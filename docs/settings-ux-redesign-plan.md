@@ -109,11 +109,11 @@ If the evidence cannot support a sentence, use “Not enough information yet” 
 
 ### Devices
 
-- [ ] Replace State/Runtime/Config/Actions/Technical tabs with a status header, Live controls, What the device reports, Display and sensor behavior, and Technical details. Only show sections relevant to the device type.
-- [ ] Header and report section distinguish requested versus reported state, cached versus live report, reachability, and last-heard time. If they disagree, show the difference and a short next action such as checking connection settings; if unknown, say what evidence is missing. Link to relevant routine history only when the association is supported by recorded data.
-- [ ] Keep power/brightness/color controls as immediate commands, not settings edits. Edit custom label, sensor interaction mapping, and calibration in their own sections. Calibration starts with a short description and an explicit Start calibration action; do not render the wizard by default.
-- [ ] Put fake sensor actions in a labeled Testing section, not next to everyday controls. Put replace-references and delete in a closed danger section with existing confirmations. Preserve raw JSON in Technical details.
-- [ ] List supports quick search plus a compact “Filters” disclosure. Show active filter chips and Clear all. With up to 300 devices, search covers all records and the list renders an initial batch of 30 with more-on-demand.
+- [x] Replace State/Runtime/Config/Actions/Technical tabs with a status header, Live controls, What the device reports, Display and sensor behavior, and Technical details. Only show sections relevant to the device type.
+- [x] Header and report section distinguish requested versus reported state, cached versus live report, reachability, and last-heard time. If they disagree, show the difference and a short next action such as checking connection settings; if unknown, say what evidence is missing. Link to relevant routine history only when the association is supported by recorded data.
+- [x] Keep power/brightness/color controls as immediate commands, not settings edits. Edit custom label, sensor interaction mapping, and calibration in their own sections. Calibration starts with a short description and an explicit Start calibration action; do not render the wizard by default.
+- [x] Put fake sensor actions in a labeled Testing section, not next to everyday controls. Put replace-references and delete in a closed danger section with existing confirmations. Preserve raw JSON in Technical details.
+- [x] List supports quick search plus a compact “Filters” disclosure. Show active filter chips and Clear all. With up to 300 devices, search covers all records and the list renders an initial batch of 30 with more-on-demand.
 
 ### Connections, helpers, and computed sources
 

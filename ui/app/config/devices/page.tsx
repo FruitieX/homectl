@@ -66,7 +66,6 @@ import { Card, CardContent } from '@/ui/primitives/card';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
 import { Skeleton } from '@/ui/primitives/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import {
   Popover,
   PopoverContent,
@@ -588,25 +587,12 @@ export default function DevicesPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [openDeviceKey, setOpenDeviceKey] = useState<string | null>(null);
-  const [deviceDetailTab, setDeviceDetailTab] = useState<
-    'state' | 'runtime' | 'config' | 'actions' | 'raw'
-  >('runtime');
+  const [calibrationOpen, setCalibrationOpen] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(30);
   const [replacementDrafts, setReplacementDrafts] = useState<
     Record<string, string>
   >({});
   const [feedbackKey, setFeedbackKey] = useState<string | null>(null);
-
-  const changeDeviceDetailTab = (value: string) => {
-    if (
-      value === 'state' ||
-      value === 'runtime' ||
-      value === 'config' ||
-      value === 'actions' ||
-      value === 'raw'
-    ) {
-      setDeviceDetailTab(value);
-    }
-  };
 
   useEffect(() => {
     setDisplayNameDrafts(
@@ -954,6 +940,61 @@ export default function DevicesPage() {
       ).sort(),
     [devices],
   );
+  const batchDevices = useMemo(
+    () => visibleDevices.slice(0, visibleCount),
+    [visibleCount, visibleDevices],
+  );
+  const remainingDevices = visibleDevices.length - batchDevices.length;
+
+  useEffect(() => {
+    setVisibleCount(30);
+  }, [
+    deviceGroupFilter,
+    deviceIntegrationFilter,
+    deviceSearch,
+    deviceTypeFilter,
+  ]);
+
+  const activeFilters = useMemo(() => {
+    const chips: { label: string; clear: () => void }[] = [];
+    if (deviceSearch.trim() !== '') {
+      chips.push({
+        label: `Search: ${deviceSearch.trim()}`,
+        clear: () => setDeviceSearch(''),
+      });
+    }
+    if (deviceTypeFilter !== 'all') {
+      chips.push({
+        label:
+          deviceTypeFilter === 'controllable'
+            ? 'Type: lights / devices'
+            : deviceTypeFilter === 'sensor'
+              ? 'Type: sensors'
+              : 'Type: other',
+        clear: () => setDeviceTypeFilter('all'),
+      });
+    }
+    if (deviceGroupFilter !== 'all') {
+      chips.push({
+        label: `Room: ${availableGroups.find((group) => group.id === deviceGroupFilter)?.name ?? deviceGroupFilter}`,
+        clear: () => setDeviceGroupFilter('all'),
+      });
+    }
+    if (deviceIntegrationFilter !== 'all') {
+      chips.push({
+        label: `Integration: ${deviceIntegrationFilter}`,
+        clear: () => setDeviceIntegrationFilter('all'),
+      });
+    }
+    return chips;
+  }, [
+    availableGroups,
+    deviceGroupFilter,
+    deviceIntegrationFilter,
+    deviceSearch,
+    deviceTypeFilter,
+  ]);
+
   const activeFilterCount =
     (deviceTypeFilter !== 'all' ? 1 : 0) +
     (deviceGroupFilter !== 'all' ? 1 : 0) +
@@ -977,7 +1018,6 @@ export default function DevicesPage() {
 
     appliedDeviceRequest.current = requestedDeviceKey;
     setOpenDeviceKey(requestedDeviceKey);
-    setDeviceDetailTab('config');
   }, [requestedDeviceKey, visibleDevices]);
 
   const updateSensorDraftKind = (
@@ -1369,13 +1409,50 @@ export default function DevicesPage() {
               {visibleDevices.length === devices.length
                 ? `${devices.length} devices`
                 : `${visibleDevices.length} of ${devices.length} devices`}
+              {visibleDevices.length > batchDevices.length
+                ? ` · showing ${batchDevices.length}`
+                : ''}
             </span>
           </div>
+          {activeFilters.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {activeFilters.map((chip) => (
+                <Badge
+                  key={chip.label}
+                  variant="secondary"
+                  className="gap-1 pr-1 text-xs"
+                >
+                  {chip.label}
+                  <button
+                    type="button"
+                    aria-label={`Remove filter ${chip.label}`}
+                    className="rounded px-1 text-muted-foreground hover:text-foreground"
+                    onClick={chip.clear}
+                  >
+                    ✕
+                  </button>
+                </Badge>
+              ))}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={() => {
+                  setDeviceSearch('');
+                  setDeviceTypeFilter('all');
+                  setDeviceGroupFilter('all');
+                  setDeviceIntegrationFilter('all');
+                }}
+              >
+                Clear all
+              </Button>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-        {visibleDevices.map((entry) => {
+        {batchDevices.map((entry) => {
           const {
             activeSceneId,
             capabilityLabels,
@@ -1494,7 +1571,9 @@ export default function DevicesPage() {
                   )}
 
                   <div className="text-sm text-foreground/80">
-                    {runtimeSummary}
+                    {'Controllable' in device.data
+                      ? `Requested: ${runtimeSummary}`
+                      : runtimeSummary}
                   </div>
 
                   {resolvedColorPreview && (
@@ -1536,41 +1615,22 @@ export default function DevicesPage() {
               }
             >
               {isOpen ? (
-                <Tabs
-                  value={deviceDetailTab}
-                  onValueChange={changeDeviceDetailTab}
-                  className="space-y-4"
-                >
-                  <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-5">
-                    <TabsTrigger value="state">State</TabsTrigger>
-                    <TabsTrigger value="runtime">Runtime</TabsTrigger>
-                    <TabsTrigger value="config">Config</TabsTrigger>
-                    <TabsTrigger value="actions">Actions</TabsTrigger>
-
-                    <TabsTrigger value="raw">Technical</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="state" className="mt-4 space-y-4">
-                    <ConfigFormSection
-                      title="Live controls"
-                      description="The same power, brightness, and color controls available from the floorplan device modal."
-                      actions={<DeviceReportStatus devices={[device]} />}
-                    >
-                      {'Controllable' in device.data ? (
+                <div className="space-y-4">
+                  <div className="space-y-4">
+                    {'Controllable' in device.data ? (
+                      <ConfigFormSection
+                        title="Live controls"
+                        description="The same power, brightness, and color controls available from the floorplan device modal. These are immediate commands, not settings."
+                        actions={
+                          <DeviceReportStatus devices={[device]} detail />
+                        }
+                      >
                         <DeviceQuickControls devices={[device]} />
-                      ) : (
-                        <ConfigHelpPanel>
-                          Sensors expose their current value in the Runtime tab;
-                          live light controls are not available for this device.
-                        </ConfigHelpPanel>
-                      )}
-                    </ConfigFormSection>
-                  </TabsContent>
+                      </ConfigFormSection>
+                    ) : null}
+                  </div>
 
-                  <TabsContent
-                    value="runtime"
-                    className="mt-4 grid gap-4 xl:grid-cols-2"
-                  >
+                  <div className="grid gap-4 xl:grid-cols-2">
                     <ConfigFormSection
                       title="What this device reports"
                       description="Current information from its connection. Values may lag behind a physical change."
@@ -1582,7 +1642,7 @@ export default function DevicesPage() {
                             value={getSceneLabel(activeSceneId, sceneNameById)}
                           />
                           <DeviceFactRow
-                            label="Current state"
+                            label="Requested state"
                             value={runtimeSummary}
                           />
                           <DeviceFactRow
@@ -1720,19 +1780,35 @@ export default function DevicesPage() {
                         </div>
                       </div>
                     </ConfigFormSection>
-                  </TabsContent>
+                  </div>
 
-                  <TabsContent value="config" className="mt-4 space-y-4">
-                    {canCalibrateDevice(device) && (
-                      <ColorCalibrationWizard
-                        key={deviceKey}
-                        device={device}
-                        devices={liveDevices}
-                      />
-                    )}
+                  <div className="space-y-4">
+                    {canCalibrateDevice(device) ? (
+                      <ConfigFormSection
+                        title="Color calibration"
+                        description="Calibration corrects the color this light shows compared to what the app asked for. It needs the light switched on and takes a few steps; nothing changes until you finish the wizard."
+                      >
+                        {calibrationOpen === deviceKey ? (
+                          <ColorCalibrationWizard
+                            key={deviceKey}
+                            device={device}
+                            devices={liveDevices}
+                          />
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            aria-expanded={false}
+                            onClick={() => setCalibrationOpen(deviceKey)}
+                          >
+                            Start calibration
+                          </Button>
+                        )}
+                      </ConfigFormSection>
+                    ) : null}
                     <ConfigFormSection
-                      title="Configuration"
-                      description="Customize how this device is displayed and how sensor payloads appear in control surfaces."
+                      title="Display and sensor behavior"
+                      description="How this device is displayed, and how its sensor payload is presented in control surfaces."
                     >
                       <ConfigField
                         label="Custom label"
@@ -1859,13 +1935,13 @@ export default function DevicesPage() {
                         </div>
                       )}
                     </ConfigFormSection>
-                  </TabsContent>
+                  </div>
 
-                  <TabsContent value="actions" className="mt-4 space-y-4">
+                  <div className="space-y-4">
                     {'Sensor' in device.data ? (
                       <ConfigFormSection
-                        title="Fake sensor actions"
-                        description="Trigger the same fake sensor actions available on the floorplan directly from configuration."
+                        title="Testing"
+                        description="These actions fake sensor input so you can test routines. They change nothing about the physical device and are separate from everyday controls."
                       >
                         <SensorActionPanel
                           device={device}
@@ -1874,69 +1950,77 @@ export default function DevicesPage() {
                           }
                         />
                       </ConfigFormSection>
-                    ) : (
-                      <ConfigHelpPanel>
-                        This device does not expose fake sensor actions.
-                      </ConfigHelpPanel>
-                    )}
+                    ) : null}
 
-                    <ConfigFormSection
-                      title="Device replacement / deletion"
-                      description="Replace config references with another device, or delete this device from runtime memory and the database while removing saved references."
-                      className="border-destructive/30 bg-destructive/5"
-                    >
-                      <ConfigField
-                        label="Replacement device"
-                        className="w-full max-w-md"
-                      >
-                        <SearchablePicker
-                          options={availableReplacementOptions.map(
-                            (option) => ({
-                              value: option.key,
-                              label: option.label,
-                              detail: option.key,
-                            }),
-                          )}
-                          value={replacementDraft}
-                          onChange={(key) =>
-                            setReplacementDrafts((previous) => ({
-                              ...previous,
-                              [deviceKey]: key,
-                            }))
-                          }
-                          placeholder="Select replacement device…"
-                          disabled={isSaving || isMutating}
-                        />
-                      </ConfigField>
+                    <details className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
+                      <summary className="cursor-pointer text-sm font-semibold">
+                        Danger zone: replace references or delete this device
+                      </summary>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Replace config references with another device, or delete
+                        this device from runtime memory and the database while
+                        removing saved references. Both ask for confirmation.
+                      </p>
+                      <div className="mt-3 space-y-3">
+                        <ConfigField
+                          label="Replacement device"
+                          className="w-full max-w-md"
+                        >
+                          <SearchablePicker
+                            options={availableReplacementOptions.map(
+                              (option) => ({
+                                value: option.key,
+                                label: option.label,
+                                detail: option.key,
+                              }),
+                            )}
+                            value={replacementDraft}
+                            onChange={(key) =>
+                              setReplacementDrafts((previous) => ({
+                                ...previous,
+                                [deviceKey]: key,
+                              }))
+                            }
+                            placeholder="Select replacement device…"
+                            disabled={isSaving || isMutating}
+                          />
+                        </ConfigField>
 
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-amber-400/60 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
-                          disabled={isSaving || isMutating || !replacementDraft}
-                          onClick={() => void replaceDeviceReferences(device)}
-                        >
-                          {isMutating && <span className={spinnerClassName} />}
-                          Replace References
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={isSaving || isMutating}
-                          onClick={() => void deleteDeviceConfig(device)}
-                        >
-                          {isMutating && <span className={spinnerClassName} />}
-                          Delete Device
-                        </Button>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-amber-400/60 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
+                            disabled={
+                              isSaving || isMutating || !replacementDraft
+                            }
+                            onClick={() => void replaceDeviceReferences(device)}
+                          >
+                            {isMutating && (
+                              <span className={spinnerClassName} />
+                            )}
+                            Replace References
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            disabled={isSaving || isMutating}
+                            onClick={() => void deleteDeviceConfig(device)}
+                          >
+                            {isMutating && (
+                              <span className={spinnerClassName} />
+                            )}
+                            Delete Device
+                          </Button>
+                        </div>
                       </div>
-                    </ConfigFormSection>
-                  </TabsContent>
+                    </details>
+                  </div>
 
-                  <TabsContent value="raw" className="mt-4">
+                  <div>
                     <ConfigFormSection
-                      title="Raw JSON payload"
-                      description="Latest raw payload published by the integration."
+                      title="Technical details"
+                      description="Latest raw payload published by the integration, exactly as it arrived."
                     >
                       {device.raw ? (
                         <details>
@@ -1953,13 +2037,25 @@ export default function DevicesPage() {
                         </p>
                       )}
                     </ConfigFormSection>
-                  </TabsContent>
-                </Tabs>
+                  </div>
+                </div>
               ) : null}
             </ExpandableConfigCard>
           );
         })}
       </div>
+
+      {remainingDevices > 0 ? (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            onClick={() => setVisibleCount((count) => count + 30)}
+          >
+            Show {Math.min(30, remainingDevices)} more ({remainingDevices}{' '}
+            hidden by paging)
+          </Button>
+        </div>
+      ) : null}
 
       {visibleDevices.length === 0 && (
         <EmptyState

@@ -13,7 +13,14 @@ import { useEffect, useState } from 'react';
 import type { Device } from '@/bindings/Device';
 
 // A bridge report may include cached/optimistic fields. Never call it hardware confirmation.
-export function DeviceReportStatus({ devices }: { devices: Device[] }) {
+export function DeviceReportStatus({
+  devices,
+  detail = false,
+}: {
+  devices: Device[];
+  /** Extra requested-vs-reported evidence for the device page. */
+  detail?: boolean;
+}) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 5000);
@@ -43,6 +50,11 @@ export function DeviceReportStatus({ devices }: { devices: Device[] }) {
     const value = state
       ? `${state.power ? 'On' : 'Off'}${state.power && state.brightness !== null ? ` · ${Math.round(state.brightness * 100)}%` : ''}${state.power && state.color && 'ct' in state.color ? ` · ${state.color.ct} K` : ''}`
       : '';
+    const requestedValue = `${data.state.power ? 'On' : 'Off'}${
+      data.state.power && data.state.brightness !== null
+        ? ` · ${Math.round(data.state.brightness * 100)}%`
+        : ''
+    }`;
     return [
       {
         device,
@@ -51,6 +63,8 @@ export function DeviceReportStatus({ devices }: { devices: Device[] }) {
         // Keep the detailed report, but only flag actionable power/brightness
         // divergence in this compact status surface.
         differs:
+          // Only flags when the report is newer than the request and they
+          // actually disagree; color gamut clipping is deliberately ignored.
           health !== 'disabled' &&
           report &&
           !report.retained &&
@@ -65,7 +79,18 @@ export function DeviceReportStatus({ devices }: { devices: Device[] }) {
         label,
         ageLabel,
         value,
+        requestedValue,
         cached: report?.retained,
+        // What the app can and cannot tell, in the app's own words.
+        evidence:
+          health === 'unknown'
+            ? 'No report and no availability observation has arrived yet, so reachability is unknown.'
+            : health === 'stale' || health === 'offline'
+              ? 'The last report is too old to stand in for the device right now.'
+              : report?.retained
+                ? 'This is a retained report from the integration, not a fresh reading.'
+                : null,
+        nextAction: null as string | null,
       },
     ];
   });
@@ -118,9 +143,24 @@ export function DeviceReportStatus({ devices }: { devices: Device[] }) {
                   {report.cached ? 'Saved state' : 'Reported'}: {report.value}
                 </div>
               )}
+              {detail ? (
+                <>
+                  <div className="text-xs text-muted-foreground">
+                    Requested by the app: {report.requestedValue}
+                  </div>
+                  {report.evidence ? (
+                    <div className="text-xs text-muted-foreground">
+                      {report.evidence}
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
               {report.differs && (
                 <div className="text-xs text-amber-600 dark:text-amber-400">
                   Reported state differs from requested
+                  {detail
+                    ? '. If it keeps disagreeing, check this integration\u2019s connection settings; the app cannot force the device to comply.'
+                    : ''}
                 </div>
               )}
               <DeviceEnabledToggle device={report.device} />
