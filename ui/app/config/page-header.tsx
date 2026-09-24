@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/ui/primitives/button';
 import { cn } from '@/lib/cn';
 import { configSectionAliases, configSections } from './sections';
+import { Breadcrumbs } from '@/ui/config/Breadcrumbs';
 
 type ConfigPageHeaderProps = {
   actions?: ReactNode;
@@ -46,22 +47,7 @@ export function ConfigPageHeader({
           </Button>
         )}
         <div className="min-w-0 flex-1 pt-0.5">
-          {backTo && section ? (
-            <nav
-              aria-label="Breadcrumb"
-              className="mb-2 hidden items-center gap-1 text-xs text-muted-foreground sm:flex"
-            >
-              <Link to="/config" className="transition hover:text-foreground">
-                Settings
-              </Link>
-              <ChevronRight className="size-3" />
-              <span>{section.group}</span>
-              <ChevronRight className="size-3" />
-              <span className="font-medium text-foreground">
-                {section.label}
-              </span>
-            </nav>
-          ) : null}
+          {section ? <Breadcrumbs items={[{ label: section.label }]} /> : null}
           <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
           {description && (
             <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">

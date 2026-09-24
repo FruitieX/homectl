@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  deviceLinkAliasNote,
   describeSceneTarget,
   orderedSceneTargets,
   sceneTargetMode,
   sceneTargetsSummary,
+  sourceAliasKeys,
 } from './sceneTargets.ts';
 
 type Config = Record<string, unknown>;
@@ -84,4 +86,59 @@ test('sceneTargetsSummary counts targets, unresolved references, and a script', 
     unresolvedCount: 1,
     scripted: true,
   });
+});
+
+test('a device link survives an integration rename instead of reading as gone', () => {
+  // The computed source keeps the legacy keys it replaced and publishes them as
+  // `aliases`; a saved `circadian/color` reference is valid, not gone.
+  const aliases = sourceAliasKeys([
+    { id: 'circadian', aliases: ['circadian/color'] },
+  ]);
+  assert.deepEqual(aliases, { 'circadian/color': 'computed/circadian' });
+
+  const descriptor = describeSceneTarget(
+    'hue',
+    { kind: 'device' },
+    { integration_id: 'circadian', device_id: 'color', brightness: 0.5 },
+    { deviceKeys: ['computed/circadian', 'zigbee2mqtt/hue'], aliases },
+  );
+
+  assert.equal(descriptor.unresolvedReason, null);
+  assert.equal(descriptor.resolvedKey, 'computed/circadian');
+  assert.equal(
+    deviceLinkAliasNote('circadian/color', 'computed/circadian'),
+    'Saved as circadian/color; the same device is published as computed/circadian.',
+  );
+});
+
+test('a device link is only reported missing when the id is gone too', () => {
+  const renamed = describeSceneTarget(
+    'hue',
+    { kind: 'device' },
+    { integration_id: 'circadian', device_id: 'color' },
+    {
+      deviceKeys: ['computed/circadian'],
+      aliases: sourceAliasKeys([
+        { id: 'circadian', aliases: ['circadian/color'] },
+      ]),
+    },
+  );
+  assert.equal(renamed.unresolvedReason, null);
+
+  const gone = describeSceneTarget(
+    'hue',
+    { kind: 'device' },
+    { integration_id: 'circadian', device_id: 'rainbow' },
+    { deviceKeys: ['computed/circadian'] },
+  );
+  assert.match(gone.unresolvedReason ?? '', /no longer exists/);
+
+  // While the catalog is still loading there is no verdict to give.
+  const loading = describeSceneTarget(
+    'hue',
+    { kind: 'device' },
+    { integration_id: 'circadian', device_id: 'rainbow' },
+    {},
+  );
+  assert.equal(loading.unresolvedReason, null);
 });

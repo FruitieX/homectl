@@ -10,6 +10,7 @@ import {
   getSceneDeviceLinkTargetKey,
   useGroups,
   useScenes,
+  useSources,
 } from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { createUuid } from '@/lib/uuid';
@@ -21,6 +22,7 @@ import {
 import Color from 'color';
 
 import { resolveSceneEffects } from '@/lib/sceneEffects';
+import { sourceAliasKeys } from '@/lib/sceneTargets';
 import { BoundedList } from '@/ui/config/BoundedList';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
 import { Section } from '@/ui/config/Section';
@@ -120,7 +122,11 @@ export default function SceneDetailPage() {
   const { apiEndpoint } = useAppConfig();
   const { data: scenes, loading, error, refetch, update, remove } = useScenes();
   const { data: groups } = useGroups();
-  const { devicesState: devices } = useDevicesApi();
+  const { devicesState: devices, loading: devicesLoading } = useDevicesApi();
+  const { data: sources } = useSources();
+  // Legacy keys a computed source still answers to (`circadian/color`), so a
+  // saved reference is never reported as gone while the source serves it.
+  const sourceAliases = useMemo(() => sourceAliasKeys(sources), [sources]);
   const { activeSection, target, openSection } = useSectionParams();
   const { status, announce } = useStatusAnnouncements();
 
@@ -139,6 +145,8 @@ export default function SceneDetailPage() {
     [devices],
   );
   const sceneIds = useMemo(() => scenes.map((entry) => entry.id), [scenes]);
+  // While the device catalog is still loading there is no verdict to give.
+  const knownDeviceKeys = devicesLoading ? undefined : deviceKeys;
 
   const deviceOptions: SceneTargetOption[] = useMemo(
     () =>
@@ -158,7 +166,11 @@ export default function SceneDetailPage() {
   const summary = useMemo(
     () =>
       scene
-        ? sceneTargetsSummary(scene, { sceneIds, deviceKeys })
+        ? sceneTargetsSummary(scene, {
+            sceneIds,
+            deviceKeys: knownDeviceKeys,
+            aliases: sourceAliases,
+          })
         : {
             deviceCount: 0,
             groupCount: 0,
@@ -292,6 +304,7 @@ export default function SceneDetailPage() {
   const visibleEffectCount = showAllEffects ? Number.POSITIVE_INFINITY : 8;
 
   const effects = resolveSceneEffects(scene, {
+    sourceAliases,
     devices,
     groups: Object.fromEntries(
       groups.map((group) => [
@@ -358,7 +371,8 @@ export default function SceneDetailPage() {
   ) => {
     const descriptor = describeSceneTarget(key, { kind }, config, {
       sceneIds,
-      deviceKeys,
+      deviceKeys: knownDeviceKeys,
+      aliases: sourceAliases,
     });
     const label =
       kind === 'device'
@@ -398,6 +412,12 @@ export default function SceneDetailPage() {
                 <dd className="inline font-mono">{key}</dd>
               </div>
             )}
+            {descriptor.resolvedKey ? (
+              <div>
+                <dt className="inline">Resolves to: </dt>
+                <dd className="inline font-mono">{descriptor.resolvedKey}</dd>
+              </div>
+            ) : null}
           </dl>
         </details>
         <SceneResolvedColorPreview

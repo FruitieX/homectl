@@ -16,6 +16,11 @@ export type SceneTargetDescriptor = {
   summary: string;
   /** Precise reason when the target cannot be resolved, otherwise null. */
   unresolvedReason: string | null;
+  /**
+   * Set when the saved reference resolves through an integration alias — the
+   * device id still exists in the catalog under another integration id.
+   */
+  resolvedKey?: string | null;
 };
 
 /**
@@ -49,6 +54,66 @@ function deviceLinkTargetKey(config: Config): string {
   return `${String(read(config, 'integration_id'))}/${String(read(config, 'device_id'))}`;
 }
 
+export type DeviceLinkResolution =
+  | { state: 'known' }
+  | { state: 'aliased'; resolvedKey: string }
+  | { state: 'missing' }
+  | { state: 'unknown' };
+
+/**
+ * A saved device link can keep working after the integration id changes: the
+ * server still serves an old `circadian/color` reference from the device that
+ * is now published as `computed/circadian`. So a literal key miss is not proof
+ * that the device is gone — when the device id exists under exactly one other
+ * integration, that is the device the reference resolves to. Callers pass the
+ * catalog only once it has loaded; while it is loading the answer is
+ * 'unknown', never 'missing'.
+ */
+export function resolveDeviceLink(
+  targetKey: string,
+  deviceKeys?: string[],
+  aliases?: Record<string, string>,
+): DeviceLinkResolution {
+  // A computed source keeps the legacy keys it replaced (for example the
+  // `circadian` source still answers to `circadian/color`), and the server
+  // publishes that mapping as `aliases`. The UI asks the same question with the
+  // same answer instead of guessing from the runtime catalog alone.
+  if (aliases && targetKey in aliases) {
+    return { state: 'aliased', resolvedKey: aliases[targetKey] };
+  }
+  if (!deviceKeys) return { state: 'unknown' };
+  if (deviceKeys.includes(targetKey)) return { state: 'known' };
+  const id = targetKey.split('/').slice(1).join('/');
+  if (id === '') return { state: 'missing' };
+  const matches = deviceKeys.filter(
+    (key) => key.split('/').slice(1).join('/') === id,
+  );
+  return matches.length === 1
+    ? { state: 'aliased', resolvedKey: matches[0] }
+    : { state: 'missing' };
+}
+
+/** `alias -> computed/<source id>` for every source that declares legacy keys. */
+export function sourceAliasKeys(
+  sources: Array<{ id: string; aliases?: Array<string> }> | undefined,
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const source of sources ?? []) {
+    for (const alias of source.aliases ?? []) {
+      map[alias] = `computed/${source.id}`;
+    }
+  }
+  return map;
+}
+
+/** One sentence for the expanded target: why the saved key still works. */
+export function deviceLinkAliasNote(
+  savedKey: string,
+  resolvedKey: string,
+): string {
+  return `Saved as ${savedKey}; the same device is published as ${resolvedKey}.`;
+}
+
 function brightnessText(config: Config): string | null {
   const brightness = read(config, 'brightness');
   if (typeof brightness !== 'number') return null;
@@ -68,7 +133,11 @@ export function describeSceneTarget(
   key: string,
   { kind }: { kind: SceneTargetKind },
   config: Config,
-  context: { sceneIds?: string[]; deviceKeys?: string[] } = {},
+  context: {
+    sceneIds?: string[];
+    deviceKeys?: string[];
+    aliases?: Record<string, string>;
+  } = {},
 ): SceneTargetDescriptor {
   const mode = sceneTargetMode(config);
 
@@ -78,10 +147,14 @@ export function describeSceneTarget(
     const deviceKeys = asArray(read(config, 'device_keys'));
     const groupKeys = asArray(read(config, 'group_keys'));
     if (deviceKeys.length > 0) {
-      scope.push(`${deviceKeys.length} device${deviceKeys.length === 1 ? '' : 's'}`);
+      scope.push(
+        `${deviceKeys.length} device${deviceKeys.length === 1 ? '' : 's'}`,
+      );
     }
     if (groupKeys.length > 0) {
-      scope.push(`${groupKeys.length} room${groupKeys.length === 1 ? '' : 's'}`);
+      scope.push(
+        `${groupKeys.length} room${groupKeys.length === 1 ? '' : 's'}`,
+      );
     }
     const summary = `Follows scene "${sceneId}"${scope.length > 0 ? ` for ${scope.join(', ')}` : ''}`;
     const known = context.sceneIds
@@ -106,9 +179,11 @@ export function describeSceneTarget(
     const targetKey = deviceLinkTargetKey(config);
     const brightness = brightnessText(config);
     const summary = `Tracks ${targetKey || 'an unchosen device'}${brightness ? ` · ${brightness}` : ''}`;
-    const known = context.deviceKeys
-      ? context.deviceKeys.includes(targetKey)
-      : undefined;
+    const resolution = resolveDeviceLink(
+      targetKey,
+      context.deviceKeys,
+      context.aliases,
+    );
 
     return {
       key,
@@ -118,9 +193,11 @@ export function describeSceneTarget(
       unresolvedReason:
         targetKey === ''
           ? 'Tracks a device that is not chosen yet'
-          : known === false
+          : resolution.state === 'missing'
             ? `Tracks ${targetKey}, which no longer exists`
             : null,
+      resolvedKey:
+        resolution.state === 'aliased' ? resolution.resolvedKey : null,
     };
   }
 
@@ -164,7 +241,11 @@ export function sceneTargetsSummary<T extends object>(
     group_states?: Record<string, T>;
     group_state_order?: readonly string[];
   },
-  context: { sceneIds?: string[]; deviceKeys?: string[] } = {},
+  context: {
+    sceneIds?: string[];
+    deviceKeys?: string[];
+    aliases?: Record<string, string>;
+  } = {},
 ): {
   deviceCount: number;
   groupCount: number;
@@ -172,8 +253,9 @@ export function sceneTargetsSummary<T extends object>(
   unresolvedCount: number;
   scripted: boolean;
 } {
-  const devices = Object.entries(scene.device_states ?? {}).map(([key, config]) =>
-    describeSceneTarget(key, { kind: 'device' }, config, context),
+  const devices = Object.entries(scene.device_states ?? {}).map(
+    ([key, config]) =>
+      describeSceneTarget(key, { kind: 'device' }, config, context),
   );
   const groups = Object.entries(scene.group_states ?? {}).map(([key, config]) =>
     describeSceneTarget(key, { kind: 'group' }, config, context),

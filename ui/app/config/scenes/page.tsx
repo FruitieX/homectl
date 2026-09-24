@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
-import { type Scene, useScenes } from '@/hooks/useConfig';
+import { type Scene, useScenes, useSources } from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
+import { sourceAliasKeys } from '@/lib/sceneTargets';
 import { useCreateDeepLink } from '@/hooks/useDeepLink';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { sceneTargetsSummary } from '@/lib/sceneTargets';
@@ -47,7 +48,8 @@ const getSceneSearchValues = (scene: Scene) => [
 
 export default function ScenesPage() {
   const { data: scenes, loading, error, refetch, create, remove } = useScenes();
-  const { devicesState: devices } = useDevicesApi();
+  const { devicesState: devices, loading: devicesLoading } = useDevicesApi();
+  const { data: sources } = useSources();
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   const navigate = useNavigate();

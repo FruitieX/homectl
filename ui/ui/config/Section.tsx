@@ -157,23 +157,26 @@ export function Section<T extends object>({
         className,
       )}
     >
-      <div className="flex flex-col gap-1 p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <h2
-            id={headingId}
-            ref={headingRef}
-            tabIndex={-1}
-            className={`min-w-0 rounded-sm text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              danger ? 'text-destructive' : 'text-foreground'
-            }`}
+      {/* The whole header is the control: title, badge, and the one-line
+          summary are all inside one button, so tapping anywhere that looks like
+          the section expands it. Actions stay outside it. */}
+      <div className="flex items-stretch justify-between gap-2">
+        <h2
+          id={headingId}
+          ref={headingRef}
+          tabIndex={-1}
+          className={`min-w-0 flex-1 rounded-sm text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            danger ? 'text-destructive' : 'text-foreground'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => onOpenChange(!open)}
+            aria-expanded={open}
+            aria-controls={bodyId}
+            className="flex w-full cursor-pointer flex-col gap-1 rounded-2xl p-4 text-left transition hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-5"
           >
-            <button
-              type="button"
-              onClick={() => onOpenChange(!open)}
-              aria-expanded={open}
-              aria-controls={bodyId}
-              className="flex w-full items-center gap-2 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
+            <span className="flex w-full items-center gap-2">
               <ChevronRight
                 aria-hidden
                 className={cn(
@@ -183,16 +186,18 @@ export function Section<T extends object>({
               />
               <span className="min-w-0">{title}</span>
               {badge ? <span className="shrink-0">{badge}</span> : null}
-            </button>
-          </h2>
-          {actions ? (
-            <div className="flex shrink-0 items-center gap-2">{actions}</div>
-          ) : null}
-        </div>
-        {summary ? (
-          <p className="pl-[1.375rem] text-xs leading-5 text-muted-foreground">
-            {summary}
-          </p>
+            </span>
+            {summary ? (
+              <span className="block pl-[1.375rem] text-xs leading-5 font-normal text-muted-foreground">
+                {summary}
+              </span>
+            ) : null}
+          </button>
+        </h2>
+        {actions ? (
+          <div className="flex shrink-0 items-center gap-2 pr-4 sm:pr-5">
+            {actions}
+          </div>
         ) : null}
       </div>
 

@@ -1,5 +1,7 @@
 import { type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+
+import { Breadcrumbs, configParentCrumb } from '@/ui/config/Breadcrumbs';
 import { ChevronLeft, MoreHorizontal } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
@@ -69,6 +71,12 @@ export function DetailPageShell({
   children,
   className,
 }: DetailPageShellProps) {
+  // A caller's own parent crumb wins (say, “Rooms” for a nested item); anything
+  // without a target is decoration and is dropped with the section groups.
+  const parentCrumb =
+    crumbs?.find((crumb) => crumb.to && crumb.label !== 'Settings') ??
+    configParentCrumb(backTo);
+
   return (
     <div
       className={cn('mx-auto flex w-full max-w-3xl flex-col gap-4', className)}
@@ -87,34 +95,14 @@ export function DetailPageShell({
         </Button>
 
         {/* Breadcrumbs are the wide-screen location cue; on phones Back plus the
-            item title is the whole pattern. */}
-        <nav
-          aria-label="Breadcrumb"
-          className="hidden text-xs text-muted-foreground sm:block"
-        >
-          <ol className="flex flex-wrap items-center gap-1">
-            {crumbs.map((crumb, index) => {
-              // Every crumb except the current one is navigable: a crumb
-              // without an explicit target falls back to the parent route.
-              const to =
-                crumb.to ?? (index < crumbs.length - 1 ? backTo : undefined);
-              return (
-                <li key={index} className="flex items-center gap-1">
-                  {index > 0 ? <span aria-hidden>/</span> : null}
-                  {to ? (
-                    <Link to={to} className="transition hover:text-foreground">
-                      {crumb.label}
-                    </Link>
-                  ) : (
-                    <span aria-current="page" className="text-foreground">
-                      {crumb.label}
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        </nav>
+            item title is the whole pattern. The parent comes from the caller
+            when it names one, otherwise from the list route this page is under;
+            section groups are never crumbs. */}
+        <Breadcrumbs
+          items={
+            parentCrumb ? [parentCrumb, { label: title }] : [{ label: title }]
+          }
+        />
 
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">

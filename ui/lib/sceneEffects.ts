@@ -7,6 +7,8 @@
  * resolves the final effect per device and says which target won.
  */
 
+import { resolveDeviceLink } from './sceneTargets';
+
 export type SceneEffectTargetKind = 'device' | 'group' | 'scene';
 
 type Config = object;
@@ -148,6 +150,8 @@ export type SceneEffectDevice = {
 };
 
 export type SceneEffectTarget = {
+  /** Set when a saved device link resolves through an integration alias. */
+  resolvedKey?: string | null;
   key: string;
   kind: SceneEffectTargetKind;
   label: string;
@@ -196,6 +200,8 @@ export type SceneEffectsContext = {
   /** Room targets the engine walks first (saved order). */
   groupOrder?: readonly string[];
   deviceDisplayNames?: Record<string, string>;
+  /** Legacy device keys a computed source still answers to. */
+  sourceAliases?: Record<string, string>;
   /** Follows a scene link when a target reads another scene. */
   resolveSceneLink?: (
     sceneId: string,
@@ -327,10 +333,19 @@ export function resolveSceneEffects(
       const sourceKey = `${String(read(config, 'integration_id'))}/${String(
         read(config, 'device_id'),
       )}`;
-      const known = context.devices?.[sourceKey];
-      if (!known) {
+      // A saved reference can outlive an integration rename (the server keeps
+      // serving `circadian/color` from `computed/circadian`), so a literal key
+      // miss is only a problem when the device id is gone from the catalog too.
+      const resolution = resolveDeviceLink(
+        sourceKey,
+        context.devices ? Object.keys(context.devices) : undefined,
+        context.sourceAliases,
+      );
+      if (resolution.state === 'missing') {
         target.unresolvedReason = `It tracks ${sourceKey}, which is not available`;
         target.repair = 'Choose another source device, or remove this target.';
+      } else if (resolution.state === 'aliased') {
+        target.resolvedKey = resolution.resolvedKey;
       }
       const words = describeSceneStateParts(config);
       const deviceKey = kind === 'group' ? `group:${key}` : key;
