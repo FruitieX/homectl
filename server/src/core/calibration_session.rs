@@ -78,6 +78,7 @@ mod tests {
             .device_color_calibrations
             .push(DeviceColorCalibration {
                 device_key: "dummy/target".into(),
+                brightness_points: Vec::new(),
                 points: vec![ColorCalibrationPoint {
                     reference: Uv::from_xy(&DeviceColor::new_from_hs(45, 0.3).to_xy().unwrap()),
                     output: Uv::from_xy(&DeviceColor::new_from_hs(80, 0.5).to_xy().unwrap()),
@@ -284,6 +285,9 @@ impl AppState {
                 ),
                 output: Uv::from_xy(&DeviceColor::Hs(preview.output.clone()).to_xy().unwrap()),
             }],
+            // The color preview authors color points only; brightness is
+            // calibrated by its own session.
+            brightness_points: Vec::new(),
         }
         .validate()?;
         if start && self.calibration_sessions.contains_key(&id) {

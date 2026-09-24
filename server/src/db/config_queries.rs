@@ -4236,6 +4236,9 @@ fn device_color_calibration_from_row(row: QueryResult) -> Result<DeviceColorCali
     let calibration = DeviceColorCalibration {
         device_key: row.try_get("", "device_key")?,
         points: serde_json::from_str(&points)?,
+        // Legacy per-device rows predate brightness curves; a device that needs
+        // one gets it through a profile.
+        brightness_points: Vec::new(),
     };
     calibration.validate().map_err(|error| eyre!(error))?;
     Ok(calibration)

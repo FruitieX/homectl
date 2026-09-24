@@ -52,12 +52,70 @@ pub struct ColorCalibrationPoint {
     pub output: Uv,
 }
 
+/// One editable brightness anchor: `logical` is the brightness a person sees in
+/// homectl, `output` is the brightness command sent to the device. Both are
+/// fractions in `(0, 1]`; an empty curve means identity.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct BrightnessCalibrationPoint {
+    pub logical: OrderedFloat<f32>,
+    pub output: OrderedFloat<f32>,
+}
+
+/// Brightness curves are authored by hand, so keep them small and ordered:
+/// two points is the smallest useful mapping, sixteen is plenty for a dimmer.
+pub const BRIGHTNESS_CURVE_MIN_POINTS: usize = 2;
+pub const BRIGHTNESS_CURVE_MAX_POINTS: usize = 16;
+
+/// Validate one brightness curve. An empty curve is valid (it means identity);
+/// a curve with points must be strictly increasing in `logical`, non-decreasing
+/// in `output`, and stay inside `(0, 1]`.
+pub fn validate_brightness_points(points: &[BrightnessCalibrationPoint]) -> Result<(), String> {
+    if points.is_empty() {
+        return Ok(());
+    }
+    if points.len() < BRIGHTNESS_CURVE_MIN_POINTS {
+        return Err(format!(
+            "A brightness curve needs at least {BRIGHTNESS_CURVE_MIN_POINTS} points",
+        ));
+    }
+    if points.len() > BRIGHTNESS_CURVE_MAX_POINTS {
+        return Err(format!(
+            "A brightness curve takes at most {BRIGHTNESS_CURVE_MAX_POINTS} points",
+        ));
+    }
+    let mut previous: Option<BrightnessCalibrationPoint> = None;
+    for point in points {
+        let logical = point.logical.into_inner();
+        let output = point.output.into_inner();
+        if !logical.is_finite() || !output.is_finite() {
+            return Err("Brightness points must be numbers".into());
+        }
+        if logical <= 0.0 || logical > 1.0 || output <= 0.0 || output > 1.0 {
+            return Err("Brightness points run from just above 0% up to 100%".into());
+        }
+        if let Some(previous) = previous {
+            if logical <= previous.logical.into_inner() {
+                return Err("Desired brightness levels must strictly increase".into());
+            }
+            if output < previous.output.into_inner() {
+                return Err("Target output must not decrease as brightness rises".into());
+            }
+        }
+        previous = Some(*point);
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct DeviceColorCalibration {
     pub device_key: String,
     #[serde(default)]
     pub points: Vec<ColorCalibrationPoint>,
+    /// Brightness anchors resolved for this device; empty means identity.
+    #[serde(default)]
+    pub brightness_points: Vec<BrightnessCalibrationPoint>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -65,10 +123,22 @@ pub struct DeviceColorCalibration {
 pub struct ColorCalibrationProfile {
     pub id: String,
     pub name: String,
+    #[serde(default)]
     pub points: Vec<ColorCalibrationPoint>,
     #[serde(default)]
     pub reference_device_key: Option<String>,
+    /// Light level used while matching color points. Metadata only — never an
+    /// anchor or curve parameter — and defaulted so a brightness-only profile
+    /// needs no color setup.
+    #[serde(default = "default_profile_brightness")]
     pub brightness: f32,
+    /// Brightness anchors; empty means identity.
+    #[serde(default)]
+    pub brightness_points: Vec<BrightnessCalibrationPoint>,
+}
+
+pub fn default_profile_brightness() -> f32 {
+    1.0
 }
 
 impl ColorCalibrationProfile {
@@ -80,17 +150,15 @@ impl ColorCalibrationProfile {
         {
             return Err("Give the profile a valid id and a name (up to 200 characters)".into());
         }
-        if self.points.is_empty()
-            || !self.brightness.is_finite()
-            || !(0.01..=1.0).contains(&self.brightness)
-        {
-            return Err(
-                "A profile needs matching points and a brightness between 1 and 100%".into(),
-            );
+        if !self.brightness.is_finite() || !(0.01..=1.0).contains(&self.brightness) {
+            return Err("Match brightness must be between 1 and 100%".into());
         }
+        // A profile may carry color points, a brightness curve, or both; one
+        // valid channel is enough, and an empty profile is not a profile.
         DeviceColorCalibration {
             device_key: self.id.clone(),
             points: self.points.clone(),
+            brightness_points: self.brightness_points.clone(),
         }
         .validate()
     }
@@ -117,6 +185,7 @@ impl crate::db::config_queries::ConfigExport {
                 .map(|profile| DeviceColorCalibration {
                     device_key: key.into(),
                     points: profile.points.clone(),
+                    brightness_points: profile.brightness_points.clone(),
                 });
         }
         self.device_color_calibrations
@@ -229,10 +298,18 @@ fn distance(a: &Uv, b: &Uv) -> f32 {
 }
 
 impl DeviceColorCalibration {
+    /// True when the resolved calibration changes nothing.
+    pub fn is_identity(&self) -> bool {
+        self.points.is_empty() && self.brightness_points.is_empty()
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if self.device_key.trim().is_empty() || self.points.len() > 64 {
             return Err("Calibration needs a device key and at most 64 points".into());
         }
+        // A calibration may correct color, brightness, or both; the channel
+        // that is present must be valid, and at least one must be present.
+        validate_brightness_points(&self.brightness_points)?;
         for (index, point) in self.points.iter().enumerate() {
             for uv in [&point.reference, &point.output] {
                 if !uv.u.is_finite() || !uv.v.is_finite() || uv.to_xy().is_none() {
@@ -245,6 +322,11 @@ impl DeviceColorCalibration {
             {
                 return Err("Reference chromaticities must be distinct".into());
             }
+        }
+        if self.points.is_empty() && self.brightness_points.is_empty() {
+            return Err(
+                "A calibration needs color points, a brightness curve, or both".into(),
+            );
         }
         Ok(())
     }
@@ -363,11 +445,148 @@ impl DeviceColorCalibration {
     }
 }
 
+/// Map a logical brightness to the command a calibrated device receives.
+///
+/// Zero stays zero and a missing value stays missing, so a light that is off
+/// never turns on through calibration. Positive values below the first anchor
+/// clamp to its output, values above the last anchor clamp to its output, and
+/// values in between interpolate linearly. A flat segment is allowed: a device
+/// that quantizes gets the same output for a range of requests.
+pub fn map_brightness_output(
+    points: &[BrightnessCalibrationPoint],
+    logical: f32,
+) -> f32 {
+    if points.is_empty() || !logical.is_finite() || logical <= 0.0 {
+        return logical;
+    }
+    let first = points[0];
+    if logical <= first.logical.into_inner() {
+        return first.output.into_inner();
+    }
+    let last = points[points.len() - 1];
+    if logical >= last.logical.into_inner() {
+        return last.output.into_inner();
+    }
+    for pair in points.windows(2) {
+        let [low, high] = [pair[0], pair[1]];
+        let low_logical = low.logical.into_inner();
+        let high_logical = high.logical.into_inner();
+        if logical >= low_logical && logical <= high_logical {
+            let span = high_logical - low_logical;
+            if span <= 0.0 {
+                return low.output.into_inner();
+            }
+            let ratio = (logical - low_logical) / span;
+            let low_output = low.output.into_inner();
+            let high_output = high.output.into_inner();
+            return low_output + (high_output - low_output) * ratio;
+        }
+    }
+    last.output.into_inner()
+}
+
+/// Map a physical brightness report back to the logical level a person asked
+/// for. Used when a report has to become logical state and there is no request
+/// to compare against; a plateau (or a clamp) resolves to its lowest logical
+/// level, deterministically.
+pub fn map_brightness_input(
+    points: &[BrightnessCalibrationPoint],
+    physical: f32,
+) -> f32 {
+    if points.is_empty() || !physical.is_finite() || physical <= 0.0 {
+        return physical;
+    }
+    let mut best: Option<(f32, f32)> = None;
+    for window in points.windows(2) {
+        let [low, high] = [window[0], window[1]];
+        let low_output = low.output.into_inner();
+        let high_output = high.output.into_inner();
+        if physical < low_output.min(high_output) || physical > low_output.max(high_output) {
+            continue;
+        }
+        let span = high_output - low_output;
+        // A flat segment cannot be inverted: the lowest logical level that
+        // produced this output wins.
+        let logical = if span <= 0.0 {
+            low.logical.into_inner()
+        } else {
+            let ratio = (physical - low_output) / span;
+            low.logical.into_inner()
+                + (high.logical.into_inner() - low.logical.into_inner()) * ratio
+        };
+        if best.is_none_or(|(candidate, _)| logical < candidate) {
+            best = Some((logical, low.output.into_inner()));
+        }
+    }
+    if let Some((logical, _)) = best {
+        return logical;
+    }
+    // Outside the curve: follow the clamp the forward map would have produced.
+    if physical < points[0].output.into_inner() {
+        points[0].logical.into_inner()
+    } else {
+        points[points.len() - 1].logical.into_inner()
+    }
+}
+
+/// What a profile keeps when it is composed for one device.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CalibrationChannels {
+    pub color: bool,
+    pub brightness: bool,
+}
+
+/// Compose a profile for one device from what it resolves today plus the
+/// channels being authored. The source profile is never mutated: a change to
+/// brightness leaves every other device assigned to it untouched.
+pub fn compose_profile_for_device(
+    id: String,
+    name: String,
+    existing: &DeviceColorCalibration,
+    channels: CalibrationChannels,
+    color_points: Vec<ColorCalibrationPoint>,
+    brightness_points: Vec<BrightnessCalibrationPoint>,
+    brightness: f32,
+    reference_device_key: Option<String>,
+) -> ColorCalibrationProfile {
+    // A channel the new profile carries but for which nothing new was authored
+    // keeps what the device resolves today, so adding brightness never drops an
+    // existing color match (and the other way round).
+    ColorCalibrationProfile {
+        id,
+        name,
+        points: if !channels.color {
+            Vec::new()
+        } else if color_points.is_empty() {
+            existing.points.clone()
+        } else {
+            color_points
+        },
+        reference_device_key,
+        brightness,
+        brightness_points: if !channels.brightness {
+            Vec::new()
+        } else if brightness_points.is_empty() {
+            existing.brightness_points.clone()
+        } else {
+            brightness_points
+        },
+    }
+}
+
 pub fn calibrated_device(device: &Device, calibration: Option<&DeviceColorCalibration>) -> Device {
     let mut physical = device.clone();
     if let (Some(calibration), DeviceData::Controllable(data)) = (calibration, &mut physical.data) {
         if let Some(color) = &data.state.color {
             data.state.color = Some(calibration.correct(color));
+        }
+        // Brightness travels on its own channel: `None` and zero stay as they
+        // are, so a saved next-on level can be mapped while the light is off.
+        if let Some(brightness) = data.state.brightness {
+            data.state.brightness = Some(OrderedFloat(map_brightness_output(
+                &calibration.brightness_points,
+                brightness.into_inner(),
+            )));
         }
     }
     physical.color_to_preferred_mode()
@@ -381,6 +600,237 @@ mod tests {
         device::{ControllableDevice, DeviceId, ManageKind},
     };
 
+    fn curve() -> Vec<BrightnessCalibrationPoint> {
+        vec![
+            BrightnessCalibrationPoint {
+                logical: OrderedFloat(0.10),
+                output: OrderedFloat(0.04),
+            },
+            BrightnessCalibrationPoint {
+                logical: OrderedFloat(0.50),
+                output: OrderedFloat(0.30),
+            },
+            BrightnessCalibrationPoint {
+                logical: OrderedFloat(1.00),
+                output: OrderedFloat(0.80),
+            },
+        ]
+    }
+
+    #[test]
+    fn brightness_curve_validation_accepts_identity_and_rejects_bad_curves() {
+        assert!(validate_brightness_points(&[]).is_ok());
+
+        let one = vec![BrightnessCalibrationPoint {
+            logical: OrderedFloat(0.5),
+            output: OrderedFloat(0.5),
+        }];
+        assert!(validate_brightness_points(&one).is_err());
+
+        let duplicate = vec![
+            BrightnessCalibrationPoint {
+                logical: OrderedFloat(0.5),
+                output: OrderedFloat(0.2),
+            },
+            BrightnessCalibrationPoint {
+                logical: OrderedFloat(0.5),
+                output: OrderedFloat(0.6),
+            },
+        ];
+        assert!(validate_brightness_points(&duplicate).is_err());
+
+        let descending = vec![
+            BrightnessCalibrationPoint {
+                logical: OrderedFloat(0.2),
+                output: OrderedFloat(0.6),
+            },
+            BrightnessCalibrationPoint {
+                logical: OrderedFloat(0.4),
+                output: OrderedFloat(0.3),
+            },
+        ];
+        assert!(validate_brightness_points(&descending).is_err());
+
+        let out_of_range = vec![
+            BrightnessCalibrationPoint {
+                logical: OrderedFloat(0.0),
+                output: OrderedFloat(0.2),
+            },
+            BrightnessCalibrationPoint {
+                logical: OrderedFloat(0.5),
+                output: OrderedFloat(1.2),
+            },
+        ];
+        assert!(validate_brightness_points(&out_of_range).is_err());
+
+        let too_many = (1..=17)
+            .map(|index| BrightnessCalibrationPoint {
+                logical: OrderedFloat(index as f32 / 100.0),
+                output: OrderedFloat(index as f32 / 100.0),
+            })
+            .collect::<Vec<_>>();
+        assert!(validate_brightness_points(&too_many).is_err());
+    }
+
+    #[test]
+    fn brightness_maps_forward_with_identity_zero_and_clamps() {
+        assert_eq!(map_brightness_output(&[], 0.42), 0.42);
+        // Zero and a missing value never move.
+        assert_eq!(map_brightness_output(&curve(), 0.0), 0.0);
+        // Below the lowest anchor still clamps to it.
+        assert_eq!(map_brightness_output(&curve(), 0.02), 0.04);
+        // Above the highest anchor clamps to the top output, not to 100%.
+        assert_eq!(map_brightness_output(&curve(), 1.0), 0.80);
+        // Between anchors interpolates linearly.
+        let middle = map_brightness_output(&curve(), 0.30);
+        assert!((middle - 0.17).abs() < 1e-6, "got {middle}");
+    }
+
+    #[test]
+    fn brightness_maps_back_from_a_report_deterministically() {
+        assert_eq!(map_brightness_input(&curve(), 0.30), 0.50);
+        let middle = map_brightness_input(&curve(), 0.17);
+        assert!((middle - 0.30).abs() < 1e-5, "got {middle}");
+        // A plateau resolves to its lowest logical level.
+        let plateau = vec![
+            BrightnessCalibrationPoint {
+                logical: OrderedFloat(0.2),
+                output: OrderedFloat(0.3),
+            },
+            BrightnessCalibrationPoint {
+                logical: OrderedFloat(0.6),
+                output: OrderedFloat(0.3),
+            },
+        ];
+        assert_eq!(map_brightness_input(&plateau, 0.3), 0.2);
+        // Outside the curve follows the forward clamp.
+        assert_eq!(map_brightness_input(&curve(), 0.01), 0.10);
+        assert_eq!(map_brightness_input(&curve(), 0.95), 1.0);
+        assert_eq!(map_brightness_input(&[], 0.5), 0.5);
+    }
+
+    #[test]
+    fn composition_keeps_the_other_channel_and_leaves_the_source_alone() {
+        let source = DeviceColorCalibration {
+            device_key: "mqtt/lamp".into(),
+            points: vec![ColorCalibrationPoint {
+                reference: uv(30, 0.25),
+                output: uv(55, 0.1),
+            }],
+            brightness_points: Vec::new(),
+        };
+
+        // Authoring brightness for a device that already matches color keeps
+        // those color points in the new profile.
+        let composed = compose_profile_for_device(
+            "lamp-brightness".into(),
+            "Lamp brightness".into(),
+            &source,
+            CalibrationChannels {
+                color: true,
+                brightness: true,
+            },
+            Vec::new(),
+            curve(),
+            1.0,
+            None,
+        );
+        assert_eq!(composed.brightness_points.len(), 3);
+        assert_eq!(source.brightness_points.len(), 0);
+        assert_eq!(composed.points.len(), 1);
+
+        // Removing brightness keeps color: the composed profile has no curve
+        // and still carries the color points.
+        let without_brightness = compose_profile_for_device(
+            "lamp-color".into(),
+            "Lamp color".into(),
+            &source,
+            CalibrationChannels {
+                color: true,
+                brightness: false,
+            },
+            source.points.clone(),
+            Vec::new(),
+            1.0,
+            None,
+        );
+        assert!(without_brightness.brightness_points.is_empty());
+        assert_eq!(without_brightness.points.len(), 1);
+        without_brightness.validate().unwrap();
+
+        // A profile with neither channel is not a profile.
+        let empty = DeviceColorCalibration {
+            device_key: "mqtt/lamp".into(),
+            points: Vec::new(),
+            brightness_points: Vec::new(),
+        };
+        assert!(empty.validate().is_err());
+    }
+
+    #[test]
+    fn legacy_json_deserializes_and_new_exports_round_trip() {
+        // An old row has neither `brightness` nor `brightness_points`.
+        let legacy = r#"{"id":"old","name":"Old","points":[]}"#;
+        let profile: ColorCalibrationProfile = serde_json::from_str(legacy).unwrap();
+        assert_eq!(profile.brightness, 1.0);
+        assert!(profile.brightness_points.is_empty());
+        // An empty color set alone is not valid any more, and a brightness
+        // curve makes it valid.
+        assert!(profile.validate().is_err());
+        let brightness_only = ColorCalibrationProfile {
+            brightness_points: curve(),
+            ..profile
+        };
+        brightness_only.validate().unwrap();
+
+        let round_tripped: ColorCalibrationProfile =
+            serde_json::from_str(&serde_json::to_string(&brightness_only).unwrap()).unwrap();
+        assert_eq!(round_tripped.brightness_points, brightness_only.brightness_points);
+        assert!(round_tripped.brightness_points[0].logical.into_inner() > 0.0);
+    }
+
+    #[test]
+    fn calibrated_device_maps_brightness_without_turning_anything_on() {
+        let calibration = DeviceColorCalibration {
+            device_key: "mqtt/lamp".into(),
+            points: Vec::new(),
+            brightness_points: curve(),
+        };
+
+        // Off stays off, and a zero level stays zero.
+        let off = lamp(
+            Capabilities {
+                brightness: Some(true),
+                ..Capabilities::default()
+            },
+            DeviceColor::new_from_hs(30, 0.5),
+        );
+        let mut off = off;
+        if let DeviceData::Controllable(data) = &mut off.data {
+            data.state.power = false;
+            data.state.brightness = Some(OrderedFloat(0.5));
+        }
+        let mapped = calibrated_device(&off, Some(&calibration));
+        if let DeviceData::Controllable(data) = &mapped.data {
+            assert!(!data.state.power);
+            assert_eq!(data.state.brightness.map(|value| value.into_inner()), Some(0.30));
+        } else {
+            panic!("expected a controllable device");
+        }
+
+        let mut zero = off.clone();
+        if let DeviceData::Controllable(data) = &mut zero.data {
+            data.state.brightness = Some(OrderedFloat(0.0));
+        }
+        let mapped_zero = calibrated_device(&zero, Some(&calibration));
+        if let DeviceData::Controllable(data) = &mapped_zero.data {
+            assert_eq!(data.state.brightness.map(|value| value.into_inner()), Some(0.0));
+        } else {
+            panic!("expected a controllable device");
+        }
+    }
+
+
     fn uv(h: u16, s: f32) -> Uv {
         Uv::from_xy(&DeviceColor::new_from_hs(h, s).to_xy().unwrap())
     }
@@ -388,6 +838,7 @@ mod tests {
     fn profile() -> DeviceColorCalibration {
         DeviceColorCalibration {
             device_key: "mqtt/lamp".into(),
+            brightness_points: Vec::new(),
             points: vec![
                 ColorCalibrationPoint {
                     reference: uv(30, 0.25),
@@ -450,6 +901,7 @@ mod tests {
         let white = uv(0, 0.0);
         let calibration = DeviceColorCalibration {
             device_key: "x/y".into(),
+            brightness_points: Vec::new(),
             points: vec![ColorCalibrationPoint {
                 reference: white.clone(),
                 output: white,
@@ -476,6 +928,7 @@ mod tests {
     fn calibrated_output_uses_each_devices_supported_transport() {
         let calibration = DeviceColorCalibration {
             device_key: "x/y".into(),
+            brightness_points: Vec::new(),
             points: vec![ColorCalibrationPoint {
                 reference: uv(0, 1.0),
                 output: uv(120, 1.0),
@@ -520,6 +973,7 @@ mod tests {
         let input = uv(240, 1.0);
         let calibration = DeviceColorCalibration {
             device_key: "x/y".into(),
+            brightness_points: Vec::new(),
             points: vec![ColorCalibrationPoint {
                 reference: uv(0, 1.0),
                 output: uv(120, 1.0),
