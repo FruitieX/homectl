@@ -38,8 +38,10 @@ import {
   useDeviceDisplayNames,
   useRoutines,
   useScenes,
+  useGroups,
 } from '@/hooks/useConfig';
 import { useDevicesState } from '@/hooks/websocket';
+import { resolveSceneEffects } from '@/lib/sceneEffects';
 import { RoutineWhatIfPreview } from '@/ui/RoutineWhatIfPreview';
 import { openAssistantPanelAtom } from '@/assistant/state';
 import { useSetAtom } from 'jotai';
@@ -86,6 +88,7 @@ export default function NewRoutinePage() {
   const { data: routines, create } = useRoutines();
   const { data: scenes, loading: scenesLoading } = useScenes();
   const devicesState = useDevicesState();
+  const groups = useGroups();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
 
   // After a choice, the fields it reveals become the obvious next focus.
@@ -232,6 +235,10 @@ export default function NewRoutinePage() {
   // Continue only advances once the current step has an answer.
   const startIsValid =
     draft.intent !== '' && (draft.intent !== 'copy' || draft.copyFromId !== '');
+  // Step 2 is not done until a scene outcome has a scene.
+  const thenIsValid = draft.outcome !== 'scene' || draft.sceneId !== '';
+  // Review needs a real name: the field's text is only a placeholder.
+  const nameIsValid = draft.name.trim() !== '';
   const errorStep: 'when' | 'then' | 'review' | null = error
     ? /scene/i.test(error)
       ? 'then'
@@ -240,6 +247,21 @@ export default function NewRoutinePage() {
         : 'review'
     : null;
   const reviewSentence = describeJourney(draft, context);
+  // Once a scene is chosen, say how much it would actually change.
+  const sceneEffectSummary = useMemo(() => {
+    const scene = (scenes ?? []).find((entry) => entry.id === draft.sceneId);
+    if (!scene) return null;
+    return resolveSceneEffects(
+      scene as unknown as { device_states?: Record<string, never> | null },
+      {
+        devices: devicesState as Record<string, { name?: string }>,
+        groups: groups as unknown as Record<
+          string,
+          { name?: string; device_keys?: unknown[] }
+        >,
+      },
+    );
+  }, [draft.sceneId, scenes, devicesState, groups]);
 
   const createRoutine = async () => {
     setSaving(true);
@@ -894,6 +916,16 @@ export default function NewRoutinePage() {
                         (scene) => scene.id === draft.sceneId,
                       )?.name ?? draft.sceneId}
                     </Badge>
+                    {sceneEffectSummary ? (
+                      <span className="text-xs text-muted-foreground">
+                        Activating it changes{' '}
+                        {sceneEffectSummary.affectedDeviceCount} device
+                        {sceneEffectSummary.affectedDeviceCount === 1
+                          ? ''
+                          : 's'}
+                        .
+                      </span>
+                    ) : null}
                     <Button
                       size="sm"
                       variant="ghost"
@@ -931,6 +963,13 @@ export default function NewRoutinePage() {
                         </li>
                       ) : null}
                     </ul>
+                    <p
+                      id="then-required"
+                      className="text-xs text-amber-600 dark:text-amber-400"
+                    >
+                      Choose the scene this routine should activate before
+                      continuing.
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       Nothing there yet?{' '}
                       <Link
@@ -1008,7 +1047,15 @@ export default function NewRoutinePage() {
               ) : (
                 <span />
               )}
-              <Button size="sm" onClick={() => setStep((step + 1) as Step)}>
+              <Button
+                size="sm"
+                disabled={!thenIsValid}
+                aria-describedby={thenIsValid ? undefined : 'then-required'}
+                onClick={() => {
+                  if (!thenIsValid) return;
+                  setStep((step + 1) as Step);
+                }}
+              >
                 Continue
                 <ArrowRight className="size-4" aria-hidden />
               </Button>
@@ -1032,8 +1079,17 @@ export default function NewRoutinePage() {
               <Input
                 value={draft.name}
                 placeholder="Evening lights"
+                aria-describedby={nameIsValid ? undefined : 'routine-name-hint'}
                 onChange={(event) => update({ name: event.target.value })}
               />
+              {nameIsValid ? null : (
+                <span
+                  id="routine-name-hint"
+                  className="text-xs text-amber-600 dark:text-amber-400"
+                >
+                  Enter a name. &ldquo;Evening lights&rdquo; is only an example.
+                </span>
+              )}
             </label>
             <details className="rounded-xl border border-border p-3">
               <summary className="cursor-pointer text-sm font-medium">
@@ -1121,14 +1177,14 @@ export default function NewRoutinePage() {
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
-          disabled={saving || missing.length > 0 || idTaken}
+          disabled={saving || missing.length > 0 || idTaken || !nameIsValid}
           onClick={() => void createRoutine()}
         >
           {saving ? 'Creating…' : 'Create routine'}
         </Button>
         <Button
           variant="ghost"
-          disabled={saving}
+          disabled={saving || !nameIsValid}
           onClick={() => navigate('/config/routines')}
         >
           Cancel

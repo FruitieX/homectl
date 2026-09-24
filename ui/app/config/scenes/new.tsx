@@ -690,9 +690,8 @@ export default function NewScenePage() {
               </ul>
             )}
             <p className="text-xs text-muted-foreground">
-              A captured target means the app's requested state, not a claim
-              about the physical device. Nothing is commanded until you activate
-              the scene.
+              Captured is the app's requested state, not a reading of the
+              device. Nothing is commanded until you activate the scene.
             </p>
           </section>
           <section className="space-y-3 rounded-2xl border border-border bg-background/70 p-4">
@@ -709,7 +708,7 @@ export default function NewScenePage() {
             </label>
             <details className="rounded-xl border border-border p-3">
               <summary className="cursor-pointer text-sm font-medium">
-                Details
+                ID and other options
               </summary>
               <label className="mt-3 block space-y-1.5">
                 <span className="text-sm font-medium">Scene ID</span>
@@ -741,9 +740,6 @@ export default function NewScenePage() {
               ) : (
                 <span />
               )}
-              <span className="text-xs text-muted-foreground">
-                Review above, then create the scene.
-              </span>
             </div>
           ) : null}
         </>
@@ -806,14 +802,6 @@ export default function NewScenePage() {
           </span>
         </div>
       ) : null}
-
-      <p className="text-xs text-muted-foreground">
-        Need a room to group devices first?{' '}
-        <Link className="underline" to="/config/groups/new">
-          Create a room
-        </Link>
-        .
-      </p>
     </div>
   );
 }

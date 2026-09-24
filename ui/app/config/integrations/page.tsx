@@ -606,7 +606,14 @@ export default function IntegrationsPage() {
   const connectionHealth = useMemo(() => {
     const map = new Map<
       string,
-      { total: number; notReporting: Array<{ key: string; label: string }> }
+      {
+        total: number;
+        notReporting: Array<{
+          key: string;
+          label: string;
+          lastReport?: number;
+        }>;
+      }
     >();
     for (const [key, device] of Object.entries(devices ?? {})) {
       const [integrationId] = key.split('/');
@@ -623,6 +630,14 @@ export default function IntegrationsPage() {
         entry.notReporting.push({
           key,
           label: device.name || (key.split('/')[1] ?? key),
+          lastReport:
+            (
+              availability as {
+                observed_at_ms?: number;
+                last_report_ms?: number;
+              }
+            ).observed_at_ms ??
+            (availability as { last_report_ms?: number }).last_report_ms,
         });
       }
       map.set(integrationId, entry);
@@ -763,16 +778,6 @@ export default function IntegrationsPage() {
                   `/config/integrations/${encodeURIComponent(integration.id)}`,
                 )
               }
-              onDelete={async () => {
-                if (
-                  await confirmDestructive(
-                    `Delete integration "${integration.id}"?`,
-                    'Devices and routines that depend on it will stop updating until it is recreated.',
-                  )
-                ) {
-                  await remove(integration.id);
-                }
-              }}
             />
           ))}
         </div>
@@ -815,6 +820,20 @@ export default function IntegrationsPage() {
               void navigate('/config/integrations', { replace: true });
             }
           }}
+          onDelete={async () => {
+            if (
+              await confirmDestructive(
+                `Delete integration "${editingIntegration.id}"?`,
+                'Devices and routines that depend on it will stop updating until it is recreated.',
+              )
+            ) {
+              await remove(editingIntegration.id);
+              setEditingId(null);
+              if (routeId) {
+                void navigate('/config/integrations', { replace: true });
+              }
+            }
+          }}
         />
       )}
     </div>
@@ -824,16 +843,14 @@ export default function IntegrationsPage() {
 function IntegrationCard({
   integration,
   onOpen,
-  onDelete,
   health,
 }: {
   integration: Integration;
   onOpen: () => void;
-  onDelete: () => void;
   /** Devices on this connection and how many stopped reporting. */
   health?: {
     total: number;
-    notReporting: Array<{ key: string; label: string }>;
+    notReporting: Array<{ key: string; label: string; lastReport?: number }>;
   };
 }) {
   return (
@@ -856,8 +873,16 @@ function IntegrationCard({
           <div>
             <CardTitle>{integration.id}</CardTitle>
             <div className="mt-2 flex flex-wrap gap-2">
-              <Badge variant="secondary">{integration.plugin}</Badge>
+              {integration.plugin === integration.id ? null : (
+                <Badge variant="secondary">{integration.plugin}</Badge>
+              )}
               <Badge
+                title="Enabled means homectl is configured to use this connection. It does not say whether the connection is reachable right now."
+                aria-label={
+                  integration.enabled
+                    ? 'Enabled in configuration'
+                    : 'Disabled in configuration'
+                }
                 className={
                   integration.enabled
                     ? enabledBadgeClassName
@@ -885,7 +910,7 @@ function IntegrationCard({
                       onClick={(event) => event.stopPropagation()}
                     >
                       {health.notReporting.length === 1
-                        ? `${health.notReporting[0].label} stopped reporting`
+                        ? `${health.notReporting[0].label} stopped reporting${describeLastReport(health.notReporting[0].lastReport)}`
                         : `${health.notReporting.length} devices stopped reporting`}
                     </Link>
                   </>
@@ -893,23 +918,20 @@ function IntegrationCard({
               </p>
             ) : null}
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={(event) => {
-                event.stopPropagation();
-                onDelete();
-              }}
-            >
-              Delete
-            </Button>
-          </div>
         </div>
       </CardHeader>
     </Card>
   );
+}
+
+function describeLastReport(observedAtMs?: number): string {
+  if (!observedAtMs) return '';
+  const minutes = Math.max(0, Math.round((Date.now() - observedAtMs) / 60000));
+  if (minutes < 1) return ' (last report just now)';
+  if (minutes < 60) return ` (last report ${minutes} min ago)`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return ` (last report ${hours} h ago)`;
+  return ` (last report ${Math.round(hours / 24)} d ago)`;
 }
 
 function IntegrationConfigFieldsEditor({
@@ -1813,6 +1835,7 @@ function IntegrationOverlay({
   schemasError,
   onClose,
   onSubmit,
+  onDelete,
 }: {
   mode: 'create' | 'edit';
   integration?: Integration;
@@ -1821,6 +1844,8 @@ function IntegrationOverlay({
   schemasError: string | null;
   onClose: () => void;
   onSubmit: (integration: Partial<Integration>) => Promise<void>;
+  /** Only used in edit mode: delete lives here, not on the list. */
+  onDelete?: () => void;
 }) {
   const [id, setId] = useState(integration?.id ?? '');
   const [plugin, setPlugin] = useState(
@@ -2090,6 +2115,25 @@ function IntegrationOverlay({
             </ConfigFormSection>
           </TabsContent>
         </Tabs>
+
+        {mode === 'edit' && onDelete ? (
+          <section className="mt-6 space-y-2 rounded-2xl border border-destructive/40 p-4">
+            <h3 className="text-sm font-semibold">Danger zone</h3>
+            <p className="text-xs text-muted-foreground">
+              Deleting this connection stops its devices from updating. Devices
+              and routines that depend on it keep their saved settings until you
+              point them somewhere else.
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={onDelete}
+            >
+              Delete this connection
+            </Button>
+          </section>
+        ) : null}
 
         <ConfigFormActions>
           <Button variant="ghost" onClick={onClose}>
