@@ -23,6 +23,7 @@ import {
   SceneSelect,
   splitDeviceKey,
 } from '@/ui/config-selectors';
+import { Advanced } from '@/ui/primitives/advanced';
 import { ConfigField } from '@/ui/config-form';
 import { Button } from '@/ui/primitives/button';
 import { Card, CardContent } from '@/ui/primitives/card';
@@ -1538,46 +1539,52 @@ function StepEditor({
                 {open ? 'Close' : 'Edit'}
               </Button>
             ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              aria-label="Move earlier"
-              disabled={index === 0}
-              onClick={() => onMove(-1)}
-            >
-              ↑
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              aria-label="Move later"
-              disabled={index === total - 1}
-              onClick={() => onMove(1)}
-            >
-              ↓
-            </Button>
-            {onDuplicate ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-label={`Duplicate step ${index + 1}`}
-                onClick={onDuplicate}
-              >
-                <Copy aria-hidden />
-              </Button>
+            {/* Reordering and removal belong to the step being edited: a row at
+                rest shows what it does, not a row of buttons. */}
+            {!onToggleOpen || open ? (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Move earlier"
+                  disabled={index === 0}
+                  onClick={() => onMove(-1)}
+                >
+                  ↑
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Move later"
+                  disabled={index === total - 1}
+                  onClick={() => onMove(1)}
+                >
+                  ↓
+                </Button>
+                {onDuplicate ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Duplicate step ${index + 1}`}
+                    onClick={onDuplicate}
+                  >
+                    <Copy aria-hidden />
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={onRemove}
+                >
+                  Remove
+                </Button>
+              </>
             ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={onRemove}
-            >
-              Remove
-            </Button>
           </div>
         </div>
 
@@ -1928,33 +1935,36 @@ export function ProgramBuilder({
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h4 className="font-medium">Program</h4>
+          <h4 className="font-medium">Actions</h4>
           <p className="text-sm text-muted-foreground">
-            Runs after a trigger fires and the condition holds. Native steps run
-            in order; a script runs sandboxed with declared state access.
+            These steps run in order once a trigger fires and the conditions
+            hold. Each row is one step: open it to change it.
           </p>
         </div>
-        <ConfigField label="Program type" className="min-w-56">
-          <select
-            className={selectClassName}
-            value={program?.kind ?? ''}
-            onChange={(event) =>
-              changeProgramKind(event.target.value as Program['kind'])
-            }
-          >
-            {program === undefined ? (
-              <option value="">Select type...</option>
-            ) : null}
-            <option value="native">Native steps</option>
-            <option value="script">Sandboxed script</option>
-          </select>
-        </ConfigField>
+        <Advanced summary="Program type">
+          <ConfigField label="Program type" className="min-w-56">
+            <select
+              className={selectClassName}
+              value={program?.kind ?? ''}
+              onChange={(event) =>
+                changeProgramKind(event.target.value as Program['kind'])
+              }
+            >
+              {program === undefined ? (
+                <option value="">Select type...</option>
+              ) : null}
+              <option value="native">Steps in order</option>
+              <option value="script">Sandboxed script</option>
+            </select>
+          </ConfigField>
+        </Advanced>
       </div>
 
       {program === undefined ? (
         <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center">
           <p className="text-sm text-muted-foreground">
-            This routine has no program yet.
+            This routine has no actions yet. Most routines just switch things on
+            or off.
           </p>
           <div className="mt-3 flex flex-wrap justify-center gap-2">
             <Button
@@ -1963,7 +1973,7 @@ export function ProgramBuilder({
               size="sm"
               onClick={() => changeProgramKind('native')}
             >
-              Create native program
+              Add steps
             </Button>
             <Button
               type="button"
@@ -1971,7 +1981,7 @@ export function ProgramBuilder({
               size="sm"
               onClick={() => changeProgramKind('script')}
             >
-              Create script program
+              Write a script
             </Button>
           </div>
         </div>
@@ -2007,8 +2017,8 @@ export function ProgramBuilder({
 
           {steps.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-              No steps yet. The server rejects an enabled routine with an empty
-              program, so add at least one step.
+              No steps yet. An enabled routine needs at least one, otherwise
+              there is nothing to run.
             </div>
           ) : (
             <div className="space-y-3">
