@@ -86,7 +86,12 @@ export function DetailPageShell({
           </Link>
         </Button>
 
-        <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground">
+        {/* Breadcrumbs are the wide-screen location cue; on phones Back plus the
+            item title is the whole pattern. */}
+        <nav
+          aria-label="Breadcrumb"
+          className="hidden text-xs text-muted-foreground sm:block"
+        >
           <ol className="flex flex-wrap items-center gap-1">
             {crumbs.map((crumb, index) => {
               // Every crumb except the current one is navigable: a crumb

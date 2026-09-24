@@ -30,6 +30,8 @@ export const Navbar = () => {
   const groupMatch = useMatch('/groups/:id');
 
   let title = 'homectl';
+  // Named at sm and up; a phone shows one location signal at a time.
+  let sectionSuffix: string | null = null;
   let back: string | null = null;
   // Settings pages render their own page heading, so the shell must not add a
   // second <h1> for the same screen.
@@ -57,7 +59,11 @@ export const Navbar = () => {
     const section =
       configSections.find((entry) => entry.href === resolved) ??
       configSections.find((entry) => resolved.startsWith(`${entry.href}/`));
-    title = section ? `Settings · ${section.label}` : 'Settings';
+    // Phones get one location signal: the list page's own title, and Back plus
+    // the item title on a detail page. Naming the section in the app bar as
+    // well is repetition on a narrow screen, so it only appears from sm up.
+    title = 'Settings';
+    sectionSuffix = section?.label ?? null;
     pageOwnsHeading = true;
   }
 
@@ -119,10 +125,16 @@ export const Navbar = () => {
         {pageOwnsHeading ? (
           <p className="truncate text-xl font-semibold text-foreground">
             {title}
+            {sectionSuffix ? (
+              <span className="hidden sm:inline"> · {sectionSuffix}</span>
+            ) : null}
           </p>
         ) : (
           <h1 className="truncate text-xl font-semibold text-foreground">
             {title}
+            {sectionSuffix ? (
+              <span className="hidden sm:inline"> · {sectionSuffix}</span>
+            ) : null}
           </h1>
         )}
       </div>
