@@ -4,4 +4,5 @@
  * Freshness of the last computed output. A failed evaluation retains the
  * last good value as `stale`, never as healthy.
  */
-export type SourceQuality = { "quality": "fresh" } | { "quality": "stale", message: string, };
+export type SourceQuality =
+  { quality: 'fresh' } | { quality: 'stale'; message: string };

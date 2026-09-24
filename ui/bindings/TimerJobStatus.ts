@@ -3,4 +3,4 @@
 /**
  * Current lifecycle state of one live job.
  */
-export type TimerJobStatus = "pending";
+export type TimerJobStatus = 'pending';

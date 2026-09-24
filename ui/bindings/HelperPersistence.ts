@@ -3,4 +3,4 @@
 /**
  * How a helper's current value survives restarts.
  */
-export type HelperPersistence = "durable" | "session";
+export type HelperPersistence = 'durable' | 'session';

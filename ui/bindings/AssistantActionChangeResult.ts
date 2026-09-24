@@ -3,4 +3,9 @@
 /**
  * Result of one applied (or rejected) action change.
  */
-export type AssistantActionChangeResult = { deviceKey: string, name?: string, ok: boolean, error?: string, };
+export type AssistantActionChangeResult = {
+  deviceKey: string;
+  name?: string;
+  ok: boolean;
+  error?: string;
+};

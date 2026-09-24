@@ -5,4 +5,10 @@
  * the provider when it reports them and are estimated from character counts
  * otherwise (`approximate` is true in that case).
  */
-export type AssistantUsage = { promptTokens: bigint, completionTokens: bigint, totalTokens: bigint, contextWindow: bigint, approximate: boolean, };
+export type AssistantUsage = {
+  promptTokens: bigint;
+  completionTokens: bigint;
+  totalTokens: bigint;
+  contextWindow: bigint;
+  approximate: boolean;
+};

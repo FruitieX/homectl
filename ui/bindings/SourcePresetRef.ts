@@ -4,4 +4,4 @@
  * Identity of a shipped source preset, pinned in the definition so a later
  * preset update is a deliberate migration instead of a silent change.
  */
-export type SourcePresetRef = { id: string, version: number, };
+export type SourcePresetRef = { id: string; version: number };

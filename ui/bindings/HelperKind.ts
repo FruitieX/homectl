@@ -3,4 +3,8 @@
 /**
  * Declared type and constraints of a helper.
  */
-export type HelperKind = { "kind": "boolean" } | { "kind": "enum", options: Array<string>, } | { "kind": "number", min?: number, max?: number, } | { "kind": "string" };
+export type HelperKind =
+  | { kind: 'boolean' }
+  | { kind: 'enum'; options: Array<string> }
+  | { kind: 'number'; min?: number; max?: number }
+  | { kind: 'string' };

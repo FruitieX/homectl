@@ -3,4 +3,8 @@
 /**
  * Acknowledges application to runtime state, not physical device delivery.
  */
-export type DeviceCommandResult = { request_id: string, applied: boolean, error: string | null, };
+export type DeviceCommandResult = {
+  request_id: string;
+  applied: boolean;
+  error: string | null;
+};

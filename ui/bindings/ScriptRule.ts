@@ -3,9 +3,10 @@
 /**
  * A JavaScript-based rule that evaluates a script returning boolean
  */
-export type ScriptRule = { 
-/**
- * JavaScript code that should return a boolean value.
- * Has access to `devices` and `groups` global objects.
- */
-script: string, };
+export type ScriptRule = {
+  /**
+   * JavaScript code that should return a boolean value.
+   * Has access to `devices` and `groups` global objects.
+   */
+  script: string;
+};

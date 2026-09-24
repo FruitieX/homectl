@@ -178,7 +178,7 @@ export default function SceneDetailPage() {
             unresolvedCount: 0,
             scripted: false,
           },
-    [deviceKeys, scene, sceneIds],
+    [knownDeviceKeys, scene, sceneIds, sourceAliases],
   );
 
   const saveSection = useCallback(

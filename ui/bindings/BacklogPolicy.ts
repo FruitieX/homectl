@@ -6,4 +6,4 @@
  * run once at the earlier occurrence. Backlog handling is explicit and
  * distinct from scheduler lateness.
  */
-export type BacklogPolicy = "skip" | "catch_up_once";
+export type BacklogPolicy = 'skip' | 'catch_up_once';

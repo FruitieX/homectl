@@ -3,4 +3,4 @@
 /**
  * Unique identity of an event within one process (boot) lifetime.
  */
-export type EventId = { boot_id: bigint, sequence: bigint, };
+export type EventId = { boot_id: bigint; sequence: bigint };

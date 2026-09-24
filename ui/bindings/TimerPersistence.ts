@@ -3,4 +3,4 @@
 /**
  * How the job survives process lifetime (P10 adds durable jobs).
  */
-export type TimerPersistence = "session" | "durable";
+export type TimerPersistence = 'session' | 'durable';

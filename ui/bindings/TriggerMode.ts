@@ -3,4 +3,4 @@
 /**
  * Determines how a rule triggers in response to state changes.
  */
-export type TriggerMode = "pulse" | "edge" | "level";
+export type TriggerMode = 'pulse' | 'edge' | 'level';

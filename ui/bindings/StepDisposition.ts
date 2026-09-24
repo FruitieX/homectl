@@ -3,4 +3,4 @@
 /**
  * Disposition of one planned step.
  */
-export type StepDisposition = "dispatched" | "suppressed";
+export type StepDisposition = 'dispatched' | 'suppressed';

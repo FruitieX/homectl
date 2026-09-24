@@ -4,4 +4,4 @@
  * Strong three-valued logic result. Errors are represented separately on the
  * enclosing evaluation, never as a truth value.
  */
-export type TruthValue = "true" | "false" | "unknown";
+export type TruthValue = 'true' | 'false' | 'unknown';

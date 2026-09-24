@@ -4,4 +4,11 @@
  * Why a value or predicate is unknown. Unknown is not an error: an entity
  * that disappears after save becomes a runtime unknown with a visible reason.
  */
-export type UnknownReason = { "kind": "missing_entity", entity: string, } | { "kind": "missing_field", field: string, } | { "kind": "offline", device: string, } | { "kind": "stale", device: string, } | { "kind": "empty_selection", group: string, } | { "kind": "not_initialized", entity: string, } | { "kind": "unknown_source_value", source: string, };
+export type UnknownReason =
+  | { kind: 'missing_entity'; entity: string }
+  | { kind: 'missing_field'; field: string }
+  | { kind: 'offline'; device: string }
+  | { kind: 'stale'; device: string }
+  | { kind: 'empty_selection'; group: string }
+  | { kind: 'not_initialized'; entity: string }
+  | { kind: 'unknown_source_value'; source: string };

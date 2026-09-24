@@ -4,4 +4,9 @@
  * One persisted assistant conversation as listed in the panel. Message
  * contents are only included when a single thread is fetched.
  */
-export type AssistantThreadSummary = { id: string, name: string, updatedAtMs: number, messageCount: number, };
+export type AssistantThreadSummary = {
+  id: string;
+  name: string;
+  updatedAtMs: number;
+  messageCount: number;
+};

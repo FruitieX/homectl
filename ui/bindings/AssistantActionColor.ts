@@ -3,4 +3,4 @@
 /**
  * Color component of a proposed light-state change.
  */
-export type AssistantActionColor = { h: number, s: number, };
+export type AssistantActionColor = { h: number; s: number };

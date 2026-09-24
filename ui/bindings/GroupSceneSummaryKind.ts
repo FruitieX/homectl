@@ -3,4 +3,5 @@
 /**
  * How the assigned scene of a group's configured members summarizes.
  */
-export type GroupSceneSummaryKind = "uniform" | "unassigned" | "mixed" | "unknown";
+export type GroupSceneSummaryKind =
+  'uniform' | 'unassigned' | 'mixed' | 'unknown';

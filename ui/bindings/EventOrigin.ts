@@ -4,4 +4,4 @@
  * Where an event came from. Automation v2 uses this to keep raw physical
  * evidence separate from desired-state commands and internal derivations.
  */
-export type EventOrigin = "report" | "command" | "derived" | "startup";
+export type EventOrigin = 'report' | 'command' | 'derived' | 'startup';

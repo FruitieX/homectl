@@ -3,4 +3,4 @@
 /**
  * Who authored one turn of the conversation history.
  */
-export type AssistantMessageRole = "user" | "assistant";
+export type AssistantMessageRole = 'user' | 'assistant';

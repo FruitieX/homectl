@@ -15,6 +15,7 @@ import {
   useDeviceSensorConfigs,
   useScenes,
   useCalibrationProfiles,
+  useDeviceColorCalibrations,
   useCalibrationAssignments,
   useAssignCalibrationProfile,
 } from '@/hooks/useConfig';
@@ -52,6 +53,8 @@ import { DeviceReportStatus } from '@/ui/DeviceReportStatus';
 import { SearchablePicker } from '@/ui/SearchablePicker';
 import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 import { ColorCalibrationWizard } from '@/ui/ColorCalibrationWizard';
+import { BrightnessCalibrationWizard } from '@/ui/BrightnessCalibrationWizard';
+import { isDimmableDevice } from '@/lib/brightnessCalibration';
 import { ResolvedColorDot } from '@/ui/SceneResolvedColorPreview';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
 import {
@@ -551,6 +554,7 @@ export default function DevicesPage() {
     error: profilesError,
   } = useCalibrationProfiles();
   const { data: calibrationAssignments } = useCalibrationAssignments();
+  const { data: deviceColorCalibrations } = useDeviceColorCalibrations();
   const assignCalibration = useAssignCalibrationProfile();
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [batchProfileId, setBatchProfileId] = useState('');
@@ -610,6 +614,7 @@ export default function DevicesPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [openDeviceKey, setOpenDeviceKey] = useState<string | null>(null);
   const [calibrationOpen, setCalibrationOpen] = useState<string | null>(null);
+  const [brightnessOpen, setBrightnessOpen] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(30);
   const [replacementDrafts, setReplacementDrafts] = useState<
     Record<string, string>
@@ -1902,27 +1907,106 @@ export default function DevicesPage() {
                     </div>
 
                     <div className="space-y-4">
-                      {canCalibrateDevice(device) ? (
+                      {canCalibrateDevice(device) ||
+                      isDimmableDevice(device) ? (
                         <ConfigFormSection
-                          title="Color calibration"
-                          description="Calibration corrects the color this light shows compared to what the app asked for. It needs the light switched on and takes a few steps; nothing changes until you finish the wizard."
+                          title="Light calibration"
+                          description={
+                            canCalibrateDevice(device) &&
+                            isDimmableDevice(device)
+                              ? 'Calibration corrects what this light does compared to what the app asked for. Color and brightness are calibrated separately; nothing changes until you finish the wizard.'
+                              : canCalibrateDevice(device)
+                                ? 'Calibration corrects the color this light shows compared to what the app asked for. Nothing changes until you finish the wizard.'
+                                : 'Calibration changes the brightness command this light receives, so the same level looks the same on another light. Nothing changes until you finish the wizard.'
+                          }
                         >
-                          {calibrationOpen === deviceKey ? (
-                            <ColorCalibrationWizard
-                              key={deviceKey}
-                              device={device}
-                              devices={liveDevices}
-                            />
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              aria-expanded={false}
-                              onClick={() => setCalibrationOpen(deviceKey)}
-                            >
-                              Start calibration
-                            </Button>
-                          )}
+                          {(() => {
+                            const assignment = calibrationAssignments.find(
+                              (row) => row.device_key === deviceKey,
+                            );
+                            const assignedProfile = calibrationProfiles.find(
+                              (profile) =>
+                                profile.id === assignment?.profile_id,
+                            );
+                            const resolved = deviceColorCalibrations.find(
+                              (row) => row.device_key === deviceKey,
+                            );
+                            const channels = [
+                              (assignedProfile?.points?.length ?? 0) > 0
+                                ? 'Color'
+                                : null,
+                              (assignedProfile?.brightness_points?.length ??
+                                0) > 0
+                                ? 'Brightness'
+                                : null,
+                            ].filter(Boolean);
+                            const busy =
+                              brightnessOpen === deviceKey ||
+                              calibrationOpen === deviceKey;
+                            return (
+                              <div className="space-y-3">
+                                {busy ? null : (
+                                  <p className="text-sm text-muted-foreground">
+                                    {assignedProfile
+                                      ? `Calibrated: ${channels.join(' and ') || 'nothing yet'} (${assignedProfile.name}).`
+                                      : 'Not calibrated yet.'}
+                                  </p>
+                                )}
+                                {calibrationOpen === deviceKey ? (
+                                  <ColorCalibrationWizard
+                                    key={`color-${deviceKey}`}
+                                    device={device}
+                                    devices={liveDevices}
+                                  />
+                                ) : null}
+                                {brightnessOpen === deviceKey ? (
+                                  <BrightnessCalibrationWizard
+                                    key={`brightness-${deviceKey}`}
+                                    device={device}
+                                    devices={liveDevices}
+                                    existingPoints={
+                                      (assignedProfile?.points ??
+                                        resolved?.points ??
+                                        []) as Array<{
+                                        reference: unknown;
+                                        output: unknown;
+                                      }>
+                                    }
+                                    profile={assignedProfile ?? null}
+                                    onSaved={() => {
+                                      void refetchDevices();
+                                    }}
+                                  />
+                                ) : null}
+                                {busy ? null : (
+                                  <div className="flex flex-wrap gap-2">
+                                    {isDimmableDevice(device) ? (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                          setBrightnessOpen(deviceKey)
+                                        }
+                                      >
+                                        Calibrate brightness
+                                      </Button>
+                                    ) : null}
+                                    {canCalibrateDevice(device) ? (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                          setCalibrationOpen(deviceKey)
+                                        }
+                                      >
+                                        Calibrate color
+                                      </Button>
+                                    ) : null}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </ConfigFormSection>
                       ) : null}
                       <ConfigFormSection
