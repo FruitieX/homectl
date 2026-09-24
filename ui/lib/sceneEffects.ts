@@ -7,7 +7,7 @@
  * resolves the final effect per device and says which target won.
  */
 
-import { resolveDeviceLink } from './sceneTargets';
+import { resolveDeviceLink } from './sceneTargets.ts';
 
 export type SceneEffectTargetKind = 'device' | 'group' | 'scene';
 

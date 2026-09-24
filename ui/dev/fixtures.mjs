@@ -310,6 +310,12 @@ function normalHome() {
               integration_id: 'zigbee2mqtt',
               device_id: 'living_room_lamp',
             },
+            // A legacy key the `circadian` computed source still answers to:
+            // the saved reference is valid, not missing.
+            hue: {
+              integration_id: 'circadian',
+              device_id: 'color',
+            },
             // Points at a scene that no longer exists, so the "unresolved" states stay exercised.
             'zigbee2mqtt/living_room_floor_lamp': {
               scene_id: 'evening_retired',
