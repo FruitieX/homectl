@@ -78,12 +78,13 @@ export interface SceneDeviceState {
   transition?: number;
 }
 
-export interface DeviceColor {
-  Hs?: { h: number; s: number };
-  Xy?: { x: number; y: number };
-  Rgb?: { r: number; g: number; b: number };
-  Ct?: { ct: number };
-}
+/**
+ * The generated binding: the server stores colours as an untagged union of
+ * `{h,s}`, `{r,g,b}`, `{x,y}`, and `{ct}`. Never reintroduce a tagged shape
+ * here — it makes a saved colour look unset in the editor.
+ */
+import type { DeviceColor } from '@/bindings/DeviceColor';
+export type { DeviceColor };
 
 /**
  * Raw v2 definition body as stored. `condition` and `execution` are

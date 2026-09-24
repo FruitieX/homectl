@@ -83,7 +83,7 @@ test('supported brightness and hue color are captured in the scene color shape',
   assert.deepEqual(result.state, {
     power: true,
     brightness: 0.25,
-    color: { Hs: { h: 210, s: 0.6 } },
+    color: { h: 210, s: 0.6 },
     transition: undefined,
   });
   assert.deepEqual(result.notes, []);
@@ -178,29 +178,23 @@ test('sensors and unknown payloads cannot be captured', () => {
 });
 
 test('color shapes convert from live to scene form and match capabilities', () => {
-  assert.deepEqual(toSceneColor({ h: 10, s: 1 }), { Hs: { h: 10, s: 1 } });
-  assert.deepEqual(toSceneColor({ r: 1, g: 2, b: 3 }), {
-    Rgb: { r: 1, g: 2, b: 3 },
-  });
-  assert.deepEqual(toSceneColor({ x: 0.3, y: 0.4 }), {
-    Xy: { x: 0.3, y: 0.4 },
-  });
-  assert.deepEqual(toSceneColor({ ct: 2400 }), { Ct: { ct: 2400 } });
-  assert.deepEqual(toSceneColor({ Hs: { h: 1, s: 1 } }), {
-    Hs: { h: 1, s: 1 },
-  });
+  assert.deepEqual(toSceneColor({ h: 10, s: 1 }), { h: 10, s: 1 });
+  assert.deepEqual(toSceneColor({ r: 1, g: 2, b: 3 }), { r: 1, g: 2, b: 3 });
+  assert.deepEqual(toSceneColor({ x: 0.3, y: 0.4 }), { x: 0.3, y: 0.4 });
+  assert.deepEqual(toSceneColor({ ct: 2400 }), { ct: 2400 });
+  assert.deepEqual(toSceneColor({ h: 1, s: 1 }), { h: 1, s: 1 });
   assert.equal(toSceneColor(null), undefined);
   assert.equal(toSceneColor({}), undefined);
   assert.equal(
     colorMatchesCapabilities(
-      { Ct: { ct: 2000 } },
+      { ct: 2000 },
       { ...brightnessOnly, ct: { start: 2000, end: 6500 } },
     ),
     true,
   );
   assert.equal(
     colorMatchesCapabilities(
-      { Ct: { ct: 2000 } },
+      { ct: 2000 },
       { ...brightnessOnly, ct: null },
     ),
     false,

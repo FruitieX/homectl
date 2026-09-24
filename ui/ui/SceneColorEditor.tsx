@@ -1,6 +1,17 @@
 import { type DeviceColor } from '@/hooks/useConfig';
 import { ConfigField } from '@/ui/config-form';
 import { Input } from '@/ui/primitives/input';
+import {
+  COLOR_MODE_LABELS,
+  type DeviceColorMode,
+  colorParts,
+  colorToCss,
+  defaultColorFor,
+  describeColorName,
+  formatColorExact,
+  getColorMode,
+  withColorPart,
+} from '@/lib/deviceColor';
 
 const selectClassName =
   'h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
@@ -9,82 +20,13 @@ const rangeClassName =
 const panelClassName =
   'space-y-3 rounded-2xl border border-border bg-muted/30 p-3';
 
-type ColorMode = 'hs' | 'xy' | 'rgb' | 'ct' | undefined;
+const MODES: DeviceColorMode[] = ['hs', 'rgb', 'xy', 'ct'];
 
-function getColorMode(color?: DeviceColor): ColorMode {
-  if (!color) return undefined;
-  if ('Hs' in color) return 'hs';
-  if ('Xy' in color) return 'xy';
-  if ('Rgb' in color) return 'rgb';
-  if ('Ct' in color) return 'ct';
-  return undefined;
-}
-
-function hslToRgb(
-  h: number,
-  s: number,
-  l: number,
-): { r: number; g: number; b: number } {
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = l - c / 2;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-
-  if (h < 60) {
-    r = c;
-    g = x;
-  } else if (h < 120) {
-    r = x;
-    g = c;
-  } else if (h < 180) {
-    g = c;
-    b = x;
-  } else if (h < 240) {
-    g = x;
-    b = c;
-  } else if (h < 300) {
-    r = x;
-    b = c;
-  } else {
-    r = c;
-    b = x;
-  }
-
-  return {
-    r: Math.round((r + m) * 255),
-    g: Math.round((g + m) * 255),
-    b: Math.round((b + m) * 255),
-  };
-}
-
-function getColorPreview(color?: DeviceColor, brightness?: number): string {
-  if (!color) return 'transparent';
-
-  const b = brightness ?? 1;
-
-  if ('Hs' in color && color.Hs) {
-    const { r, g, b: blue } = hslToRgb(color.Hs.h, color.Hs.s, 0.5);
-    return `rgb(${Math.round(r * b)}, ${Math.round(g * b)}, ${Math.round(blue * b)})`;
-  }
-
-  if ('Rgb' in color && color.Rgb) {
-    return `rgb(${Math.round(color.Rgb.r * b)}, ${Math.round(color.Rgb.g * b)}, ${Math.round(color.Rgb.b * b)})`;
-  }
-
-  if ('Ct' in color && color.Ct) {
-    const ct = color.Ct.ct;
-    const warmth = Math.max(0, Math.min(1, (ct - 153) / (500 - 153)));
-    const r = Math.round((255 - warmth * 55) * b);
-    const g = Math.round((240 - warmth * 30) * b);
-    const blue = Math.round((200 + warmth * 55) * b);
-    return `rgb(${r}, ${g}, ${blue})`;
-  }
-
-  return 'gray';
-}
-
+/**
+ * Edits one device colour in the shape the server actually stores: an untagged
+ * `{h,s}` | `{r,g,b}` | `{x,y}` | `{ct}`. Switching mode emits a valid value of
+ * the new shape, and an existing XY value is editable rather than dropped.
+ */
 export function SceneColorEditor({
   color,
   brightness,
@@ -95,7 +37,8 @@ export function SceneColorEditor({
   onChange: (color: DeviceColor | undefined) => void;
 }) {
   const colorMode = getColorMode(color);
-  const preview = getColorPreview(color, brightness);
+  const preview = color ? colorToCss(color, brightness ?? 1) : 'transparent';
+  const parts = color ? colorParts(color) : [];
 
   return (
     <div className="space-y-4">
@@ -107,152 +50,89 @@ export function SceneColorEditor({
             const mode = event.target.value;
             if (mode === 'none') {
               onChange(undefined);
-            } else if (mode === 'hs') {
-              onChange({ Hs: { h: 30, s: 1 } });
-            } else if (mode === 'rgb') {
-              onChange({ Rgb: { r: 255, g: 200, b: 100 } });
-            } else if (mode === 'ct') {
-              onChange({ Ct: { ct: 300 } });
+            } else {
+              onChange(defaultColorFor(mode as DeviceColorMode));
             }
           }}
         >
           <option value="none">No color</option>
-          <option value="hs">Hue/Saturation</option>
-          <option value="rgb">RGB</option>
-          <option value="ct">Color Temperature</option>
+          {MODES.map((mode) => (
+            <option key={mode} value={mode}>
+              {COLOR_MODE_LABELS[mode]}
+            </option>
+          ))}
         </select>
       </ConfigField>
 
-      {colorMode ? (
+      {color && colorMode ? (
         <div className={panelClassName}>
           <div
+            role="img"
+            aria-label={`Colour preview: ${describeColorName(color)}`}
+            title={formatColorExact(color)}
             className="h-8 w-full rounded"
             style={{ backgroundColor: preview }}
           />
 
-          {colorMode === 'hs' && color && 'Hs' in color ? (
-            <>
-              <ConfigField label={`Hue: ${color.Hs?.h ?? 0}°`}>
-                <input
-                  type="range"
-                  min="0"
-                  max="360"
-                  value={color.Hs?.h ?? 0}
-                  className={rangeClassName}
-                  style={{ accentColor: `hsl(${color.Hs?.h ?? 0}, 100%, 50%)` }}
-                  onChange={(event) =>
-                    onChange({
-                      Hs: {
-                        h: Number(event.target.value),
-                        s: color.Hs?.s ?? 1,
-                      },
-                    })
-                  }
-                />
-              </ConfigField>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {parts.map((part) => (
               <ConfigField
-                label={`Saturation: ${Math.round((color.Hs?.s ?? 1) * 100)}%`}
+                key={part.key}
+                label={`${part.label}: ${part.display}${part.unit ?? ''}`}
               >
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={(color.Hs?.s ?? 1) * 100}
-                  className={rangeClassName}
-                  onChange={(event) =>
-                    onChange({
-                      Hs: {
-                        h: color.Hs?.h ?? 0,
-                        s: Number(event.target.value) / 100,
-                      },
-                    })
-                  }
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min={part.min}
+                    max={part.max}
+                    step={part.step}
+                    value={part.value}
+                    aria-label={`${part.label} slider`}
+                    className={rangeClassName}
+                    onChange={(event) =>
+                      onChange(
+                        withColorPart(
+                          color,
+                          part.key,
+                          Number(event.target.value),
+                        ),
+                      )
+                    }
+                  />
+                  {/* An exact number beside every slider. */}
+                  <Input
+                    type="number"
+                    min={part.min}
+                    max={part.max}
+                    step={part.step}
+                    value={part.display}
+                    aria-label={`${part.label} exact value`}
+                    className="h-9 w-24"
+                    onChange={(event) =>
+                      onChange(
+                        withColorPart(
+                          color,
+                          part.key,
+                          Number(event.target.value),
+                        ),
+                      )
+                    }
+                  />
+                </div>
               </ConfigField>
-            </>
-          ) : null}
+            ))}
+          </div>
 
-          {colorMode === 'rgb' && color && 'Rgb' in color ? (
-            <div className="grid grid-cols-3 gap-3">
-              <ConfigField label="R">
-                <Input
-                  type="number"
-                  min="0"
-                  max="255"
-                  className="h-9"
-                  value={color.Rgb?.r ?? 255}
-                  onChange={(event) =>
-                    onChange({
-                      Rgb: {
-                        r: Number(event.target.value),
-                        g: color.Rgb?.g ?? 200,
-                        b: color.Rgb?.b ?? 100,
-                      },
-                    })
-                  }
-                />
-              </ConfigField>
-              <ConfigField label="G">
-                <Input
-                  type="number"
-                  min="0"
-                  max="255"
-                  className="h-9"
-                  value={color.Rgb?.g ?? 200}
-                  onChange={(event) =>
-                    onChange({
-                      Rgb: {
-                        r: color.Rgb?.r ?? 255,
-                        g: Number(event.target.value),
-                        b: color.Rgb?.b ?? 100,
-                      },
-                    })
-                  }
-                />
-              </ConfigField>
-              <ConfigField label="B">
-                <Input
-                  type="number"
-                  min="0"
-                  max="255"
-                  className="h-9"
-                  value={color.Rgb?.b ?? 100}
-                  onChange={(event) =>
-                    onChange({
-                      Rgb: {
-                        r: color.Rgb?.r ?? 255,
-                        g: color.Rgb?.g ?? 200,
-                        b: Number(event.target.value),
-                      },
-                    })
-                  }
-                />
-              </ConfigField>
+          {colorMode === 'ct' ? (
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Cool (6500K)</span>
+              <span>Warm (2000K)</span>
             </div>
           ) : null}
 
-          {colorMode === 'ct' && color && 'Ct' in color ? (
-            <ConfigField
-              label={`Color Temp: ${color.Ct?.ct ?? 300} mireds (~${Math.round(
-                1000000 / (color.Ct?.ct ?? 300),
-              )}K)`}
-            >
-              <input
-                type="range"
-                min="153"
-                max="500"
-                value={color.Ct?.ct ?? 300}
-                className={rangeClassName}
-                onChange={(event) =>
-                  onChange({ Ct: { ct: Number(event.target.value) } })
-                }
-              />
-              <div className="mt-1 flex justify-between text-xs text-muted-foreground">
-                <span>Cool (6500K)</span>
-                <span>Warm (2000K)</span>
-              </div>
-            </ConfigField>
-          ) : null}
+          <p className="text-xs text-muted-foreground">
+            {describeColorName(color)} · {formatColorExact(color)}
+          </p>
         </div>
       ) : null}
     </div>

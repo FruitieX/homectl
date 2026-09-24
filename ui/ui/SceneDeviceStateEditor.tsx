@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { ChevronRight } from 'lucide-react';
 import {
   SceneDeviceConfig,
   SceneDeviceState,
@@ -276,6 +277,9 @@ export interface SceneTargetConfigEditorProps {
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   focused?: boolean;
+  /** The one row whose fields are open in this collection. */
+  selected?: boolean;
+  onSelect?: () => void;
 }
 
 export function SceneTargetConfigEditor({
@@ -293,6 +297,8 @@ export function SceneTargetConfigEditor({
   onMoveUp,
   onMoveDown,
   focused,
+  selected = false,
+  onSelect,
 }: SceneTargetConfigEditorProps) {
   const configType = getConfigType(config);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -324,8 +330,22 @@ export function SceneTargetConfigEditor({
     >
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h4 className="font-semibold">{targetLabel ?? targetKey}</h4>
+          <button
+            type="button"
+            onClick={onSelect}
+            aria-expanded={selected}
+            className="min-w-0 flex-1 rounded-lg text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <h4 className="flex items-center gap-1.5 font-semibold">
+              <ChevronRight
+                aria-hidden
+                className={cn(
+                  'size-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none',
+                  selected && 'rotate-90',
+                )}
+              />
+              <span className="min-w-0 truncate">{targetLabel ?? targetKey}</span>
+            </h4>
             {/* One line: what this target does right now, so the fields below
                 stay closed until someone wants to change them. */}
             <p className="text-xs text-muted-foreground">
@@ -334,9 +354,9 @@ export function SceneTargetConfigEditor({
                 <span className="ml-2 font-mono">{targetKey}</span>
               ) : null}
             </p>
-          </div>
+          </button>
           <div className="flex shrink-0 items-center gap-1">
-            {position !== undefined && targetCount !== undefined && (
+            {position !== undefined && (targetCount ?? 0) > 1 && (
               <>
                 <Button
                   type="button"
@@ -357,7 +377,7 @@ export function SceneTargetConfigEditor({
                   className="size-8"
                   aria-label={`Move ${targetLabel ?? targetKey} later`}
                   title="Move later"
-                  disabled={position === targetCount - 1}
+                  disabled={position === (targetCount ?? 1) - 1}
                   onClick={onMoveDown}
                 >
                   <ChevronDown />
@@ -376,11 +396,9 @@ export function SceneTargetConfigEditor({
           </div>
         </div>
 
-        <details className="mt-2">
-          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-            Edit target
-          </summary>
-          <div className={cn(fieldClassName, 'mt-3')}>
+        {selected ? (
+          <>
+            <div className={cn(fieldClassName, 'mt-3')}>
             <label>
               <span className={fieldLabelClassName}>Config Type</span>
             </label>
@@ -427,7 +445,8 @@ export function SceneTargetConfigEditor({
               onChange={onChange}
             />
           )}
-        </details>
+          </>
+        ) : null}
       </CardContent>
     </Card>
   );

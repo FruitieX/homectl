@@ -188,6 +188,8 @@ export default function SceneDetailPage() {
   });
   const [showAllEffects, setShowAllEffects] = useState(false);
   const coordinator = useSectionEditCoordinator();
+  // Collections keep exactly one row editor open.
+  const [openTargetKey, setOpenTargetKey] = useState<string | null>(null);
   const deviceEditor = useSectionEditor<Scene>({
     item: scene,
     fields: DEVICE_FIELDS,
@@ -447,6 +449,10 @@ export default function SceneDetailPage() {
                       onMoveDown: () => moveRoom(key, 1),
                     }
                   : {})}
+                selected={openTargetKey === key}
+                onSelect={() =>
+                  setOpenTargetKey((current) => (current === key ? null : key))
+                }
               />
             </div>
           );

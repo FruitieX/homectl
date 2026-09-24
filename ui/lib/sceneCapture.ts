@@ -69,25 +69,23 @@ export function toSceneColor(color: unknown): DeviceColor | undefined {
   if (!color || typeof color !== 'object') {
     return undefined;
   }
+  // Colours are stored untagged: {h,s} | {r,g,b} | {x,y} | {ct}.
   const value = color as Record<string, unknown>;
-  if (value.Hs || value.Xy || value.Rgb || value.Ct) {
-    return value as DeviceColor;
-  }
   if (typeof value.h === 'number' && typeof value.s === 'number') {
-    return { Hs: { h: value.h, s: value.s } };
+    return { h: value.h, s: value.s } as DeviceColor;
   }
   if (
     typeof value.r === 'number' &&
     typeof value.g === 'number' &&
     typeof value.b === 'number'
   ) {
-    return { Rgb: { r: value.r, g: value.g, b: value.b } };
+    return { r: value.r, g: value.g, b: value.b } as DeviceColor;
   }
   if (typeof value.x === 'number' && typeof value.y === 'number') {
-    return { Xy: { x: value.x, y: value.y } };
+    return { x: value.x, y: value.y } as DeviceColor;
   }
   if (typeof value.ct === 'number') {
-    return { Ct: { ct: value.ct } };
+    return { ct: value.ct } as DeviceColor;
   }
   return undefined;
 }
@@ -100,10 +98,23 @@ export function colorMatchesCapabilities(
   if (!color) {
     return false;
   }
-  if (color.Hs) return capabilities.hs;
-  if (color.Xy) return capabilities.xy;
-  if (color.Rgb) return capabilities.rgb;
-  if (color.Ct) return capabilities.ct !== null;
+  // Untagged wire shapes; kept local so this module stays importable by the
+  // plain node test runner (lib/deviceColor.ts is the UI's shared parser).
+  const value = color as Record<string, unknown>;
+  if (typeof value.h === 'number' && typeof value.s === 'number') {
+    return capabilities.hs;
+  }
+  if (typeof value.x === 'number' && typeof value.y === 'number') {
+    return capabilities.xy;
+  }
+  if (
+    typeof value.r === 'number' &&
+    typeof value.g === 'number' &&
+    typeof value.b === 'number'
+  ) {
+    return capabilities.rgb;
+  }
+  if (typeof value.ct === 'number') return capabilities.ct !== null;
   return false;
 }
 

@@ -6,6 +6,12 @@ import {
   getSceneDeviceLinkTargetKey,
 } from '@/hooks/useConfig';
 import { black, getResolvedDeviceColorState, white } from '@/lib/colors';
+import {
+  type DeviceColor,
+  type RawDeviceColor,
+  colorToRgb,
+  getColorMode,
+} from '@/lib/deviceColor';
 import Color, { type ColorInstance } from 'color';
 
 type Color = ColorInstance;
@@ -73,78 +79,11 @@ export function ResolvedColorDot({
   );
 }
 
-function xyToRgb(x: number, y: number) {
-  const safeY = y === 0 ? 0.0001 : y;
-  const z = 1 - x - y;
-  const brightness = 1;
-  const linearX = (brightness / safeY) * x;
-  const linearZ = (brightness / safeY) * z;
-
-  let r = linearX * 1.656492 - brightness * 0.354851 - linearZ * 0.255038;
-  let g = -linearX * 0.707196 + brightness * 1.655397 + linearZ * 0.036152;
-  let b = linearX * 0.051713 - brightness * 0.121364 + linearZ * 1.01153;
-
-  r = r <= 0.0031308 ? 12.92 * r : 1.055 * Math.pow(r, 1 / 2.4) - 0.055;
-  g = g <= 0.0031308 ? 12.92 * g : 1.055 * Math.pow(g, 1 / 2.4) - 0.055;
-  b = b <= 0.0031308 ? 12.92 * b : 1.055 * Math.pow(b, 1 / 2.4) - 0.055;
-
-  const clamp = (value: number) =>
-    Math.max(0, Math.min(255, Math.round(value * 255)));
-
-  return {
-    r: clamp(r),
-    g: clamp(g),
-    b: clamp(b),
-  };
-}
-
 function getColorObject(color: ColorInput): Color | null {
-  if (!color || typeof color !== 'object') {
-    return null;
-  }
-
-  if ('Hs' in color && color.Hs) {
-    return Color({ h: color.Hs.h, s: color.Hs.s * 100, v: 100 });
-  }
-  if ('Rgb' in color && color.Rgb) {
-    return Color.rgb(color.Rgb.r, color.Rgb.g, color.Rgb.b);
-  }
-  if ('Ct' in color && color.Ct) {
-    const normalized = Math.max(
-      0,
-      Math.min(1, (color.Ct.ct - 153) / (500 - 153)),
-    );
-    return Color.rgb(
-      Math.round(255 - normalized * 55),
-      Math.round(240 - normalized * 30),
-      Math.round(200 + normalized * 55),
-    );
-  }
-  if ('Xy' in color && color.Xy) {
-    const rgb = xyToRgb(color.Xy.x, color.Xy.y);
-    return Color.rgb(rgb.r, rgb.g, rgb.b);
-  }
-
-  if ('h' in color && 's' in color) {
-    return Color({ h: color.h, s: color.s * 100, v: 100 });
-  }
-  if ('r' in color && 'g' in color && 'b' in color) {
-    return Color.rgb(color.r, color.g, color.b);
-  }
-  if ('ct' in color) {
-    const normalized = Math.max(0, Math.min(1, (color.ct - 153) / (500 - 153)));
-    return Color.rgb(
-      Math.round(255 - normalized * 55),
-      Math.round(240 - normalized * 30),
-      Math.round(200 + normalized * 55),
-    );
-  }
-  if ('x' in color && 'y' in color) {
-    const rgb = xyToRgb(color.x, color.y);
-    return Color.rgb(rgb.r, rgb.g, rgb.b);
-  }
-
-  return null;
+  if (!color || typeof color !== 'object') return null;
+  if (!getColorMode(color as RawDeviceColor)) return null;
+  const { r, g, b } = colorToRgb(color as DeviceColor);
+  return Color.rgb(r, g, b);
 }
 
 function getSceneById(scenes: Scene[], sceneId: string) {
