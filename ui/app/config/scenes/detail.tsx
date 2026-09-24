@@ -363,22 +363,39 @@ export default function SceneDetailPage() {
 
     return (
       <div className="space-y-2" data-target-key={key}>
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{label}</p>
-            <p className="truncate text-xs text-muted-foreground">
-              {kind === 'device' ? key : key}
-            </p>
-          </div>
-          <Badge variant="muted">{modeLabel(descriptor.mode)}</Badge>
+        {/* One line per target: name, then what it resolves to. */}
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="min-w-0 truncate text-sm font-medium">{label}</span>
+          <span aria-hidden className="text-muted-foreground">
+            →
+          </span>
+          <span className="min-w-0 truncate text-sm text-foreground/80">
+            {descriptor.summary}
+          </span>
         </div>
-        <p className="text-sm text-foreground/80">{descriptor.summary}</p>
         {descriptor.unresolvedReason ? (
           <p className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300">
             <AlertTriangle aria-hidden className="size-3 shrink-0" />
             {descriptor.unresolvedReason}
           </p>
         ) : null}
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer">Details</summary>
+          <dl className="mt-1 space-y-0.5">
+            <div>
+              <dt className="inline">Mode: </dt>
+              <dd className="inline">{modeLabel(descriptor.mode)}</dd>
+            </div>
+            {label === key ? null : (
+              <div>
+                <dt className="inline">
+                  {kind === 'device' ? 'Device key: ' : 'Room id: '}
+                </dt>
+                <dd className="inline font-mono">{key}</dd>
+              </div>
+            )}
+          </dl>
+        </details>
         <SceneResolvedColorPreview
           config={config}
           devices={devices}
