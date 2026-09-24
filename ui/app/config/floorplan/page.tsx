@@ -737,24 +737,25 @@ export default function FloorplanPage() {
         </CardContent>
       </Card>
 
-      {/* Optional: Background image upload */}
-      <details className="rounded-3xl border border-border bg-card p-5 shadow-sm">
-        <summary className="cursor-pointer list-none font-medium">
-          Optional: Upload Background Image
-        </summary>
-        <div className="mt-4">
-          <p className="text-sm text-muted-foreground mb-4">
-            Upload an SVG, PNG, or JPEG image to show beneath the editable
-            floorplan grid in both the editor and the map view. The grid
-            stretches across the full image, so you can raise the grid
-            resolution without pushing it outside the image bounds.
+      {/* Display and layout: what the canvas shows, rather than how you draw. */}
+      <Card>
+        <CardContent className="p-5">
+          <h3 className="font-medium">Display and layout</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            The background image sits beneath the grid in the editor and the map
+            view. The grid stretches across the whole image, so raising the grid
+            resolution never pushes it outside the image bounds.
           </p>
-          {backgroundImageUrl && (
-            <p className="mb-3 text-sm text-emerald-600 dark:text-emerald-300">
-              A background image is currently attached to this floorplan.
+          {backgroundImageUrl ? (
+            <p className="mt-3 text-sm text-muted-foreground">
+              A background image is attached. Uploading another replaces it.
+            </p>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">
+              No background image yet: the grid stands alone.
             </p>
           )}
-          <div className="flex flex-wrap gap-3 items-center">
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <Input
               ref={fileInputRef}
               type="file"
@@ -766,9 +767,9 @@ export default function FloorplanPage() {
               }}
               disabled={loading || floorplanLoading || !selectedFloorplanId}
             />
-            {backgroundImageUrl && (
+            {backgroundImageUrl ? (
               <Button
-                variant="destructive"
+                variant="outline"
                 disabled={loading || floorplanLoading || !selectedFloorplanId}
                 onClick={async () => {
                   if (
@@ -781,48 +782,12 @@ export default function FloorplanPage() {
                   }
                 }}
               >
-                Remove Image
+                Remove image
               </Button>
-            )}
+            ) : null}
           </div>
-        </div>
-      </details>
-
-      {/* Info */}
-      <Alert>
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          className="stroke-current shrink-0 w-6 h-6"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-          ></path>
-        </svg>
-        <div>
-          <AlertTitle>How to Use</AlertTitle>
-          <ul className="text-sm list-disc list-inside">
-            <li>
-              <strong>Draw Walls:</strong> Select a tile type and click/drag to
-              paint
-            </li>
-            <li>
-              <strong>Place Devices:</strong> Select a device and click to place
-              it on the grid
-            </li>
-            <li>
-              <strong>Paint Groups:</strong> Choose a group and paint its room
-              footprint tile by tile
-            </li>
-            <li>Drag placed devices to reposition them</li>
-            <li>Group masks and grid walls are saved with the floorplan</li>
-          </ul>
-        </div>
-      </Alert>
+        </CardContent>
+      </Card>
 
       {showCreateFloorplan && (
         <ResponsiveOverlay

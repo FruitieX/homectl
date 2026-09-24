@@ -620,8 +620,7 @@ function AppearanceSettingsCard() {
                 Density
               </span>
               <span className="block text-xs leading-5 text-muted-foreground">
-                Compact fits more rows on screen; comfortable keeps larger touch
-                targets.
+                Compact fits more rows; comfortable keeps bigger touch targets.
               </span>
             </div>
             <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted p-1">
@@ -646,15 +645,14 @@ function AppearanceSettingsCard() {
             label="Display performance and troubleshooting"
             summary={blurEffectsEnabled ? undefined : 'Customized'}
           >
-            <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-muted/30 p-4">
+            <div className="flex items-center justify-between gap-4 rounded-2xl bg-muted/30 p-4">
               <span className="space-y-1">
                 <span className="block text-sm font-medium text-foreground">
                   Blur effects
                 </span>
                 <span className="block text-xs leading-5 text-muted-foreground">
-                  Store this setting in this browser only. Disable it on slower
-                  dashboard clients to make overlay and sticky-element scrolling
-                  cheaper.
+                  Stored in this browser. Turn it off if scrolling stutters on a
+                  slower client.
                 </span>
               </span>
               <Switch

@@ -43,7 +43,9 @@ export function ConfigListSearchBar({
             : `${totalCount} ${totalCount === 1 ? 'item' : 'items'}`}
         </span>
 
-        {hasActiveSearch && (
+        {/* One clear action, not two: when nothing matches, the empty state is
+            the place to clear the search from. */}
+        {hasActiveSearch && filteredCount > 0 && (
           <Button
             variant="ghost"
             size="sm"
