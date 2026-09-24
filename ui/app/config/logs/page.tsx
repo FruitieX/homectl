@@ -44,6 +44,19 @@ const levelOptions: Array<LogLevel | 'ALL'> = [
   'TRACE',
 ];
 
+/** Log rows lead with the clock time; the full timestamp stays in details. */
+function formatShortTime(timestamp: string) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return timestamp;
+  }
+  return date.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
 function formatTimestamp(timestamp: string) {
   return new Date(timestamp).toLocaleString(undefined, {
     dateStyle: 'short',
@@ -215,25 +228,53 @@ export default function LogsPage() {
         <div className="space-y-3">
           {visibleLogs.map((entry, index) => (
             <Card key={`${entry.timestamp}-${entry.target}-${index}`}>
-              <CardHeader className="gap-3">
-                <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={levelBadgeVariant[entry.level]}>
-                      {entry.level}
-                    </Badge>
-                    <CardTitle className="break-all font-mono text-sm">
-                      {entry.target}
-                    </CardTitle>
-                  </div>
-                  <CardDescription>
-                    {formatTimestamp(entry.timestamp)}
+              <CardHeader className="gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardDescription className="tabular-nums">
+                    {formatShortTime(entry.timestamp)}
                   </CardDescription>
+                  <Badge variant={levelBadgeVariant[entry.level]}>
+                    {entry.level}
+                  </Badge>
+                  <CardTitle className="text-sm font-medium">
+                    {entry.target}
+                  </CardTitle>
                 </div>
+                <p className="line-clamp-2 text-sm leading-6 text-foreground">
+                  {entry.message}
+                </p>
               </CardHeader>
               <CardContent>
-                <pre className="whitespace-pre-wrap wrap-break-word rounded-2xl bg-muted p-4 text-sm leading-6 text-muted-foreground">
-                  {entry.message}
-                </pre>
+                <details className="rounded-xl border border-border p-3">
+                  <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                    Raw entry
+                  </summary>
+                  <dl className="mt-2 space-y-1 text-xs">
+                    <div className="flex gap-2">
+                      <dt className="w-20 shrink-0 text-muted-foreground">
+                        Time
+                      </dt>
+                      <dd className="tabular-nums">
+                        {formatTimestamp(entry.timestamp)}
+                      </dd>
+                    </div>
+                    <div className="flex gap-2">
+                      <dt className="w-20 shrink-0 text-muted-foreground">
+                        Source
+                      </dt>
+                      <dd className="font-mono break-all">{entry.target}</dd>
+                    </div>
+                    <div className="flex gap-2">
+                      <dt className="w-20 shrink-0 text-muted-foreground">
+                        Level
+                      </dt>
+                      <dd className="font-mono">{entry.level}</dd>
+                    </div>
+                  </dl>
+                  <pre className="mt-2 whitespace-pre-wrap wrap-break-word rounded-lg bg-muted p-3 font-mono text-xs leading-5 text-muted-foreground">
+                    {entry.message}
+                  </pre>
+                </details>
               </CardContent>
             </Card>
           ))}
