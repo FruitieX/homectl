@@ -515,7 +515,6 @@ export default function RoutineDetailPage() {
                 devices={devices}
                 deviceDisplayNameMap={deviceDisplayNameMap}
                 groups={groups}
-                onEdit={() => when.begin()}
               />
             }
             renderEditor={(api) => {
@@ -575,7 +574,6 @@ export default function RoutineDetailPage() {
                 deviceDisplayNameMap={deviceDisplayNameMap}
                 groups={groups}
                 showTrace
-                onEdit={() => onlyIf.begin()}
               />
             }
             renderEditor={(api) => {
@@ -633,7 +631,6 @@ export default function RoutineDetailPage() {
                   name: entry.name,
                 }))}
                 deviceDisplayNameMap={deviceDisplayNameMap}
-                onEdit={() => then.begin()}
               />
             }
             renderEditor={(api) => {
@@ -817,7 +814,7 @@ export default function RoutineDetailPage() {
           openSection(open ? 'technical-definition' : null)
         }
         api={technical}
-        editLabel="Edit JSON"
+        changeLabel="Change JSON"
         fieldLabels={{
           definition_v2: 'Definition',
           rules: 'Rules',

@@ -28,11 +28,12 @@ export function useDirtyNavigationGuard(
 ) {
   useUnsavedChanges(dirty);
 
+  // Only leaving the page counts as navigation. Switching which section is
+  // open on the same page is handled in place by SectionEditProvider, which can
+  // offer Save as well as Discard.
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
-      dirty &&
-      `${currentLocation.pathname}${currentLocation.search}` !==
-        `${nextLocation.pathname}${nextLocation.search}`,
+      dirty && currentLocation.pathname !== nextLocation.pathname,
   );
 
   const prompting = useRef(false);

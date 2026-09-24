@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, MoreHorizontal } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
+import { SectionEditProvider } from '@/ui/config/sectionEditCoordinator';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
 import {
@@ -189,7 +190,7 @@ export function DetailPageShell({
           }
         />
       ) : (
-        children
+        <SectionEditProvider>{children}</SectionEditProvider>
       )}
     </div>
   );

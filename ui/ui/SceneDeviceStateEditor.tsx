@@ -376,7 +376,7 @@ export function SceneTargetConfigEditor({
           </div>
         </div>
 
-        <details className="mt-2" open={focused}>
+        <details className="mt-2">
           <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
             Edit target
           </summary>

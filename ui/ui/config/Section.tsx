@@ -9,7 +9,10 @@ import {
 import { ChevronRight } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
+import { confirmDialog } from '@/ui/primitives/confirm-dialog';
 import { Button } from '@/ui/primitives/button';
+import { StatusRegion, useStatusAnnouncements } from '@/ui/config/StatusRegion';
+import { useSectionEditCoordinator } from '@/ui/config/sectionEditCoordinator';
 import type { SectionEditorApi } from '@/ui/config/useSectionEditor';
 
 export type SectionProps<T extends object> = {
@@ -25,14 +28,15 @@ export type SectionProps<T extends object> = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   api: SectionEditorApi<T>;
-  /** Read-only content shown when the section is not being edited. */
+  /** Read-only content shown until the reader chooses Change. */
   readView: ReactNode;
   /** Fields shown in place of the read view while editing. */
   renderEditor: (api: SectionEditorApi<T>) => ReactNode;
-  editLabel?: string;
+  /** Label of the single action that starts editing this section. */
+  changeLabel?: string;
   /** Set false for sections with nothing to persist. */
   editable?: boolean;
-  /** When set, Edit is disabled and the reason is exposed. */
+  /** When set, Change is disabled and the reason is exposed. */
   editDisabledReason?: string | null;
   /** Field key -> human label, used by the error summary. */
   fieldLabels?: Record<string, string>;
@@ -43,12 +47,10 @@ export type SectionProps<T extends object> = {
 };
 
 /**
- * One section of a detail page: a heading that discloses a read view, and an
- * Edit action *inside* the expanded body (never nested in the disclosure
- * trigger). Editing replaces the read view in place; Save and Cancel are
- * explicit, validation errors get a summary that focuses the first bad field,
- * and a server-side change to the same fields is surfaced before it can be
- * overwritten.
+ * One section of a detail page. Opening it shows the saved values and current
+ * evidence first; a single **Change** action then replaces that read content
+ * with the editor. Only the section being edited shows Save and Cancel, and a
+ * page keeps at most one editor open at a time (see SectionEditProvider).
  */
 export function Section<T extends object>({
   id,
@@ -61,7 +63,7 @@ export function Section<T extends object>({
   api,
   readView,
   renderEditor,
-  editLabel = 'Edit',
+  changeLabel = 'Change',
   editable = true,
   editDisabledReason = null,
   fieldLabels,
@@ -70,20 +72,31 @@ export function Section<T extends object>({
   className,
 }: SectionProps<T>) {
   const sectionRef = useRef<HTMLElement | null>(null);
-  const editButtonRef = useRef<HTMLButtonElement | null>(null);
+  const changeButtonRef = useRef<HTMLButtonElement | null>(null);
   const [restoreFocus, setRestoreFocus] = useState(false);
+  const { status, announce } = useStatusAnnouncements();
+  const coordinator = useSectionEditCoordinator();
 
-  // Opening the section starts its draft: there is no Edit step to find.
+  const titleText = typeof title === 'string' ? title : 'This section';
+
+  // Tell the page-level coordinator what this section is doing, so another
+  // section can ask before it takes over the single editor slot.
   useEffect(() => {
-    if (!open || !editable || api.editing) return;
-    api.begin();
-  }, [open, editable, api]);
+    coordinator?.report(id, {
+      editing: api.editing,
+      dirty: api.dirty,
+      saving: api.saving,
+      save: api.save,
+      cancel: api.cancel,
+      title: titleText,
+    });
+  });
 
-  // Return focus to the section heading after Save or Discard.
+  // Return focus to the Change action after Save or Cancel.
   useEffect(() => {
     if (!restoreFocus || api.editing) return;
     setRestoreFocus(false);
-    editButtonRef.current?.focus();
+    changeButtonRef.current?.focus();
   }, [api.editing, restoreFocus]);
 
   const focusField = useCallback((field: string) => {
@@ -92,6 +105,42 @@ export function Section<T extends object>({
     );
     node?.focus();
   }, []);
+
+  const startEditing = useCallback(() => {
+    if (coordinator) {
+      coordinator.requestBegin(id, api.begin);
+    } else {
+      api.begin();
+    }
+  }, [api, coordinator, id]);
+
+  const finishEditing = useCallback(
+    async (mode: 'save' | 'cancel') => {
+      if (mode === 'cancel') {
+        if (api.dirty) {
+          const confirmed = await confirmDialog({
+            title: `Discard changes to ${titleText}?`,
+            description:
+              'The fields you changed here go back to their saved values.',
+            confirmLabel: 'Discard changes',
+            cancelLabel: 'Keep editing',
+          });
+          if (!confirmed) return;
+        }
+        api.cancel();
+        setRestoreFocus(true);
+        announce('Changes discarded', 'info');
+        return;
+      }
+      const wasDirty = api.dirty;
+      await api.save();
+      if (!api.errors.length) {
+        setRestoreFocus(true);
+        announce(wasDirty ? 'Changes saved' : 'Saved', 'success');
+      }
+    },
+    [announce, api, titleText],
+  );
 
   const headingId = `${id}-heading`;
   const bodyId = `${id}-body`;
@@ -154,7 +203,7 @@ export function Section<T extends object>({
           aria-label={typeof title === 'string' ? title : undefined}
           className="space-y-4 border-t border-border/70 p-4 sm:p-5"
         >
-          {editable ? (
+          {api.editing ? (
             <>
               {api.conflict ? (
                 <div
@@ -230,8 +279,8 @@ export function Section<T extends object>({
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
-                  onClick={() => void api.save()}
-                  disabled={api.saving || !api.dirty}
+                  onClick={() => void finishEditing('save')}
+                  disabled={api.saving}
                   aria-busy={api.saving}
                 >
                   {api.saving
@@ -240,36 +289,48 @@ export function Section<T extends object>({
                       ? 'Retry save'
                       : 'Save'}
                 </Button>
-                {api.dirty ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    disabled={api.saving}
-                    onClick={() => {
-                      api.cancel();
-                      setRestoreFocus(true);
-                    }}
-                  >
-                    Discard changes
-                  </Button>
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    No changes yet
-                  </span>
-                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={api.saving}
+                  onClick={() => void finishEditing('cancel')}
+                >
+                  Cancel
+                </Button>
               </div>
             </>
           ) : (
             <>
               {readView}
-              {editDisabledReason ? (
-                <p
-                  id={`${id}-edit-disabled`}
-                  className="mt-2 text-xs text-muted-foreground"
-                >
-                  {editDisabledReason}
-                </p>
+              {editable ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    ref={changeButtonRef}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={startEditing}
+                    disabled={editDisabledReason !== null}
+                    aria-describedby={
+                      editDisabledReason ? `${id}-change-disabled` : undefined
+                    }
+                  >
+                    {changeLabel}
+                  </Button>
+                  {editDisabledReason ? (
+                    <p
+                      id={`${id}-change-disabled`}
+                      className="text-xs text-muted-foreground"
+                    >
+                      {editDisabledReason}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
+              <StatusRegion
+                message={status?.message ?? null}
+                tone={status?.tone ?? 'info'}
+              />
             </>
           )}
         </div>

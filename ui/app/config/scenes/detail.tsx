@@ -27,6 +27,7 @@ import { Section } from '@/ui/config/Section';
 import { StatusRegion, useStatusAnnouncements } from '@/ui/config/StatusRegion';
 import { useDirtyNavigationGuard } from '@/ui/config/useDirtyNavigationGuard';
 import { useSectionEditor } from '@/ui/config/useSectionEditor';
+import { useSectionEditCoordinator } from '@/ui/config/sectionEditCoordinator';
 import { useSectionParams } from '@/ui/config/useSectionParams';
 import {
   ConfigField,
@@ -186,6 +187,7 @@ export default function SceneDetailPage() {
     save: saveSection,
   });
   const [showAllEffects, setShowAllEffects] = useState(false);
+  const coordinator = useSectionEditCoordinator();
   const deviceEditor = useSectionEditor<Scene>({
     item: scene,
     fields: DEVICE_FIELDS,
@@ -733,10 +735,16 @@ export default function SceneDetailPage() {
                           type="button"
                           className="mt-1.5 text-xs font-medium text-primary underline-offset-4 hover:underline"
                           onClick={() => {
-                            if (target.kind === 'group') {
-                              roomEditor.begin();
+                            const begin =
+                              target.kind === 'group'
+                                ? roomEditor.begin
+                                : deviceEditor.begin;
+                            const sectionId =
+                              target.kind === 'group' ? 'rooms' : 'devices';
+                            if (coordinator) {
+                              coordinator.requestBegin(sectionId, begin);
                             } else {
-                              deviceEditor.begin();
+                              begin();
                             }
                           }}
                         >
@@ -916,7 +924,7 @@ export default function SceneDetailPage() {
           headingRef={(node) => {
             headingRefs.current.script = node;
           }}
-          editLabel="Edit script"
+          changeLabel="Change script"
           readView={
             scriptPreview ? (
               <pre className="max-h-48 overflow-auto rounded-xl border border-border/70 bg-muted/30 p-3 text-xs">
