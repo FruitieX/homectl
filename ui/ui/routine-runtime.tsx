@@ -30,8 +30,20 @@ const toneClassName: Record<Tone, string> = {
   ghost: 'border-transparent bg-muted/70 text-muted-foreground',
 };
 
-export function StatusBadge({ label, tone }: { label: string; tone: Tone }) {
-  return <Badge className={toneClassName[tone]}>{label}</Badge>;
+export function StatusBadge({
+  label,
+  tone,
+  title,
+}: {
+  label: string;
+  tone: Tone;
+  title?: string;
+}) {
+  return (
+    <Badge className={toneClassName[tone]} title={title}>
+      {label}
+    </Badge>
+  );
 }
 
 function formatDuration(ms: number): string {

@@ -72,20 +72,111 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   return true;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) !== null
+  );
+}
+
+function readPath(root: unknown, path: readonly string[]): unknown {
+  let current: unknown = root;
+  for (const key of path) {
+    if (!isPlainObject(current)) {
+      return undefined;
+    }
+    current = current[key];
+  }
+  return current;
+}
+
+/**
+ * Copy fields out of an item for a section draft. Field names may be dotted
+ * paths ("definition_v2.triggers") so a section can own a sub-field of a
+ * nested definition while its siblings belong to other sections. The result
+ * keeps the nesting, because that is the shape Save merges back and the shape
+ * the conflict check compares.
+ */
 export function pickFields<T extends object>(
   item: T,
   fields: readonly string[],
 ): Record<string, unknown> {
   const picked: Record<string, unknown> = {};
   for (const field of fields) {
-    picked[field] = (item as Record<string, unknown>)[field];
+    const path = field.split('.');
+    const value = readPath(item, path);
+    let target = picked;
+    for (const key of path.slice(0, -1)) {
+      const existing = target[key];
+      if (!isPlainObject(existing)) {
+        target[key] = {};
+      }
+      target = target[key] as Record<string, unknown>;
+    }
+    target[path[path.length - 1]] = value;
   }
   return picked;
 }
 
-/** Merge a section draft over the latest loaded item, leaving other fields alone. */
+/**
+ * Merge a section draft over the latest loaded item. Plain objects merge into
+ * their counterpart so sibling sub-fields survive; every other value (arrays
+ * included) replaces the stored one, which is what editors produce. The item
+ * itself is not mutated: the merge builds new objects along the changed paths.
+ */
 export function mergeFields<T extends object>(item: T, section: Partial<T>): T {
-  return { ...item, ...section };
+  const merge = (
+    base: Record<string, unknown>,
+    patch: Record<string, unknown>,
+  ): Record<string, unknown> => {
+    const result: Record<string, unknown> = { ...base };
+    for (const [key, value] of Object.entries(patch)) {
+      const current = result[key];
+      if (
+        value === undefined &&
+        !(key in (base as Record<string, unknown>)) &&
+        !(key in patch)
+      ) {
+        continue;
+      }
+      result[key] =
+        isPlainObject(value) && isPlainObject(current)
+          ? merge(current, value)
+          : value;
+    }
+    return result;
+  };
+  return merge(
+    item as unknown as Record<string, unknown>,
+    section as unknown as Record<string, unknown>,
+  ) as unknown as T;
+}
+
+/**
+ * Compare a captured section snapshot against the latest item, descending only
+ * into the paths the snapshot actually holds. A key the section does not own
+ * is not compared, and a sibling added next to an owned sub-field is not a
+ * conflict either: only what Edit copied can count as "changed elsewhere".
+ */
+function sectionSnapshotEqual(baseline: unknown, latest: unknown): boolean {
+  if (isPlainObject(baseline) && isPlainObject(latest)) {
+    for (const [key, value] of Object.entries(baseline)) {
+      const other = latest[key];
+      if (isPlainObject(value) && isPlainObject(other)) {
+        if (!sectionSnapshotEqual(value, other)) {
+          return false;
+        }
+        continue;
+      }
+      if (!deepEqual(value, other)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return deepEqual(baseline, latest);
 }
 
 /**
@@ -101,7 +192,7 @@ export function sectionChangedElsewhere(
   const ignore = new Set(ignoreFields);
   const fields = Object.keys(baseline).filter((field) => !ignore.has(field));
   for (const field of fields) {
-    if (!deepEqual(baseline[field], latest[field])) {
+    if (!sectionSnapshotEqual(baseline[field], latest[field])) {
       return true;
     }
   }

@@ -5,6 +5,7 @@ import type { RoutinePreviewResponse } from '@/bindings/RoutinePreviewResponse';
 import type { RoutinePreviewRequest } from '@/bindings/RoutinePreviewRequest';
 import type { ConditionTraceNode } from '@/bindings/ConditionTraceNode';
 import { useAppConfig } from '@/hooks/appConfig';
+import { triggerLabel } from '@/ui/routine-runtime';
 import { DeviceSelect } from '@/ui/config-selectors';
 import { ValuePathPicker } from '@/ui/ValuePathPicker';
 import { SearchablePicker } from '@/ui/SearchablePicker';
@@ -53,6 +54,11 @@ export function RoutineWhatIfPreview({
   const { apiEndpoint } = useAppConfig();
   const triggers = (definition.triggers ?? []) as TriggerSpec[];
   const [triggerId, setTriggerId] = useState('');
+  const assumedTrigger = triggers.find((spec) => spec.id === triggerId);
+  const assumedTriggerLabel = assumedTrigger
+    ? (triggerLabel(assumedTrigger, devices, {}) ??
+      `${assumedTrigger.kind.replaceAll('_', ' ')} trigger`)
+    : 'selected trigger';
   const [deviceKey, setDeviceKey] = useState('');
   const [path, setPath] = useState('/value');
   const [valueType, setValueType] = useState<'boolean' | 'number' | 'text'>(
@@ -220,12 +226,24 @@ export function RoutineWhatIfPreview({
               {issue.path}: {issue.message}
             </p>
           ))}
-          {preview.condition && (
-            <p className="font-medium">
-              Condition: {preview.condition.error || preview.condition.truth}
-              {preview.would_run ? ' · would run' : ' · would not run'}
-            </p>
-          )}
+          <p className="text-base font-semibold">
+            {preview.would_run ? 'Would run' : 'Would not run'}
+          </p>
+          <p className="text-muted-foreground">
+            Assuming the {assumedTriggerLabel} fires
+            {preview.condition?.error
+              ? ' — but the condition cannot be evaluated.'
+              : preview.would_run
+                ? ': the condition is met and that trigger fires.'
+                : preview.condition?.truth === 'true'
+                  ? ': the condition is met, but nothing in this scenario fires it.'
+                  : preview.condition?.truth === 'false'
+                    ? ': the condition is not met right now.'
+                    : ': the condition is unknown right now.'}
+          </p>
+          {preview.condition?.error ? (
+            <p className="text-destructive">{preview.condition.error}</p>
+          ) : null}
           {preview.condition?.trace && (
             <details>
               <summary className="cursor-pointer text-sm text-primary">
@@ -254,8 +272,10 @@ export function RoutineWhatIfPreview({
             </p>
           )}
           <p className="text-xs text-muted-foreground">
-            Preview predicts a plan from current state. It does not confirm
-            physical device delivery.
+            Preview only predicts a plan from current state: it does not fire
+            devices, does not check whether the trigger you assumed will
+            actually occur, does not execute scripts, and does not confirm
+            physical delivery.
           </p>
         </div>
       )}

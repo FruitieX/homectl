@@ -111,7 +111,11 @@ function scene(id, name, options = {}) {
   };
 }
 
-function v2Routine(id, name, { triggers, conditions, steps, enabled = true, revision = 1 }) {
+function v2Routine(
+  id,
+  name,
+  { triggers, conditions, steps, enabled = true, revision = 1 },
+) {
   return {
     id,
     name,
@@ -121,7 +125,17 @@ function v2Routine(id, name, { triggers, conditions, steps, enabled = true, revi
     definition_v2: {
       triggers,
       condition: conditions,
-      program: { kind: 'native', steps },
+      program: {
+        kind: 'native',
+        // Native actions are tagged by `action`; the fixture writes them with
+        // `kind` for readability, so translate here. Ids are required: the UI
+        // keys step rows by action id.
+        steps: steps.map(({ kind, ...rest }, index) => ({
+          id: `s${index + 1}`,
+          action: kind,
+          ...rest,
+        })),
+      },
       execution: { mode: 'queued', max_actions: 32 },
     },
     rules: [],
@@ -130,7 +144,15 @@ function v2Routine(id, name, { triggers, conditions, steps, enabled = true, revi
 }
 
 function v1Routine(id, name, { rules, actions, enabled = true }) {
-  return { id, name, enabled, semantics_version: 1, revision: 1, rules, actions };
+  return {
+    id,
+    name,
+    enabled,
+    semantics_version: 1,
+    revision: 1,
+    rules,
+    actions,
+  };
 }
 
 function helper(id, name, kind, value, persistence = 'persistent') {
@@ -167,14 +189,43 @@ function integration(id, plugin, config, enabled = true) {
 
 function normalHome() {
   const devices = [
-    controllable('living_room_lamp', 'Living room lamp', 'zigbee2mqtt', { brightness: 0.8, color: { h: 32, s: 0.4 } }),
-    controllable('living_room_floor_lamp', 'Floor lamp', 'zigbee2mqtt', { power: false, brightness: null, color: null }),
-    controllable('kitchen_counter', 'Kitchen counter', 'esphome', { brightness: 0.65, color: { h: 28, s: 0.35 } }),
-    controllable('kitchen_pendant', 'Kitchen pendant', 'esphome', { brightness: 1, color: { h: 30, s: 0.2 } }),
-    controllable('bedroom_lamp', 'Bedroom lamp', 'zigbee2mqtt', { power: false, brightness: null, color: null, sceneId: 'normal' }),
-    controllable('bedroom_lamp_2', 'Bedroom lamp 2', 'zigbee2mqtt', { power: false, brightness: null, color: null, sceneId: 'normal' }),
-    controllable('office_desk', 'Desk light', 'zigbee2mqtt', { brightness: 0.9, color: { h: 210, s: 0.2 } }),
-    controllable('hallway_strip', 'Hallway strip', 'mqtt', { brightness: 0.4, color: { h: 25, s: 0.7 } }),
+    controllable('living_room_lamp', 'Living room lamp', 'zigbee2mqtt', {
+      brightness: 0.8,
+      color: { h: 32, s: 0.4 },
+    }),
+    controllable('living_room_floor_lamp', 'Floor lamp', 'zigbee2mqtt', {
+      power: false,
+      brightness: null,
+      color: null,
+    }),
+    controllable('kitchen_counter', 'Kitchen counter', 'esphome', {
+      brightness: 0.65,
+      color: { h: 28, s: 0.35 },
+    }),
+    controllable('kitchen_pendant', 'Kitchen pendant', 'esphome', {
+      brightness: 1,
+      color: { h: 30, s: 0.2 },
+    }),
+    controllable('bedroom_lamp', 'Bedroom lamp', 'zigbee2mqtt', {
+      power: false,
+      brightness: null,
+      color: null,
+      sceneId: 'normal',
+    }),
+    controllable('bedroom_lamp_2', 'Bedroom lamp 2', 'zigbee2mqtt', {
+      power: false,
+      brightness: null,
+      color: null,
+      sceneId: 'normal',
+    }),
+    controllable('office_desk', 'Desk light', 'zigbee2mqtt', {
+      brightness: 0.9,
+      color: { h: 210, s: 0.2 },
+    }),
+    controllable('hallway_strip', 'Hallway strip', 'mqtt', {
+      brightness: 0.4,
+      color: { h: 25, s: 0.7 },
+    }),
     sensor('entryway_button', 'Entryway button', 'zigbee2mqtt', 'idle'),
     sensor('bedroom_switch', 'Bedroom switch', 'zigbee2mqtt', 'idle'),
     sensor('living_room_motion', 'Living room motion', 'zigbee2mqtt', 'clear'),
@@ -192,13 +243,19 @@ function normalHome() {
             ...devices.filter((d) => 'Controllable' in d.data),
             // One member that no longer exists, so the "missing member" states
             // stay exercised instead of only appearing by accident.
-            { integration_id: 'zigbee2mqtt', device_id: 'living_room_spot_retired' },
+            {
+              integration_id: 'zigbee2mqtt',
+              device_id: 'living_room_spot_retired',
+            },
           ],
           ['office'],
         ),
         group('living_room', 'Living room', [
           { integration_id: 'zigbee2mqtt', device_id: 'living_room_lamp' },
-          { integration_id: 'zigbee2mqtt', device_id: 'living_room_floor_lamp' },
+          {
+            integration_id: 'zigbee2mqtt',
+            device_id: 'living_room_floor_lamp',
+          },
         ]),
         group('kitchen', 'Kitchen', [
           { integration_id: 'esphome', device_id: 'kitchen_counter' },
@@ -208,20 +265,37 @@ function normalHome() {
           { integration_id: 'zigbee2mqtt', device_id: 'bedroom_lamp' },
           { integration_id: 'zigbee2mqtt', device_id: 'bedroom_lamp_2' },
         ]),
-        group('office', 'Office', [{ integration_id: 'zigbee2mqtt', device_id: 'office_desk' }]),
-        group('hallway', 'Hallway', [{ integration_id: 'mqtt', device_id: 'hallway_strip' }]),
+        group('office', 'Office', [
+          { integration_id: 'zigbee2mqtt', device_id: 'office_desk' },
+        ]),
+        group('hallway', 'Hallway', [
+          { integration_id: 'mqtt', device_id: 'hallway_strip' },
+        ]),
       ],
       scenes: [
         scene('normal', 'Normal', {
           device_states: {
-            'zigbee2mqtt/living_room_lamp': { power: true, brightness: 0.8, color: { h: 32, s: 0.4 } },
+            'zigbee2mqtt/living_room_lamp': {
+              power: true,
+              brightness: 0.8,
+              color: { h: 32, s: 0.4 },
+            },
             // Tracks another device instead of setting a state.
-            'esphome/kitchen_pendant': { integration_id: 'zigbee2mqtt', device_id: 'living_room_lamp' },
+            'esphome/kitchen_pendant': {
+              integration_id: 'zigbee2mqtt',
+              device_id: 'living_room_lamp',
+            },
             // Points at a scene that no longer exists, so the "unresolved" states stay exercised.
-            'zigbee2mqtt/living_room_floor_lamp': { scene_id: 'evening_retired' },
+            'zigbee2mqtt/living_room_floor_lamp': {
+              scene_id: 'evening_retired',
+            },
           },
           group_states: {
-            living_room: { power: true, brightness: 0.8, color: { h: 32, s: 0.4 } },
+            living_room: {
+              power: true,
+              brightness: 0.8,
+              color: { h: 32, s: 0.4 },
+            },
             kitchen: { power: true, brightness: 0.8, color: { h: 30, s: 0.3 } },
             bedroom: { power: true, brightness: 1, color: { h: 30, s: 0.5 } },
             office: { power: true, brightness: 0.9, color: { h: 210, s: 0.2 } },
@@ -229,9 +303,21 @@ function normalHome() {
         }),
         scene('dark', 'Dark', {
           group_states: {
-            living_room: { power: true, brightness: 0.25, color: { h: 25, s: 0.95 } },
-            kitchen: { power: true, brightness: 0.25, color: { h: 25, s: 0.95 } },
-            bedroom: { power: true, brightness: 0.25, color: { h: 25, s: 0.95 } },
+            living_room: {
+              power: true,
+              brightness: 0.25,
+              color: { h: 25, s: 0.95 },
+            },
+            kitchen: {
+              power: true,
+              brightness: 0.25,
+              color: { h: 25, s: 0.95 },
+            },
+            bedroom: {
+              power: true,
+              brightness: 0.25,
+              color: { h: 25, s: 0.95 },
+            },
           },
         }),
         scene('night', 'Night', {
@@ -245,51 +331,198 @@ function normalHome() {
           // A scripted scene, so the "Customized" script section is exercised.
           script: 'defineSceneScript(() => ({ devices: {}, groups: {} }))',
           device_states: {
-            'zigbee2mqtt/living_room_lamp': { power: true, brightness: 0.15, color: { h: 260, s: 0.8 } },
-            'zigbee2mqtt/living_room_floor_lamp': { power: true, brightness: 0.1, color: { h: 260, s: 0.8 } },
+            'zigbee2mqtt/living_room_lamp': {
+              power: true,
+              brightness: 0.15,
+              color: { h: 260, s: 0.8 },
+            },
+            'zigbee2mqtt/living_room_floor_lamp': {
+              power: true,
+              brightness: 0.1,
+              color: { h: 260, s: 0.8 },
+            },
           },
           group_states: { kitchen: { power: false } },
         }),
       ],
       routines: [
         v2Routine('bedroom_down', 'Bedroom switch down', {
-          triggers: [{ id: 't1', kind: 'device_state', device: { integration_id: 'zigbee2mqtt', device_id: 'bedroom_switch' }, state: { value: 'down_press' } }],
-          conditions: { kind: 'all', conditions: [{ kind: 'true' }] },
-          steps: [{ kind: 'activate_scene', scene_id: 'dark', group_keys: ['bedroom'] }],
+          triggers: [
+            {
+              id: 't1',
+              kind: 'state_change',
+              device: {
+                integration_id: 'zigbee2mqtt',
+                device_id: 'bedroom_switch',
+              },
+              mode: 'transition',
+            },
+          ],
+          conditions: {
+            kind: 'all',
+            conditions: [{ kind: 'literal', value: true }],
+          },
+          steps: [
+            {
+              kind: 'activate_scene',
+              scene_id: 'dark',
+              group_keys: ['bedroom'],
+            },
+          ],
         }),
         v2Routine('motion_on', 'Living room motion on', {
-          triggers: [{ id: 't1', kind: 'device_state', device: { integration_id: 'zigbee2mqtt', device_id: 'living_room_motion' }, state: { value: 'detected' } }],
+          triggers: [
+            {
+              id: 't1',
+              kind: 'state_change',
+              device: {
+                integration_id: 'zigbee2mqtt',
+                device_id: 'living_room_motion',
+              },
+              mode: 'level',
+            },
+          ],
           conditions: {
             kind: 'all',
             conditions: [
-              { kind: 'time_window', start: '07:00', end: '23:00' },
-              { kind: 'compare', left: { source: 'helper', id: 'entryway_cooldown' }, op: 'eq', right: { literal: false } },
+              {
+                kind: 'comparison',
+                source: {
+                  kind: 'device',
+                  device: {
+                    integration_id: 'zigbee2mqtt',
+                    device_id: 'living_room_motion',
+                  },
+                  path: '/occupancy',
+                },
+                operator: 'truthy',
+              },
+              {
+                kind: 'comparison',
+                source: { kind: 'helper', helper: 'entryway_cooldown' },
+                operator: 'eq',
+                value: false,
+              },
             ],
           },
-          steps: [{ kind: 'activate_scene', scene_id: 'normal', group_keys: ['living_room'] }],
+          steps: [
+            {
+              kind: 'activate_scene',
+              scene_id: 'normal',
+              group_keys: ['living_room'],
+            },
+          ],
         }),
         v2Routine('entryway_nightlight', 'Entryway nightlight', {
-          triggers: [{ id: 't1', kind: 'device_state', device: { integration_id: 'zigbee2mqtt', device_id: 'entryway_button' }, state: { value: 'press' } }],
-          conditions: { kind: 'all', conditions: [{ kind: 'compare', left: { source: 'sun' }, op: 'eq', right: { literal: 'below_horizon' } }] },
-          steps: [{ kind: 'activate_scene', scene_id: 'dark', group_keys: ['hallway'] }],
+          triggers: [
+            {
+              id: 't1',
+              kind: 'state_change',
+              device: {
+                integration_id: 'zigbee2mqtt',
+                device_id: 'entryway_button',
+              },
+              mode: 'transition',
+            },
+          ],
+          conditions: {
+            kind: 'all',
+            conditions: [
+              {
+                kind: 'comparison',
+                source: {
+                  kind: 'computed_source',
+                  source: 'circadian',
+                  path: '/phase',
+                },
+                operator: 'eq',
+                value: 'night',
+              },
+            ],
+          },
+          steps: [
+            {
+              kind: 'activate_scene',
+              scene_id: 'dark',
+              group_keys: ['hallway'],
+            },
+          ],
         }),
         v1Routine('legacy_hallway', 'Hallway motion (legacy)', {
-          rules: [{ any: [{ integration_id: 'mqtt', device_id: 'outdoor_sensor', state: { value: 4.5 } }] }],
-          actions: [{ action: 'ActivateScene', scene_id: 'dark', group_keys: ['hallway'] }],
+          rules: [
+            {
+              any: [
+                {
+                  integration_id: 'mqtt',
+                  device_id: 'outdoor_sensor',
+                  state: { value: 4.5 },
+                },
+              ],
+            },
+          ],
+          actions: [
+            {
+              action: 'ActivateScene',
+              scene_id: 'dark',
+              group_keys: ['hallway'],
+            },
+          ],
         }),
         v2Routine('kitchen_day', 'Kitchen daytime', {
           triggers: [
-            { id: 't1', kind: 'schedule', schedule: { kind: 'daily', at: '07:30' } },
-            { id: 't2', kind: 'device_state', device: { integration_id: 'esphome', device_id: 'kitchen_counter' }, state: { power: false } },
+            {
+              id: 't1',
+              kind: 'schedule',
+              schedule: {
+                cron: '0 30 7 * * *',
+                timezone: 'Europe/Helsinki',
+                backlog: 'skip',
+              },
+            },
+            {
+              id: 't2',
+              kind: 'report',
+              device: {
+                integration_id: 'esphome',
+                device_id: 'kitchen_counter',
+              },
+              field: 'power',
+            },
           ],
-          conditions: { kind: 'all', conditions: [{ kind: 'time_window', start: '06:00', end: '18:00' }] },
+          conditions: {
+            kind: 'all',
+            conditions: [
+              {
+                kind: 'comparison',
+                source: {
+                  kind: 'device',
+                  device: {
+                    integration_id: 'esphome',
+                    device_id: 'kitchen_counter',
+                  },
+                  path: '/power',
+                },
+                operator: 'truthy',
+              },
+            ],
+          },
           steps: [
-            { kind: 'activate_scene', scene_id: 'normal', group_keys: ['kitchen'] },
-            { kind: 'activate_scene', scene_id: 'normal', group_keys: ['living_room'] },
+            {
+              kind: 'activate_scene',
+              scene_id: 'normal',
+              group_keys: ['kitchen'],
+            },
+            {
+              kind: 'activate_scene',
+              scene_id: 'normal',
+              group_keys: ['living_room'],
+            },
           ],
         }),
       ],
-      helpers: [helper('entryway_cooldown', 'Entryway cooldown', 'boolean', false)],
+      helpers: [
+        helper('entryway_cooldown', 'Entryway cooldown', 'boolean', false),
+      ],
       sources: [
         source('circadian', 'Circadian rhythm', {
           kind: 'circadian_compat',
@@ -307,9 +540,24 @@ function normalHome() {
         }),
       ],
       integrations: [
-        integration('mqtt', 'mqtt', { host: 'mqtt.example.test', port: 1883, managed: 'Unmanaged', topic: 'home/devices/{id}', topic_set: 'home/devices/{id}/set' }),
-        integration('zigbee2mqtt', 'mqtt', { host: 'mqtt.example.test', port: 1883, managed: 'Zigbee2Mqtt', topic: 'zigbee2mqtt/{id}', topic_set: 'zigbee2mqtt/{id}/set' }),
-        integration('esphome', 'esphome', { host: 'esphome.example.test', port: 6053 }),
+        integration('mqtt', 'mqtt', {
+          host: 'mqtt.example.test',
+          port: 1883,
+          managed: 'Unmanaged',
+          topic: 'home/devices/{id}',
+          topic_set: 'home/devices/{id}/set',
+        }),
+        integration('zigbee2mqtt', 'mqtt', {
+          host: 'mqtt.example.test',
+          port: 1883,
+          managed: 'Zigbee2Mqtt',
+          topic: 'zigbee2mqtt/{id}',
+          topic_set: 'zigbee2mqtt/{id}/set',
+        }),
+        integration('esphome', 'esphome', {
+          host: 'esphome.example.test',
+          port: 6053,
+        }),
       ],
       devices: [],
       floorplans: [],
@@ -337,15 +585,52 @@ function normalHome() {
           definition_revision: 3,
           fingerprint: 'a1b2c3d4e5f60718',
           matched_trigger_ids: ['t1'],
-          triggers: [{ id: 't1', kind: 'device_state', matched: true }],
-          condition: { truth: 'true', trace: { kind: 'all', children: [] } },
+          triggers: [
+            {
+              trigger_id: 't1',
+              kind: 'state_change',
+              fired: true,
+              eligible: true,
+              truth: 'true',
+              armed: true,
+            },
+          ],
+          condition: {
+            truth: 'true',
+            trace: { path: '/condition', truth: 'true', evaluated: true },
+          },
           will_trigger: true,
+          execution_pending: false,
+          last_run: {
+            run_id: 7,
+            definition_revision: 3,
+            accepted: true,
+            steps: [
+              {
+                action_id: 's1',
+                kind: 'activate_scene',
+                targets: ['zigbee2mqtt/living_room_lamp'],
+                disposition: 'dispatched',
+              },
+            ],
+            dropped: 0,
+          },
         },
       },
     ],
     logs: [
-      { timestamp: new Date(Date.now() - 90_000).toISOString(), level: 'INFO', target: 'homectl_server::core::routines', message: 'Routine triggered: id=bedroom_down' },
-      { timestamp: new Date(Date.now() - 120_000).toISOString(), level: 'WARN', target: 'homectl_server::integrations::mqtt', message: 'Could not find device esphome/kitchen_pendant in state' },
+      {
+        timestamp: new Date(Date.now() - 90_000).toISOString(),
+        level: 'INFO',
+        target: 'homectl_server::core::routines',
+        message: 'Routine triggered: id=bedroom_down',
+      },
+      {
+        timestamp: new Date(Date.now() - 120_000).toISOString(),
+        level: 'WARN',
+        target: 'homectl_server::integrations::mqtt',
+        message: 'Could not find device esphome/kitchen_pendant in state',
+      },
     ],
   };
 }
@@ -356,8 +641,18 @@ function largeHome() {
   const base = normalHome();
   const integrations = ['zigbee2mqtt', 'esphome', 'mqtt', 'tasmota'];
   const rooms = [
-    'living_room', 'kitchen', 'bedroom', 'office', 'hallway', 'bathroom',
-    'dining_room', 'guest_room', 'garage', 'sauna', 'utility', 'outdoor',
+    'living_room',
+    'kitchen',
+    'bedroom',
+    'office',
+    'hallway',
+    'bathroom',
+    'dining_room',
+    'guest_room',
+    'garage',
+    'sauna',
+    'utility',
+    'outdoor',
   ];
   const devices = [...base.devices];
   const groups = [...base.config.groups];
@@ -370,15 +665,24 @@ function largeHome() {
       const id = `${rooms[room]}_device_${i}`;
       const power = (room + i) % 5 !== 0;
       devices.push(
-        controllable(id, `${rooms[room].replace(/_/g, ' ')} light ${i + 1}`, integration, {
-          power,
-          brightness: power ? 0.5 : null,
-          color: power ? { h: (i * 17) % 360, s: 0.4 } : null,
-          receivedAgoMs: 2000 + i * 250,
-        }),
+        controllable(
+          id,
+          `${rooms[room].replace(/_/g, ' ')} light ${i + 1}`,
+          integration,
+          {
+            power,
+            brightness: power ? 0.5 : null,
+            color: power ? { h: (i * 17) % 360, s: 0.4 } : null,
+            receivedAgoMs: 2000 + i * 250,
+          },
+        ),
       );
       members.push({ integration_id: integration, device_id: id });
-      deviceStates[`${integration}/${id}`] = { power, brightness: power ? 0.5 : null, color: power ? { h: (i * 17) % 360, s: 0.4 } : null };
+      deviceStates[`${integration}/${id}`] = {
+        power,
+        brightness: power ? 0.5 : null,
+        color: power ? { h: (i * 17) % 360, s: 0.4 } : null,
+      };
     }
     groups.push(group(rooms[room], rooms[room].replace(/_/g, ' '), members));
   }
@@ -398,22 +702,63 @@ function largeHome() {
   const deepConditions = {
     kind: 'all',
     conditions: [
-      { kind: 'time_window', start: '06:30', end: '22:30' },
-      { kind: 'compare', left: { source: 'sun' }, op: 'eq', right: { literal: 'below_horizon' } },
+      {
+        kind: 'comparison',
+        source: {
+          kind: 'device',
+          device: {
+            integration_id: 'zigbee2mqtt',
+            device_id: 'living_room_motion',
+          },
+          path: '/occupancy',
+        },
+        operator: 'truthy',
+      },
+      {
+        kind: 'comparison',
+        source: {
+          kind: 'computed_source',
+          source: 'circadian',
+          path: '/phase',
+        },
+        operator: 'eq',
+        value: 'night',
+      },
       {
         kind: 'any',
         conditions: [
-          { kind: 'compare', left: { source: 'helper', id: 'entryway_cooldown' }, op: 'eq', right: { literal: false } },
+          {
+            kind: 'comparison',
+            source: { kind: 'helper', helper: 'entryway_cooldown' },
+            operator: 'eq',
+            value: false,
+          },
           {
             kind: 'all',
             conditions: [
-              { kind: 'compare', left: { source: 'device', device: { integration_id: 'zigbee2mqtt', device_id: 'living_room_motion' } }, op: 'eq', right: { literal: 'clear' } },
+              {
+                kind: 'compare',
+                left: {
+                  source: 'device',
+                  device: {
+                    integration_id: 'zigbee2mqtt',
+                    device_id: 'living_room_motion',
+                  },
+                },
+                op: 'eq',
+                right: { literal: 'clear' },
+              },
               { kind: 'time_window', start: '23:00', end: '05:00' },
               {
                 kind: 'any',
                 conditions: [
-                  { kind: 'compare', left: { source: 'helper', id: 'entryway_cooldown' }, op: 'eq', right: { literal: true } },
-                  { kind: 'true' },
+                  {
+                    kind: 'compare',
+                    left: { source: 'helper', id: 'entryway_cooldown' },
+                    op: 'eq',
+                    right: { literal: true },
+                  },
+                  { kind: 'literal', value: true },
                 ],
               },
             ],
@@ -429,29 +774,79 @@ function largeHome() {
     { kind: 'delay', seconds: 30 },
     { kind: 'activate_scene', scene_id: 'night', group_keys: ['kitchen'] },
     { kind: 'activate_scene', scene_id: 'movie', group_keys: ['living_room'] },
-    { kind: 'set_device_state', device: { integration_id: 'mqtt', device_id: 'hallway_strip' }, state: { power: false } },
+    {
+      kind: 'set_device_state',
+      device: { integration_id: 'mqtt', device_id: 'hallway_strip' },
+      state: { power: false },
+    },
   ];
 
   const routines = [
     ...base.config.routines,
-    v2Routine('everything_evening', 'Everything in the evening', { triggers: [{ id: 't1', kind: 'schedule', schedule: { kind: 'daily', at: '17:45' } }], conditions: deepConditions, steps: manySteps, revision: 7 }),
+    v2Routine('everything_evening', 'Everything in the evening', {
+      triggers: [
+        {
+          id: 't1',
+          kind: 'schedule',
+          schedule: {
+            cron: '0 45 17 * * *',
+            timezone: 'Europe/Helsinki',
+            backlog: 'catch_up_once',
+          },
+        },
+      ],
+      conditions: deepConditions,
+      steps: manySteps,
+      revision: 7,
+    }),
   ];
   for (let i = 0; i < 55; i += 1) {
     routines.push(
-      v2Routine(`generated_routine_${i}`, `${rooms[i % rooms.length].replace(/_/g, ' ')} routine ${i + 1}`, {
-        triggers: [{ id: 't1', kind: 'schedule', schedule: { kind: 'daily', at: `${String(6 + (i % 16)).padStart(2, '0')}:${String((i * 7) % 60).padStart(2, '0')}` } }],
-        conditions: { kind: 'all', conditions: [{ kind: 'true' }] },
-        steps: [{ kind: 'activate_scene', scene_id: i % 2 === 0 ? 'normal' : 'dark', group_keys: [rooms[i % rooms.length]] }],
-        enabled: i % 7 !== 0,
-      }),
+      v2Routine(
+        `generated_routine_${i}`,
+        `${rooms[i % rooms.length].replace(/_/g, ' ')} routine ${i + 1}`,
+        {
+          triggers: [
+            {
+              id: 't1',
+              kind: 'schedule',
+              schedule: {
+                cron: `0 ${(i * 7) % 60} ${6 + (i % 16)} * * *`,
+                timezone: 'Europe/Helsinki',
+                backlog: 'skip',
+              },
+            },
+          ],
+          conditions: {
+            kind: 'all',
+            conditions: [{ kind: 'literal', value: true }],
+          },
+          steps: [
+            {
+              kind: 'activate_scene',
+              scene_id: i % 2 === 0 ? 'normal' : 'dark',
+              group_keys: [rooms[i % rooms.length]],
+            },
+          ],
+          enabled: i % 7 !== 0,
+        },
+      ),
     );
   }
   for (let i = 0; i < 15; i += 1) {
     const groupStates = {};
     for (const room of rooms.slice(0, 4 + (i % 6))) {
-      groupStates[room] = { power: i % 3 !== 0, brightness: 0.2 + (i % 5) * 0.15, color: { h: (i * 23) % 360, s: 0.5 } };
+      groupStates[room] = {
+        power: i % 3 !== 0,
+        brightness: 0.2 + (i % 5) * 0.15,
+        color: { h: (i * 23) % 360, s: 0.5 },
+      };
     }
-    base.config.scenes.push(scene(`generated_scene_${i}`, `Generated scene ${i + 1}`, { groupStates }));
+    base.config.scenes.push(
+      scene(`generated_scene_${i}`, `Generated scene ${i + 1}`, {
+        groupStates,
+      }),
+    );
   }
   base.config.scenes.push(manyTargets);
 
@@ -471,10 +866,20 @@ function degradedHome() {
   base.config.scenes.push(
     scene('evening', 'Evening', {
       device_states: {
-        'zigbee2mqtt/living_room_lamp': { power: true, brightness: 0.3, color: { h: 30, s: 0.6 } },
-        'zigbee2mqtt/removed_lamp': { power: true, brightness: 0.5, color: { h: 30, s: 0.5 } },
+        'zigbee2mqtt/living_room_lamp': {
+          power: true,
+          brightness: 0.3,
+          color: { h: 30, s: 0.6 },
+        },
+        'zigbee2mqtt/removed_lamp': {
+          power: true,
+          brightness: 0.5,
+          color: { h: 30, s: 0.5 },
+        },
       },
-      group_states: { kitchen: { power: true, brightness: 0.5, color: { h: 30, s: 0.5 } } },
+      group_states: {
+        kitchen: { power: true, brightness: 0.5, color: { h: 30, s: 0.5 } },
+      },
     }),
   );
   const devices = base.devices.map((d) => {
@@ -504,11 +909,23 @@ function emptyHome() {
     runtimeStatus: { persistence_available: true, memory_only_mode: false },
     devices: [],
     config: {
-      groups: [], scenes: [], routines: [], helpers: [], sources: [],
-      integrations: [], devices: [], floorplans: [], device_display_overrides: [],
-      device_sensor_configs: [], device_color_calibrations: [], calibration_profiles: [],
-      calibration_assignments: [], group_positions: [], dashboard_layouts: [],
-      dashboard_widgets: [], widget_settings: [],
+      groups: [],
+      scenes: [],
+      routines: [],
+      helpers: [],
+      sources: [],
+      integrations: [],
+      devices: [],
+      floorplans: [],
+      device_display_overrides: [],
+      device_sensor_configs: [],
+      device_color_calibrations: [],
+      calibration_profiles: [],
+      calibration_assignments: [],
+      group_positions: [],
+      dashboard_layouts: [],
+      dashboard_widgets: [],
+      widget_settings: [],
     },
     routineHistory: [],
     logs: [],

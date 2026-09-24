@@ -23,7 +23,9 @@ const port = Number(process.env.PORT ?? args.get('port') ?? 45901);
 const initial = process.env.FIXTURE ?? args.get('fixture') ?? 'normal';
 
 if (!fixtures[initial]) {
-  console.error(`unknown fixture '${initial}'; expected one of ${Object.keys(fixtures).join(', ')}`);
+  console.error(
+    `unknown fixture '${initial}'; expected one of ${Object.keys(fixtures).join(', ')}`,
+  );
   process.exit(1);
 }
 
@@ -37,7 +39,11 @@ function reload(nextName) {
   return true;
 }
 
-const writeOk = { applied: true, persistence: { kind: 'persisted' }, warning: null };
+const writeOk = {
+  applied: true,
+  persistence: { kind: 'persisted' },
+  warning: null,
+};
 
 function send(res, status, body, extraHeaders = {}) {
   const payload = body === undefined ? '' : JSON.stringify(body);
@@ -77,7 +83,10 @@ const SPECIAL_GET = {
   'runtime-status': () => db.runtimeStatus,
   'routine-history': () => db.routineHistory,
   logs: () => db.logs,
-  'config-export': () => ({ version: 1, exported_at: new Date().toISOString() }),
+  'config-export': () => ({
+    version: 1,
+    exported_at: new Date().toISOString(),
+  }),
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -95,7 +104,11 @@ const server = http.createServer(async (req, res) => {
       console.log(`fixture switched to '${next}'`);
       return send(res, 200, { success: true, fixture: name });
     }
-    return send(res, 400, { success: false, error: `unknown fixture '${next}'`, fixtures: Object.keys(fixtures) });
+    return send(res, 400, {
+      success: false,
+      error: `unknown fixture '${next}'`,
+      fixtures: Object.keys(fixtures),
+    });
   }
   if (path.startsWith('/__fixture/')) {
     const next = decodeURIComponent(path.slice('/__fixture/'.length));
@@ -103,13 +116,17 @@ const server = http.createServer(async (req, res) => {
       console.log(`fixture switched to '${next}'`);
       return send(res, 200, { success: true, fixture: name });
     }
-    return send(res, 404, { success: false, error: `unknown fixture '${next}'` });
+    return send(res, 404, {
+      success: false,
+      error: `unknown fixture '${next}'`,
+    });
   }
 
   console.log(`${method} ${req.url}`);
 
   if (path === '/api/config') return send(res, 200, {});
-  if (path === '/health/live' || path === '/health/ready') return send(res, 200, { status: 'ok' });
+  if (path === '/health/live' || path === '/health/ready')
+    return send(res, 200, { status: 'ok' });
   if (path === '/api/v1/commands/scene') {
     const body = await readBody(req);
     console.log(`  -> scene command: ${JSON.stringify(body)}`);
@@ -125,7 +142,11 @@ const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
     const idx = db.devices.findIndex((d) => d.id === id);
     if (idx >= 0) db.devices[idx] = { ...db.devices[idx], ...body };
-    return send(res, 200, { success: true, data: db.devices[idx], write: writeOk });
+    return send(res, 200, {
+      success: true,
+      data: db.devices[idx],
+      write: writeOk,
+    });
   }
 
   const configMatch = /^\/api\/v1\/config\/([a-z0-9-]+)(?:\/(.*))?$/.exec(path);
@@ -135,14 +156,19 @@ const server = http.createServer(async (req, res) => {
 
     const failure = db.failures?.[`config/${endpoint}`];
     if (failure && method === 'GET') {
-      return send(res, failure, { success: false, error: `${endpoint} is unavailable (simulated ${failure})` });
+      return send(res, failure, {
+        success: false,
+        error: `${endpoint} is unavailable (simulated ${failure})`,
+      });
     }
     if (db.lagMs && method === 'GET') await sleep(db.lagMs);
 
     if (method === 'GET') {
       if (rest) {
         // Single item GETs are used by detail pages; fall back to the list.
-        const list = Array.isArray(db.config[endpoint]) ? db.config[endpoint] : [];
+        const list = Array.isArray(db.config[endpoint])
+          ? db.config[endpoint]
+          : [];
         const item = list.find((i) => i.id === rest || i.device_key === rest);
         if (item) return send(res, 200, { success: true, data: item });
         console.log(`  !! no fixture item for config/${endpoint}/${rest}`);
@@ -150,7 +176,9 @@ const server = http.createServer(async (req, res) => {
       }
       const special = SPECIAL_GET[endpoint];
       if (special) return send(res, 200, { success: true, data: special() });
-      const list = Array.isArray(db.config[endpoint]) ? db.config[endpoint] : [];
+      const list = Array.isArray(db.config[endpoint])
+        ? db.config[endpoint]
+        : [];
       return send(res, 200, { success: true, data: list });
     }
 
@@ -159,16 +187,28 @@ const server = http.createServer(async (req, res) => {
       if (endpoint === 'routines') {
         return send(res, 200, {
           success: true,
-          data: { will_trigger: true, assumed_trigger: body?.trigger_id ?? 't1', first_blocking_reason: null, steps: [], condition: { truth: 'true', trace: { kind: 'all', children: [] } } },
+          data: {
+            will_trigger: true,
+            assumed_trigger: body?.trigger_id ?? 't1',
+            first_blocking_reason: null,
+            steps: [],
+            condition: { truth: 'true', trace: { kind: 'all', children: [] } },
+          },
         });
       }
-      return send(res, 200, { success: true, data: { samples: [], summary: 'fixture preview' } });
+      return send(res, 200, {
+        success: true,
+        data: { samples: [], summary: 'fixture preview' },
+      });
     }
 
     if (method === 'POST') {
       const body = await readBody(req);
-      const list = Array.isArray(db.config[endpoint]) ? db.config[endpoint] : (db.config[endpoint] = []);
-      if (endpoint === 'migrate' || endpoint === 'import') return send(res, 200, { success: true, data: { applied: true } });
+      const list = Array.isArray(db.config[endpoint])
+        ? db.config[endpoint]
+        : (db.config[endpoint] = []);
+      if (endpoint === 'migrate' || endpoint === 'import')
+        return send(res, 200, { success: true, data: { applied: true } });
       const item = { ...body };
       const idx = list.findIndex((i) => i.id === item.id);
       if (idx >= 0) list[idx] = item;
@@ -178,13 +218,19 @@ const server = http.createServer(async (req, res) => {
 
     if (method === 'PUT' || method === 'PATCH') {
       const body = await readBody(req);
-      const list = Array.isArray(db.config[endpoint]) ? db.config[endpoint] : (db.config[endpoint] = []);
+      const list = Array.isArray(db.config[endpoint])
+        ? db.config[endpoint]
+        : (db.config[endpoint] = []);
       if (endpoint === 'core' || endpoint === 'assistant') {
         return send(res, 200, { success: true, data: body, write: writeOk });
       }
       const id = rest ?? body?.id ?? body?.device_key;
       const idx = list.findIndex((i) => i.id === id || i.device_key === id);
-      const item = { ...(idx >= 0 ? list[idx] : {}), ...body, id: id ?? body?.id };
+      const item = {
+        ...(idx >= 0 ? list[idx] : {}),
+        ...body,
+        id: id ?? body?.id,
+      };
       if (idx >= 0) list[idx] = item;
       else list.push(item);
       return send(res, 200, { success: true, data: item, write: writeOk });
@@ -192,7 +238,9 @@ const server = http.createServer(async (req, res) => {
 
     if (method === 'DELETE') {
       const body = await readBody(req);
-      const list = Array.isArray(db.config[endpoint]) ? db.config[endpoint] : [];
+      const list = Array.isArray(db.config[endpoint])
+        ? db.config[endpoint]
+        : [];
       const id = rest ?? body?.id ?? body?.device_key;
       const idx = list.findIndex((i) => i.id === id || i.device_key === id);
       if (idx >= 0) list.splice(idx, 1);
@@ -200,12 +248,18 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  if (path === '/api/v1/config/floorplan/grid' || path === '/api/v1/config/floorplan/image') {
+  if (
+    path === '/api/v1/config/floorplan/grid' ||
+    path === '/api/v1/config/floorplan/image'
+  ) {
     return send(res, 200, { success: true, data: {}, write: writeOk });
   }
 
   if (path.startsWith('/api/v1/config/assistant')) {
-    return send(res, 200, { success: true, data: { threads: [], plans: [], actions: [] } });
+    return send(res, 200, {
+      success: true,
+      data: { threads: [], plans: [], actions: [] },
+    });
   }
   if (path.startsWith('/api/v1/config/calibration')) {
     return send(res, 200, { success: true, data: [], write: writeOk });
@@ -216,9 +270,107 @@ const server = http.createServer(async (req, res) => {
 });
 
 /**
- * Accept the live-state WebSocket upgrade so the UI does not reconnect in a
- * loop. Fixtures have no live state, so the socket stays open and silent
- * instead of pushing frames it does not have.
+ * Synthetic runtime status for every v2 routine in the fixture: the first
+ * trigger is armed with a due time, later triggers report their own state, the
+ * condition carries a trace, and the most recent run has one dispatched and one
+ * suppressed step. This is what lets the routine pages' live-state explanations
+ * be reviewed without a real engine.
+ */
+function buildRoutineStatuses(db) {
+  const statuses = {};
+  for (const routine of db.config?.routines ?? []) {
+    const definition = routine.definition_v2;
+    if (!definition) continue;
+    const triggers = definition.triggers ?? [];
+    const steps = definition.program?.steps ?? [];
+    const now = Date.now();
+    const condition = definition.condition ?? { kind: 'literal', value: true };
+    const children =
+      condition.kind === 'all' || condition.kind === 'any'
+        ? (condition.conditions ?? [])
+        : [];
+    const trace = {
+      path: '/condition',
+      truth: 'false',
+      evaluated: true,
+      children:
+        children.length > 0
+          ? children.map((child, index) => ({
+              path: `/condition/conditions/${index}`,
+              truth: index === 0 ? 'true' : 'false',
+              evaluated: true,
+            }))
+          : undefined,
+    };
+    statuses[routine.id] = {
+      all_conditions_match: false,
+      will_trigger: false,
+      rules: [],
+      v2: {
+        definition_revision: routine.revision ?? 1,
+        fingerprint: `fixture-${routine.id}`,
+        matched_trigger_ids: [],
+        triggers: triggers.map((trigger, index) => ({
+          trigger_id: trigger.id,
+          kind: trigger.kind,
+          fired: false,
+          eligible: true,
+          truth: index === 0 ? 'true' : 'unknown',
+          armed: index === 0,
+          due_wall_ms: index === 0 ? now + 90_000 : undefined,
+          unknown_reason:
+            index === 0
+              ? undefined
+              : { kind: 'stale', device: 'esphome/kitchen_counter' },
+        })),
+        condition: { truth: 'false', trace },
+        will_trigger: false,
+        execution_pending: false,
+        last_run: {
+          run_id: 12,
+          definition_revision: routine.revision ?? 1,
+          accepted: true,
+          steps: steps.map((step, index) => ({
+            action_id: step.id,
+            kind: step.action,
+            targets: [],
+            disposition: index === 0 ? 'dispatched' : 'suppressed',
+            reason:
+              index === 0 ? undefined : 'skipped by the execution policy cap',
+          })),
+          dropped: 0,
+        },
+      },
+    };
+  }
+  return statuses;
+}
+
+function encodeTextFrame(text) {
+  const payload = Buffer.from(text, 'utf8');
+  const length = payload.length;
+  if (length < 126) {
+    return Buffer.concat([Buffer.from([0x81, length]), payload]);
+  }
+  if (length < 65_536) {
+    const header = Buffer.alloc(4);
+    header[0] = 0x81;
+    header[1] = 126;
+    header.writeUInt16BE(length, 2);
+    return Buffer.concat([header, payload]);
+  }
+  const header = Buffer.alloc(10);
+  header[0] = 0x81;
+  header[1] = 127;
+  header.writeBigUInt64BE(BigInt(length), 2);
+  return Buffer.concat([header, payload]);
+}
+
+/**
+ * Accept the live-state WebSocket upgrade and answer a `Resync` with a full
+ * state frame. Without live state the UI treats a patch as a revision gap and
+ * asks for exactly this, so the socket carries the fixture's synthetic routine
+ * statuses instead of staying silent.
  */
 server.on('upgrade', (req, socket) => {
   const key = req.headers['sec-websocket-key'];
@@ -240,10 +392,86 @@ server.on('upgrade', (req, socket) => {
       '',
     ].join('\r\n'),
   );
+  let buffered = Buffer.alloc(0);
+  // Nudge the client into the resync handshake: it has no revision yet, so a
+  // revision-1 patch makes it ask for the full state, which is then sent below.
+  socket.write(
+    encodeTextFrame(
+      JSON.stringify({
+        Patch: { revision: 1, routine_statuses: { upserted: {}, removed: [] } },
+      }),
+    ),
+  );
+  const sendState = () => {
+    const frame = {
+      State: {
+        revision: 1,
+        devices: {},
+        scenes: {},
+        groups: {},
+        routine_statuses: buildRoutineStatuses(db),
+        timers: [],
+        helper_statuses: [],
+        ui_state: {},
+      },
+    };
+    socket.write(encodeTextFrame(JSON.stringify(frame)));
+  };
+  socket.on('data', (chunk) => {
+    buffered = Buffer.concat([buffered, chunk]);
+    // Client frames are masked; read the opcode/length, unmask, and look for a
+    // Resync request. Anything else is ignored.
+    while (buffered.length >= 2) {
+      const opcode = buffered[0] & 0x0f;
+      const masked = (buffered[1] & 0x80) !== 0;
+      let length = buffered[1] & 0x7f;
+      let offset = 2;
+      if (length === 126) {
+        if (buffered.length < 4) return;
+        length = buffered.readUInt16BE(2);
+        offset = 4;
+      } else if (length === 127) {
+        if (buffered.length < 10) return;
+        length = Number(buffered.readBigUInt64BE(2));
+        offset = 10;
+      }
+      const maskLength = masked ? 4 : 0;
+      if (buffered.length < offset + maskLength + length) return;
+      let payload = buffered.subarray(
+        offset + maskLength,
+        offset + maskLength + length,
+      );
+      if (masked) {
+        const mask = buffered.subarray(offset, offset + 4);
+        payload = Buffer.from(
+          payload.map((byte, index) => byte ^ mask[index % 4]),
+        );
+      }
+      buffered = buffered.subarray(offset + maskLength + length);
+      if (opcode === 0x8) {
+        socket.end();
+        return;
+      }
+      if (opcode !== 0x1) continue;
+      const text = payload.toString('utf8');
+      console.log(`  ws <- ${text.slice(0, 120)}`);
+      try {
+        const message = JSON.parse(text);
+        if (message && typeof message === 'object' && 'Resync' in message) {
+          sendState();
+          console.log('  ws -> full state frame');
+        }
+      } catch {
+        // ignore malformed frames
+      }
+    }
+  });
   socket.on('error', () => socket.destroy());
 });
 
 server.listen(port, '0.0.0.0', () => {
   console.log(`fixture server on http://127.0.0.1:${port} (fixture '${name}')`);
-  console.log(`point the dev server at it: HOMECTL_DEV_PROXY_TARGET=http://127.0.0.1:${port} pnpm dev`);
+  console.log(
+    `point the dev server at it: HOMECTL_DEV_PROXY_TARGET=http://127.0.0.1:${port} pnpm dev`,
+  );
 });

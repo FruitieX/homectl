@@ -31,6 +31,9 @@ const ConfigRoutineHistoryPage = lazy(
   () => import('../app/config/routine-history/page'),
 );
 const ConfigRoutinesPage = lazy(() => import('../app/config/routines/page'));
+const ConfigRoutineDetailPage = lazy(
+  () => import('../app/config/routines/detail'),
+);
 const ConfigScenesPage = lazy(() => import('../app/config/scenes/page'));
 const ConfigSettingsPage = lazy(() => import('../app/config/settings/page'));
 const ConfigSourcesPage = lazy(() => import('../app/config/sources/page'));
@@ -154,6 +157,10 @@ export const router = createBrowserRouter([
           {
             path: 'routines',
             element: withSuspense(<ConfigRoutinesPage />),
+          },
+          {
+            path: 'routines/:id',
+            element: withSuspense(<ConfigRoutineDetailPage />),
           },
           {
             path: 'routine-history',

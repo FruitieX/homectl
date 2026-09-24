@@ -96,3 +96,93 @@ test('firstInvalidField points at the first invalid subsection', () => {
     'schedule',
   );
 });
+
+test('pickFields keeps nested paths nested so sections can own sub-fields', () => {
+  const item = {
+    id: 'morning',
+    definition_v2: {
+      triggers: [{ id: 't1' }],
+      condition: { kind: 'literal', value: true },
+      program: { kind: 'native', steps: [] },
+    },
+  };
+  const picked = pickFields(item, ['definition_v2.triggers']);
+  assert.deepEqual(picked, { definition_v2: { triggers: [{ id: 't1' }] } });
+});
+
+test('mergeFields merges nested paths without dropping sibling fields', () => {
+  const item = {
+    definition_v2: {
+      triggers: [{ id: 't1' }],
+      condition: { kind: 'literal', value: true },
+      program: { kind: 'native', steps: [] },
+    },
+  };
+  const merged = mergeFields(item, {
+    definition_v2: { triggers: [{ id: 't2' }] },
+  } as Partial<typeof item>);
+  assert.deepEqual(merged.definition_v2.triggers, [{ id: 't2' }]);
+  // Sections that own no part of the definition leave it untouched.
+  assert.deepEqual(merged.definition_v2.condition, {
+    kind: 'literal',
+    value: true,
+  });
+  assert.deepEqual(merged.definition_v2.program, { kind: 'native', steps: [] });
+});
+
+test('mergeFields creates missing parents and replaces arrays wholesale', () => {
+  const item = { id: 'x' } as Record<string, unknown>;
+  const merged = mergeFields(
+    item as object,
+    {
+      definition_v2: { program: { kind: 'native', steps: [{ id: 's1' }] } },
+    } as never,
+  ) as Record<string, unknown>;
+  assert.deepEqual(merged.definition_v2, {
+    program: { kind: 'native', steps: [{ id: 's1' }] },
+  });
+  const replaced = mergeFields(
+    { definition_v2: { triggers: [{ id: 'a' }, { id: 'b' }] } } as object,
+    { definition_v2: { triggers: [{ id: 'c' }] } } as never,
+  ) as Record<string, unknown>;
+  assert.deepEqual(
+    (replaced.definition_v2 as Record<string, unknown>).triggers,
+    [{ id: 'c' }],
+  );
+});
+
+test('sectionChangedElsewhere compares only the fields the section owns', () => {
+  const baseline = { definition_v2: { triggers: [{ id: 't1' }] } };
+  assert.equal(
+    sectionChangedElsewhere(baseline, {
+      definition_v2: {
+        triggers: [{ id: 't1' }],
+        condition: { kind: 'literal', value: false },
+      },
+    }),
+    false,
+  );
+  assert.equal(
+    sectionChangedElsewhere(baseline, {
+      definition_v2: { triggers: [{ id: 't2' }] },
+    }),
+    true,
+  );
+  // Deeper nesting inside an owned path is compared all the way down.
+  assert.equal(
+    sectionChangedElsewhere({ a: { b: { c: 1 } } }, { a: { b: { c: 2 } } }),
+    true,
+  );
+  assert.equal(
+    sectionChangedElsewhere({ a: { b: { c: 1 } } }, { a: { b: { c: 1 } } }),
+    false,
+  );
+  // A key the section does not own never raises a conflict.
+  assert.equal(
+    sectionChangedElsewhere(
+      { definition_v2: { triggers: [{ id: 't1' }] } },
+      { definition_v2: { triggers: [{ id: 't1' }] }, name: 'renamed' },
+    ),
+    false,
+  );
+});
