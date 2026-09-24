@@ -5,7 +5,7 @@ RUN corepack enable && corepack prepare pnpm@10.18.0 --activate
 
 WORKDIR /app/ui
 
-COPY ui/package.json ui/pnpm-lock.yaml ./
+COPY ui/package.json ui/pnpm-lock.yaml ui/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY ui ./
@@ -13,7 +13,9 @@ ARG VITE_GIT_COMMIT
 ARG VITE_BUILD_DATE
 RUN VITE_GIT_COMMIT="$VITE_GIT_COMMIT" VITE_BUILD_DATE="$VITE_BUILD_DATE" pnpm build
 
-FROM rust:1.90-slim-bookworm AS server-builder
+# The workspace dependencies declare rust-version 1.94 (sea-orm 2, sqlx 0.9), so
+# the image toolchain must not trail the flake's.
+FROM rust:1.98-slim-bookworm AS server-builder
 
 WORKDIR /app
 
