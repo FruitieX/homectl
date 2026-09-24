@@ -10,6 +10,11 @@ import type { RoutineV2RuntimeStatus } from '@/bindings/RoutineV2RuntimeStatus';
 import type { TargetSpec } from '@/bindings/TargetSpec';
 import type { TriggerSpec } from '@/bindings/TriggerSpec';
 import { getDeviceDisplayLabelFromKey } from '@/lib/deviceLabel';
+import {
+  describeConditionNarrative,
+  describeTriggerPhrase,
+  describeUnknownReasonSentence,
+} from '@/lib/routineNarrative';
 import { describeCondition } from '@/ui/ConditionBuilder';
 import { Badge } from '@/ui/primitives/badge';
 import {
@@ -129,11 +134,15 @@ export function WhenReadList({
   status,
   devices,
   deviceDisplayNameMap,
+  groups,
+  onEdit,
 }: {
   definition: RoutineDefinitionV2Body;
   status?: RoutineV2RuntimeStatus;
   devices: DevicesState;
   deviceDisplayNameMap: Record<string, string>;
+  groups?: FlattenedGroupsConfig;
+  onEdit?: () => void;
 }) {
   const triggers: TriggerSpec[] = definition.triggers ?? [];
   if (triggers.length === 0) {
@@ -143,6 +152,7 @@ export function WhenReadList({
       </p>
     );
   }
+  const context = { devices, groups, deviceNames: deviceDisplayNameMap };
   return (
     <div className="space-y-2">
       {triggers.map((spec) => {
@@ -150,28 +160,39 @@ export function WhenReadList({
           (candidate) => candidate.trigger_id === spec.id,
         );
         const badge = runtime ? triggerBadge(runtime) : null;
+        const phrase = describeTriggerPhrase(spec, context);
         return (
           <details
             key={spec.id}
             className="rounded-xl border border-border/70 bg-background/60"
           >
             <summary className="flex cursor-pointer flex-wrap items-center gap-2 p-2.5">
-              <Badge variant="outline">{spec.kind.replaceAll('_', ' ')}</Badge>
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                {triggerLabel(spec, devices, deviceDisplayNameMap) ??
-                  `${spec.kind.replaceAll('_', ' ')} trigger`}
+              <span className="min-w-0 flex-1 text-sm font-medium">
+                {phrase.charAt(0).toUpperCase() + phrase.slice(1)}
               </span>
               {badge ? (
                 <StatusBadge label={badge.label} tone={badge.tone} />
               ) : null}
             </summary>
-            <div className="space-y-1 border-t border-border/70 px-2.5 py-2 text-xs text-muted-foreground">
+            <div className="space-y-1.5 border-t border-border/70 px-2.5 py-2 text-xs text-muted-foreground">
               <p>{triggerStateSentence(runtime)}</p>
               {runtime ? (
                 <p>
-                  Fired for the current frame: {runtime.fired ? 'yes' : 'no'} ·
-                  condition {runtime.truth}
+                  Matched for the current frame: {runtime.fired ? 'yes' : 'no'}{' '}
+                  · its condition is {runtime.truth}
                 </p>
+              ) : null}
+              <p className="font-mono text-[11px] leading-relaxed">
+                {describeTriggerKindDetail(spec)}
+              </p>
+              {onEdit ? (
+                <button
+                  type="button"
+                  className="mt-1 text-xs font-medium text-primary underline-offset-4 hover:underline"
+                  onClick={onEdit}
+                >
+                  Edit triggers
+                </button>
               ) : null}
             </div>
           </details>
@@ -179,6 +200,30 @@ export function WhenReadList({
       })}
     </div>
   );
+}
+
+/** The technical half of a trigger, kept for the expanded row only. */
+function describeTriggerKindDetail(spec: TriggerSpec): string {
+  const parts: string[] = [`kind: ${spec.kind}`];
+  const mode = (spec as { mode?: string }).mode;
+  if (mode) {
+    parts.push(`mode: ${mode}`);
+  }
+  if (spec.kind === 'schedule' && spec.schedule) {
+    if (spec.schedule.cron) {
+      parts.push(`cron: ${spec.schedule.cron}`);
+    }
+    if (spec.schedule.every_ms !== undefined) {
+      parts.push(`every: ${String(spec.schedule.every_ms)} ms`);
+    }
+    if (spec.schedule.timezone) {
+      parts.push(`timezone: ${spec.schedule.timezone}`);
+    }
+  }
+  if (spec.kind === 'timer_fired' && spec.timer) {
+    parts.push(`timer: ${spec.timer}`);
+  }
+  return parts.join(' · ');
 }
 
 function ConditionTree({
@@ -298,13 +343,17 @@ export function ConditionReadView({
   evaluation,
   devices,
   deviceDisplayNameMap,
+  groups,
   showTrace = false,
+  onEdit,
 }: {
   condition: unknown;
   evaluation?: ConditionEvaluation;
   devices: DevicesState;
   deviceDisplayNameMap: Record<string, string>;
+  groups?: FlattenedGroupsConfig;
   showTrace?: boolean;
+  onEdit?: () => void;
 }) {
   const resolveDevice = (ref: {
     integration_id: string;
@@ -319,9 +368,22 @@ export function ConditionReadView({
     );
   };
   const error = evaluation?.error;
+  const narrative = describeConditionNarrative(condition as never, {
+    devices,
+    groups,
+    deviceNames: deviceDisplayNameMap,
+  });
   return (
     <div className="space-y-3">
-      <ConditionTree condition={condition} resolveDevice={resolveDevice} />
+      <p className="text-sm leading-relaxed">
+        {narrative.text.charAt(0).toUpperCase() + narrative.text.slice(1)}.
+        {narrative.evidence ? (
+          <span className="text-muted-foreground">
+            {' '}
+            Right now: {narrative.evidence.split('currently ').pop()}.
+          </span>
+        ) : null}
+      </p>
       {evaluation ? (
         <div className="space-y-1 rounded-xl border border-border/70 bg-muted/20 p-2.5">
           <div className="flex flex-wrap items-center gap-2">
@@ -341,7 +403,12 @@ export function ConditionReadView({
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
           {evaluation.unknown_reason ? (
             <p className="text-xs text-muted-foreground">
-              Unknown: {formatUnknownReason(evaluation.unknown_reason)}
+              Waiting for data:{' '}
+              {describeUnknownReasonSentence(evaluation.unknown_reason, {
+                devices,
+                groups,
+                deviceNames: deviceDisplayNameMap,
+              })}
             </p>
           ) : null}
           {showTrace && evaluation.trace ? (
@@ -355,6 +422,23 @@ export function ConditionReadView({
             </details>
           ) : null}
         </div>
+      ) : null}
+      <details className="text-xs">
+        <summary className="cursor-pointer font-medium text-muted-foreground">
+          Show the condition list
+        </summary>
+        <div className="mt-2">
+          <ConditionTree condition={condition} resolveDevice={resolveDevice} />
+        </div>
+      </details>
+      {onEdit ? (
+        <button
+          type="button"
+          className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+          onClick={onEdit}
+        >
+          Edit this condition
+        </button>
       ) : null}
     </div>
   );
@@ -380,6 +464,7 @@ export function ThenReadList({
   scenes,
   routines,
   deviceDisplayNameMap,
+  onEdit,
 }: {
   program?: Program;
   lastRun?: PlannedRunStatus;
@@ -388,6 +473,7 @@ export function ThenReadList({
   scenes: NameList;
   routines: NameList;
   deviceDisplayNameMap: Record<string, string>;
+  onEdit?: () => void;
 }) {
   if (!program || (program.kind !== 'native' && program.kind !== 'script')) {
     return (
@@ -428,11 +514,6 @@ export function ThenReadList({
                 {index + 1}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="mr-2 align-middle">
-                  <Badge variant="outline">
-                    {step.action.replaceAll('_', ' ')}
-                  </Badge>
-                </span>
                 {describeNativeAction(
                   step,
                   devices,
@@ -463,6 +544,15 @@ export function ThenReadList({
           );
         })}
       </ol>
+      {onEdit ? (
+        <button
+          type="button"
+          className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+          onClick={onEdit}
+        >
+          Edit steps
+        </button>
+      ) : null}
       {lastRun ? (
         <p className="text-xs text-muted-foreground">
           Labels are from the most recent accepted run

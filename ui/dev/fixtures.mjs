@@ -246,7 +246,7 @@ function normalHome() {
     }),
     sensor('entryway_button', 'Entryway button', 'zigbee2mqtt', 'idle'),
     sensor('bedroom_switch', 'Bedroom switch', 'zigbee2mqtt', 'idle'),
-    sensor('living_room_motion', 'Living room motion', 'zigbee2mqtt', 'clear'),
+    sensor('living_room_motion', 'Living room motion', 'zigbee2mqtt', false),
     sensor('outdoor_sensor', 'Outdoor temperature', 'mqtt', 4.5),
   ];
   return {
@@ -391,7 +391,7 @@ function normalHome() {
                 integration_id: 'zigbee2mqtt',
                 device_id: 'living_room_motion',
               },
-              mode: 'level',
+              mode: 'transition',
             },
           ],
           conditions: {
@@ -405,7 +405,7 @@ function normalHome() {
                     integration_id: 'zigbee2mqtt',
                     device_id: 'living_room_motion',
                   },
-                  path: '/occupancy',
+                  path: '/value',
                 },
                 operator: 'truthy',
               },
@@ -443,6 +443,21 @@ function normalHome() {
                 },
                 operator: 'eq',
                 value: 'night',
+              },
+              {
+                // A reading with a limit, so the collapsed rows can say what
+                // is short right now (“currently 40%”).
+                kind: 'comparison',
+                source: {
+                  kind: 'device',
+                  device: {
+                    integration_id: 'mqtt',
+                    device_id: 'hallway_strip',
+                  },
+                  path: '/observed/brightness',
+                },
+                operator: 'lt',
+                value: 0.5,
               },
             ],
           },

@@ -1,4 +1,5 @@
 import type { ConditionTraceNode } from '@/bindings/ConditionTraceNode';
+import { describeScheduleNarrative } from '@/lib/routineNarrative';
 import type { DeviceIdRef } from '@/bindings/DeviceIdRef';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
@@ -127,15 +128,10 @@ export function triggerLabel(
 
   switch (spec.kind) {
     case 'schedule': {
-      const every = spec.schedule.every_ms;
-      const base = spec.schedule.cron
-        ? `Cron ${spec.schedule.cron}`
-        : every !== undefined
-          ? `Every ${formatDuration(Number(every))}`
-          : 'Schedule';
-      return spec.schedule.timezone
-        ? `${base} (${spec.schedule.timezone})`
-        : base;
+      // The raw cron expression belongs in the row's technical detail, not in
+      // the sentence a beginner reads.
+      const schedule = describeScheduleNarrative(spec.schedule);
+      return `On a schedule: ${schedule.text}`;
     }
     case 'predicate_for':
       return `Held for ${formatDuration(Number(spec.duration_ms))}`;
@@ -231,8 +227,19 @@ export function triggerStateSentence(
   if (trigger.error) {
     return `Cannot be evaluated: ${trigger.error}`;
   }
-  if (trigger.armed && trigger.due_wall_ms !== undefined) {
-    return `Armed — next fire ${formatDue(Number(trigger.due_wall_ms), now)}`;
+  if (
+    trigger.armed &&
+    trigger.due_wall_ms !== undefined &&
+    (trigger.kind === 'schedule' || trigger.kind === 'timer_fired')
+  ) {
+    return trigger.kind === 'schedule'
+      ? `Scheduled — next run ${formatDue(Number(trigger.due_wall_ms), now)}`
+      : `Timer set — fires ${formatDue(Number(trigger.due_wall_ms), now)}`;
+  }
+  if (trigger.armed) {
+    return trigger.kind === 'schedule'
+      ? 'Scheduled — waiting for the next time'
+      : 'Watching for the next event';
   }
   if (trigger.unknown_reason) {
     return `Unknown: ${formatUnknownReason(trigger.unknown_reason)}`;
@@ -253,7 +260,9 @@ export function triggerBadge(trigger: TriggerRuntimeStatus): {
     return { label: 'Fired', tone: 'success' };
   }
   if (trigger.armed) {
-    return { label: 'Armed', tone: 'info' };
+    return trigger.kind === 'schedule'
+      ? { label: 'Scheduled', tone: 'info' }
+      : { label: 'Watching', tone: 'info' };
   }
   // Event triggers (reports, schedules, timers, startup, manual) have no
   // meaningful truth value, so they must not read as "Unknown".

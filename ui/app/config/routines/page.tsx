@@ -26,9 +26,24 @@ import { Skeleton } from '@/ui/primitives/skeleton';
 import { Switch } from '@/ui/primitives/switch';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
-import { StatusBadge, triggerLabel } from '@/ui/routine-runtime';
+import { StatusBadge, formatUnknownReason } from '@/ui/routine-runtime';
+import {
+  describeRoutineLastOutcome,
+  describeRoutineStateLine,
+  describeRoutineTriggerLine,
+  describeUnknownReasonSentence,
+} from '@/lib/routineNarrative';
+
+const stateToneClass: Record<string, string> = {
+  success: 'text-emerald-700 dark:text-emerald-300',
+  warning: 'text-amber-700 dark:text-amber-300',
+  error: 'text-destructive',
+  info: 'text-muted-foreground',
+  neutral: 'text-muted-foreground',
+};
 import { describeNativeAction } from '@/ui/v2-routine-summary';
 import type { NativeAction } from '@/bindings/NativeAction';
+import type { RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
 import type { Program } from '@/bindings/Program';
 import type { TriggerSpec } from '@/bindings/TriggerSpec';
 
@@ -110,58 +125,66 @@ export default function RoutinesPage() {
     );
   }
 
+  const narrativeContext = {
+    devices,
+    groups,
+    deviceNames: deviceDisplayNameMap,
+  };
+
+  /**
+   * The card's two content lines: what starts it, and what it does in the
+   * words a person would use. Raw cron expressions and node kinds live on the
+   * detail page, not here.
+   */
   const describeRoutine = (routine: Routine): string => {
     const isV2 =
       routine.semantics_version === 2 || Boolean(routine.definition_v2);
     if (!isV2) {
-      return `${routine.rules.length} rule${routine.rules.length === 1 ? '' : 's'} · ${routine.actions.length} action${routine.actions.length === 1 ? '' : 's'}`;
+      return `${routine.rules.length} rule${routine.rules.length === 1 ? '' : 's'} → ${routine.actions.length} action${routine.actions.length === 1 ? '' : 's'}`;
     }
     const triggers: TriggerSpec[] = routine.definition_v2?.triggers ?? [];
-    const fallbackKind = (trigger: TriggerSpec | undefined): string => {
-      switch (trigger?.kind) {
-        case 'schedule':
-          return 'a schedule';
-        case 'state_change':
-        case 'report':
-          return 'a device change';
-        case 'predicate_transition':
-        case 'predicate_for':
-          return 'a condition becoming true';
-        case 'timer_fired':
-          return 'a timer';
-        case 'startup':
-          return 'startup';
-        case 'manual':
-          return 'a manual trigger';
-        default:
-          return 'a trigger';
-      }
-    };
-    const when =
-      triggers.length === 0
-        ? 'nothing yet'
-        : (triggerLabel(triggers[0], devices, deviceDisplayNameMap) ??
-            fallbackKind(triggers[0])) +
-          (triggers.length > 1 ? ` +${triggers.length - 1}` : '');
+    const when = describeRoutineTriggerLine(
+      routine.definition_v2,
+      narrativeContext,
+    );
     const program = routine.definition_v2?.program as Program | undefined;
     const then =
       program?.kind === 'script'
-        ? 'a script'
+        ? 'run a script'
         : program?.kind === 'native' && program.steps.length > 0
-          ? (
-              describeNativeAction(
-                program.steps[0] as NativeAction,
-                devices,
-                groups,
-                sceneList,
-                routineList,
-                deviceDisplayNameMap,
-              ) +
-              (program.steps.length > 1 ? ` +${program.steps.length - 1}` : '')
-            ).toLowerCase()
-          : 'nothing yet';
-    return `When ${when} → ${then}`;
+          ? describeNativeAction(
+              program.steps[0] as NativeAction,
+              devices,
+              groups,
+              sceneList,
+              routineList,
+              deviceDisplayNameMap,
+            ) +
+            (program.steps.length > 1
+              ? ` +${program.steps.length - 1} more`
+              : '')
+          : 'do nothing yet';
+    if (!when) {
+      return `Does not start on its own → ${then}`;
+    }
+    return `${when} → ${then}`;
   };
+
+  const stateLineFor = (
+    routine: Routine,
+    status: RoutineRuntimeStatus | undefined,
+  ) =>
+    describeRoutineStateLine({
+      enabled: routine.enabled,
+      definition: routine.definition_v2,
+      status:
+        routine.semantics_version === 2 || routine.definition_v2
+          ? status?.v2
+          : status,
+      context: narrativeContext,
+      describeUnknown: (reason) =>
+        describeUnknownReasonSentence(reason, narrativeContext),
+    });
 
   return (
     <div className="space-y-4">
@@ -262,34 +285,26 @@ export default function RoutinesPage() {
                       Legacy routine
                     </Badge>
                   )}
-                  {routine.enabled && status ? (
-                    <StatusBadge
-                      label={
-                        status.will_trigger
-                          ? 'Triggering'
-                          : status.all_conditions_match
-                            ? 'Conditions met'
-                            : 'Waiting for data'
-                      }
-                      tone={
-                        status.will_trigger
-                          ? 'success'
-                          : status.all_conditions_match
-                            ? 'warning'
-                            : 'neutral'
-                      }
-                    />
-                  ) : null}
-                  {routine.enabled && status?.v2 ? (
-                    <span className="text-[11px] text-muted-foreground">
-                      {
-                        status.v2.triggers.filter((trigger) => trigger.armed)
-                          .length
-                      }{' '}
-                      armed
-                    </span>
-                  ) : null}
                 </div>
+                {routine.enabled ? (
+                  <div className="mt-2 space-y-0.5">
+                    {(() => {
+                      const state = stateLineFor(routine, status);
+                      return (
+                        <p
+                          className={`text-xs ${stateToneClass[state.tone] ?? ''}`}
+                        >
+                          {state.text}
+                        </p>
+                      );
+                    })()}
+                    {describeRoutineLastOutcome(status?.v2?.last_run) ? (
+                      <p className="text-xs text-muted-foreground">
+                        {describeRoutineLastOutcome(status?.v2?.last_run)}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
               </li>
             );
           })}

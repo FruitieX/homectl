@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useHelperStatuses } from '@/hooks/websocket';
 import { useInterval } from 'usehooks-ts';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 
@@ -39,7 +40,15 @@ import { ProgramBuilder } from '@/ui/ProgramBuilder';
 import { RuleBuilder, type Rule } from '@/ui/RuleBuilder';
 import { TriggerBuilder } from '@/ui/TriggerBuilder';
 import { RoutineExecutionPolicyEditor } from '@/ui/RoutineExecutionPolicyEditor';
-import { RoutineRuntimePanel } from '@/ui/routine-runtime';
+import { RoutineRuntimePanel, formatUnknownReason } from '@/ui/routine-runtime';
+import { describeNativeAction } from '@/ui/v2-routine-summary';
+import type { NativeAction } from '@/bindings/NativeAction';
+import {
+  describeConditionNarrative,
+  describeRoutineStateLine,
+  describeTriggerPhrase,
+  describeUnknownReasonSentence,
+} from '@/lib/routineNarrative';
 import { RoutineWhatIfPreview } from '@/ui/RoutineWhatIfPreview';
 import {
   ConditionReadView,
@@ -91,6 +100,7 @@ export default function RoutineDetailPage() {
   } = useRoutines();
   const { data: scenes } = useScenes();
   const { data: helpers } = useHelpers();
+  const helperStatuses = useHelperStatuses();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
   const { devicesState: apiDevices } = useDevicesApi();
   const liveDevices = useDevicesState();
@@ -293,59 +303,82 @@ export default function RoutineDetailPage() {
   }
 
   const triggers = definition.triggers ?? [];
-  const armedCount = v2Status?.triggers.filter((t) => t.armed).length ?? 0;
-  const truth = v2Status?.condition.truth;
+  const narrativeContext = {
+    devices,
+    groups,
+    deviceNames: deviceDisplayNameMap,
+    helpers: (helperStatuses ?? helpers ?? []).map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      value: (entry as { value?: unknown }).value,
+    })),
+  };
+  // The same sentence the routines list shows, so the two views agree.
+  const routineStateLine = describeRoutineStateLine({
+    enabled: routine.enabled,
+    definition: definition as { condition?: unknown },
+    status: (isV2 ? v2Status : status) as never,
+    context: narrativeContext,
+    describeUnknown: (reason) =>
+      describeUnknownReasonSentence(reason, narrativeContext),
+  });
+  const whenSummary = triggers.length
+    ? `${describeTriggerPhrase(triggers[0], narrativeContext)}${
+        triggers.length > 1 ? ` (+${triggers.length - 1} more)` : ''
+      }`
+    : 'Nothing starts it yet';
+  const conditionNarrative = describeConditionNarrative(
+    definition.condition as never,
+    narrativeContext,
+  );
+  const ifSummary = conditionNarrative.evidence ?? conditionNarrative.text;
+  const firstStep =
+    program?.kind === 'native' && program.steps.length > 0
+      ? describeNativeAction(
+          program.steps[0] as NativeAction,
+          devices,
+          groups,
+          (scenes ?? []).map((scene) => ({ id: scene.id, name: scene.name })),
+          (routines ?? []).map((entry) => ({ id: entry.id, name: entry.name })),
+          deviceDisplayNameMap,
+        )
+      : program?.kind === 'script'
+        ? 'Run its script'
+        : 'Nothing yet';
+  const thenSummary = `${
+    firstStep.charAt(0).toUpperCase() + firstStep.slice(1)
+  }${program?.kind === 'native' && program.steps.length > 1 ? ` (+${program.steps.length - 1} more)` : ''}`;
   const liveStatusBadge = (() => {
     if (!routine.enabled) return null;
+    const state = routineStateLine;
     if (!status) {
       return { label: 'No live state', className: statusBadgeClassName.muted };
     }
-    if (status.will_trigger) {
-      return { label: 'Triggering', className: statusBadgeClassName.success };
+    if (state.tone === 'success') {
+      return { label: 'Running now', className: statusBadgeClassName.success };
     }
-    if (status.all_conditions_match) {
+    if (state.tone === 'error') {
       return {
-        label: 'Conditions met',
-        className: statusBadgeClassName.warning,
+        label: 'Needs attention',
+        className: statusBadgeClassName.error,
       };
     }
-    return {
-      label: 'Waiting for data',
-      className: statusBadgeClassName.muted,
-    };
+    if (state.tone === 'warning') {
+      return {
+        label: 'Waiting for data',
+        className: statusBadgeClassName.muted,
+      };
+    }
+    return { label: 'Idle', className: statusBadgeClassName.muted };
   })();
+  // One sentence, in the same words the list card uses, plus what it means for
+  // delivery: a matched run is a dispatched command, not a confirmed device.
   const statusSentence = (() => {
-    if (!routine.enabled) {
-      return 'Disabled: this routine does not evaluate or trigger.';
+    const base = routineStateLine.text;
+    if (routineStateLine.tone === 'success') {
+      return `${base}. Dispatched commands are not confirmed device delivery.`;
     }
-    if (isV2) {
-      if (!v2Status) return 'Waiting for runtime status.';
-      if (v2Status.condition.error) {
-        return 'The condition could not be evaluated; the error is reported under Only if.';
-      }
-      if (v2Status.will_trigger) {
-        return 'The condition and a triggering event matched. This status does not confirm physical device delivery.';
-      }
-      if (v2Status.condition.truth === 'true') {
-        return 'The condition is met; waiting for a matching trigger event.';
-      }
-      if (v2Status.condition.truth === 'false') {
-        return 'The condition is not met; the routine will not trigger yet.';
-      }
-      return 'The condition is unknown right now; the reason is reported under Only if.';
-    }
-    if (!status) return 'Waiting for runtime status.';
-    if (status.rules.some((rule) => rule.error)) {
-      return 'A rule could not be evaluated; the error is reported under When.';
-    }
-    if (status.will_trigger) {
-      return 'The conditions and triggering event matched. This status does not confirm physical device delivery.';
-    }
-    if (status.all_conditions_match) {
-      return 'The conditions match; waiting for a matching trigger event.';
-    }
-    const matching = status.rules.filter((rule) => rule.condition_match).length;
-    return `${matching} of ${status.rules.length} conditions match.`;
+    return base.endsWith('.') ? base : `${base}.`;
   })();
 
   const triggerCount = triggers.length;
@@ -444,9 +477,7 @@ export default function RoutineDetailPage() {
           <Section
             id="when"
             title="When"
-            summary={`${triggerCount} ${triggerCount === 1 ? 'trigger' : 'triggers'}${
-              armedCount > 0 ? ` · ${armedCount} armed` : ''
-            }`}
+            summary={whenSummary}
             open={activeSection === 'when'}
             onOpenChange={(open) => openSection(open ? 'when' : null)}
             api={when}
@@ -457,6 +488,8 @@ export default function RoutineDetailPage() {
                 status={routine.enabled ? v2Status : undefined}
                 devices={devices}
                 deviceDisplayNameMap={deviceDisplayNameMap}
+                groups={groups}
+                onEdit={() => when.begin()}
               />
             }
             renderEditor={(api) => {
@@ -487,15 +520,7 @@ export default function RoutineDetailPage() {
           <Section
             id="only-if"
             title="Only if"
-            summary={
-              routine.enabled && v2Status && !onlyIf.dirty
-                ? truth === 'true'
-                  ? 'Met right now'
-                  : truth === 'false'
-                    ? 'Not met right now'
-                    : 'Unknown right now'
-                : undefined
-            }
+            summary={onlyIf.dirty ? undefined : ifSummary}
             badge={v2Status?.condition.error ? 'Evaluation error' : undefined}
             open={activeSection === 'only-if'}
             onOpenChange={(open) => openSection(open ? 'only-if' : null)}
@@ -511,7 +536,9 @@ export default function RoutineDetailPage() {
                 }
                 devices={devices}
                 deviceDisplayNameMap={deviceDisplayNameMap}
+                groups={groups}
                 showTrace
+                onEdit={() => onlyIf.begin()}
               />
             }
             renderEditor={(api) => {
@@ -545,13 +572,7 @@ export default function RoutineDetailPage() {
           <Section
             id="then"
             title="Then"
-            summary={
-              program?.kind === 'native'
-                ? `${stepCount} ${stepCount === 1 ? 'step' : 'steps'}`
-                : program?.kind === 'script'
-                  ? 'Script'
-                  : 'Not configured'
-            }
+            summary={thenSummary}
             open={activeSection === 'then'}
             onOpenChange={(open) => openSection(open ? 'then' : null)}
             api={then}
@@ -575,6 +596,7 @@ export default function RoutineDetailPage() {
                   name: entry.name,
                 }))}
                 deviceDisplayNameMap={deviceDisplayNameMap}
+                onEdit={() => then.begin()}
               />
             }
             renderEditor={(api) => {
