@@ -96,12 +96,15 @@ function group(id, name, devices, linkedGroups = []) {
   };
 }
 
-function scene(id, name, { deviceStates = {}, groupStates = {} } = {}) {
+function scene(id, name, options = {}) {
+  // Accept both the camelCase factory options and the raw stored field names.
+  const deviceStates = options.device_states ?? options.deviceStates ?? {};
+  const groupStates = options.group_states ?? options.groupStates ?? {};
   return {
     id,
     name,
-    hidden: false,
-    script: null,
+    hidden: options.hidden ?? false,
+    script: options.script ?? null,
     device_states: deviceStates,
     group_states: groupStates,
     group_state_order: Object.keys(groupStates),
@@ -210,6 +213,13 @@ function normalHome() {
       ],
       scenes: [
         scene('normal', 'Normal', {
+          device_states: {
+            'zigbee2mqtt/living_room_lamp': { power: true, brightness: 0.8, color: { h: 32, s: 0.4 } },
+            // Tracks another device instead of setting a state.
+            'esphome/kitchen_pendant': { integration_id: 'zigbee2mqtt', device_id: 'living_room_lamp' },
+            // Points at a scene that no longer exists, so the "unresolved" states stay exercised.
+            'zigbee2mqtt/living_room_floor_lamp': { scene_id: 'evening_retired' },
+          },
           group_states: {
             living_room: { power: true, brightness: 0.8, color: { h: 32, s: 0.4 } },
             kitchen: { power: true, brightness: 0.8, color: { h: 30, s: 0.3 } },
@@ -232,6 +242,8 @@ function normalHome() {
           },
         }),
         scene('movie', 'Movie', {
+          // A scripted scene, so the "Customized" script section is exercised.
+          script: 'defineSceneScript(() => ({ devices: {}, groups: {} }))',
           device_states: {
             'zigbee2mqtt/living_room_lamp': { power: true, brightness: 0.15, color: { h: 260, s: 0.8 } },
             'zigbee2mqtt/living_room_floor_lamp': { power: true, brightness: 0.1, color: { h: 260, s: 0.8 } },

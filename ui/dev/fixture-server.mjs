@@ -113,7 +113,8 @@ const server = http.createServer(async (req, res) => {
   if (path === '/api/v1/commands/scene') {
     const body = await readBody(req);
     console.log(`  -> scene command: ${JSON.stringify(body)}`);
-    return send(res, 200, { success: true, data: { accepted: true } });
+    // Same shape the real command endpoint answers with.
+    return send(res, 200, { applied: true, scene_id: body?.scene_id ?? null });
   }
 
   if (path === '/api/v1/devices' && method === 'GET') {

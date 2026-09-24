@@ -422,7 +422,7 @@ export default function GroupDetailPage() {
           <Section<Group>
             id="details"
             title="Details"
-            summary={`${group.name}${group.hidden ? ' · hidden' : ''}`}
+            summary={`${group.hidden ? 'Hidden' : 'Visible'} · id ${group.id}`}
             open={activeSection === 'details'}
             onOpenChange={(open) => openSection(open ? 'details' : null)}
             api={detailEditor}

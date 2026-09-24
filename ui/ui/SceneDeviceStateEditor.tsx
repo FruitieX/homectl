@@ -258,7 +258,7 @@ function SceneLinkEditor({ config, scenes, onChange }: SceneLinkEditorProps) {
   );
 }
 
-interface SceneTargetConfigEditorProps {
+export interface SceneTargetConfigEditorProps {
   targetKey: string;
   targetLabel?: string;
   config: SceneDeviceConfig;
@@ -275,7 +275,7 @@ interface SceneTargetConfigEditorProps {
   focused?: boolean;
 }
 
-function SceneTargetConfigEditor({
+export function SceneTargetConfigEditor({
   targetKey,
   targetLabel,
   config,
@@ -422,14 +422,14 @@ export interface SceneTargetOption {
   label: string;
 }
 
-interface AddSceneTargetModalProps {
+export interface AddSceneTargetModalProps {
   options: SceneTargetOption[];
   existingKeys: string[];
   onAdd: (targetKey: string) => void;
   onClose: () => void;
 }
 
-function AddSceneTargetModal({
+export function AddSceneTargetModal({
   options,
   existingKeys,
   onAdd,
