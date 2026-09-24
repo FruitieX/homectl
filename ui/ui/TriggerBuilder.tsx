@@ -682,13 +682,16 @@ export function TriggerBuilder({
                         <StatusBadge label={badge.label} tone={badge.tone} />
                       ) : null}
                     </div>
-                    <p className="font-mono text-xs text-muted-foreground">
-                      {trigger.id}
+                    <p className="text-xs text-muted-foreground">
+                      {triggerStateSentence(live, now)}
                     </p>
-                    {open || duplicateId ? null : (
-                      <p className="text-xs text-muted-foreground">
-                        {triggerStateSentence(live, now)}
-                      </p>
+                    {open ? null : (
+                      <details className="text-xs text-muted-foreground">
+                        <summary className="cursor-pointer">
+                          Technical details
+                        </summary>
+                        <p className="mt-1 font-mono">{trigger.id}</p>
+                      </details>
                     )}
                   </div>
                   <div className="flex items-center gap-1">
