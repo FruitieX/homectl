@@ -1,6 +1,7 @@
 use super::*;
 use crate::core::{
-    calibration_session::CalibrationPreview, color_calibration::ColorCalibrationProfile,
+    calibration_session::{BrightnessPreview, CalibrationPreview},
+    color_calibration::ColorCalibrationProfile,
 };
 
 #[derive(Deserialize)]
@@ -67,6 +68,18 @@ pub(super) fn routes(
         .and(warp::body::json())
         .and(with_handle(handle))
         .and_then(|id, preview, handle| preview_session(id, preview, handle, false));
+    let brightness_start = warp::path!("calibration-brightness-sessions" / String)
+        .and(warp::post())
+        .and(warp::body::content_length_limit(4096))
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(|id, preview, handle| brightness_session(id, preview, handle, true));
+    let brightness_preview = warp::path!("calibration-brightness-sessions" / String)
+        .and(warp::put())
+        .and(warp::body::content_length_limit(4096))
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(|id, preview, handle| brightness_session(id, preview, handle, false));
     let stop = warp::path!("calibration-sessions" / String)
         .and(warp::delete())
         .and(with_handle(handle))
@@ -82,6 +95,8 @@ pub(super) fn routes(
         .or(assign)
         .or(start)
         .or(preview)
+        .or(brightness_start)
+        .or(brightness_preview)
         .or(stop)
         .or(heartbeat)
 }
@@ -171,6 +186,48 @@ async fn preview_session(
         Ok(Ok(())) => {
             if start {
                 // Reclaim sessions after a closed/disconnected browser. The UI sends a heartbeat.
+                tokio::spawn(async move {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                        let id = id.clone();
+                        let done = handle
+                            .mutate(move |state| {
+                                Box::pin(async move { state.expire_calibration_session(&id) })
+                            })
+                            .await;
+                        if !matches!(done, Ok(false)) {
+                            break;
+                        }
+                    }
+                });
+            }
+            Ok(session_response())
+        }
+        Ok(Err(error)) => Ok(error_response(&error, StatusCode::BAD_REQUEST)),
+        Err(_) => Ok(actor_unavailable()),
+    }
+}
+
+/// A brightness session shares the lifecycle of a color one: the same id, the
+/// same heartbeat, the same Cancel/Finish restoration — but it never needs
+/// color values, so a dimmer with no color support can use it.
+async fn brightness_session(
+    id: String,
+    preview: BrightnessPreview,
+    handle: StateHandle,
+    start: bool,
+) -> Result<impl Reply, warp::Rejection> {
+    let session_id = id.clone();
+    let result = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.preview_brightness_calibration(session_id, preview, start)
+            })
+        })
+        .await;
+    match result {
+        Ok(Ok(())) => {
+            if start {
                 tokio::spawn(async move {
                     loop {
                         tokio::time::sleep(std::time::Duration::from_secs(30)).await;

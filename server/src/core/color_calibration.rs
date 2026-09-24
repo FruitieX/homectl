@@ -253,17 +253,40 @@ impl crate::core::state::AppState {
                 return Err("Calibration profile does not exist".into());
             }
         }
-        // Validate the whole selection before touching either storage or runtime.
+        // Which channels the profile carries decides who can take it: a
+        // brightness-only curve fits a dimmer with no color support, and a
+        // profile with color points needs the target's color path. Nothing is
+        // dropped silently — the whole selection is validated first, and an
+        // incompatible device is reported with its name.
+        let channels = match &profile_id {
+            Some(id) => {
+                let profile = self
+                    .runtime_config
+                    .color_calibration_profiles
+                    .iter()
+                    .find(|row| &row.id == id)
+                    .ok_or("Calibration profile does not exist")?;
+                CalibrationChannels {
+                    color: !profile.points.is_empty(),
+                    brightness: !profile.brightness_points.is_empty(),
+                }
+            }
+            // Removing an assignment asks nothing of the device's channels.
+            None => CalibrationChannels {
+                color: false,
+                brightness: false,
+            },
+        };
         let mut devices = Vec::new();
         for key in &keys {
-            if self
-                .calibration_sessions
-                .values()
-                .any(|session| session.reference.get_device_key().to_string() == *key)
-            {
+            if self.calibration_sessions.values().any(|session| {
+                std::iter::once(&session.target)
+                    .chain(session.reference.iter())
+                    .any(|device| device.get_device_key().to_string() == *key)
+            }) {
                 return Err("Finish the calibration using this light as a reference before changing its profile".into());
             }
-            devices.push(self.calibration_device(key)?);
+            devices.push(self.calibration_device_for(key, channels)?);
         }
         let db = crate::db::get_db_connection().map_err(|error| error.to_string())?;
         crate::db::config_queries::calibration::assign(db, &keys, profile_id.as_deref())
@@ -1004,4 +1027,84 @@ mod tests {
             assert!(distance(&round_trip, &expected) < 1e-5);
         }
     }
+
+    #[tokio::test]
+    async fn assignment_eligibility_follows_the_channels_in_the_profile() {
+        use crate::core::event::tests::test_state;
+        use crate::types::{
+            color::Capabilities,
+            device::{ControllableDevice, DeviceData, DeviceId, ManageKind},
+            integration::IntegrationId,
+        };
+
+        let (mut state, _rx) = test_state();
+        let dimmer = Device::new(
+            IntegrationId::from("dummy".to_string()),
+            DeviceId::new("dimmer"),
+            "Dimmer".into(),
+            DeviceData::Controllable(ControllableDevice::new(
+                None,
+                false,
+                Some(0.4),
+                None,
+                None,
+                Capabilities {
+                    brightness: Some(true),
+                    ..Default::default()
+                },
+                ManageKind::Full,
+            )),
+            None,
+        );
+        state.devices.set_state(&dimmer, true, true);
+        let key = dimmer.get_device_key().to_string();
+
+        let brightness_only = ColorCalibrationProfile {
+            id: "dimmer-curve".into(),
+            name: "Dimmer curve".into(),
+            points: Vec::new(),
+            reference_device_key: None,
+            brightness: 1.0,
+            brightness_points: curve(),
+        };
+        state
+            .runtime_config
+            .color_calibration_profiles
+            .push(brightness_only.clone());
+
+        // A brightness-only profile fits a colourless dimmer: the eligibility
+        // check never reaches the database on the way to the assignment.
+        let refused = state
+            .assign_calibration_profile(vec![key.clone()], Some("dimmer-curve".into()))
+            .await
+            .unwrap_err();
+        assert!(
+            !refused.contains("color"),
+            "a brightness-only profile must accept a dimmer: {refused}"
+        );
+
+        // A profile that carries colour points is refused, by name, with the
+        // channel that does not fit.
+        state
+            .runtime_config
+            .color_calibration_profiles
+            .push(ColorCalibrationProfile {
+                id: "color-curve".into(),
+                name: "Color curve".into(),
+                points: vec![ColorCalibrationPoint {
+                    reference: Uv::from_xy(&DeviceColor::new_from_hs(30, 0.3).to_xy().unwrap()),
+                    output: Uv::from_xy(&DeviceColor::new_from_hs(60, 0.4).to_xy().unwrap()),
+                }],
+                reference_device_key: None,
+                brightness: 0.5,
+                brightness_points: Vec::new(),
+            });
+        let refused = state
+            .assign_calibration_profile(vec![key.clone()], Some("color-curve".into()))
+            .await
+            .unwrap_err();
+        assert!(refused.contains("Dimmer"), "{refused}");
+        assert!(refused.contains("color"), "{refused}");
+    }
+
 }
