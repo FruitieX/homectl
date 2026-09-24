@@ -522,10 +522,23 @@ export default function FloorplanPage() {
         </Alert>
       ) : null}
       <ConfigPageHeader
-        title="Floorplan"
+        title={
+          selectedFloorplanName
+            ? `Floorplan · ${selectedFloorplanName}`
+            : 'Floorplan'
+        }
         description="Add a map of your home, then place rooms and devices where they belong."
         actions={
           <>
+            <span className="self-center text-xs text-muted-foreground">
+              {floorplanLoadError
+                ? 'Not saved: the selected floorplan failed to load'
+                : !selectedFloorplanId
+                  ? 'No floorplan selected'
+                  : hasChanges
+                    ? 'Unsaved changes'
+                    : 'All changes saved'}
+            </span>
             <Button
               onClick={handleSave}
               disabled={

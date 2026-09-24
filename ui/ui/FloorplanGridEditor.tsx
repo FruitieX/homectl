@@ -707,6 +707,7 @@ export function FloorplanGridEditor({
     useState<VerticalResizeDirection>('bottom');
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [groupQuery, setGroupQuery] = useState('');
   const [groupPaintMode, setGroupPaintMode] = useState<GroupPaintMode>('paint');
   const [isPainting, setIsPainting] = useState(false);
   const [draggingDevice, setDraggingDevice] = useState<string | null>(null);
@@ -842,12 +843,29 @@ export function FloorplanGridEditor({
     }
     return left.name.localeCompare(right.name);
   });
+  const normalizedGroupQuery = groupQuery.trim().toLowerCase();
+  const matchingGroups = normalizedGroupQuery
+    ? sortedGroups.filter((group) =>
+        group.name.toLowerCase().includes(normalizedGroupQuery),
+      )
+    : sortedGroups;
 
   useEffect(() => {
     if (!selectedGroup && sortedGroups[0]) {
       setSelectedGroup(sortedGroups[0].id);
     }
   }, [selectedGroup, sortedGroups]);
+
+  useEffect(() => {
+    if (
+      normalizedGroupQuery &&
+      selectedGroup &&
+      !matchingGroups.some((group) => group.id === selectedGroup) &&
+      matchingGroups[0]
+    ) {
+      setSelectedGroup(matchingGroups[0].id);
+    }
+  }, [matchingGroups, normalizedGroupQuery, selectedGroup]);
 
   const pushUndoSnapshot = useCallback((snapshot: FloorplanGrid) => {
     setUndoStack((previousStack) => {
@@ -1570,40 +1588,152 @@ export function FloorplanGridEditor({
         onAutoCrop={autoCrop}
       />
 
-      <FloorplanDeviceScaleControl
-        value={grid.deviceScale}
-        min={minFloorplanDeviceScale}
-        max={maxFloorplanDeviceScale}
-        onChange={updateDeviceScale}
-      />
-      <label className="flex items-center justify-between gap-3 text-sm">
-        Device labels
-        <select
-          className="h-10 rounded-md border border-input bg-background px-3"
-          value={grid.labelMode ?? 'sensors'}
-          onChange={(event) =>
-            onChange({
-              ...grid,
-              labelMode: event.target.value as FloorplanGrid['labelMode'],
-            })
-          }
-        >
-          <option value="none">Hidden</option>
-          <option value="sensors">Sensors</option>
-          <option value="lights">Lights</option>
-          <option value="all">All devices</option>
-        </select>
-      </label>
+      <details className="rounded-2xl border border-border p-4">
+        <summary className="cursor-pointer text-sm font-semibold">
+          Display and layout
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            canvas size, labels, scale, background
+          </span>
+        </summary>
+        <div className="mt-4 space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">Canvas size</span>
+            <Input
+              type="number"
+              aria-label="Floorplan width in tiles"
+              className="h-9 w-20"
+              value={width}
+              min={5}
+              max={100}
+              onChange={(event) =>
+                resizeGrid(parseInt(event.target.value) || 10, height)
+              }
+            />
+            <span>×</span>
+            <Input
+              type="number"
+              aria-label="Floorplan height in tiles"
+              className="h-9 w-20"
+              value={height}
+              min={5}
+              max={100}
+              onChange={(event) =>
+                resizeGrid(width, parseInt(event.target.value) || 10)
+              }
+            />
+            <span className="text-xs text-muted-foreground">
+              tiles wide and tall; existing content moves with the canvas.
+            </span>
+          </div>
 
-      {backgroundImageUrl && (
-        <FloorplanBackgroundControls
-          mode={mode}
-          showGrid={showGrid}
-          gridOpacity={gridOpacity}
-          onShowGridChange={setShowGrid}
-          onGridOpacityChange={setGridOpacity}
-        />
-      )}
+          <div className="flex gap-2 items-center">
+            <span className="text-sm font-medium">Resize with</span>
+            <Input
+              type="number"
+              className="h-9 w-16"
+              value={width}
+              onChange={(e) =>
+                resizeGrid(parseInt(e.target.value) || 10, height)
+              }
+              min={5}
+              max={100}
+            />
+            <span>×</span>
+            <Input
+              type="number"
+              className="h-9 w-16"
+              value={height}
+              onChange={(e) =>
+                resizeGrid(width, parseInt(e.target.value) || 10)
+              }
+              min={5}
+              max={100}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">Grow towards</span>
+            <div className="flex rounded-xl bg-muted p-1">
+              <Button
+                variant={
+                  horizontalResizeDirection === 'left' ? 'default' : 'ghost'
+                }
+                size="sm"
+                onClick={() => setHorizontalResizeDirection('left')}
+                type="button"
+              >
+                Left
+              </Button>
+              <Button
+                variant={
+                  horizontalResizeDirection === 'right' ? 'default' : 'ghost'
+                }
+                size="sm"
+                onClick={() => setHorizontalResizeDirection('right')}
+                type="button"
+              >
+                Right
+              </Button>
+            </div>
+            <div className="flex rounded-xl bg-muted p-1">
+              <Button
+                variant={
+                  verticalResizeDirection === 'top' ? 'default' : 'ghost'
+                }
+                size="sm"
+                onClick={() => setVerticalResizeDirection('top')}
+                type="button"
+              >
+                Top
+              </Button>
+              <Button
+                variant={
+                  verticalResizeDirection === 'bottom' ? 'default' : 'ghost'
+                }
+                size="sm"
+                onClick={() => setVerticalResizeDirection('bottom')}
+                type="button"
+              >
+                Bottom
+              </Button>
+            </div>
+          </div>
+          <FloorplanDeviceScaleControl
+            value={grid.deviceScale}
+            min={minFloorplanDeviceScale}
+            max={maxFloorplanDeviceScale}
+            onChange={updateDeviceScale}
+          />
+          <label className="flex items-center justify-between gap-3 text-sm">
+            Device labels
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3"
+              value={grid.labelMode ?? 'sensors'}
+              onChange={(event) =>
+                onChange({
+                  ...grid,
+                  labelMode: event.target.value as FloorplanGrid['labelMode'],
+                })
+              }
+            >
+              <option value="none">Hidden</option>
+              <option value="sensors">Sensors</option>
+              <option value="lights">Lights</option>
+              <option value="all">All devices</option>
+            </select>
+          </label>
+
+          {backgroundImageUrl ? (
+            <FloorplanBackgroundControls
+              mode={mode}
+              showGrid={showGrid}
+              gridOpacity={gridOpacity}
+              onShowGridChange={setShowGrid}
+              onGridOpacityChange={setGridOpacity}
+            />
+          ) : null}
+        </div>
+      </details>
 
       {/* Tile toolbar */}
       {mode === 'tiles' && (
@@ -1628,130 +1758,97 @@ export function FloorplanGridEditor({
 
             <div className="h-8 w-px bg-border" />
 
-            <div className="flex gap-2 items-center">
-              <span className="text-sm">Size:</span>
-              <Input
-                type="number"
-                className="h-9 w-16"
-                value={width}
-                onChange={(e) =>
-                  resizeGrid(parseInt(e.target.value) || 10, height)
-                }
-                min={5}
-                max={100}
-              />
-              <span>×</span>
-              <Input
-                type="number"
-                className="h-9 w-16"
-                value={height}
-                onChange={(e) =>
-                  resizeGrid(width, parseInt(e.target.value) || 10)
-                }
-                min={5}
-                max={100}
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm">Expand:</span>
-              <div className="flex rounded-xl bg-muted p-1">
-                <Button
-                  variant={
-                    horizontalResizeDirection === 'left' ? 'default' : 'ghost'
-                  }
-                  size="sm"
-                  onClick={() => setHorizontalResizeDirection('left')}
-                  type="button"
-                >
-                  Left
-                </Button>
-                <Button
-                  variant={
-                    horizontalResizeDirection === 'right' ? 'default' : 'ghost'
-                  }
-                  size="sm"
-                  onClick={() => setHorizontalResizeDirection('right')}
-                  type="button"
-                >
-                  Right
-                </Button>
-              </div>
-              <div className="flex rounded-xl bg-muted p-1">
-                <Button
-                  variant={
-                    verticalResizeDirection === 'top' ? 'default' : 'ghost'
-                  }
-                  size="sm"
-                  onClick={() => setVerticalResizeDirection('top')}
-                  type="button"
-                >
-                  Top
-                </Button>
-                <Button
-                  variant={
-                    verticalResizeDirection === 'bottom' ? 'default' : 'ghost'
-                  }
-                  size="sm"
-                  onClick={() => setVerticalResizeDirection('bottom')}
-                  type="button"
-                >
-                  Bottom
-                </Button>
-              </div>
-            </div>
-
             {drawShapeControl}
 
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="text-sm text-muted-foreground">Fill all:</span>
-              {(Object.keys(tileColors) as TileType[]).map((type) => (
-                <Button
-                  key={type}
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => fillAll(type)}
-                >
-                  {tileLabels[type]}
-                </Button>
-              ))}
-            </div>
+            <details className="rounded-xl border border-border px-3 py-2">
+              <summary className="cursor-pointer text-sm font-medium">
+                Bulk actions
+              </summary>
+              <div className="mt-2 flex flex-wrap items-center gap-1">
+                <span className="text-sm text-muted-foreground">
+                  Fill the whole canvas with:
+                </span>
+                {(Object.keys(tileColors) as TileType[]).map((type) => (
+                  <Button
+                    key={type}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => fillAll(type)}
+                  >
+                    {tileLabels[type]}
+                  </Button>
+                ))}
+              </div>
+            </details>
           </div>
 
-          <div className="text-sm text-muted-foreground">
-            Left click paints, right click temporarily erases back to floor, and
-            drag shape controls whether dragging draws freehand, straight lines,
-            or filled rectangles. Shift previews a line from the last clicked
-            cell to the cursor.
+          <p className="text-sm text-muted-foreground">
+            Drag to paint with the selected tile; hold Shift to draw a straight
+            line.
             {lineAnchor?.mode === 'tiles'
-              ? ` Hold Shift to preview from ${lineAnchor.cell.x + 1}, ${lineAnchor.cell.y + 1}, then Shift-click to draw the line.`
-              : ' Click a cell to set the anchor, then hold Shift and click another cell to connect them.'}
-          </div>
+              ? ` The line starts at ${lineAnchor.cell.x + 1}, ${lineAnchor.cell.y + 1}.`
+              : ''}
+          </p>
+          <details className="text-sm text-muted-foreground">
+            <summary className="cursor-pointer font-medium">
+              How drawing works
+            </summary>
+            <p className="mt-2">
+              Left click paints, right click temporarily erases back to floor,
+              and the drag shape controls whether dragging draws freehand,
+              straight lines, or filled rectangles. Shift previews a line from
+              the last clicked cell to the cursor.
+              {lineAnchor?.mode === 'tiles'
+                ? ' Shift-click to draw the previewed line.'
+                : ' Click a cell to set the anchor, then hold Shift and click another cell to connect them.'}
+            </p>
+          </details>
         </div>
       )}
 
       {mode === 'groups' && (
         <div className="space-y-3">
-          <div className="text-sm text-muted-foreground">
-            Select a group, then click and drag to paint its area. Choose
-            Rectangle drag shape to fill room-like areas quickly. Right click
-            temporarily erases, and holding Shift previews a line from the last
-            clicked cell.
+          <p className="text-sm text-muted-foreground">
+            Pick the room, then drag to paint its area.
             {lineAnchor?.mode === 'groups'
-              ? ` Hold Shift to preview from ${lineAnchor.cell.x + 1}, ${lineAnchor.cell.y + 1}, then Shift-click to draw the line.`
-              : ' Click a cell to set the anchor, then hold Shift and click another cell to connect them.'}
-          </div>
+              ? ` The line starts at ${lineAnchor.cell.x + 1}, ${lineAnchor.cell.y + 1}.`
+              : ' Hold Shift to draw a straight line.'}
+          </p>
+          <details className="text-sm text-muted-foreground">
+            <summary className="cursor-pointer font-medium">
+              How room painting works
+            </summary>
+            <p className="mt-2">
+              Click and drag to paint the selected group's area. Choose the
+              Rectangle drag shape to fill room-like areas quickly. Right click
+              temporarily erases, and holding Shift previews a line from the
+              last clicked cell.
+              {lineAnchor?.mode === 'groups'
+                ? ' Shift-click to draw the previewed line.'
+                : ' Click a cell to set the anchor, then hold Shift and click another cell to connect them.'}
+            </p>
+          </details>
 
           <div className="flex flex-wrap gap-3 items-center">
+            <label className="space-y-2 w-full max-w-sm">
+              <span className="text-sm font-medium">Find a room</span>
+              <Input
+                type="search"
+                className="h-10"
+                placeholder="Type part of a room name"
+                value={groupQuery}
+                onChange={(event) => setGroupQuery(event.target.value)}
+              />
+            </label>
             <label className="space-y-2 w-full max-w-sm">
               <span className="text-sm font-medium">Group</span>
               <select
                 className={selectClassName}
                 value={selectedGroup ?? ''}
-                onChange={(e) => setSelectedGroup(e.target.value || null)}
+                onChange={(e) => setSelectedGroup(e.target.value)}
               >
                 <option value="">Select group...</option>
-                {sortedGroups.map((group) => (
+                {matchingGroups.map((group) => (
                   <option key={group.id} value={group.id}>
                     {group.name}
                     {group.hidden ? ' (hidden)' : ''}

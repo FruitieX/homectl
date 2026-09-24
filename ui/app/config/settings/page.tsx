@@ -348,7 +348,7 @@ export default function SettingsPage() {
                       className="mt-6"
                       openWhen={Boolean(
                         form.formState.errors.defaultTransitionMs ||
-                          form.formState.errors.sceneTransitionMs,
+                        form.formState.errors.sceneTransitionMs,
                       )}
                     >
                       <FormField
@@ -451,40 +451,13 @@ export default function SettingsPage() {
           <TabsContent value="info" className="mt-4">
             <Card>
               <CardHeader>
-                <CardTitle>Server Information</CardTitle>
+                <CardTitle>homectl {buildInfo.version}</CardTitle>
                 <CardDescription>
-                  Runtime endpoints exposed by the server process.
+                  Built {buildInfo.buildDate}. Report this version when asking
+                  about a problem.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <p className="flex items-center gap-2">
-                  <Server className="size-4" />
-                  <span className="font-medium text-foreground">
-                    API Endpoint:
-                  </span>
-                  <code className="rounded-md bg-muted px-1.5 py-0.5">
-                    {displayApiEndpoint}
-                  </code>
-                </p>
-                <p className="flex items-center gap-2">
-                  <Wifi className="size-4" />
-                  <span className="font-medium text-foreground">
-                    WebSocket:
-                  </span>
-                  <code className="rounded-md bg-muted px-1.5 py-0.5">
-                    {wsEndpoint}
-                  </code>
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="mt-4">
-              <CardHeader>
-                <CardTitle>Build Information</CardTitle>
-                <CardDescription>
-                  Source and build metadata for the frontend currently loaded.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
                 <dl className="grid gap-4 text-sm sm:grid-cols-3">
                   <div className="min-w-0 space-y-1">
                     <dt className="text-muted-foreground">Version</dt>
@@ -505,6 +478,31 @@ export default function SettingsPage() {
                     </dd>
                   </div>
                 </dl>
+                <Advanced
+                  label="Server and environment details"
+                  description="Runtime endpoints this app talks to, and where the loaded build came from."
+                >
+                  <div className="space-y-3 text-sm text-muted-foreground">
+                    <p className="flex items-center gap-2">
+                      <Server className="size-4" />
+                      <span className="font-medium text-foreground">
+                        API Endpoint:
+                      </span>
+                      <code className="rounded-md bg-muted px-1.5 py-0.5">
+                        {displayApiEndpoint}
+                      </code>
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <Wifi className="size-4" />
+                      <span className="font-medium text-foreground">
+                        WebSocket:
+                      </span>
+                      <code className="rounded-md bg-muted px-1.5 py-0.5">
+                        {wsEndpoint}
+                      </code>
+                    </p>
+                  </div>
+                </Advanced>
               </CardContent>
             </Card>
           </TabsContent>

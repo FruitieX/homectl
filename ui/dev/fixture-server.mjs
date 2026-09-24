@@ -149,6 +149,66 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  if (path === '/api/v1/config/floorplan/grid') {
+    // A small two-room plan with a wall, a door, and a window so the editor
+    // has real content to render.
+    const width = 12;
+    const height = 9;
+    const tiles = [];
+    for (let y = 0; y < height; y += 1) {
+      const row = [];
+      for (let x = 0; x < width; x += 1) {
+        const isBorder =
+          x === 0 || y === 0 || x === width - 1 || y === height - 1;
+        row.push(isBorder ? 'wall' : 'floor');
+      }
+      tiles.push(row);
+    }
+    for (let y = 1; y < height - 1; y += 1) {
+      tiles[y][6] = y === 5 ? 'door' : 'wall';
+    }
+    tiles[0][3] = 'window';
+    const grid = {
+      width,
+      height,
+      tiles,
+      tileSize: 32,
+      deviceScale: 1,
+      labelMode: 'sensors',
+      devices: [],
+      groups: {
+        living_room: [
+          { x: 1, y: 1 },
+          { x: 1, y: 2 },
+          { x: 2, y: 1 },
+          { x: 2, y: 2 },
+        ],
+        kitchen: [
+          { x: 8, y: 1 },
+          { x: 8, y: 2 },
+          { x: 9, y: 1 },
+          { x: 9, y: 2 },
+        ],
+      },
+    };
+    return send(res, 200, {
+      success: true,
+      data: JSON.stringify(grid),
+      write: writeOk,
+    });
+  }
+
+  if (path === '/api/v1/config/floorplan/image') {
+    // A one pixel transparent PNG: enough for the background layer to exist.
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    res.writeHead(200, { 'content-type': 'image/png' });
+    res.end(png);
+    return undefined;
+  }
+
   const configMatch = /^\/api\/v1\/config\/([a-z0-9-]+)(?:\/(.*))?$/.exec(path);
   if (configMatch) {
     const endpoint = configMatch[1];
@@ -246,13 +306,6 @@ const server = http.createServer(async (req, res) => {
       if (idx >= 0) list.splice(idx, 1);
       return send(res, 200, { success: true, data: { id }, write: writeOk });
     }
-  }
-
-  if (
-    path === '/api/v1/config/floorplan/grid' ||
-    path === '/api/v1/config/floorplan/image'
-  ) {
-    return send(res, 200, { success: true, data: {}, write: writeOk });
   }
 
   if (path.startsWith('/api/v1/config/assistant')) {

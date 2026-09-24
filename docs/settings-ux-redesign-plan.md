@@ -127,9 +127,9 @@ If the evidence cannot support a sentence, use “Not enough information yet” 
 
 ### Floorplan and system settings
 
-- [ ] Floorplan keeps the canvas central and explicit Save. Header shows selected floorplan and unsaved state; Rename/Delete and import/export move to a secondary menu. Only show the toolbar for the active Walls / Devices / Rooms mode. Keep Undo visible. Move grid size, label mode, scale, and background image to Display/Layout settings.
-- [ ] Replace the long wall-drawing instructions with one contextual sentence and optional help. Group selection uses search. Bulk Fill/Clear and layout reset require explicit, well-labeled actions separate from ordinary painting; preserve existing undo semantics.
-- [ ] App & system may keep Appearance, Behavior, Assistant, and About as top-level categories because they are genuinely different. Within Behavior and Assistant, show current state and common setting first; provider limits, transition defaults, and build/server facts stay behind disclosures. Keep their existing URLs and independent saves.
+- [x] Floorplan keeps the canvas central and explicit Save. Header shows selected floorplan and unsaved state; Rename/Delete and import/export move to a secondary menu. Only show the toolbar for the active Walls / Devices / Rooms mode. Keep Undo visible. Move grid size, label mode, scale, and background image to Display/Layout settings.
+- [x] Replace the long wall-drawing instructions with one contextual sentence and optional help. Group selection uses search. Bulk Fill/Clear and layout reset require explicit, well-labeled actions separate from ordinary painting; preserve existing undo semantics.
+- [x] App & system may keep Appearance, Behavior, Assistant, and About as top-level categories because they are genuinely different. Within Behavior and Assistant, show current state and common setting first; provider limits, transition defaults, and build/server facts stay behind disclosures. Keep their existing URLs and independent saves.
 
 ## Phase 4 — finding and explaining problems
 

@@ -552,7 +552,14 @@ function normalHome() {
         }),
       ],
       devices: [],
-      floorplans: [],
+      floorplans: [
+        {
+          id: 'ground_floor',
+          name: 'Ground floor',
+          created_at: '2026-01-04T09:00:00.000Z',
+          updated_at: '2026-02-11T18:20:00.000Z',
+        },
+      ],
       device_display_overrides: [],
       device_sensor_configs: [],
       device_color_calibrations: [],
@@ -905,7 +912,14 @@ function emptyHome() {
       sources: [],
       integrations: [],
       devices: [],
-      floorplans: [],
+      floorplans: [
+        {
+          id: 'ground_floor',
+          name: 'Ground floor',
+          created_at: '2026-01-04T09:00:00.000Z',
+          updated_at: '2026-02-11T18:20:00.000Z',
+        },
+      ],
       device_display_overrides: [],
       device_sensor_configs: [],
       device_color_calibrations: [],
