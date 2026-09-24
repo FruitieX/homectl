@@ -173,6 +173,7 @@ export default function SceneDetailPage() {
         : [],
     save: saveSection,
   });
+  const [showAllEffects, setShowAllEffects] = useState(false);
   const deviceEditor = useSectionEditor<Scene>({
     item: scene,
     fields: DEVICE_FIELDS,
@@ -272,6 +273,8 @@ export default function SceneDetailPage() {
 
   // What the engine would actually apply: rooms first, then devices, with the
   // last writer per device winning.
+  const visibleEffectCount = showAllEffects ? Number.POSITIVE_INFINITY : 8;
+
   const effects = resolveSceneEffects(scene, {
     devices,
     groups: Object.fromEntries(
@@ -464,13 +467,13 @@ export default function SceneDetailPage() {
       status={
         <>
           {`${summary.deviceCount} device target${summary.deviceCount === 1 ? '' : 's'} · ${summary.groupCount} room target${summary.groupCount === 1 ? '' : 's'}`}
-          {summary.unresolvedCount > 0 ? (
+          {effects.unresolvedCount > 0 ? (
             <>
               {' · '}
               <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
                 <AlertTriangle aria-hidden className="size-3.5" />
-                {summary.unresolvedCount} target
-                {summary.unresolvedCount === 1 ? '' : 's'} cannot be resolved
+                {effects.unresolvedCount} saved reference
+                {effects.unresolvedCount === 1 ? '' : 's'} cannot be resolved
               </span>
             </>
           ) : null}
@@ -501,105 +504,186 @@ export default function SceneDetailPage() {
           ) : (
             <>
               <p className="mt-1 text-xs text-muted-foreground">
-                {effects.affectedDeviceCount} device
-                {effects.affectedDeviceCount === 1 ? '' : 's'} in{' '}
-                {effects.targets.length} target
-                {effects.targets.length === 1 ? '' : 's'}
-                {effects.scripted
-                  ? ' · its script can override these values at runtime'
-                  : ''}
+                {effects.affectedDeviceCount === 0
+                  ? 'No device would change.'
+                  : `Affects ${effects.affectedDeviceCount} device${
+                      effects.affectedDeviceCount === 1 ? '' : 's'
+                    }.`}
                 {effects.unresolvedCount > 0
-                  ? ` · ${effects.unresolvedCount} target${
+                  ? ` ${effects.unresolvedCount} saved reference${
                       effects.unresolvedCount === 1 ? '' : 's'
-                    } cannot be resolved and will be skipped`
+                    } cannot be resolved and will be skipped (${[
+                      effects.unresolvedByKind.directTargets > 0
+                        ? `${effects.unresolvedByKind.directTargets} direct device target${
+                            effects.unresolvedByKind.directTargets === 1
+                              ? ''
+                              : 's'
+                          }`
+                        : null,
+                      effects.unresolvedByKind.roomTargets > 0
+                        ? `${effects.unresolvedByKind.roomTargets} room target${
+                            effects.unresolvedByKind.roomTargets === 1
+                              ? ''
+                              : 's'
+                          }`
+                        : null,
+                      effects.unresolvedByKind.roomMembers > 0
+                        ? `${effects.unresolvedByKind.roomMembers} device${
+                            effects.unresolvedByKind.roomMembers === 1
+                              ? ''
+                              : 's'
+                          } inside a room`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(', ')}).`
+                  : ''}
+                {effects.scripted
+                  ? ' Its script can override these values at runtime.'
                   : ''}
               </p>
-              <ul className="mt-3 space-y-2">
-                {effects.targets.map((target) => (
-                  <li
-                    key={`${target.kind}:${target.key}`}
-                    className="rounded-xl border border-border/70 bg-background/60 p-2.5"
-                    data-target-key={target.key}
-                  >
-                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                      <span className="text-sm font-medium">
-                        {target.label}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground">
-                        {target.kind === 'group' ? 'Room' : 'Device'}
-                      </span>
-                      {target.unresolvedReason ? (
-                        <span className="text-xs text-amber-700 dark:text-amber-300">
-                          {target.unresolvedReason}
-                        </span>
-                      ) : null}
-                    </div>
-                    {target.devices.length > 0 ? (
-                      <ul className="mt-1.5 space-y-1 text-xs">
-                        {target.devices.slice(0, 8).map((device) => (
-                          <li
-                            key={device.deviceKey}
-                            className="flex flex-wrap items-baseline gap-x-1.5"
-                          >
-                            <span className="text-foreground/85">
-                              {device.deviceLabel}
-                            </span>
-                            <span aria-hidden>→</span>
-                            <span>
-                              {target.unresolvedReason ? 'would set ' : ''}
-                              {device.changes.join(', ')}
-                            </span>
-                            {device.overriddenBy ? (
-                              <span className="text-muted-foreground">
-                                (replaced by {device.overriddenBy})
-                              </span>
-                            ) : null}
-                          </li>
-                        ))}
-                        {target.devices.length > 8 ? (
-                          <li className="text-muted-foreground">
-                            +{target.devices.length - 8} more
-                          </li>
-                        ) : null}
-                      </ul>
-                    ) : null}
-                    {target.repair ? (
-                      <button
-                        type="button"
-                        className="mt-1.5 text-xs font-medium text-primary underline-offset-4 hover:underline"
-                        onClick={() => {
-                          if (target.kind === 'group') {
-                            roomEditor.begin();
-                          } else {
-                            deviceEditor.begin();
-                          }
-                        }}
+
+              <ul className="mt-3 space-y-1.5">
+                {effects.finalByDevice
+                  .slice(0, visibleEffectCount)
+                  .map((entry) => {
+                    const winner = effects.targets.find(
+                      (target) =>
+                        target.label === entry.fromLabel &&
+                        target.devices.some(
+                          (device) => device.deviceKey === entry.deviceKey,
+                        ),
+                    );
+                    const replaced = winner?.devices.find(
+                      (device) =>
+                        device.deviceKey === entry.deviceKey &&
+                        device.overriddenBy,
+                    );
+                    return (
+                      <li
+                        key={entry.deviceKey}
+                        className="text-sm"
+                        data-target-key={entry.deviceKey}
                       >
-                        {target.repair}
-                      </button>
-                    ) : null}
-                  </li>
-                ))}
+                        <span className="text-foreground/90">
+                          {entry.deviceLabel}
+                        </span>{' '}
+                        <span aria-hidden className="text-muted-foreground">
+                          →
+                        </span>{' '}
+                        <span>{entry.changes.join(', ')}</span>
+                        {replaced ? (
+                          <details className="mt-0.5">
+                            <summary className="cursor-pointer text-xs text-muted-foreground">
+                              which target set this
+                            </summary>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Set by {entry.fromLabel}; the room setting it
+                              replaced came from {replaced.overriddenBy}.
+                            </p>
+                          </details>
+                        ) : null}
+                      </li>
+                    );
+                  })}
               </ul>
-              {effects.unresolvedCount > 0 &&
-              effects.affectedDeviceCount > 0 ? (
+              {effects.finalByDevice.length > visibleEffectCount ? (
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-medium text-primary underline-offset-4 hover:underline"
+                  onClick={() => setShowAllEffects(true)}
+                >
+                  Show all {effects.finalByDevice.length} devices
+                </button>
+              ) : null}
+
+              {effects.unresolvedCount > 0 ? (
                 <p className="mt-3 text-xs text-muted-foreground">
-                  Activating now still changes{' '}
-                  {effects.finalByDevice
-                    .slice(0, 6)
-                    .map(
-                      (entry) =>
-                        `${entry.deviceLabel} → ${entry.changes.join(', ')}`,
-                    )
-                    .join('; ')}
-                  {effects.finalByDevice.length > 6
-                    ? `; and ${effects.finalByDevice.length - 6} more`
-                    : ''}
-                  . The unresolved target
-                  {effects.unresolvedCount === 1 ? '' : 's'} above{' '}
-                  {effects.unresolvedCount === 1 ? 'is' : 'are'} skipped.
+                  Activating now affects only the available devices listed
+                  above; the missing references are skipped.
                 </p>
               ) : null}
+
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                  Show the saved targets ({effects.targets.length})
+                </summary>
+                <ul className="mt-2 space-y-2">
+                  {effects.targets.map((target) => (
+                    <li
+                      key={`${target.kind}:${target.key}`}
+                      className="rounded-xl border border-border/70 bg-background/60 p-2.5"
+                    >
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span className="text-sm font-medium">
+                          {target.label}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {target.kind === 'group' ? 'Room' : 'Device'}
+                        </span>
+                        {target.unresolvedReason ? (
+                          <span className="text-xs text-amber-700 dark:text-amber-300">
+                            {target.unresolvedReason}
+                          </span>
+                        ) : null}
+                      </div>
+                      {target.devices.length > 0 ? (
+                        <ul className="mt-1.5 space-y-1 text-xs">
+                          {target.devices.slice(0, 8).map((device) => (
+                            <li
+                              key={device.deviceKey}
+                              className="flex flex-wrap items-baseline gap-x-1.5"
+                            >
+                              <span className="text-foreground/85">
+                                {device.deviceLabel}
+                              </span>
+                              <span aria-hidden>→</span>
+                              <span>
+                                {target.unresolvedReason ? 'would set ' : ''}
+                                {device.changes.join(', ')}
+                              </span>
+                              {device.overriddenBy ? (
+                                <span className="text-muted-foreground">
+                                  (replaced by {device.overriddenBy})
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                          {target.devices.length > 8 ? (
+                            <li className="text-muted-foreground">
+                              +{target.devices.length - 8} more
+                            </li>
+                          ) : null}
+                        </ul>
+                      ) : null}
+                      {target.missingMembers.length > 0 ? (
+                        <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-300">
+                          {target.missingMembers.length} saved member
+                          {target.missingMembers.length === 1 ? '' : 's'} no
+                          longer exist
+                          {target.missingMembers.length === 1 ? 's' : ''}:{' '}
+                          {target.missingMembers.join(', ')}
+                        </p>
+                      ) : null}
+                      {target.repair ? (
+                        <button
+                          type="button"
+                          className="mt-1.5 text-xs font-medium text-primary underline-offset-4 hover:underline"
+                          onClick={() => {
+                            if (target.kind === 'group') {
+                              roomEditor.begin();
+                            } else {
+                              deviceEditor.begin();
+                            }
+                          }}
+                        >
+                          {target.repair}
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </details>
             </>
           )}
         </div>

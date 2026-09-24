@@ -561,7 +561,7 @@ function AppearanceSettingsCard() {
               : `Using ${themeMode} theme.`}
           </p>
 
-          <div className="space-y-2 rounded-2xl border border-border bg-muted/30 p-4">
+          <div className="space-y-2 pt-1">
             <div className="space-y-1">
               <span className="block text-sm font-medium text-foreground">
                 Accent color
@@ -570,18 +570,29 @@ function AppearanceSettingsCard() {
                 Tints primary buttons, focus rings, and charts.
               </span>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div
+              className="flex flex-wrap gap-2"
+              role="radiogroup"
+              aria-label="Accent color"
+            >
+              <span aria-live="polite" className="sr-only">
+                {`Accent color: ${
+                  accents.find((option) => option.id === accent)?.label ??
+                  accent
+                }`}
+              </span>
               {accents.map((option) => {
                 const selected = accent === option.id;
                 return (
                   <button
                     key={option.id}
                     type="button"
+                    role="radio"
                     aria-label={`Use ${option.label} accent`}
-                    aria-pressed={selected}
+                    aria-checked={selected}
                     onClick={() => setAccent(option.id)}
                     className={cn(
-                      'inline-flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5 text-xs font-medium transition',
+                      'touch-target inline-flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5 text-xs font-medium transition',
                       selected
                         ? 'border-foreground/70 bg-background'
                         : 'border-border/70 hover:border-border',
@@ -603,7 +614,7 @@ function AppearanceSettingsCard() {
             </div>
           </div>
 
-          <div className="space-y-2 rounded-2xl border border-border bg-muted/30 p-4">
+          <div className="space-y-2 pt-1">
             <div className="space-y-1">
               <span className="block text-sm font-medium text-foreground">
                 Density
@@ -620,7 +631,7 @@ function AppearanceSettingsCard() {
                   type="button"
                   variant={density === option ? 'default' : 'ghost'}
                   className={cn(
-                    'h-11 rounded-xl',
+                    'touch-target h-11 rounded-xl',
                     density === option && 'shadow-sm',
                   )}
                   onClick={() => setDensity(option)}

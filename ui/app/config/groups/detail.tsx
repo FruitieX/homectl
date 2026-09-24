@@ -156,7 +156,11 @@ export default function GroupDetailPage() {
     group && group.devices.length > 0
       ? [
           `${group.devices.length} device${group.devices.length === 1 ? '' : 's'}`,
-          missing.length > 0 ? `${missing.length} unavailable` : null,
+          missing.length > 0
+            ? `${missing.length} missing device reference${
+                missing.length === 1 ? '' : 's'
+              }`
+            : null,
           // Examples help while the section is collapsed; once it is open the
           // rows say the same thing in more detail.
           activeSection === 'devices'
@@ -218,7 +222,8 @@ export default function GroupDetailPage() {
             badge={
               missing.length > 0 ? (
                 <Badge variant="warning" className="font-medium">
-                  {missing.length} unavailable
+                  {missing.length} missing reference
+                  {missing.length === 1 ? '' : 's'}
                 </Badge>
               ) : undefined
             }
@@ -245,7 +250,8 @@ export default function GroupDetailPage() {
                         <p className="truncate text-sm">
                           {isMissing ? (
                             <span className="text-muted-foreground">
-                              {lookups.labelFor(device)} — no longer exists
+                              {lookups.labelFor(device)} — this saved device is
+                              not in the current catalog
                             </span>
                           ) : (
                             <Link

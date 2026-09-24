@@ -10,6 +10,7 @@ import {
   Layers3,
   Lightbulb,
   PlugZap,
+  Plus,
   Search,
   Wand2,
   X,
@@ -28,6 +29,12 @@ import {
 import { useHelpers, useIntegrations, useRoutines } from '@/hooks/useConfig';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { Button } from '@/ui/primitives/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/ui/primitives/dropdown-menu';
 import { Input } from '@/ui/primitives/input';
 import { configItemHref } from '@/lib/configItemHref';
 import { configSections } from './sections';
@@ -42,12 +49,58 @@ type Destination = {
   keywords?: string;
 };
 
-const sectionGroups = [
-  'Your home',
-  'Automations',
-  'Appearance',
-  'Maintenance',
+/**
+ * The four places a person looks for their configuration. Everything in
+ * Settings belongs to one of them, and each one keeps its own creation
+ * actions so the home screen does not need a wall of shortcuts.
+ */
+const homeDestinations = [
+  {
+    key: 'rooms-and-devices',
+    label: 'Rooms and devices',
+    description: 'What you control, where it is, and how it is laid out.',
+    hrefs: ['/config/groups', '/config/devices', '/config/floorplan'],
+    actions: [
+      { label: 'Add a room', href: '/config/groups/new' },
+      { label: 'Rename or move a device', href: '/config/devices' },
+    ],
+  },
+  {
+    key: 'scenes-and-routines',
+    label: 'Scenes and routines',
+    description: 'What happens, when it happens, and what it last did.',
+    hrefs: [
+      '/config/scenes',
+      '/config/routines',
+      '/config/helpers',
+      '/config/sources',
+      '/config/routine-history',
+    ],
+    actions: [
+      { label: 'Create a scene', href: '/config/scenes/new' },
+      { label: 'Create a routine', href: '/config/routines/new' },
+      { label: 'See automation history', href: '/config/routine-history' },
+    ],
+  },
+  {
+    key: 'connections-and-data',
+    label: 'Connections and data',
+    description: 'Where readings come from and how your setup is kept.',
+    hrefs: ['/config/integrations', '/config/logs', '/config/import-export'],
+    actions: [
+      { label: 'Add a connection', href: '/config/integrations?new=1' },
+      { label: 'Export a backup', href: '/config/import-export' },
+    ],
+  },
+  {
+    key: 'app-and-system',
+    label: 'App and system',
+    description: 'How the app looks, and checks on this server.',
+    hrefs: ['/config/settings', '/config/diagnostics'],
+    actions: [{ label: 'Check for problems', href: '/config/diagnostics' }],
+  },
 ] as const;
+
 const tasks = [
   {
     key: 'new-group',
@@ -129,7 +182,10 @@ export default function ConfigPage() {
         label: section.label,
         description: section.description,
         href: section.href,
-        group: 'Settings',
+        group:
+          homeDestinations.find((destination) =>
+            (destination.hrefs as readonly string[]).includes(section.href),
+          )?.label ?? 'Settings',
         keywords: `${section.group} ${section.keywords.join(' ')}`,
       })),
       ...tasks.map((task) => ({
@@ -322,12 +378,38 @@ export default function ConfigPage() {
   );
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 pb-8">
-      <div className="space-y-5">
+    <div className="mx-auto max-w-5xl space-y-5 pb-8">
+      <div className="space-y-4">
         <ConfigPageHeader
           backTo={null}
-          title="Settings"
-          description="Everything you need to set up and understand your home."
+          title="Set up your home"
+          description="Find anything, or start something new."
+          actions={
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm">
+                  <Plus className="size-4" aria-hidden />
+                  Create
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {tasks.map((task) => {
+                  const Icon = task.icon;
+                  return (
+                    <DropdownMenuItem key={task.key} asChild>
+                      <Link
+                        to={task.href}
+                        onClick={() => recordRecent(`action:${task.key}`)}
+                      >
+                        <Icon className="size-4" aria-hidden />
+                        {task.label}
+                      </Link>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          }
         />
         <div className="relative">
           <Search
@@ -337,8 +419,8 @@ export default function ConfigPage() {
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search settings, devices, rooms, or tasks"
-            aria-label="Search settings, devices, rooms, or tasks"
+            placeholder="Search settings and devices"
+            aria-label="Search settings and devices"
             className="h-12 rounded-2xl bg-card pl-12 pr-10 text-base shadow-sm"
           />
           {search && (
@@ -367,7 +449,7 @@ export default function ConfigPage() {
               <CircleHelp className="mx-auto mb-3 size-6 text-muted-foreground" />
               <p className="font-medium">Nothing found</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Try a device name, room, task, or technical term.
+                Try a device name, room, or task.
               </p>
             </div>
           ) : (
@@ -392,26 +474,27 @@ export default function ConfigPage() {
         </div>
       ) : (
         <>
+          {/* Is anything wrong? One line, one action. */}
           <section
             aria-labelledby="home-status"
-            className="rounded-3xl border border-border/70 bg-card p-5 shadow-sm sm:p-6"
+            className="rounded-2xl border border-border/70 bg-card px-4 py-3 shadow-sm"
           >
-            <div className="flex items-start gap-4">
+            <div className="flex items-center gap-3">
               <span
-                className={`grid size-11 shrink-0 place-items-center rounded-2xl ${diagnostics.isPending || diagnostics.isError ? 'bg-muted text-muted-foreground' : warnings.length ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-primary/10 text-primary'}`}
+                className={`grid size-9 shrink-0 place-items-center rounded-xl ${diagnostics.isPending || diagnostics.isError ? 'bg-muted text-muted-foreground' : warnings.length ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-primary/10 text-primary'}`}
               >
                 {diagnostics.isPending ? (
-                  <Activity className="size-5" />
+                  <Activity className="size-4" />
                 ) : diagnostics.isError ? (
-                  <CircleHelp className="size-5" />
+                  <CircleHelp className="size-4" />
                 ) : warnings.length ? (
-                  <AlertTriangle className="size-5" />
+                  <AlertTriangle className="size-4" />
                 ) : (
-                  <CheckCircle2 className="size-5" />
+                  <CheckCircle2 className="size-4" />
                 )}
               </span>
               <div className="min-w-0 flex-1">
-                <h2 id="home-status" className="text-lg font-semibold">
+                <h2 id="home-status" className="text-sm font-semibold">
                   {diagnostics.isPending
                     ? 'Checking your setup…'
                     : diagnostics.isError
@@ -424,120 +507,114 @@ export default function ConfigPage() {
                             ? 'No warnings need attention'
                             : 'Your setup looks good'}
                 </h2>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
                   {diagnostics.isPending
                     ? 'Looking for broken links and other configuration issues.'
                     : diagnostics.isError
-                      ? 'The server did not return configuration checks. Try again to see current issues.'
+                      ? 'The server did not return configuration checks.'
                       : diagnostics.data?.warming_up
                         ? 'Some checks will be available after devices finish starting.'
                         : warnings.length
-                          ? `${warnings[0].name}: ${warnings[0].message}`
+                          ? `${warnings[0].name}: ${warnings[0].message} ${warnings[0].suggestion}`
                           : reviewCount > 0
-                            ? `${reviewCount} ${reviewCount === 1 ? 'item is' : 'items are'} available for review. Automation behavior and physical device delivery are checked separately.`
-                            : 'No problems found by these checks. Automation behavior and physical device delivery are checked separately.'}
+                            ? `${reviewCount} ${reviewCount === 1 ? 'item is' : 'items are'} available for review.`
+                            : 'No problems found by these checks.'}
                 </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Button
-                    asChild
-                    variant={warnings.length ? 'default' : 'outline'}
-                    size="sm"
-                  >
-                    <Link
-                      to={
-                        warnings.length
-                          ? configItemHref(
-                              warnings[0].entity,
-                              warnings[0].entity_id,
-                            )
-                          : '/config/diagnostics'
-                      }
-                    >
-                      {warnings.length ? 'Review issue' : 'View checks'}
-                      <ArrowRight className="size-4" />
-                    </Link>
-                  </Button>
-                  {diagnostics.isError && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void diagnostics.refetch()}
-                    >
-                      Try again
-                    </Button>
-                  )}
-                  <Button asChild size="sm" variant="ghost">
-                    <Link to="/config/routine-history">Automation history</Link>
-                  </Button>
-                </div>
               </div>
+              {diagnostics.isError ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void diagnostics.refetch()}
+                >
+                  Try again
+                </Button>
+              ) : (
+                <Button
+                  asChild
+                  size="sm"
+                  variant={warnings.length ? 'default' : 'outline'}
+                >
+                  <Link
+                    to={
+                      warnings.length
+                        ? configItemHref(
+                            warnings[0].entity,
+                            warnings[0].entity_id,
+                          )
+                        : '/config/diagnostics'
+                    }
+                  >
+                    {warnings.length ? 'Fix this' : 'View checks'}
+                    <ArrowRight className="size-4" />
+                  </Link>
+                </Button>
+              )}
             </div>
           </section>
 
-          {setupStep && !setupDismissed && (
-            <section className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
-              <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-                <Wand2 className="size-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-primary">Next step</p>
-                <Link
-                  to={setupStep.href}
-                  className="mt-0.5 inline-flex items-center gap-1 font-medium hover:underline"
+          {/* Where do I go? Four destinations, actions kept inside. */}
+          <section aria-label="Settings areas" className="space-y-2">
+            {homeDestinations.map((destination) => {
+              const areas = configSections.filter((section) =>
+                (destination.hrefs as readonly string[]).includes(section.href),
+              );
+              return (
+                <details
+                  key={destination.key}
+                  className="group overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm"
                 >
-                  {setupStep.label}
-                  <ArrowRight className="size-4" />
-                </Link>
-                <p className="text-xs leading-5 text-muted-foreground">
-                  {setupStep.detail}
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Dismiss setup suggestion"
-                className="rounded-full p-1 text-muted-foreground hover:bg-muted"
-                onClick={() => {
-                  window.localStorage.setItem(setupDismissalKey, '1');
-                  setSetupDismissed(true);
-                }}
-              >
-                <X className="size-4" />
-              </button>
-            </section>
-          )}
-
-          <section className="space-y-3">
-            <div className="flex items-end justify-between">
-              <h2 className="text-lg font-semibold">
-                What would you like to do?
-              </h2>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {tasks.map((task) => {
-                const Icon = task.icon;
-                return (
-                  <Link
-                    key={task.key}
-                    to={task.href}
-                    onClick={() => recordRecent(`action:${task.key}`)}
-                    className="group flex min-h-16 items-center gap-3 rounded-2xl border border-border/70 bg-card px-4 py-3 shadow-sm transition hover:border-primary/40 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary">
-                      <Icon className="size-4" />
+                  <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 transition hover:bg-accent [&::-webkit-details-marker]:hidden">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold">
+                        {destination.label}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {destination.description}
+                      </span>
                     </span>
-                    <span className="flex-1 text-sm font-medium">
-                      {task.label}
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {areas.length} areas
                     </span>
-                    <ArrowRight className="size-4 text-muted-foreground/60" />
-                  </Link>
-                );
-              })}
-            </div>
+                    <ChevronRight
+                      className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+                      aria-hidden
+                    />
+                  </summary>
+                  <div className="divide-y divide-border/50 border-t border-border/60">
+                    {areas.map((section) =>
+                      trackedLink(
+                        {
+                          key: `nav:${section.href}`,
+                          label: section.label,
+                          description: section.description,
+                          href: section.href,
+                          group: destination.label,
+                        },
+                        'flex items-center gap-3 px-4 py-2.5 transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                      ),
+                    )}
+                    {destination.actions.map((action) => (
+                      <Link
+                        key={action.href + action.label}
+                        to={action.href}
+                        className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-primary transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      >
+                        <Plus className="size-4 shrink-0" aria-hidden />
+                        {action.label}
+                      </Link>
+                    ))}
+                  </div>
+                </details>
+              );
+            })}
           </section>
 
           {recentEntries.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="text-sm font-semibold">Recently visited</h2>
+            <section className="space-y-2">
+              <h2 className="text-xs font-semibold text-muted-foreground">
+                Recently visited
+              </h2>
               <div className="flex flex-wrap gap-2">
                 {recentEntries.map((entry) => (
                   <Link
@@ -552,55 +629,6 @@ export default function ConfigPage() {
               </div>
             </section>
           )}
-
-          <section className="space-y-3">
-            <div>
-              <h2 className="text-lg font-semibold">Browse settings</h2>
-              <p className="text-sm text-muted-foreground">
-                Choose an area to see its details.
-              </p>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              {sectionGroups.map((group) => (
-                <details
-                  key={group}
-                  className="group overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm"
-                >
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold transition hover:bg-accent [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0">{group}</span>
-                    <span className="flex shrink-0 items-center gap-2 text-xs font-normal text-muted-foreground">
-                      {
-                        configSections.filter(
-                          (section) => section.group === group,
-                        ).length
-                      }{' '}
-                      areas
-                      <ChevronRight
-                        className="size-4 transition-transform group-open:rotate-90"
-                        aria-hidden
-                      />
-                    </span>
-                  </summary>
-                  <div className="divide-y divide-border/50">
-                    {configSections
-                      .filter((section) => section.group === group)
-                      .map((section) =>
-                        trackedLink(
-                          {
-                            key: `nav:${section.href}`,
-                            label: section.label,
-                            description: section.description,
-                            href: section.href,
-                            group,
-                          },
-                          'flex items-center gap-3 px-4 py-2.5 transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
-                        ),
-                      )}
-                  </div>
-                </details>
-              ))}
-            </div>
-          </section>
         </>
       )}
     </div>

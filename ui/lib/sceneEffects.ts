@@ -109,6 +109,8 @@ export type SceneEffectTarget = {
   repair: string | null;
   /** Devices this target changes, already expanded for rooms. */
   devices: SceneEffectDevice[];
+  /** Saved members of this room that are not in the current catalog. */
+  missingMembers: string[];
 };
 
 export type SceneEffects = {
@@ -122,6 +124,12 @@ export type SceneEffects = {
   }>;
   affectedDeviceCount: number;
   unresolvedCount: number;
+  /** Missing references split by where they live, for an honest header. */
+  unresolvedByKind: {
+    directTargets: number;
+    roomTargets: number;
+    roomMembers: number;
+  };
   /** True when the scene has a script that can override these values. */
   scripted: boolean;
   /** Devices that a room target sets but a device target then overrides. */
@@ -228,6 +236,7 @@ export function resolveSceneEffects(
       unresolvedReason: null,
       repair: null,
       devices: [],
+      missingMembers: [],
     };
 
     if (kind === 'group' && !context.groups?.[key]) {
@@ -303,6 +312,12 @@ export function resolveSceneEffects(
       }
       const index = targets.length;
       for (const deviceKey of members) {
+        if (!context.devices?.[deviceKey]) {
+          // A saved member that is not in the catalog: name it instead of
+          // pretending the room will change it.
+          target.missingMembers.push(deviceKey);
+          continue;
+        }
         const previous = written.get(deviceKey);
         if (previous) {
           const earlier =
@@ -394,11 +409,28 @@ export function resolveSceneEffects(
     }
   }
 
+  const unresolvedByKind = {
+    directTargets: targets.filter(
+      (target) => target.kind === 'device' && target.unresolvedReason !== null,
+    ).length,
+    roomTargets: targets.filter(
+      (target) => target.kind === 'group' && target.unresolvedReason !== null,
+    ).length,
+    roomMembers: targets.reduce(
+      (total, target) => total + target.missingMembers.length,
+      0,
+    ),
+  };
+  const unresolvedCount =
+    targets.filter((target) => target.unresolvedReason !== null).length +
+    unresolvedByKind.roomMembers;
+
   return {
     targets,
     finalByDevice,
     affectedDeviceCount: finalByDevice.length,
-    unresolvedCount: targets.filter((target) => target.unresolvedReason).length,
+    unresolvedCount,
+    unresolvedByKind,
     scripted: Boolean(scene.script && scene.script.trim() !== ''),
     overrideNotes,
   };

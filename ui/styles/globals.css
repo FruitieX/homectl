@@ -1305,6 +1305,23 @@ html[data-density='compact'] {
   font-size: 14px;
 }
 
+/*
+ * Compact shrinks text and padding, never the area a finger has to hit.
+ * Controls that carry .touch-target keep a 44px minimum in both densities.
+ */
+.touch-target {
+  min-height: 44px;
+}
+
+html[data-density='compact'] .touch-target {
+  min-height: 44px;
+}
+
+html[data-density='compact'] [role='tab'],
+html[data-density='compact'] [role='radio'] {
+  min-height: 44px;
+}
+
 html[data-density='comfortable'] {
   font-size: 16px;
 }

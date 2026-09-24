@@ -121,6 +121,50 @@ test('a scene target that sets nothing is flagged rather than described as a cha
   assert.match(effects.targets[0].unresolvedReason ?? '', /sets no state/);
 });
 
+test('missing references are counted by where they live', () => {
+  const effects = resolveSceneEffects(
+    {
+      group_states: { living_room: { power: true } },
+      device_states: { 'mqtt/attic_lamp': { power: true } },
+    },
+    {
+      ...context,
+      groups: {
+        living_room: {
+          name: 'Living room',
+          device_keys: ['mqtt/living_room_lamp', 'mqtt/hallway_strip'],
+        },
+      },
+      devices: { 'mqtt/living_room_lamp': { name: 'Living room lamp' } },
+    },
+  );
+  assert.deepEqual(effects.unresolvedByKind, {
+    directTargets: 1,
+    roomTargets: 0,
+    roomMembers: 1,
+  });
+  assert.equal(effects.unresolvedCount, 2);
+  assert.deepEqual(effects.targets[0].missingMembers, ['mqtt/hallway_strip']);
+  // Only the member that still exists is reported as a change.
+  assert.deepEqual(
+    effects.targets[0].devices.map((device) => device.deviceKey),
+    ['mqtt/living_room_lamp'],
+  );
+});
+
+test('a missing room counts as a room target, not a member', () => {
+  const effects = resolveSceneEffects(
+    { group_states: { attic: { power: true } } },
+    context,
+  );
+  assert.deepEqual(effects.unresolvedByKind, {
+    directTargets: 0,
+    roomTargets: 1,
+    roomMembers: 0,
+  });
+  assert.equal(effects.unresolvedCount, 1);
+});
+
 test('colour words never leak raw hue numbers', () => {
   assert.equal(describeColorWords({ h: 32, s: 0.3 }), 'warm white');
   assert.equal(describeColorWords({ h: 210, s: 0.05 }), 'cool white');
