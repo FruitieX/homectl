@@ -87,23 +87,26 @@ export function DetailPageShell({
 
         <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground">
           <ol className="flex flex-wrap items-center gap-1">
-            {crumbs.map((crumb, index) => (
-              <li key={index} className="flex items-center gap-1">
-                {index > 0 ? <span aria-hidden>/</span> : null}
-                {crumb.to ? (
-                  <Link
-                    to={crumb.to}
-                    className="transition hover:text-foreground"
-                  >
-                    {crumb.label}
-                  </Link>
-                ) : (
-                  <span aria-current="page" className="text-foreground">
-                    {crumb.label}
-                  </span>
-                )}
-              </li>
-            ))}
+            {crumbs.map((crumb, index) => {
+              // Every crumb except the current one is navigable: a crumb
+              // without an explicit target falls back to the parent route.
+              const to =
+                crumb.to ?? (index < crumbs.length - 1 ? backTo : undefined);
+              return (
+                <li key={index} className="flex items-center gap-1">
+                  {index > 0 ? <span aria-hidden>/</span> : null}
+                  {to ? (
+                    <Link to={to} className="transition hover:text-foreground">
+                      {crumb.label}
+                    </Link>
+                  ) : (
+                    <span aria-current="page" className="text-foreground">
+                      {crumb.label}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ol>
         </nav>
 

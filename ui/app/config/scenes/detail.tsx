@@ -758,6 +758,7 @@ export default function SceneDetailPage() {
           }
           renderEditor={() => (
             <ConfigFormSection
+              className="border-0 bg-transparent p-0 shadow-none"
               title="Device targets"
               description="Set an explicit state, track another device, or follow another scene."
             >
@@ -805,6 +806,7 @@ export default function SceneDetailPage() {
           }
           renderEditor={() => (
             <ConfigFormSection
+              className="border-0 bg-transparent p-0 shadow-none"
               title="Room targets"
               description="Rooms apply in order. If two rooms share a device, the later room wins for it."
             >
