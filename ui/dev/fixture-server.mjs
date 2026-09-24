@@ -490,8 +490,32 @@ server.on('upgrade', (req, socket) => {
             device,
           ]),
         ),
-        scenes: {},
-        groups: {},
+        scenes: Object.fromEntries(
+          (db.config.scenes ?? []).map((scene) => [
+            scene.id,
+            {
+              name: scene.name,
+              hidden: scene.hidden ?? false,
+              device_states: scene.device_states ?? {},
+              group_states: scene.group_states ?? {},
+              script: scene.script ?? null,
+            },
+          ]),
+        ),
+        // FlattenedGroupsConfig: keyed by group id, device keys as
+        // "integration/device" strings.
+        groups: Object.fromEntries(
+          (db.config.groups ?? []).map((group) => [
+            group.id,
+            {
+              name: group.name,
+              hidden: group.hidden ?? false,
+              device_keys: (group.devices ?? []).map(
+                (member) => `${member.integration_id}/${member.device_id}`,
+              ),
+            },
+          ]),
+        ),
         routine_statuses: buildRoutineStatuses(db),
         timers: [],
         helper_statuses: [],

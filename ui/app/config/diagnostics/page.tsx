@@ -6,6 +6,7 @@ import type { ConfigDiagnostics } from '@/bindings/ConfigDiagnostics';
 import type { ConfigDiagnostic } from '@/bindings/ConfigDiagnostic';
 import { useAppConfig } from '@/hooks/appConfig';
 import { useSearchParamState } from '@/hooks/useDeepLink';
+import { configItemHref } from '@/lib/configItemHref';
 import { Button } from '@/ui/primitives/button';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
@@ -13,29 +14,6 @@ import { ConfigPageHeader } from '../page-header';
 
 const sections = { group: 'groups', scene: 'scenes', device: 'devices' };
 const labels = { group: 'room', scene: 'scene', device: 'device' };
-
-/** The item's own page, so a check never dumps the user back into a list. */
-function itemHref(entity: string, entityId: string) {
-  const encoded = encodeURIComponent(entityId);
-  switch (entity) {
-    case 'group':
-      return `/config/groups/${encoded}`;
-    case 'scene':
-      return `/config/scenes/${encoded}`;
-    case 'device':
-      return `/config/devices/detail?key=${encoded}`;
-    case 'routine':
-      return `/config/routines/${encoded}`;
-    case 'integration':
-      return `/config/integrations/${encoded}`;
-    case 'helper':
-      return `/config/helpers/${encoded}`;
-    case 'source':
-      return `/config/sources/${encoded}`;
-    default:
-      return `/config/${sections[entity as keyof typeof sections] ?? 'devices'}?q=${encoded}`;
-  }
-}
 
 function Issue({ issue }: { issue: ConfigDiagnostic }) {
   const Icon = issue.severity === 'warning' ? AlertTriangle : Info;
@@ -68,7 +46,7 @@ function Issue({ issue }: { issue: ConfigDiagnostic }) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild size="sm" variant="outline">
-            <Link to={itemHref(issue.entity, issue.entity_id)}>
+            <Link to={configItemHref(issue.entity, issue.entity_id)}>
               Open {labels[issue.entity] ?? issue.entity}
             </Link>
           </Button>

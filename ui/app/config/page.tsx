@@ -29,6 +29,7 @@ import { useHelpers, useIntegrations, useRoutines } from '@/hooks/useConfig';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
+import { configItemHref } from '@/lib/configItemHref';
 import { configSections } from './sections';
 import { ConfigPageHeader } from './page-header';
 
@@ -252,6 +253,9 @@ export default function ConfigPage() {
   const recentEntries = recents
     .map((key) => destinations.find((entry) => entry.key === key))
     .filter((entry): entry is Destination => entry !== undefined)
+    // Task links already sit on the first screenful, so repeating them here
+    // would show the same item twice.
+    .filter((entry) => !entry.key.startsWith('action:'))
     .slice(0, 5);
   const warnings =
     diagnostics.data?.issues.filter((issue) => issue.severity === 'warning') ??
@@ -442,7 +446,10 @@ export default function ConfigPage() {
                     <Link
                       to={
                         warnings.length
-                          ? `/config/diagnostics?q=${encodeURIComponent(warnings[0].entity_id)}`
+                          ? configItemHref(
+                              warnings[0].entity,
+                              warnings[0].entity_id,
+                            )
                           : '/config/diagnostics'
                       }
                     >
@@ -557,15 +564,22 @@ export default function ConfigPage() {
               {sectionGroups.map((group) => (
                 <details
                   key={group}
-                  open={group === 'Your home' || group === 'Automations'}
                   className="group overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm"
                 >
-                  <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold transition hover:bg-accent [&::-webkit-details-marker]:hidden">
-                    {group}
-                    <ChevronRight
-                      className="size-4 text-muted-foreground transition-transform group-open:rotate-90"
-                      aria-hidden
-                    />
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold transition hover:bg-accent [&::-webkit-details-marker]:hidden">
+                    <span className="min-w-0">{group}</span>
+                    <span className="flex shrink-0 items-center gap-2 text-xs font-normal text-muted-foreground">
+                      {
+                        configSections.filter(
+                          (section) => section.group === group,
+                        ).length
+                      }{' '}
+                      areas
+                      <ChevronRight
+                        className="size-4 transition-transform group-open:rotate-90"
+                        aria-hidden
+                      />
+                    </span>
                   </summary>
                   <div className="divide-y divide-border/50">
                     {configSections
