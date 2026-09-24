@@ -73,7 +73,13 @@ export function Section<T extends object>({
   const editButtonRef = useRef<HTMLButtonElement | null>(null);
   const [restoreFocus, setRestoreFocus] = useState(false);
 
-  // Return focus to Edit after Save or Cancel.
+  // Opening the section starts its draft: there is no Edit step to find.
+  useEffect(() => {
+    if (!open || !editable || api.editing) return;
+    api.begin();
+  }, [open, editable, api]);
+
+  // Return focus to the section heading after Save or Discard.
   useEffect(() => {
     if (!restoreFocus || api.editing) return;
     setRestoreFocus(false);
@@ -148,7 +154,7 @@ export function Section<T extends object>({
           aria-label={typeof title === 'string' ? title : undefined}
           className="space-y-4 border-t border-border/70 p-4 sm:p-5"
         >
-          {api.editing ? (
+          {editable ? (
             <>
               {api.conflict ? (
                 <div
@@ -234,51 +240,35 @@ export function Section<T extends object>({
                       ? 'Retry save'
                       : 'Save'}
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={api.saving}
-                  onClick={() => {
-                    api.cancel();
-                    setRestoreFocus(true);
-                  }}
-                >
-                  Cancel
-                </Button>
-                {!api.dirty && !api.saving ? (
+                {api.dirty ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={api.saving}
+                    onClick={() => {
+                      api.cancel();
+                      setRestoreFocus(true);
+                    }}
+                  >
+                    Discard changes
+                  </Button>
+                ) : (
                   <span className="text-xs text-muted-foreground">
                     No changes yet
                   </span>
-                ) : null}
+                )}
               </div>
             </>
           ) : (
             <>
               {readView}
-              {editable ? (
-                <div>
-                  <Button
-                    ref={editButtonRef}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={api.begin}
-                    disabled={editDisabledReason !== null}
-                    aria-describedby={
-                      editDisabledReason ? `${id}-edit-disabled` : undefined
-                    }
-                  >
-                    {editLabel}
-                  </Button>
-                  {editDisabledReason ? (
-                    <p
-                      id={`${id}-edit-disabled`}
-                      className="mt-2 text-xs text-muted-foreground"
-                    >
-                      {editDisabledReason}
-                    </p>
-                  ) : null}
-                </div>
+              {editDisabledReason ? (
+                <p
+                  id={`${id}-edit-disabled`}
+                  className="mt-2 text-xs text-muted-foreground"
+                >
+                  {editDisabledReason}
+                </p>
               ) : null}
             </>
           )}
