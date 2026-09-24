@@ -1,0 +1,2902 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>homectl · Settings mockups</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        --ink: #21332f;
+        --muted: #61716d;
+        --line: #e2e8e2;
+        --paper: #fbfcf8;
+        --surface: #fff;
+        --subtle: #f5f7f3;
+        --accent: #176a53;
+        --accent-soft: #e4f4ed;
+        --amber: #8b590e;
+        --amber-soft: #fff5df;
+        --red: #a74138;
+        --shadow: 0 2px 7px #163b2d09, 0 14px 32px #163b2d06;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:focus-visible,
+      a:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid #72c9a5;
+        outline-offset: 3px;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 236px minmax(0, 1fr);
+      }
+      .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        padding: 25px 16px;
+        border-right: 1px solid var(--line);
+        background: #f7faf5;
+        display: flex;
+        flex-direction: column;
+      }
+      .brand {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 4px 10px 25px;
+        color: #214c3b;
+        font-size: 18px;
+        font-weight: 750;
+        letter-spacing: -0.035em;
+      }
+      .brandmark {
+        width: 28px;
+        height: 28px;
+        border-radius: 9px;
+        background: var(--accent);
+        display: grid;
+        place-items: center;
+        color: white;
+        font-size: 17px;
+        font-weight: 500;
+      }
+      .side-caption {
+        margin: 7px 10px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #7e8c86;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+      }
+      .side-link {
+        width: 100%;
+        text-align: left;
+        border: 0;
+        background: transparent;
+        color: #465a52;
+        padding: 11px 12px;
+        border-radius: 10px;
+        display: flex;
+        gap: 11px;
+        align-items: center;
+        font-weight: 560;
+      }
+      .side-link:hover,
+      .side-link.active {
+        background: #e5f1e9;
+        color: #164d3b;
+      }
+      .side-link.active {
+        font-weight: 700;
+      }
+      .side-icon {
+        width: 21px;
+        text-align: center;
+        font-size: 17px;
+        line-height: 1;
+      }
+      .side-foot {
+        margin-top: auto;
+        border-top: 1px solid var(--line);
+        padding: 15px 10px 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .workspace {
+        min-width: 0;
+      }
+      .topbar {
+        height: 62px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--line);
+        padding: 0 34px;
+        background: #fffdfb;
+      }
+      .topbar .crumb {
+        color: #66776d;
+        font-size: 13px;
+      }
+      .topbar .crumb strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .top-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .search-trigger {
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        color: var(--muted);
+        background: white;
+        height: 34px;
+        min-width: 210px;
+        text-align: left;
+        padding: 0 11px;
+      }
+      .search-trigger span {
+        float: right;
+        color: #9aaa9e;
+        font-size: 11px;
+      }
+      .avatar {
+        background: #dcefe4;
+        color: #2e654b;
+        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .page {
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 34px 38px 90px;
+      }
+      .screen {
+        display: none;
+      }
+      .screen.active {
+        display: block;
+      }
+      .back {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #5e7067;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 17px;
+      }
+      .back:hover {
+        color: var(--accent);
+      }
+      .page-heading {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 22px;
+      }
+      .eyebrow {
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 760;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(27px, 3vw, 36px);
+        line-height: 1.14;
+        font-weight: 730;
+        letter-spacing: -0.045em;
+      }
+      h2 {
+        margin: 0;
+        font-size: 17px;
+        line-height: 1.3;
+        letter-spacing: -0.02em;
+      }
+      h3 {
+        margin: 0;
+        font-size: 14px;
+      }
+      p {
+        margin: 0;
+      }
+      .lead {
+        color: var(--muted);
+        font-size: 14px;
+        margin-top: 8px;
+        max-width: 640px;
+      }
+      .lead strong {
+        color: var(--ink);
+        font-weight: 650;
+      }
+      .badge-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-top: 11px;
+      }
+      .badge {
+        display: inline-flex;
+        gap: 5px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 99px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 680;
+        color: #5d7064;
+        background: #fff;
+        white-space: nowrap;
+      }
+      .badge.good {
+        background: var(--accent-soft);
+        border-color: #cfe9dc;
+        color: #1c6e51;
+      }
+      .badge.caution {
+        background: var(--amber-soft);
+        border-color: #f0dab1;
+        color: var(--amber);
+      }
+      .badge.neutral {
+        background: #f1f4ef;
+      }
+      .btn {
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid #cedbd0;
+        background: #fff;
+        color: #25513e;
+        height: 38px;
+        border-radius: 9px;
+        padding: 0 14px;
+        font-weight: 680;
+        white-space: nowrap;
+        box-shadow: 0 1px 2px #092b1610;
+      }
+      .btn:hover {
+        border-color: #8cb6a0;
+        background: #f6fbf7;
+        text-decoration: none;
+      }
+      .btn.primary {
+        color: white;
+        border-color: var(--accent);
+        background: var(--accent);
+      }
+      .btn.primary:hover {
+        background: #11533f;
+      }
+      .btn.quiet {
+        background: transparent;
+        box-shadow: none;
+        border-color: transparent;
+        color: var(--accent);
+      }
+      .btn.danger {
+        color: var(--red);
+        border-color: #edc4be;
+      }
+      .btn.small {
+        height: 32px;
+        font-size: 12px;
+        padding: 0 10px;
+      }
+      .btn:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+      .stack {
+        display: grid;
+        gap: 14px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .card-body {
+        padding: 20px 22px;
+      }
+      .card-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 15px;
+      }
+      .card-head p {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 4px;
+      }
+      .micro {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .subtle {
+        color: var(--muted);
+      }
+      .result-card {
+        background: #f6fbf7;
+        border-color: #d8e9db;
+      }
+      .result-card .card-body {
+        padding-top: 19px;
+        padding-bottom: 18px;
+      }
+      .result-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 760;
+        font-size: 15px;
+        margin-bottom: 5px;
+      }
+      .result-copy {
+        color: #4d6157;
+        max-width: 720px;
+      }
+      .callout {
+        border-radius: 11px;
+        padding: 12px 14px;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        font-size: 13px;
+      }
+      .callout.warn {
+        border: 1px solid #ead6aa;
+        background: #fff8e9;
+        color: #694d24;
+      }
+      .callout.info {
+        border: 1px solid #dce8df;
+        background: #f7faf6;
+        color: #52665a;
+      }
+      .callout > span:first-child {
+        font-size: 17px;
+        line-height: 1;
+      }
+      .callout .btn {
+        margin-left: auto;
+      }
+      .section {
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+      }
+      .section > summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 16px 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .section > summary::-webkit-details-marker {
+        display: none;
+      }
+      .chevron {
+        color: #8b9a90;
+        width: 13px;
+        flex: none;
+        transform: rotate(-90deg);
+        transition: transform 0.16s ease;
+        font-size: 13px;
+      }
+      .section[open] .chevron {
+        transform: rotate(0);
+      }
+      .section-title {
+        font-size: 14px;
+        font-weight: 730;
+        min-width: 84px;
+      }
+      .section-summary {
+        color: var(--muted);
+        font-size: 12px;
+        flex: 1;
+        min-width: 0;
+      }
+      .section > .section-content {
+        border-top: 1px solid var(--line);
+        padding: 17px 20px 19px;
+      }
+      .read-pane,
+      .edit-pane {
+        display: grid;
+        gap: 14px;
+      }
+      .edit-pane {
+        display: none;
+      }
+      .section.editing .read-pane {
+        display: none;
+      }
+      .section.editing .edit-pane {
+        display: grid;
+      }
+      .section .edit-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding-top: 6px;
+        border-top: 1px solid var(--line);
+      }
+      .row-list {
+        display: grid;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        min-height: 50px;
+        padding: 8px 0;
+        border-bottom: 1px solid #edf0eb;
+      }
+      .row:first-child {
+        padding-top: 0;
+      }
+      .row:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+      .row-main {
+        min-width: 0;
+        flex: 1;
+      }
+      .row-title {
+        font-weight: 650;
+        display: block;
+      }
+      .row-note {
+        color: var(--muted);
+        font-size: 12px;
+        display: block;
+        margin-top: 1px;
+      }
+      .row-right {
+        margin-left: auto;
+        display: flex;
+        gap: 7px;
+        align-items: center;
+        text-align: right;
+        white-space: nowrap;
+        font-size: 12px;
+      }
+      .dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        background: #80a995;
+        flex: none;
+      }
+      .dot.dim {
+        background: #d8ddd5;
+        border: 1px solid #a9b2a8;
+      }
+      .swatch {
+        width: 22px;
+        height: 22px;
+        flex: none;
+        border-radius: 7px;
+        border: 1px solid #0002;
+        background: #8262cd;
+      }
+      .swatch.warm {
+        background: #e9ac69;
+      }
+      .swatch.off {
+        background: #edf0ed;
+      }
+      .swatch.purple {
+        background: #8262cd;
+      }
+      .swatch.blue {
+        background: #85accb;
+      }
+      .swatch.manual {
+        background: #74ab91;
+      }
+      .effect-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 24px;
+      }
+      .preview-foot {
+        border-top: 1px solid var(--line);
+        margin-top: 14px;
+        padding-top: 12px;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .chip {
+        font-size: 11px;
+        color: #527365;
+        background: #edf5ee;
+        padding: 2px 7px;
+        border-radius: 5px;
+        font-weight: 650;
+        white-space: nowrap;
+      }
+      .chip.gray {
+        color: #6a746a;
+        background: #f0f2ed;
+      }
+      .field-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .field {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+      }
+      .field label,
+      .field > span {
+        font-size: 12px;
+        font-weight: 700;
+        color: #40574a;
+      }
+      .field input,
+      .field select,
+      .search-input {
+        width: 100%;
+        height: 38px;
+        padding: 0 10px;
+        border: 1px solid #cad8cd;
+        border-radius: 9px;
+        background: white;
+        color: var(--ink);
+      }
+      .field small {
+        color: var(--muted);
+        line-height: 1.35;
+      }
+      .field.full {
+        grid-column: 1 / -1;
+      }
+      .choice-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .choice {
+        border: 1px solid #d9e3da;
+        border-radius: 8px;
+        padding: 7px 10px;
+        background: white;
+        color: #52645a;
+        font-size: 12px;
+        font-weight: 650;
+      }
+      .choice.selected {
+        background: var(--accent-soft);
+        color: #146047;
+        border-color: #9fd0b8;
+      }
+      .target-editor {
+        border: 1px solid #dbe6dc;
+        background: #fbfdfb;
+        border-radius: 12px;
+        padding: 15px;
+        display: grid;
+        gap: 14px;
+      }
+      .target-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .draft-preview {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid #d9e9dc;
+        background: #f3faf4;
+        border-radius: 9px;
+        padding: 9px 11px;
+        font-size: 12px;
+      }
+      .target-head .row-main {
+        flex: 1;
+      }
+      .picker-button {
+        width: 100%;
+        height: 38px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        text-align: left;
+        border: 1px solid #cad8cd;
+        border-radius: 9px;
+        background: white;
+        color: var(--ink);
+        padding: 0 10px;
+      }
+      .picker-button:after {
+        content: "▾";
+        color: #66796c;
+      }
+      .picker-panel {
+        margin-top: 5px;
+        display: grid;
+        gap: 5px;
+      }
+      .picker-panel[hidden] {
+        display: none;
+      }
+      .search-results {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fff;
+        overflow: hidden;
+        max-height: 170px;
+        overflow-y: auto;
+      }
+      .search-result {
+        width: 100%;
+        border: 0;
+        border-bottom: 1px solid #edf0eb;
+        background: white;
+        text-align: left;
+        padding: 9px 11px;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .search-result:hover {
+        background: #f2f9f3;
+      }
+      .search-result:last-child {
+        border-bottom: 0;
+      }
+      .search-result small {
+        color: var(--muted);
+      }
+      .reference-key {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        overflow-wrap: anywhere;
+        color: #4b5f55;
+        font-size: 12px;
+      }
+      .comparison {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        overflow: hidden;
+      }
+      .comparison > div {
+        padding: 14px;
+      }
+      .comparison > div + div {
+        border-left: 1px solid var(--line);
+        background: #fafbf9;
+      }
+      .comparison .caption {
+        color: #73837a;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+      }
+      .comparison .value {
+        font-size: 20px;
+        font-weight: 730;
+        margin-top: 4px;
+        letter-spacing: -0.035em;
+      }
+      .evidence {
+        display: grid;
+        gap: 4px;
+      }
+      .evidence-line {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .spark {
+        display: flex;
+        gap: 4px;
+        align-items: flex-end;
+        height: 31px;
+        padding: 3px 0;
+      }
+      .spark i {
+        width: 11px;
+        background: #9fc8af;
+        border-radius: 3px 3px 0 0;
+        display: block;
+      }
+      .timeline {
+        border-left: 2px solid #dfece2;
+        padding-left: 18px;
+        display: grid;
+        gap: 14px;
+        margin-left: 7px;
+      }
+      .timeline-entry {
+        position: relative;
+      }
+      .timeline-entry:before {
+        content: "";
+        position: absolute;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--accent);
+        left: -24px;
+        top: 5px;
+      }
+      .timeline-entry.warn:before {
+        background: #c79138;
+      }
+      .timeline-entry time {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .timeline-entry strong {
+        display: block;
+        font-size: 13px;
+      }
+      .action-sentence {
+        font-weight: 630;
+      }
+      .divider {
+        height: 1px;
+        background: var(--line);
+      }
+      .danger-section {
+        border-color: #f0d7d2;
+      }
+      .danger-section .section-title {
+        color: var(--red);
+      }
+      .mock-banner {
+        max-width: 1040px;
+        margin: 22px auto -16px;
+        padding: 0 38px;
+        color: #8a968e;
+        font-size: 11px;
+      }
+      .mobile-nav {
+        display: none;
+      }
+      #toast {
+        position: fixed;
+        bottom: 23px;
+        right: 24px;
+        background: #1d4f3b;
+        color: white;
+        padding: 10px 14px;
+        border-radius: 9px;
+        box-shadow: 0 8px 30px #123a2938;
+        opacity: 0;
+        transform: translateY(8px);
+        pointer-events: none;
+        transition:
+          opacity 0.2s,
+          transform 0.2s;
+        z-index: 10;
+      }
+      #toast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      @media (max-width: 1050px) {
+        .page {
+          padding-inline: 26px;
+        }
+        .effect-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 760px) {
+        .shell {
+          display: block;
+        }
+        .sidebar {
+          display: none;
+        }
+        .topbar {
+          height: 52px;
+          padding: 0 17px;
+        }
+        .topbar .crumb {
+          font-weight: 700;
+          font-size: 16px;
+          color: var(--ink);
+        }
+        .topbar .crumb span,
+        .topbar .crumb strong {
+          display: none;
+        }
+        .topbar .crumb:after {
+          content: "Settings";
+        }
+        .search-trigger {
+          min-width: 0;
+          width: 36px;
+          height: 36px;
+          overflow: hidden;
+          white-space: nowrap;
+          font-size: 0;
+          text-align: center;
+        }
+        .search-trigger:before {
+          content: "";
+          display: inline-block;
+          width: 13px;
+          height: 13px;
+          border: 2px solid currentColor;
+          border-radius: 50%;
+          vertical-align: middle;
+        }
+        .search-trigger:after {
+          content: "";
+          display: inline-block;
+          height: 2px;
+          width: 8px;
+          background: currentColor;
+          transform: rotate(48deg) translate(-2px, 7px);
+        }
+        .search-trigger span,
+        .avatar {
+          display: none;
+        }
+        .page {
+          padding: 19px 16px 88px;
+        }
+        .mock-banner {
+          margin: 12px auto -6px;
+          padding: 0 17px;
+        }
+        .back {
+          margin-bottom: 16px;
+        }
+        .page-heading {
+          margin-bottom: 18px;
+        }
+        h1 {
+          font-size: 28px;
+        }
+        .lead {
+          font-size: 13px;
+        }
+        .page-heading .btn {
+          flex: none;
+        }
+        .card-body {
+          padding: 17px;
+        }
+        .section > summary {
+          padding: 15px;
+          align-items: flex-start;
+          flex-wrap: wrap;
+          gap: 5px 9px;
+        }
+        .section-title {
+          min-width: 0;
+        }
+        .section-summary {
+          flex-basis: 100%;
+          padding-left: 22px;
+        }
+        .section > .section-content {
+          padding: 16px;
+        }
+        .effect-grid,
+        .field-grid {
+          grid-template-columns: 1fr;
+        }
+        .field.full {
+          grid-column: auto;
+        }
+        .callout {
+          flex-wrap: wrap;
+        }
+        .callout .btn {
+          margin-left: 26px;
+        }
+        .mobile-nav {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 64px;
+          background: #fffefb;
+          border-top: 1px solid var(--line);
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          z-index: 8;
+          padding-bottom: env(safe-area-inset-bottom);
+        }
+        .mobile-nav button {
+          border: 0;
+          background: transparent;
+          color: #66766a;
+          font-size: 10px;
+          display: grid;
+          align-content: center;
+          justify-items: center;
+          gap: 1px;
+        }
+        .mobile-nav button.active {
+          color: var(--accent);
+          background: #edf6ed;
+          font-weight: 700;
+        }
+        .mobile-nav span {
+          font-size: 17px;
+          line-height: 1.2;
+        }
+        #toast {
+          bottom: 75px;
+          left: 16px;
+          right: 16px;
+        }
+      }
+      @media (max-width: 430px) {
+        .row-right {
+          white-space: normal;
+        }
+        .comparison .value {
+          font-size: 17px;
+        }
+        .page-heading .btn {
+          height: 34px;
+          padding: 0 10px;
+          font-size: 12px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *:before,
+        *:after {
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar" aria-label="Mockup navigation">
+        <div class="brand"><span class="brandmark">⌂</span> homectl</div>
+        <div class="side-caption">Settings mockups</div>
+        <button class="side-link active" data-page="scene">
+          <span class="side-icon">◈</span> Scene editor
+        </button>
+        <button class="side-link" data-page="device">
+          <span class="side-icon">◉</span> Device editor
+        </button>
+        <button class="side-link" data-page="room">
+          <span class="side-icon">▦</span> Room editor
+        </button>
+        <button class="side-link" data-page="routine">
+          <span class="side-icon">◇</span> Routine editor
+        </button>
+        <button class="side-link" data-page="connection">
+          <span class="side-icon">◎</span> Connection editor
+        </button>
+        <div class="side-foot">
+          Concept prototype · Synthetic data<br />No changes are saved to
+          homectl.
+        </div>
+      </aside>
+      <div class="workspace">
+        <header class="topbar">
+          <div class="crumb">
+            <span>Settings&nbsp; / &nbsp;</span
+            ><strong id="top-title">Scenes</strong>
+          </div>
+          <div class="top-actions">
+            <button class="search-trigger" data-action="search">
+              Search settings <span>⌘ K</span></button
+            ><span class="avatar">H</span>
+          </div>
+        </header>
+        <div class="mock-banner">
+          INTERACTIVE DESIGN MOCKUP · example data · no server connection
+        </div>
+        <main class="page">
+          <article class="screen active" id="scene">
+            <a class="back" href="#scene" data-action="back">← &nbsp; Scenes</a>
+            <div class="page-heading">
+              <div>
+                <div class="eyebrow">Scene</div>
+                <h1>Movie</h1>
+                <p class="lead">
+                  <strong>4 lights in saved targets</strong> from 2 devices and
+                  1 room.
+                </p>
+                <div class="badge-row">
+                  <span class="badge good">Visible</span
+                  ><span class="badge neutral">Scripted</span>
+                </div>
+              </div>
+              <button class="btn primary" data-action="activate">
+                ▶ &nbsp; Activate
+              </button>
+            </div>
+            <div class="stack">
+              <div class="card result-card">
+                <div class="card-body">
+                  <div class="card-head">
+                    <div>
+                      <h2>Saved targets before script</h2>
+                      <p>The script can override them at activation.</p>
+                    </div>
+                    <span class="badge">4 lights</span>
+                  </div>
+                  <div class="effect-grid">
+                    <div class="row">
+                      <span
+                        class="swatch purple"
+                        role="img"
+                        aria-label="Violet, hue 260 degrees, saturation 80 percent"
+                      ></span
+                      ><span class="row-main"
+                        ><span class="row-title">Living room</span
+                        ><span class="row-note"
+                          >Lamp 15% · Floor lamp 10% · violet</span
+                        ></span
+                      ><span class="row-right">2 on</span>
+                    </div>
+                    <div class="row">
+                      <span class="swatch off" aria-hidden="true"></span
+                      ><span class="row-main"
+                        ><span class="row-title">Kitchen</span
+                        ><span class="row-note">Counter and pendant</span></span
+                      ><span class="row-right">2 off</span>
+                    </div>
+                  </div>
+                  <div class="preview-foot">
+                    <span class="micro"
+                      >Activation sends commands; delivery is not confirmed
+                      here.</span
+                    ><a
+                      href="#scene-advanced"
+                      data-action="open-section"
+                      data-target="scene-advanced"
+                      >See script ↗</a
+                    >
+                  </div>
+                </div>
+              </div>
+              <details class="section" id="scene-targets" open>
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Targets</span
+                  ><span class="section-summary"
+                    >Living room lamp, Floor lamp · Kitchen room off</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <div class="row-list">
+                      <div class="row">
+                        <span class="swatch purple" aria-hidden="true"></span
+                        ><span class="row-main"
+                          ><span class="row-title">Living room lamp</span
+                          ><span class="row-note"
+                            >Set state · violet (h 260°, s 80%)</span
+                          ></span
+                        ><span class="row-right">On · 15%</span>
+                      </div>
+                      <div class="row">
+                        <span class="swatch purple" aria-hidden="true"></span
+                        ><span class="row-main"
+                          ><span class="row-title">Floor lamp</span
+                          ><span class="row-note"
+                            >Set state · violet (h 260°, s 80%)</span
+                          ></span
+                        ><span class="row-right">On · 10%</span>
+                      </div>
+                      <div class="row">
+                        <span class="swatch off" aria-hidden="true"></span
+                        ><span class="row-main"
+                          ><span class="row-title">Kitchen</span
+                          ><span class="row-note"
+                            >Room target · 2 resolved devices</span
+                          ></span
+                        ><span class="row-right">Off</span>
+                      </div>
+                    </div>
+                    <div>
+                      <button class="btn small" data-action="edit">
+                        Change targets
+                      </button>
+                    </div>
+                  </div>
+                  <div class="edit-pane">
+                    <div class="target-editor">
+                      <div class="target-head">
+                        <span class="swatch purple" aria-hidden="true"></span
+                        ><span class="row-main"
+                          ><strong>Living room lamp</strong
+                          ><span class="row-note"
+                            >Selected device target</span
+                          ></span
+                        ><button
+                          class="btn quiet small"
+                          data-action="mock-remove"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div
+                        class="choice-row"
+                        role="group"
+                        aria-label="Target type"
+                      >
+                        <button
+                          class="choice selected"
+                          data-choice="Set a state"
+                        >
+                          Set a state</button
+                        ><button class="choice" data-choice="Follow a device">
+                          Follow a device</button
+                        ><button class="choice" data-choice="Use another scene">
+                          Use another scene
+                        </button>
+                      </div>
+                      <div class="field-grid">
+                        <div class="field">
+                          <label for="scene-power">Power</label
+                          ><select id="scene-power">
+                            <option>On</option>
+                            <option>Off</option>
+                            <option>Leave unchanged</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label for="scene-brightness"
+                            >Brightness · exact percentage</label
+                          ><input
+                            id="scene-brightness"
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value="15"
+                          />
+                        </div>
+                        <div class="field">
+                          <label for="scene-color">Colour</label>
+                          <div class="choice-row" style="align-items: center">
+                            <span
+                              class="swatch purple"
+                              aria-hidden="true"
+                            ></span
+                            ><input
+                              id="scene-color"
+                              type="color"
+                              value="#8262cd"
+                              style="max-width: 80px"
+                            /><small>HS · 260° hue · 80% saturation</small>
+                          </div>
+                        </div>
+                        <div class="field">
+                          <label for="scene-fade">Fade time</label
+                          ><select id="scene-fade">
+                            <option>Use device default</option>
+                            <option>0.4 seconds</option>
+                            <option>Custom…</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="draft-preview">
+                        <span
+                          class="swatch purple"
+                          id="scene-draft-swatch"
+                          aria-hidden="true"
+                        ></span
+                        ><span
+                          ><strong>Draft effect</strong><br /><span
+                            id="scene-draft-text"
+                            >Living room lamp · On · 15% · violet</span
+                          ></span
+                        >
+                      </div>
+                    </div>
+                    <div class="row-list">
+                      <button
+                        class="search-result"
+                        data-action="choose-target"
+                        data-target-name="Floor lamp"
+                      >
+                        Floor lamp
+                        <small>Direct device · On · 10%</small></button
+                      ><button
+                        class="search-result"
+                        data-action="choose-target"
+                        data-target-name="Kitchen"
+                      >
+                        Kitchen <small>Room · Off</small>
+                      </button>
+                    </div>
+                    <div>
+                      <button class="btn small" data-action="scene-add-picker">
+                        + &nbsp; Add device or room
+                      </button>
+                    </div>
+                    <div id="scene-picker" hidden>
+                      <label class="field"
+                        ><span>Find a device or room</span
+                        ><input
+                          class="search-input"
+                          id="scene-target-search"
+                          placeholder="Name, room, integration or ID"
+                          autocomplete="off"
+                      /></label>
+                      <div class="search-results">
+                        <button
+                          class="search-result"
+                          data-action="pick-scene-target"
+                        >
+                          Desk light
+                          <small
+                            >Device · Office · zigbee2mqtt/office_desk</small
+                          ></button
+                        ><button
+                          class="search-result"
+                          data-action="pick-scene-target"
+                        >
+                          Hallway
+                          <small
+                            >Room · 1 available device, 1 missing</small
+                          ></button
+                        ><button
+                          class="search-result"
+                          data-action="pick-scene-target"
+                        >
+                          Bedroom lamp
+                          <small
+                            >Device · Bedroom · zigbee2mqtt/bedroom_lamp</small
+                          >
+                        </button>
+                      </div>
+                    </div>
+                    <div class="edit-actions">
+                      <button class="btn primary small" data-action="save">
+                        Save targets</button
+                      ><button class="btn quiet small" data-action="cancel">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <details class="section" id="scene-details">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Details</span
+                  ><span class="section-summary">Visible · ID movie</span>
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <div class="row-list">
+                      <div class="row">
+                        <span class="row-main"
+                          ><span class="row-title">Name</span></span
+                        ><span>Movie</span>
+                      </div>
+                      <div class="row">
+                        <span class="row-main"
+                          ><span class="row-title"
+                            >Shown in main controls</span
+                          ></span
+                        ><span>Yes</span>
+                      </div>
+                    </div>
+                    <button class="btn small" data-action="edit">
+                      Change details
+                    </button>
+                  </div>
+                  <div class="edit-pane">
+                    <div class="field-grid">
+                      <div class="field">
+                        <label for="scene-name">Name</label
+                        ><input id="scene-name" value="Movie" />
+                      </div>
+                      <div class="field">
+                        <span>Shown in main controls</span>
+                        <div class="choice-row">
+                          <button class="choice selected">Yes</button
+                          ><button class="choice">No</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="micro">Permanent ID: movie</div>
+                    <div class="edit-actions">
+                      <button class="btn primary small" data-action="save">
+                        Save details</button
+                      ><button class="btn quiet small" data-action="cancel">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <details class="section" id="scene-advanced">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Script</span
+                  ><span class="section-summary"
+                    >Custom script · can override saved targets</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <code class="reference-key"
+                      >defineSceneScript(() =&gt; ({ devices: {}, groups: {}
+                      }))</code
+                    ><button class="btn small" data-action="edit">
+                      Change script
+                    </button>
+                  </div>
+                  <div class="edit-pane">
+                    <div class="field">
+                      <label for="scene-script">Scene script</label
+                      ><input
+                        id="scene-script"
+                        value="defineSceneScript(() => ({ devices: {}, groups: {} }))"
+                      />
+                    </div>
+                    <div class="edit-actions">
+                      <button class="btn primary small" data-action="save">
+                        Save script</button
+                      ><button class="btn quiet small" data-action="cancel">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <details class="section danger-section">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Delete scene</span
+                  ><span class="section-summary"
+                    >Remove Movie and its saved targets</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <p class="micro">
+                    Routines that reference this scene may need repair.
+                  </p>
+                  <button class="btn danger small" data-action="danger">
+                    Delete Movie…
+                  </button>
+                </div>
+              </details>
+            </div>
+          </article>
+
+          <article class="screen" id="device">
+            <a class="back" href="#device" data-action="back"
+              >← &nbsp; Devices</a
+            >
+            <div class="page-heading">
+              <div>
+                <div class="eyebrow">Device · Living room</div>
+                <h1>Living room lamp</h1>
+                <p class="lead">
+                  <strong>Needs attention.</strong> Homectl requested 80%
+                  brightness; the latest report says 25%. The device was heard
+                  from 2 minutes ago.
+                </p>
+                <div class="badge-row">
+                  <span class="badge caution">Requested ≠ reported</span
+                  ><span class="badge good">Available</span>
+                </div>
+              </div>
+            </div>
+            <div class="stack">
+              <div class="callout warn">
+                <span>!</span
+                ><span
+                  ><strong>Brightness has not followed the request.</strong
+                  ><br />Check the lamp or its connection if it stays at
+                  25%.</span
+                ><button
+                  class="btn small"
+                  data-action="navigate"
+                  data-page="connection"
+                >
+                  View connection
+                </button>
+              </div>
+              <div class="card">
+                <div class="card-body">
+                  <div class="card-head">
+                    <div>
+                      <h2>Control now</h2>
+                      <p>
+                        These commands take effect immediately; they do not edit
+                        settings.
+                      </p>
+                    </div>
+                  </div>
+                  <div class="field-grid">
+                    <div class="field">
+                      <label for="device-power">Power</label>
+                      <div class="choice-row">
+                        <button class="choice selected" data-device-power="On">
+                          On</button
+                        ><button class="choice" data-device-power="Off">
+                          Off
+                        </button>
+                      </div>
+                    </div>
+                    <div class="field">
+                      <label for="device-brightness">Brightness</label>
+                      <div class="choice-row">
+                        <input
+                          id="device-brightness"
+                          type="range"
+                          min="0"
+                          max="100"
+                          value="80"
+                          style="flex: 1"
+                        /><input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value="80"
+                          aria-label="Exact brightness percent"
+                          style="
+                            width: 68px;
+                            border: 1px solid #cad8cd;
+                            border-radius: 8px;
+                            padding: 5px;
+                          "
+                        /><span>%</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    class="choice-row"
+                    style="align-items: center; margin-top: 12px"
+                  >
+                    <button
+                      class="btn primary small"
+                      data-action="set-brightness"
+                    >
+                      Set brightness</button
+                    ><span class="micro"
+                      >Requested state · On · 80% · amber colour</span
+                    >
+                  </div>
+                </div>
+              </div>
+              <details class="section" id="device-report" open>
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">What it reports</span
+                  ><span class="section-summary"
+                    >On · 25% · received 2 minutes ago</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <div class="comparison">
+                      <div>
+                        <div class="caption">Requested by homectl</div>
+                        <div class="value">On · 80%</div>
+                        <div class="micro">Requested 2 min 3 sec ago</div>
+                      </div>
+                      <div>
+                        <div class="caption">Last integration report</div>
+                        <div class="value">On · 25%</div>
+                        <div class="micro">
+                          Received 2 min ago · not retained
+                        </div>
+                      </div>
+                    </div>
+                    <p class="micro">
+                      This is the latest integration report, not independent
+                      confirmation of the lamp's physical state.
+                    </p>
+                    <a
+                      href="#routine"
+                      data-action="navigate"
+                      data-page="routine"
+                      >View related automation activity ↗</a
+                    >
+                  </div>
+                </div>
+              </details>
+              <details class="section" id="device-display">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Display name</span
+                  ><span class="section-summary"
+                    >Living room lamp · integration label</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <div class="row">
+                      <span class="row-main"
+                        ><span class="row-title">Name shown in homectl</span
+                        ><span class="row-note">Living room lamp</span></span
+                      ><span class="chip gray">Integration label</span>
+                    </div>
+                    <button class="btn small" data-action="edit">
+                      Change display name
+                    </button>
+                  </div>
+                  <div class="edit-pane">
+                    <div class="field">
+                      <label for="device-label">Custom name</label
+                      ><input
+                        id="device-label"
+                        placeholder="Use integration label"
+                      />
+                    </div>
+                    <div class="edit-actions">
+                      <button class="btn primary small" data-action="save">
+                        Save name</button
+                      ><button class="btn quiet small" data-action="cancel">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <details class="section" id="device-calibration">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Calibration</span
+                  ><span class="section-summary"
+                    >Colour and brightness · no profile assigned</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <p class="micro">
+                      Match this lamp's colour or brightness with another light.
+                      The controls are shown only for capabilities this device
+                      supports.
+                    </p>
+                    <button class="btn small" data-action="calibrate">
+                      Start calibration
+                    </button>
+                  </div>
+                </div>
+              </details>
+              <details class="section" id="device-technical">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Technical details</span
+                  ><span class="section-summary"
+                    >Capabilities, identifiers, raw report</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="row-list">
+                    <div class="row">
+                      <span class="row-main"
+                        ><span class="row-title">Device key</span></span
+                      ><span class="reference-key"
+                        >zigbee2mqtt/living_room_lamp</span
+                      >
+                    </div>
+                    <div class="row">
+                      <span class="row-main"
+                        ><span class="row-title">Capabilities</span></span
+                      ><span class="micro">Brightness · HS · XY · CT</span>
+                    </div>
+                  </div>
+                  <button class="btn quiet small" data-action="technical">
+                    View raw report
+                  </button>
+                </div>
+              </details>
+              <details class="section danger-section">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Replace or delete</span
+                  ><span class="section-summary"
+                    >Repair references or remove this device</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <p class="micro">
+                    Replacement updates saved references to this device.
+                    Deletion removes it from the catalog.
+                  </p>
+                  <div class="choice-row">
+                    <button class="btn small" data-action="danger">
+                      Replace references…</button
+                    ><button class="btn danger small" data-action="danger">
+                      Delete device…
+                    </button>
+                  </div>
+                </div>
+              </details>
+            </div>
+          </article>
+
+          <article class="screen" id="room">
+            <a class="back" href="#room" data-action="back">← &nbsp; Rooms</a>
+            <div class="page-heading">
+              <div>
+                <div class="eyebrow">Room</div>
+                <h1>Hallway</h1>
+                <p class="lead">
+                  <strong>1 available device</strong> and
+                  <strong>1 missing saved member</strong>. One routine uses this
+                  room.
+                </p>
+                <div class="badge-row">
+                  <span class="badge caution">1 reference needs repair</span
+                  ><span class="badge good">Shown in Rooms</span>
+                </div>
+              </div>
+            </div>
+            <div class="stack">
+              <div class="callout warn">
+                <span>!</span
+                ><span
+                  ><strong>Hallway spot is missing.</strong><br />It remains in
+                  this room's saved members, but no matching device is in the
+                  catalog.</span
+                ><button
+                  class="btn small"
+                  data-action="open-section"
+                  data-target="room-members"
+                >
+                  Review member
+                </button>
+              </div>
+              <details class="section" id="room-members" open>
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Devices</span
+                  ><span class="section-summary"
+                    >Hallway strip · 1 missing reference</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <div class="row-list">
+                      <div class="row">
+                        <span class="dot"></span
+                        ><span class="row-main"
+                          ><span class="row-title">Hallway strip</span
+                          ><span class="row-note"
+                            >Available · direct member</span
+                          ></span
+                        ><span class="row-right">On · 40%</span>
+                      </div>
+                      <div class="row">
+                        <span class="dot dim"></span
+                        ><span class="row-main"
+                          ><span class="row-title"
+                            >Hallway spot
+                            <span class="badge caution">Missing</span></span
+                          ><span class="row-note reference-key"
+                            >mqtt/hallway_spot</span
+                          ></span
+                        >
+                      </div>
+                    </div>
+                    <button class="btn small" data-action="edit">
+                      Change devices
+                    </button>
+                  </div>
+                  <div class="edit-pane">
+                    <div class="row">
+                      <span class="dot"></span
+                      ><span class="row-main"
+                        ><span class="row-title">Hallway strip</span
+                        ><span class="row-note reference-key"
+                          >mqtt/hallway_strip</span
+                        ></span
+                      ><button
+                        class="btn quiet small"
+                        data-action="mock-remove"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div class="target-editor">
+                      <div class="target-head">
+                        <span class="dot dim"></span
+                        ><span class="row-main"
+                          ><strong>Hallway spot · missing</strong
+                          ><span class="row-note reference-key"
+                            >mqtt/hallway_spot</span
+                          ></span
+                        >
+                      </div>
+                      <div class="choice-row">
+                        <button class="btn small" data-action="repair-picker">
+                          Replace with another device…</button
+                        ><button
+                          class="btn danger small"
+                          data-action="mock-remove"
+                        >
+                          Remove reference
+                        </button>
+                      </div>
+                      <div id="room-picker" hidden>
+                        <label class="field"
+                          ><span>Search replacement</span
+                          ><input
+                            class="search-input"
+                            id="replacement-search"
+                            placeholder="Name, room, integration or ID"
+                        /></label>
+                        <div class="search-results">
+                          <button class="search-result" disabled>
+                            Hallway strip
+                            <small
+                              >mqtt/hallway_strip · already in room</small
+                            ></button
+                          ><button
+                            class="search-result"
+                            data-action="pick-replacement"
+                          >
+                            Kitchen counter
+                            <small>esphome/kitchen_counter</small></button
+                          ><button
+                            class="search-result"
+                            data-action="pick-replacement"
+                          >
+                            Desk light <small>zigbee2mqtt/office_desk</small>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <button class="btn small" data-action="add-picker">
+                        + &nbsp; Add device
+                      </button>
+                    </div>
+                    <div class="edit-actions">
+                      <button class="btn primary small" data-action="save">
+                        Save devices</button
+                      ><button class="btn quiet small" data-action="cancel">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <details class="section" id="room-links">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Linked rooms</span
+                  ><span class="section-summary">None</span>
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <p class="micro">No linked rooms.</p>
+                    <button class="btn small" data-action="edit">
+                      Change linked rooms
+                    </button>
+                  </div>
+                  <div class="edit-pane">
+                    <label class="field"
+                      ><span>Add a linked room</span
+                      ><input class="search-input" placeholder="Search rooms…"
+                    /></label>
+                    <div class="search-results">
+                      <button class="search-result" data-action="mock-choice">
+                        Living room <small>2 devices</small></button
+                      ><button class="search-result" data-action="mock-choice">
+                        Kitchen <small>2 devices</small></button
+                      ><button class="search-result" disabled>
+                        Hallway <small>Cannot link a room to itself</small>
+                      </button>
+                    </div>
+                    <div class="edit-actions">
+                      <button class="btn primary small" data-action="save">
+                        Save linked rooms</button
+                      ><button class="btn quiet small" data-action="cancel">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <details class="section" id="room-details">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Details</span
+                  ><span class="section-summary"
+                    >Shown in Rooms · ID hallway</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <div class="row">
+                      <span class="row-main"
+                        ><span class="row-title">Name</span></span
+                      ><span>Hallway</span>
+                    </div>
+                    <div class="row">
+                      <span class="row-main"
+                        ><span class="row-title"
+                          >Shown in main controls</span
+                        ></span
+                      ><span>Yes</span>
+                    </div>
+                    <button class="btn small" data-action="edit">
+                      Change details
+                    </button>
+                  </div>
+                  <div class="edit-pane">
+                    <div class="field-grid">
+                      <div class="field">
+                        <label for="room-name">Name</label
+                        ><input id="room-name" value="Hallway" />
+                      </div>
+                      <div class="field">
+                        <span>Shown in main controls</span>
+                        <div class="choice-row">
+                          <button class="choice selected">Yes</button
+                          ><button class="choice">No</button>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="micro">ID: hallway · used by 1 routine</p>
+                    <div class="edit-actions">
+                      <button class="btn primary small" data-action="save">
+                        Save details</button
+                      ><button class="btn quiet small" data-action="cancel">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <details class="section danger-section">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Delete room</span
+                  ><span class="section-summary"
+                    >Remove Hallway and its saved membership</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <button class="btn danger small" data-action="danger">
+                    Delete Hallway…
+                  </button>
+                </div>
+              </details>
+            </div>
+          </article>
+
+          <article class="screen" id="routine">
+            <a class="back" href="#routine" data-action="back"
+              >← &nbsp; Routines</a
+            >
+            <div class="page-heading">
+              <div>
+                <div class="eyebrow">Routine</div>
+                <h1>Living room motion on</h1>
+                <p class="lead">
+                  <strong>Enabled · waiting for motion.</strong> Current
+                  condition not met: motion is inactive.
+                </p>
+                <div class="badge-row">
+                  <span class="badge good">Enabled</span
+                  ><span class="badge neutral">Waiting for event</span>
+                </div>
+              </div>
+              <button class="btn" data-action="toggle-routine">Pause</button>
+            </div>
+            <div class="stack">
+              <div class="card result-card">
+                <div class="card-body">
+                  <div class="result-title">Current evidence</div>
+                  <p class="result-copy">
+                    Motion is inactive; cooldown is off. No matching event is in
+                    retained history, so this cannot explain a specific past
+                    non-run.
+                  </p>
+                  <div class="preview-foot">
+                    <span class="micro"
+                      >Current evaluation · updated just now</span
+                    ><a
+                      href="#routine-activity"
+                      data-action="open-section"
+                      data-target="routine-activity"
+                      >See activity ↗</a
+                    >
+                  </div>
+                </div>
+              </div>
+
+              <details class="section" id="routine-when">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">When</span
+                  ><span class="section-summary"
+                    >Living room motion changes</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <div class="row">
+                      <span class="dot"></span
+                      ><span class="row-main"
+                        ><span class="row-title"
+                          >Living room motion changes</span
+                        ><span class="row-note"
+                          >Waiting for the next report · no trigger evaluation
+                          received yet</span
+                        ></span
+                      >
+                    </div>
+                    <button class="btn small" data-action="edit">
+                      Change trigger
+                    </button>
+                  </div>
+                  <div class="edit-pane">
+                    <div class="field-grid">
+                      <div class="field">
+                        <label for="trigger-device">Device</label
+                        ><button
+                          class="picker-button"
+                          id="trigger-device"
+                          data-action="toggle-picker"
+                          data-target="trigger-device-picker"
+                        >
+                          Living room motion
+                        </button>
+                        <div
+                          class="picker-panel"
+                          id="trigger-device-picker"
+                          hidden
+                        >
+                          <input
+                            class="search-input"
+                            data-filter-results
+                            placeholder="Search 12 devices"
+                            autocomplete="off"
+                          />
+                          <div class="search-results">
+                            <button
+                              class="search-result"
+                              data-action="pick-option"
+                              data-for="trigger-device"
+                              data-label="Living room motion"
+                            >
+                              Living room motion
+                              <small>Living room · sensor</small></button
+                            ><button
+                              class="search-result"
+                              data-action="pick-option"
+                              data-for="trigger-device"
+                              data-label="Hallway strip"
+                            >
+                              Hallway strip <small>Hallway · light</small>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label for="trigger-event">Start when</label
+                        ><select id="trigger-event">
+                          <option>Its state changes</option>
+                          <option>It reports any value</option>
+                          <option>It becomes active</option>
+                        </select>
+                      </div>
+                    </div>
+                    <button class="btn small" data-action="add-picker">
+                      + &nbsp; Add another trigger
+                    </button>
+                    <div class="edit-actions">
+                      <button class="btn primary small" data-action="save">
+                        Save trigger</button
+                      ><button class="btn quiet small" data-action="cancel">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <details class="section" id="routine-conditions" open>
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Only if</span
+                  ><span class="section-summary"
+                    >Motion is active · cooldown is off</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <div class="row-list">
+                      <div class="row">
+                        <span class="dot dim"></span
+                        ><span class="row-main"
+                          ><span class="row-title"
+                            >Living room motion is active</span
+                          ><span class="row-note"
+                            >Current value: inactive · received just now</span
+                          ></span
+                        ><span class="badge neutral">Not met now</span>
+                      </div>
+                      <div class="row">
+                        <span class="dot"></span
+                        ><span class="row-main"
+                          ><span class="row-title"
+                            >Entryway cooldown is off</span
+                          ><span class="row-note"
+                            >Current helper value: off</span
+                          ></span
+                        ><span class="badge good">Met now</span>
+                      </div>
+                    </div>
+                    <button class="btn small" data-action="edit">
+                      Change conditions
+                    </button>
+                  </div>
+                  <div class="edit-pane">
+                    <div class="target-editor">
+                      <div class="target-head">
+                        <span class="dot dim"></span
+                        ><span class="row-main"
+                          ><strong>Living room motion is active</strong
+                          ><span class="row-note"
+                            >Edit this condition</span
+                          ></span
+                        >
+                      </div>
+                      <div class="field-grid">
+                        <div class="field">
+                          <label for="condition-device">Device</label
+                          ><button
+                            class="picker-button"
+                            id="condition-device"
+                            data-action="toggle-picker"
+                            data-target="condition-device-picker"
+                          >
+                            Living room motion
+                          </button>
+                          <div
+                            class="picker-panel"
+                            id="condition-device-picker"
+                            hidden
+                          >
+                            <input
+                              class="search-input"
+                              data-filter-results
+                              placeholder="Search 12 devices"
+                              autocomplete="off"
+                            />
+                            <div class="search-results">
+                              <button
+                                class="search-result"
+                                data-action="pick-option"
+                                data-for="condition-device"
+                                data-label="Living room motion"
+                              >
+                                Living room motion
+                                <small>Living room · sensor</small></button
+                              ><button
+                                class="search-result"
+                                data-action="pick-option"
+                                data-for="condition-device"
+                                data-label="Living room lamp"
+                              >
+                                Living room lamp
+                                <small>Living room · light</small></button
+                              ><button
+                                class="search-result"
+                                data-action="pick-option"
+                                data-for="condition-device"
+                                data-label="Hallway strip"
+                              >
+                                Hallway strip <small>Hallway · light</small>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="field">
+                          <label for="condition-field">Field</label
+                          ><button
+                            class="picker-button"
+                            id="condition-field"
+                            data-action="toggle-picker"
+                            data-target="condition-field-picker"
+                          >
+                            Motion · inactive now
+                          </button>
+                          <div
+                            class="picker-panel"
+                            id="condition-field-picker"
+                            hidden
+                          >
+                            <input
+                              class="search-input"
+                              data-filter-results
+                              placeholder="Search available fields"
+                              autocomplete="off"
+                            />
+                            <div class="search-results">
+                              <button
+                                class="search-result"
+                                data-action="pick-option"
+                                data-for="condition-field"
+                                data-label="Motion · inactive now"
+                              >
+                                Motion
+                                <small>Boolean · inactive now</small></button
+                              ><button
+                                class="search-result"
+                                data-action="pick-option"
+                                data-for="condition-field"
+                                data-label="Battery · 87% now"
+                              >
+                                Battery <small>Number · 87% now</small>
+                              </button>
+                            </div>
+                            <button
+                              class="btn quiet small"
+                              data-action="technical"
+                            >
+                              Use custom JSON path…
+                            </button>
+                          </div>
+                        </div>
+                        <div class="field">
+                          <label for="condition-operator">Compare</label
+                          ><select id="condition-operator">
+                            <option>is</option>
+                            <option>is not</option>
+                            <option>changes to</option>
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label for="condition-value">Value</label
+                          ><select id="condition-value">
+                            <option>Active</option>
+                            <option>Inactive</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="callout info">
+                        <span>◷</span
+                        ><span
+                          ><strong>Recent field values</strong><br />Inactive
+                          now · active at 08:12 · inactive at 08:13. Use these
+                          observed values when choosing the comparison.</span
+                        >
+                      </div>
+                    </div>
+                    <div class="row">
+                      <span class="row-main"
+                        ><span class="row-title">Entryway cooldown is off</span
+                        ><span class="row-note"
+                          >Click to edit this condition</span
+                        ></span
+                      ><button
+                        class="btn quiet small"
+                        data-action="mock-choice"
+                      >
+                        Choose
+                      </button>
+                    </div>
+                    <div>
+                      <button class="btn small" data-action="add-picker">
+                        + &nbsp; Add condition
+                      </button>
+                    </div>
+                    <div class="edit-actions">
+                      <button class="btn primary small" data-action="save">
+                        Save conditions</button
+                      ><button class="btn quiet small" data-action="cancel">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <details class="section" id="routine-then">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Then</span
+                  ><span class="section-summary"
+                    >Activate Normal in Living room</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <div class="row">
+                      <span class="chip">1</span
+                      ><span class="row-main"
+                        ><span class="row-title"
+                          >Activate Normal in Living room</span
+                        ><span class="row-note"
+                          >Use scene transition</span
+                        ></span
+                      >
+                    </div>
+                    <button class="btn small" data-action="edit">
+                      Change actions
+                    </button>
+                  </div>
+                  <div class="edit-pane">
+                    <div class="target-editor">
+                      <div class="target-head">
+                        <span class="chip">1</span
+                        ><span class="row-main"
+                          ><strong>Activate a scene</strong
+                          ><span class="row-note"
+                            >Choose the scene and where it applies</span
+                          ></span
+                        >
+                      </div>
+                      <div class="field-grid">
+                        <div class="field">
+                          <label for="action-scene">Scene</label
+                          ><button
+                            class="picker-button"
+                            id="action-scene"
+                            data-action="toggle-picker"
+                            data-target="action-scene-picker"
+                          >
+                            Normal
+                          </button>
+                          <div
+                            class="picker-panel"
+                            id="action-scene-picker"
+                            hidden
+                          >
+                            <input
+                              class="search-input"
+                              data-filter-results
+                              placeholder="Search scenes"
+                              autocomplete="off"
+                            />
+                            <div class="search-results">
+                              <button
+                                class="search-result"
+                                data-action="pick-option"
+                                data-for="action-scene"
+                                data-label="Normal"
+                              >
+                                Normal
+                                <small>Sets living room lights</small></button
+                              ><button
+                                class="search-result"
+                                data-action="pick-option"
+                                data-for="action-scene"
+                                data-label="Movie"
+                              >
+                                Movie <small>4 saved light targets</small>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="field">
+                          <label for="action-room">Apply to</label
+                          ><button
+                            class="picker-button"
+                            id="action-room"
+                            data-action="toggle-picker"
+                            data-target="action-room-picker"
+                          >
+                            Living room
+                          </button>
+                          <div
+                            class="picker-panel"
+                            id="action-room-picker"
+                            hidden
+                          >
+                            <input
+                              class="search-input"
+                              data-filter-results
+                              placeholder="Search rooms"
+                              autocomplete="off"
+                            />
+                            <div class="search-results">
+                              <button
+                                class="search-result"
+                                data-action="pick-option"
+                                data-for="action-room"
+                                data-label="Living room"
+                              >
+                                Living room <small>2 devices</small></button
+                              ><button
+                                class="search-result"
+                                data-action="pick-option"
+                                data-for="action-room"
+                                data-label="Kitchen"
+                              >
+                                Kitchen <small>2 devices</small></button
+                              ><button
+                                class="search-result"
+                                data-action="pick-option"
+                                data-for="action-room"
+                                data-label="Hallway"
+                              >
+                                Hallway <small>1 available · 1 missing</small>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="choice-row">
+                        <button
+                          class="btn quiet small"
+                          data-action="mock-choice"
+                        >
+                          Move</button
+                        ><button
+                          class="btn quiet small"
+                          data-action="mock-choice"
+                        >
+                          Duplicate</button
+                        ><button
+                          class="btn quiet small"
+                          data-action="mock-remove"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                    <button class="btn small" data-action="add-picker">
+                      + &nbsp; Add action
+                    </button>
+                    <div class="edit-actions">
+                      <button class="btn primary small" data-action="save">
+                        Save actions</button
+                      ><button class="btn quiet small" data-action="cancel">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <details class="section" id="routine-preview">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Try a what-if</span
+                  ><span class="section-summary"
+                    >Preview without running actions</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <p class="micro">
+                      Uses the saved routine and current values. It will not
+                      command devices or predict whether motion will actually
+                      occur.
+                    </p>
+                    <div class="field-grid">
+                      <div class="field">
+                        <label for="whatif-event">Suppose this happens</label
+                        ><select id="whatif-event">
+                          <option>Living room motion changes</option>
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label for="whatif-value">Suppose motion is</label
+                        ><select id="whatif-value">
+                          <option>Active</option>
+                          <option>Inactive</option>
+                        </select>
+                      </div>
+                    </div>
+                    <button class="btn small" data-action="preview">
+                      Preview result
+                    </button>
+                    <div class="callout info" id="whatif-result" hidden>
+                      <span>✓</span
+                      ><span
+                        ><strong>Would run.</strong> With motion active and
+                        cooldown off, the saved condition is met; one scene
+                        action would be planned. Device delivery is not
+                        tested.</span
+                      >
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <details class="section" id="routine-activity">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Activity</span
+                  ><span class="section-summary"
+                    >No matching event in retained history</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <p class="micro">
+                      The current condition is not a reconstruction of a past
+                      attempt.
+                    </p>
+                    <div class="timeline">
+                      <div class="timeline-entry">
+                        <time>Current · just now</time
+                        ><strong>Motion inactive · cooldown off</strong
+                        ><span class="micro"
+                          >Live values, not a recorded routine run.</span
+                        >
+                      </div>
+                      <div class="timeline-entry warn">
+                        <time>Retained history</time
+                        ><strong>No matching event recorded</strong
+                        ><span class="micro"
+                          >Recorded attempts will appear here with their outcome
+                          and reason.</span
+                        >
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <details class="section" id="routine-advanced">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Advanced</span
+                  ><span class="section-summary"
+                    >Runs in arrival order · 32-action cap</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <p class="micro">
+                      If a run would exceed the action cap, the server rejects
+                      the whole run.
+                    </p>
+                    <button class="btn small" data-action="edit">
+                      Change execution policy
+                    </button>
+                  </div>
+                  <div class="edit-pane">
+                    <div class="field-grid">
+                      <div class="field">
+                        <label for="policy-mode">When another run arrives</label
+                        ><select id="policy-mode">
+                          <option>Queue it</option>
+                          <option>Skip it</option>
+                          <option>Restart</option>
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label for="policy-cap">Maximum actions</label
+                        ><input
+                          id="policy-cap"
+                          type="number"
+                          min="1"
+                          max="64"
+                          value="32"
+                        />
+                      </div>
+                    </div>
+                    <div class="edit-actions">
+                      <button class="btn primary small" data-action="save">
+                        Save policy</button
+                      ><button class="btn quiet small" data-action="cancel">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+            </div>
+          </article>
+
+          <article class="screen" id="connection">
+            <a class="back" href="#connection" data-action="back"
+              >← &nbsp; Connections</a
+            >
+            <div class="page-heading">
+              <div>
+                <div class="eyebrow">Connection</div>
+                <h1>Home devices</h1>
+                <p class="lead">
+                  <strong>Enabled.</strong> There is no universal connection
+                  status from this integration. One of its devices has a recent
+                  report mismatch.
+                </p>
+                <div class="badge-row">
+                  <span class="badge good">Enabled</span
+                  ><span class="badge neutral">Connection status unknown</span>
+                </div>
+              </div>
+            </div>
+            <div class="stack">
+              <div class="callout warn">
+                <span>!</span
+                ><span
+                  ><strong>Living room lamp reports 25%, requested 80%.</strong
+                  ><br />That device reported 2 minutes ago; inspect its state
+                  before changing this connection.</span
+                ><button
+                  class="btn small"
+                  data-action="navigate"
+                  data-page="device"
+                >
+                  View device
+                </button>
+              </div>
+              <details class="section" id="connection-primary" open>
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Main settings</span
+                  ><span class="section-summary">Host and port configured</span>
+                </summary>
+                <div class="section-content">
+                  <div class="read-pane">
+                    <div class="row-list">
+                      <div class="row">
+                        <span class="row-main"
+                          ><span class="row-title">Host</span></span
+                        ><span class="reference-key">mqtt.example.test</span>
+                      </div>
+                      <div class="row">
+                        <span class="row-main"
+                          ><span class="row-title">Port</span></span
+                        ><span>8883</span>
+                      </div>
+                      <div class="row">
+                        <span class="row-main"
+                          ><span class="row-title">Credentials</span></span
+                        ><span>Stored securely</span>
+                      </div>
+                    </div>
+                    <button class="btn small" data-action="edit">
+                      Change main settings
+                    </button>
+                  </div>
+                  <div class="edit-pane">
+                    <div class="field-grid">
+                      <div class="field">
+                        <label for="conn-host">Host</label
+                        ><input id="conn-host" value="mqtt.example.test" />
+                      </div>
+                      <div class="field">
+                        <label for="conn-port">Port</label
+                        ><input id="conn-port" type="number" value="8883" />
+                      </div>
+                    </div>
+                    <p class="micro">
+                      Stored credentials are retained unless you explicitly
+                      replace or clear them.
+                    </p>
+                    <div class="edit-actions">
+                      <button class="btn primary small" data-action="save">
+                        Save settings</button
+                      ><button class="btn quiet small" data-action="cancel">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+              <details class="section" id="connection-devices">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Devices</span
+                  ><span class="section-summary"
+                    >12 known · 1 needs attention</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <div class="row">
+                    <span class="dot dim"></span
+                    ><span class="row-main"
+                      ><span class="row-title">Living room lamp</span
+                      ><span class="row-note"
+                        >Requested and reported brightness differ</span
+                      ></span
+                    ><button
+                      class="btn quiet small"
+                      data-action="navigate"
+                      data-page="device"
+                    >
+                      Open
+                    </button>
+                  </div>
+                  <p class="micro">
+                    Showing the affected device first. Search and filters would
+                    cover all 12 here.
+                  </p>
+                </div>
+              </details>
+              <details class="section" id="connection-advanced">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Advanced</span
+                  ><span class="section-summary"
+                    >Topic mapping, payload mode, raw JSON</span
+                  >
+                </summary>
+                <div class="section-content">
+                  <p class="micro">
+                    Optional integration-specific fields live here. Unknown keys
+                    are preserved when using the visual form.
+                  </p>
+                  <button class="btn small" data-action="technical">
+                    View JSON
+                  </button>
+                </div>
+              </details>
+              <details class="section danger-section">
+                <summary>
+                  <span class="chevron">⌄</span
+                  ><span class="section-title">Delete connection</span
+                  ><span class="section-summary">Devices stop updating</span>
+                </summary>
+                <div class="section-content">
+                  <button class="btn danger small" data-action="danger">
+                    Delete connection…
+                  </button>
+                </div>
+              </details>
+            </div>
+          </article>
+        </main>
+      </div>
+    </div>
+    <nav class="mobile-nav" aria-label="Mockup views">
+      <button class="active" data-page="scene"><span>◈</span>Scene</button
+      ><button data-page="device"><span>◉</span>Device</button
+      ><button data-page="room"><span>▦</span>Room</button
+      ><button data-page="routine"><span>◇</span>Routine</button
+      ><button data-page="connection"><span>◎</span>Connection</button>
+    </nav>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script>
+      const titles = {
+        scene: "Scenes",
+        device: "Devices",
+        room: "Rooms",
+        routine: "Routines",
+        connection: "Connections",
+      };
+      const toast = document.getElementById("toast");
+      let toastTimer;
+      function announce(message) {
+        toast.textContent = message;
+        toast.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove("show"), 3500);
+      }
+      function showPage(page, updateHash = true) {
+        if (!titles[page]) page = "scene";
+        document
+          .querySelectorAll(".screen")
+          .forEach((el) => el.classList.toggle("active", el.id === page));
+        document
+          .querySelectorAll("[data-page]")
+          .forEach((el) =>
+            el.classList.toggle("active", el.dataset.page === page),
+          );
+        document.getElementById("top-title").textContent = titles[page];
+        // Prefix the hash so it cannot double as an element anchor and scroll
+        // the page past the navigation on a direct load.
+        if (updateHash) history.replaceState(null, "", "#view-" + page);
+        window.scrollTo({ top: 0, behavior: "instant" });
+      }
+      function beginEdit(section) {
+        document
+          .querySelectorAll(".section.editing")
+          .forEach((el) => el.classList.remove("editing"));
+        section.open = true;
+        section.classList.add("editing");
+        section
+          .querySelector(
+            ".edit-pane input, .edit-pane select, .edit-pane button",
+          )
+          ?.focus();
+      }
+      document.addEventListener("click", (event) => {
+        const pageButton = event.target.closest("[data-page]");
+        if (pageButton) {
+          event.preventDefault();
+          showPage(pageButton.dataset.page);
+          return;
+        }
+        const choice = event.target.closest(
+          "[data-choice], [data-device-power]",
+        );
+        if (choice) {
+          const group = choice.parentElement;
+          group
+            .querySelectorAll(".choice")
+            .forEach((el) => el.classList.remove("selected"));
+          choice.classList.add("selected");
+          if (choice.dataset.devicePower)
+            announce(
+              "Mock command: power " +
+                choice.dataset.devicePower.toLowerCase() +
+                ".",
+            );
+          return;
+        }
+        const button = event.target.closest("[data-action]");
+        if (!button) return;
+        event.preventDefault();
+        const action = button.dataset.action;
+        const section = button.closest(".section");
+        if (action === "edit" && section) beginEdit(section);
+        else if ((action === "save" || action === "cancel") && section) {
+          section.classList.remove("editing");
+          section.open = true;
+          section.querySelector('[data-action="edit"]')?.focus();
+          announce(
+            action === "save"
+              ? "Mockup only: this change was not saved."
+              : "Changes discarded in this mockup.",
+          );
+        } else if (action === "open-section") {
+          const target = document.getElementById(button.dataset.target);
+          if (target) {
+            target.open = true;
+            target.scrollIntoView({ behavior: "smooth", block: "start" });
+            target.querySelector("summary")?.focus();
+          }
+        } else if (action === "toggle-picker") {
+          const panel = document.getElementById(button.dataset.target);
+          panel.hidden = !panel.hidden;
+          if (!panel.hidden) panel.querySelector("input")?.focus();
+        } else if (action === "pick-option") {
+          document.getElementById(button.dataset.for).textContent =
+            button.dataset.label;
+          button.closest(".picker-panel").hidden = true;
+          document.getElementById(button.dataset.for).focus();
+        } else if (action === "repair-picker") {
+          document.getElementById("room-picker").hidden = false;
+          document.getElementById("replacement-search").focus();
+        } else if (action === "scene-add-picker") {
+          document.getElementById("scene-picker").hidden = false;
+          document.getElementById("scene-target-search").focus();
+        } else if (action === "pick-scene-target")
+          announce(
+            "Added " +
+              button.childNodes[0].textContent.trim() +
+              " to this mock draft.",
+          );
+        else if (action === "set-brightness")
+          announce(
+            "Mock command: brightness requested. No device command was sent.",
+          );
+        else if (action === "preview")
+          document.getElementById("whatif-result").hidden = false;
+        else if (action === "pick-replacement")
+          announce(
+            "Selected replacement in this mockup. Save devices to review the change.",
+          );
+        else if (action === "activate")
+          announce("Mockup only: no device commands were sent.");
+        else if (action === "back")
+          announce(
+            "This prototype shows detail pages only. Use the view navigation to explore.",
+          );
+        else if (action === "toggle-routine") {
+          button.textContent =
+            button.textContent === "Pause" ? "Resume" : "Pause";
+          announce("Mockup only: routine status was not changed.");
+        } else if (action === "choose-target")
+          announce(
+            "Selected " + button.dataset.targetName + " in the target list.",
+          );
+        else if (action === "search")
+          announce("Use the mockup navigation to switch views.");
+        else if (action === "calibrate")
+          announce("Calibration wizard would open here.");
+        else if (action === "technical")
+          announce("Technical JSON/details would open here.");
+        else if (action === "danger")
+          announce(
+            "A production confirmation would explain the exact impact before proceeding.",
+          );
+        else if (action === "add-picker")
+          announce(
+            "A searchable device, room, or action picker would open here.",
+          );
+        else if (action === "mock-remove")
+          announce("Item marked for removal in this mockup.");
+        else if (action === "mock-choice")
+          announce("Selected for editing in this mockup.");
+      });
+      document.addEventListener("input", (event) => {
+        if (["scene-brightness", "scene-color"].includes(event.target.id)) {
+          const power = document.getElementById("scene-power").value;
+          const brightness = document.getElementById("scene-brightness").value;
+          const color = document.getElementById("scene-color").value;
+          document.getElementById("scene-draft-text").textContent =
+            "Living room lamp · " + power + " · " + brightness + "% · " + color;
+          document.getElementById("scene-draft-swatch").style.background =
+            color;
+        }
+        if (
+          !["replacement-search", "scene-target-search"].includes(
+            event.target.id,
+          ) &&
+          !event.target.matches("[data-filter-results]")
+        )
+          return;
+        const query = event.target.value.trim().toLowerCase();
+        const picker = event.target.closest(
+          "#room-picker, #scene-picker, .picker-panel",
+        );
+        picker.querySelectorAll(".search-result").forEach((result) => {
+          result.hidden = !result.textContent.toLowerCase().includes(query);
+        });
+      });
+      document.getElementById("scene-power").addEventListener("change", () => {
+        document
+          .getElementById("scene-brightness")
+          .dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      const hashPage = () =>
+        location.hash.replace(/^#view-/, "").replace(/^#/, "");
+      window.addEventListener("hashchange", () => showPage(hashPage(), false));
+      showPage(hashPage(), false);
+    </script>
+  </body>
+</html>
