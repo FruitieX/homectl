@@ -26,6 +26,9 @@ const ConfigImportExportPage = lazy(
 const ConfigIntegrationsPage = lazy(
   () => import('../app/config/integrations/page'),
 );
+const ConfigIntegrationDetailPage = lazy(
+  () => import('../app/config/integrations/detail'),
+);
 const ConfigLogsPage = lazy(() => import('../app/config/logs/page'));
 const ConfigMigrationPage = lazy(() => import('../app/config/migration/page'));
 const ConfigDiagnosticsPage = lazy(
@@ -153,7 +156,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'integrations/:id',
-            element: withSuspense(<ConfigIntegrationsPage />),
+            element: withSuspense(<ConfigIntegrationDetailPage />),
           },
           {
             path: 'diagnostics',

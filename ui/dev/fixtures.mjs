@@ -558,6 +558,9 @@ function normalHome() {
         integration('mqtt', 'mqtt', {
           host: 'mqtt.example.test',
           port: 1883,
+          mode: 'generic',
+          // Masked exactly as the server sends it: the page must preserve it.
+          password: '••••••••',
           managed: 'Unmanaged',
           topic: 'home/devices/{id}',
           topic_set: 'home/devices/{id}/set',

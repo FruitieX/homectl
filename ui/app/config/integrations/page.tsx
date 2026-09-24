@@ -41,7 +41,7 @@ import { Textarea } from '@/ui/primitives/textarea';
 import { selectClassNameLarge as selectClassName } from '@/ui/form-styles';
 import { checkboxClassName } from '@/ui/form-styles';
 
-const fallbackPluginOptions = [
+export const fallbackPluginOptions = [
   'mqtt',
   'circadian',
   'cron',
@@ -49,9 +49,9 @@ const fallbackPluginOptions = [
   'dummy',
   'random',
 ];
-const enabledBadgeClassName =
+export const enabledBadgeClassName =
   'border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300';
-const disabledBadgeClassName =
+export const disabledBadgeClassName =
   'border-transparent bg-destructive/15 text-destructive dark:text-red-300';
 const outboundMinIntervalPath = 'outbound_device_updates.min_interval_ms';
 const unsetSelectValue = '__unset__';
@@ -60,7 +60,10 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function getConfigPathValue(config: Record<string, unknown>, path: string) {
+export function getConfigPathValue(
+  config: Record<string, unknown>,
+  path: string,
+) {
   let current: unknown = config;
 
   for (const segment of path.split('.')) {
@@ -74,7 +77,7 @@ function getConfigPathValue(config: Record<string, unknown>, path: string) {
   return current;
 }
 
-function configFieldIsVisible(
+export function configFieldIsVisible(
   config: Record<string, unknown>,
   field: IntegrationConfigFieldSchema,
 ) {
@@ -106,7 +109,7 @@ function fieldPlaceholder(field: IntegrationConfigFieldSchema) {
   return undefined;
 }
 
-function initialIntegrationConfig(
+export function initialIntegrationConfig(
   plugin: string,
   config: Record<string, unknown>,
 ) {
@@ -591,12 +594,8 @@ export default function IntegrationsPage() {
     loading: schemasLoading,
     error: schemasError,
   } = useIntegrationConfigSchemas();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [missingRouteId, setMissingRouteId] = useState<string | null>(null);
-  const { id: routeId } = useParams();
-  const navigate = useNavigate();
-  const appliedRouteIdRef = useRef<string | null>(null);
   const [search, setSearch] = useSearchParamState();
+  const navigate = useNavigate();
   const [showCreate, setShowCreate] = useState(false);
   useCreateDeepLink(useCallback(() => setShowCreate(true), []));
   const [createPlugin, setCreatePlugin] = useState<string | null>(null);
@@ -644,45 +643,10 @@ export default function IntegrationsPage() {
     }
     return map;
   }, [devices]);
-  const editingIntegration = integrations.find(
-    (integration) => integration.id === editingId,
-  );
   const visibleIntegrations = integrations.filter((integration) =>
     matchesConfigSearch(search, ...getIntegrationSearchValues(integration)),
   );
-  useAssistantPageContext(
-    editingIntegration
-      ? {
-          kind: 'integration',
-          id: editingIntegration.id,
-          label: editingIntegration.id,
-        }
-      : { kind: 'integration' },
-  );
-
-  // Deep link: /config/integrations/<id> opens that connection's editor once
-  // the list has loaded, and a stale link says so instead of silently showing
-  // the list.
-  useEffect(() => {
-    if (!routeId) {
-      appliedRouteIdRef.current = null;
-      setMissingRouteId(null);
-      return;
-    }
-    if (loading) {
-      return;
-    }
-    if (appliedRouteIdRef.current === routeId) {
-      return;
-    }
-    if (integrations.some((integration) => integration.id === routeId)) {
-      appliedRouteIdRef.current = routeId;
-      setMissingRouteId(null);
-      setEditingId(routeId);
-      return;
-    }
-    setMissingRouteId(routeId);
-  }, [integrations, loading, routeId]);
+  useAssistantPageContext({ kind: 'integration' });
 
   if (loading || schemasLoading) {
     return (
@@ -721,20 +685,6 @@ export default function IntegrationsPage() {
           </Button>
         }
       />
-
-      {missingRouteId ? (
-        <Alert variant="destructive">
-          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-            <span>
-              No connection is called “{missingRouteId}”; it may have been
-              renamed or deleted.
-            </span>
-            <Button asChild size="sm" variant="outline">
-              <Link to="/config/integrations">Back to connections</Link>
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
 
       {integrations.length === 0 ? (
         <IntegrationGettingStarted
@@ -785,7 +735,6 @@ export default function IntegrationsPage() {
 
       {showCreate && (
         <IntegrationOverlay
-          mode="create"
           initialPlugin={createPlugin ?? undefined}
           schemas={integrationSchemas}
           schemasError={schemasError}
@@ -797,42 +746,6 @@ export default function IntegrationsPage() {
             await create(integration);
             setShowCreate(false);
             setCreatePlugin(null);
-          }}
-        />
-      )}
-
-      {editingIntegration && (
-        <IntegrationOverlay
-          mode="edit"
-          integration={editingIntegration}
-          schemas={integrationSchemas}
-          schemasError={schemasError}
-          onClose={() => {
-            setEditingId(null);
-            if (routeId) {
-              void navigate('/config/integrations', { replace: true });
-            }
-          }}
-          onSubmit={async (integration) => {
-            await update(editingIntegration.id, integration);
-            setEditingId(null);
-            if (routeId) {
-              void navigate('/config/integrations', { replace: true });
-            }
-          }}
-          onDelete={async () => {
-            if (
-              await confirmDestructive(
-                `Delete integration "${editingIntegration.id}"?`,
-                'Devices and routines that depend on it will stop updating until it is recreated.',
-              )
-            ) {
-              await remove(editingIntegration.id);
-              setEditingId(null);
-              if (routeId) {
-                void navigate('/config/integrations', { replace: true });
-              }
-            }
           }}
         />
       )}
@@ -924,7 +837,7 @@ function IntegrationCard({
   );
 }
 
-function describeLastReport(observedAtMs?: number): string {
+export function describeLastReport(observedAtMs?: number): string {
   if (!observedAtMs) return '';
   const minutes = Math.max(0, Math.round((Date.now() - observedAtMs) / 60000));
   if (minutes < 1) return ' (last report just now)';
@@ -934,7 +847,7 @@ function describeLastReport(observedAtMs?: number): string {
   return ` (last report ${Math.round(hours / 24)} d ago)`;
 }
 
-function IntegrationConfigFieldsEditor({
+export function IntegrationConfigFieldsEditor({
   schema,
   schemaError,
   config,
@@ -1026,7 +939,7 @@ function IntegrationConfigFieldsEditor({
   );
 }
 
-function SchemaConfigField({
+export function SchemaConfigField({
   field,
   config,
   validationError,
@@ -1672,7 +1585,7 @@ function parseJsonText(text: string): JsonParseResult {
   return { ok: true, value };
 }
 
-function parseConfigJsonText(text: string) {
+export function parseConfigJsonText(text: string) {
   const parsed = parseJsonText(text);
 
   if (!parsed.ok || !isJsonObject(parsed.value)) {
@@ -1711,7 +1624,7 @@ function requiredFieldMissing(
   return false;
 }
 
-function missingRequiredFieldLabels(
+export function missingRequiredFieldLabels(
   schema: IntegrationConfigSchema | undefined,
   config: Record<string, unknown> | undefined,
 ) {
@@ -1724,7 +1637,7 @@ function missingRequiredFieldLabels(
     .map((field) => field.label);
 }
 
-function mqttProfileValidationError(config: Record<string, unknown>) {
+export function mqttProfileValidationError(config: Record<string, unknown>) {
   const mode = config.mode;
   if (mode !== 'esphome') {
     return null;
@@ -1769,7 +1682,7 @@ function mqttProfileValidationError(config: Record<string, unknown>) {
   return null;
 }
 
-function mqttProfileFieldError(
+export function mqttProfileFieldError(
   config: Record<string, unknown>,
   fieldKey: string,
 ) {
@@ -1828,41 +1741,26 @@ function mqttProfileFieldError(
 }
 
 function IntegrationOverlay({
-  mode,
-  integration,
   initialPlugin,
   schemas,
   schemasError,
   onClose,
   onSubmit,
-  onDelete,
 }: {
-  mode: 'create' | 'edit';
-  integration?: Integration;
   initialPlugin?: string;
   schemas: IntegrationConfigSchema[];
   schemasError: string | null;
   onClose: () => void;
   onSubmit: (integration: Partial<Integration>) => Promise<void>;
-  /** Only used in edit mode: delete lives here, not on the list. */
-  onDelete?: () => void;
 }) {
-  const [id, setId] = useState(integration?.id ?? '');
-  const [plugin, setPlugin] = useState(
-    integration?.plugin ?? initialPlugin ?? '',
-  );
+  const [id, setId] = useState('');
+  const [plugin, setPlugin] = useState(initialPlugin ?? '');
   const [config, setConfig] = useState<Record<string, unknown>>(
-    initialIntegrationConfig(
-      integration?.plugin ?? initialPlugin ?? '',
-      integration?.config ?? {},
-    ),
+    initialIntegrationConfig(initialPlugin ?? '', {}),
   );
-  const [enabled, setEnabled] = useState(integration?.enabled ?? true);
+  const [enabled, setEnabled] = useState(true);
   const [editTab, setEditTab] = useState<'settings' | 'json'>('settings');
-  const [jsonText, setJsonText] = useState(
-    JSON.stringify(integration?.config ?? {}, null, 2),
-  );
-  const isCreate = mode === 'create';
+  const [jsonText, setJsonText] = useState('{}');
   const selectedSchema = schemas.find((schema) => schema.plugin === plugin);
   const pluginOptions =
     schemas.length > 0
@@ -1962,23 +1860,15 @@ function IntegrationOverlay({
           onClose();
         }
       }}
-      title={
-        isCreate ? 'Add connection or service' : `Edit ${integration?.id ?? id}`
-      }
-      description={
-        isCreate
-          ? 'Choose a type, then enter the details needed to connect it.'
-          : 'Review its configuration and change how this connection works.'
-      }
+      title="Add connection or service"
+      description="Choose a type, then enter the details needed to connect it."
       presentation="fullscreen"
       className="max-w-2xl"
     >
       <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
         <div className="space-y-3 pb-3">
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-medium">
-              {integration?.plugin ?? (plugin || 'No type chosen')}
-            </span>
+            <span className="font-medium">{plugin || 'No type chosen'}</span>
             <Badge
               className={
                 enabled ? enabledBadgeClassName : disabledBadgeClassName
@@ -1994,19 +1884,6 @@ function IntegrationOverlay({
               </span>
             ) : null}
           </div>
-          {!isCreate ? (
-            <Alert>
-              <AlertDescription>
-                {schemasError
-                  ? `Next step: reload this page. The plugin schema could not be loaded (${schemasError}), so the fields below may be incomplete.`
-                  : missingFields.length > 0
-                    ? `Next step: fill in ${missingFields[0]}${missingFields.length > 1 ? ` and ${missingFields.length - 1} more field${missingFields.length === 2 ? '' : 's'}` : ''}, then save.`
-                    : profileValidationError
-                      ? `Next step: ${profileValidationError}`
-                      : 'All required fields are present. Saving applies the configuration to the running connection.'}
-              </AlertDescription>
-            </Alert>
-          ) : null}
         </div>
 
         <Tabs value={editTab} onValueChange={changeTab}>
@@ -2021,51 +1898,38 @@ function IntegrationOverlay({
               title="Connection details"
               description="Choose a type and give this connection a unique id. The id stays fixed after creation so linked devices and automations keep working."
             >
-              {isCreate ? (
-                <>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <ConfigField label="Connection ID">
-                      <Input
-                        value={id}
-                        onChange={(event) => setId(event.target.value)}
-                        placeholder="e.g. my-mqtt"
-                      />
-                    </ConfigField>
+              <>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <ConfigField label="Connection ID">
+                    <Input
+                      value={id}
+                      onChange={(event) => setId(event.target.value)}
+                      placeholder="e.g. my-mqtt"
+                    />
+                  </ConfigField>
 
-                    <ConfigField label="Type">
-                      <SearchablePicker
-                        options={pluginOptions.map((option) => ({
-                          value: option,
-                          label: option,
-                        }))}
-                        value={plugin}
-                        onChange={selectPlugin}
-                        placeholder="Select connection type…"
-                      />
-                    </ConfigField>
-                  </div>
-                  <IntegrationGettingStarted
-                    schemas={schemas}
-                    onSelectPlugin={(nextPlugin) => {
-                      selectPlugin(nextPlugin);
-                      if (!id) {
-                        setId(nextPlugin);
-                      }
-                    }}
-                  />
-                </>
-              ) : (
-                <ConfigReadOnlyGrid>
-                  <ConfigReadOnlyItem
-                    label="Connection ID"
-                    value={integration?.id}
-                  />
-                  <ConfigReadOnlyItem
-                    label="Plugin"
-                    value={integration?.plugin}
-                  />
-                </ConfigReadOnlyGrid>
-              )}
+                  <ConfigField label="Type">
+                    <SearchablePicker
+                      options={pluginOptions.map((option) => ({
+                        value: option,
+                        label: option,
+                      }))}
+                      value={plugin}
+                      onChange={selectPlugin}
+                      placeholder="Select connection type…"
+                    />
+                  </ConfigField>
+                </div>
+                <IntegrationGettingStarted
+                  schemas={schemas}
+                  onSelectPlugin={(nextPlugin) => {
+                    selectPlugin(nextPlugin);
+                    if (!id) {
+                      setId(nextPlugin);
+                    }
+                  }}
+                />
+              </>
 
               <ConfigToggleRow
                 label="Enabled"
@@ -2116,31 +1980,12 @@ function IntegrationOverlay({
           </TabsContent>
         </Tabs>
 
-        {mode === 'edit' && onDelete ? (
-          <section className="mt-6 space-y-2 rounded-2xl border border-destructive/40 p-4">
-            <h3 className="text-sm font-semibold">Danger zone</h3>
-            <p className="text-xs text-muted-foreground">
-              Deleting this connection stops its devices from updating. Devices
-              and routines that depend on it keep their saved settings until you
-              point them somewhere else.
-            </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={onDelete}
-            >
-              Delete this connection
-            </Button>
-          </section>
-        ) : null}
-
         <ConfigFormActions>
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
           <Button disabled={!canSubmit} onClick={submit}>
-            {isCreate ? 'Create' : 'Save'}
+            Create
           </Button>
         </ConfigFormActions>
       </div>

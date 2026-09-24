@@ -172,7 +172,137 @@ function buildDiagnostics() {
 }
 
 /** config endpoint name -> array in db.config (or a special key) */
+/**
+ * The MQTT plugin's field metadata, mirroring
+ * `server/src/core/integrations/mod.rs::integration_config_schema`. The fixture
+ * has to carry it: without a schema a connection detail page cannot show
+ * Primary settings, optional groups, or a masked secret, and the review would
+ * be of an empty page rather than of the real one.
+ */
+function buildIntegrationSchemas() {
+  const field = (overrides) => ({
+    key: '',
+    label: '',
+    kind: 'text',
+    required: false,
+    description: null,
+    placeholder: null,
+    options: undefined,
+    default_value: null,
+    min: null,
+    max: null,
+    step: null,
+    help_text: null,
+    section: null,
+    advanced: false,
+    visible_when: null,
+    ...overrides,
+  });
+  return [
+    {
+      plugin: 'mqtt',
+      name: 'MQTT',
+      description:
+        'Connect generic MQTT devices, Zigbee2MQTT bridges, or ESPHome MQTT JSON lights.',
+      fields: [
+        field({
+          key: 'host',
+          label: 'Host',
+          kind: 'text',
+          required: true,
+          description: 'MQTT broker hostname or IP address.',
+          placeholder: 'mqtt.example.org',
+          section: 'Connection',
+        }),
+        field({
+          key: 'port',
+          label: 'Port',
+          kind: 'number',
+          required: true,
+          description: 'MQTT broker port.',
+          placeholder: '1883',
+          min: 1,
+          max: 65535,
+          step: 1,
+          section: 'Connection',
+        }),
+        field({
+          key: 'username',
+          label: 'Username',
+          kind: 'text',
+          description: 'Optional MQTT username.',
+          placeholder: 'homeassistant',
+          section: 'Connection',
+        }),
+        field({
+          key: 'password',
+          label: 'Password',
+          kind: 'password',
+          description: 'Optional MQTT password.',
+          section: 'Connection',
+        }),
+        field({
+          key: 'mode',
+          label: 'Mode',
+          kind: 'select',
+          required: true,
+          description:
+            'Generic MQTT: custom topics and payload mappings. Zigbee2MQTT: discover devices and capabilities from bridge metadata.',
+          default_value: 'generic',
+          section: 'Mode',
+          options: [
+            {
+              label: 'Generic MQTT',
+              value: 'generic',
+              description: 'Custom MQTT topics and payload mappings.',
+            },
+            {
+              label: 'Zigbee2MQTT',
+              value: 'zigbee2mqtt',
+              description:
+                'Discover devices and capabilities from Zigbee2MQTT bridge metadata.',
+            },
+          ],
+        }),
+        field({
+          key: 'topic',
+          label: 'State topic',
+          kind: 'text',
+          required: true,
+          description:
+            'Topic to subscribe to for device state messages.',
+          placeholder: 'home/+/example/{id}',
+          section: 'Topics',
+          help_text:
+            'Use `{id}` where the device id appears in the MQTT topic. `+` and `#` are supported subscription wildcards.',
+          visible_when: { key: 'mode', equals: 'generic' },
+        }),
+        field({
+          key: 'topic_set',
+          label: 'Command topic',
+          kind: 'text',
+          required: true,
+          description: 'Topic used when publishing device state commands.',
+          placeholder: 'home/lights/example/{id}/set',
+          section: 'Topics',
+          visible_when: { key: 'mode', equals: 'generic' },
+        }),
+        field({
+          key: 'zigbee2mqtt_base_topic',
+          label: 'Base topic',
+          kind: 'text',
+          description: 'Zigbee2MQTT bridge base topic.',
+          placeholder: 'zigbee2mqtt',
+          section: 'Zigbee2MQTT',
+          visible_when: { key: 'mode', equals: 'zigbee2mqtt' },
+        }),
+      ],
+    },
+  ];
+}
+
 const SPECIAL_GET = {
+  'integration-schemas': () => buildIntegrationSchemas(),
   'runtime-status': () => db.runtimeStatus,
   'routine-history': () => db.routineHistory,
   logs: () => db.logs,
