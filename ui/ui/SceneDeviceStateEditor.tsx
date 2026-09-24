@@ -65,7 +65,10 @@ interface DeviceStateEditorProps {
   onChange: (config: SceneDeviceState) => void;
 }
 
-export function DeviceStateEditor({ config, onChange }: DeviceStateEditorProps) {
+export function DeviceStateEditor({
+  config,
+  onChange,
+}: DeviceStateEditorProps) {
   return (
     <div className="space-y-3">
       {/* Power */}
@@ -321,9 +324,16 @@ export function SceneTargetConfigEditor({
     >
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-2">
-          <div>
+          <div className="min-w-0">
             <h4 className="font-semibold">{targetLabel ?? targetKey}</h4>
-            <p className="text-xs text-muted-foreground">{targetKey}</p>
+            {/* One line: what this target does right now, so the fields below
+                stay closed until someone wants to change them. */}
+            <p className="text-xs text-muted-foreground">
+              {summarizeTarget(config)}
+              {targetLabel && targetLabel !== targetKey ? (
+                <span className="ml-2 font-mono">{targetKey}</span>
+              ) : null}
+            </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {position !== undefined && targetCount !== undefined && (
@@ -366,55 +376,84 @@ export function SceneTargetConfigEditor({
           </div>
         </div>
 
-        <div className={cn(fieldClassName, 'mt-2')}>
-          <label>
-            <span className={fieldLabelClassName}>Config Type</span>
-          </label>
-          <select
-            className={selectClassName}
-            value={configType}
-            onChange={(e) =>
-              handleTypeChange(
-                e.target.value as 'device_state' | 'device_link' | 'scene_link',
-              )
-            }
-          >
-            <option value="device_state">Device State</option>
-            <option value="device_link">Link to Device</option>
-            <option value="scene_link">Link to Scene</option>
-          </select>
-        </div>
+        <details className="mt-2" open={focused}>
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+            Edit target
+          </summary>
+          <div className={cn(fieldClassName, 'mt-3')}>
+            <label>
+              <span className={fieldLabelClassName}>Config Type</span>
+            </label>
+            <select
+              className={selectClassName}
+              value={configType}
+              onChange={(e) =>
+                handleTypeChange(
+                  e.target.value as
+                    'device_state' | 'device_link' | 'scene_link',
+                )
+              }
+            >
+              <option value="device_state">Device State</option>
+              <option value="device_link">Link to Device</option>
+              <option value="scene_link">Link to Scene</option>
+            </select>
+          </div>
 
-        <div className="my-2 h-px bg-border" />
+          <div className="my-2 h-px bg-border" />
 
-        <SceneResolvedColorPreview
-          config={config}
-          devices={devices}
-          scenes={allScenes}
-          targetKey={targetKey}
-          targetKind={targetKind}
-        />
-
-        {isDeviceState(config) && (
-          <DeviceStateEditor config={config} onChange={onChange} />
-        )}
-        {isDeviceLink(config) && (
-          <DeviceLinkEditor
+          <SceneResolvedColorPreview
             config={config}
             devices={devices}
-            onChange={onChange}
+            scenes={allScenes}
+            targetKey={targetKey}
+            targetKind={targetKind}
           />
-        )}
-        {isSceneLink(config) && (
-          <SceneLinkEditor
-            config={config}
-            scenes={scenes}
-            onChange={onChange}
-          />
-        )}
+
+          {isDeviceState(config) && (
+            <DeviceStateEditor config={config} onChange={onChange} />
+          )}
+          {isDeviceLink(config) && (
+            <DeviceLinkEditor
+              config={config}
+              devices={devices}
+              onChange={onChange}
+            />
+          )}
+          {isSceneLink(config) && (
+            <SceneLinkEditor
+              config={config}
+              scenes={scenes}
+              onChange={onChange}
+            />
+          )}
+        </details>
       </CardContent>
     </Card>
   );
+}
+
+/** A short, plain description of what this target currently does. */
+function summarizeTarget(config: SceneDeviceConfig): string {
+  if (isDeviceState(config)) {
+    const parts: string[] = [config.power === false ? 'Off' : 'On'];
+    if (config.brightness !== undefined) {
+      parts.push(`${Math.round(config.brightness * 100)}%`);
+    }
+    return parts.join(' · ');
+  }
+  if (isDeviceLink(config)) {
+    const target = [config.integration_id, config.device_id]
+      .filter(Boolean)
+      .join('/');
+    return target ? `Follows ${target}` : 'Follows a device (not chosen yet)';
+  }
+  if (isSceneLink(config)) {
+    return config.scene_id
+      ? `Follows scene ${config.scene_id}`
+      : 'Follows a scene (not chosen yet)';
+  }
+  return 'Not configured yet';
 }
 
 export interface SceneTargetOption {

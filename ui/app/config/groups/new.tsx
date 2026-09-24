@@ -140,7 +140,7 @@ export default function NewGroupPage() {
           </button>
           {showAllInList ? (
             <div className="space-y-5 border-t border-border/70 p-4">
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <p className="text-xs font-medium text-muted-foreground">
                   Devices
                 </p>
@@ -164,7 +164,7 @@ export default function NewGroupPage() {
                   }
                 />
               </div>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <p className="text-xs font-medium text-muted-foreground">
                   Linked rooms
                 </p>

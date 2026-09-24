@@ -210,7 +210,7 @@ export default function DiagnosticsPage() {
               }
             />
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {visible.map((issue) => (
                 <Issue key={issue.id} issue={issue} />
               ))}

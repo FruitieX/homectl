@@ -936,7 +936,7 @@ export default function RoutineDetailPage() {
         onOpenChange={(open) => openSection(open ? 'danger' : null)}
         api={details}
         readView={
-          <div className="space-y-3">
+          <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Deleting removes its triggers, conditions, and program
               {isV2 ? '.' : ', and its legacy rules and actions with them.'}

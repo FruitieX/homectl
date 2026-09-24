@@ -415,7 +415,7 @@ export default function SceneDetailPage() {
   ) => {
     const entries = orderedSceneTargets(items, order);
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         {entries.map(([key, config], index) => {
           const label =
             kind === 'device'

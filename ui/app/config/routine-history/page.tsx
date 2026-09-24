@@ -638,7 +638,7 @@ export default function RoutineHistoryPage() {
               }
             />
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {visibleHistory.map((entry) => {
                 const errorCount = countEntryErrors(entry);
                 const v2 = entry.v2;

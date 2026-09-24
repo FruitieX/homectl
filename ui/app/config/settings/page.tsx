@@ -537,7 +537,7 @@ function AppearanceSettingsCard() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="grid grid-cols-3 gap-2 rounded-2xl bg-muted p-1">
             {themeOptions.map((option) => (
               <Button

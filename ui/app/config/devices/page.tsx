@@ -1659,7 +1659,7 @@ export default function DevicesPage() {
                       description="Current information from its connection. Values may lag behind a physical change."
                     >
                       {'Controllable' in device.data ? (
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                           <DeviceFactRow
                             label="Active scene"
                             value={getSceneLabel(activeSceneId, sceneNameById)}
@@ -1692,7 +1692,7 @@ export default function DevicesPage() {
                           )}
                         </div>
                       ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                           <DeviceFactRow
                             label="Current value"
                             value={runtimeSummary}
@@ -1735,7 +1735,7 @@ export default function DevicesPage() {
                       title="Identity"
                       description="Static ids, display names, capabilities, and config group membership."
                     >
-                      <div className="space-y-3">
+                      <div className="space-y-4">
                         <DeviceFactRow
                           label="Default label"
                           value={entry.defaultLabel}

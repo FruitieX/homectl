@@ -59,7 +59,7 @@ export function AssistantDraftPanel({
           : 'Describe the automation and review the draft below. Nothing is saved automatically.'
       }
     >
-      <div className="space-y-3">
+      <div className="space-y-4">
         <Textarea
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}

@@ -225,7 +225,7 @@ export default function LogsPage() {
           }
         />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {visibleLogs.map((entry, index) => (
             <Card key={`${entry.timestamp}-${entry.target}-${index}`}>
               <CardHeader className="gap-2">

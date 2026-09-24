@@ -402,7 +402,7 @@ function ManageRoutinesDialog({
       title="Manage routines"
       description="Pick routines and apply one change to all of them."
     >
-      <div className="space-y-3">
+      <div className="space-y-4">
         <Input
           aria-label="Filter routines"
           placeholder="Filter routines"
