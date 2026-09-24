@@ -6,6 +6,7 @@ import type { RawRuleOperator } from '@/bindings/RawRuleOperator';
 import type { ValueSource } from '@/bindings/ValueSource';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
 import { useSources } from '@/hooks/useConfig';
+import { getDeviceDisplayLabelFromKey } from '@/lib/deviceLabel';
 import { selectClassName } from '@/ui/builder-fields';
 import {
   DeviceSelect,
@@ -430,6 +431,15 @@ export function ConditionEditor({
   depth?: number;
 }) {
   const [newChildKind, setNewChildKind] = useState<ConditionKind>('comparison');
+  // One nested clause is open for editing at a time; the others stay sentences.
+  const [openChildIndex, setOpenChildIndex] = useState<number | null>(null);
+  const resolveDeviceLabel = (ref: {
+    integration_id: string;
+    device_id: string;
+  }) => {
+    const key = `${ref.integration_id}/${ref.device_id}`;
+    return getDeviceDisplayLabelFromKey(key, devices[key]?.name ?? key, {});
+  };
 
   const kindSelect = (
     <select
@@ -452,43 +462,72 @@ export function ConditionEditor({
     update: (next: ConditionExpr[]) => void,
   ) => (
     <div className="space-y-3">
-      {children.map((child, index) => (
-        <div key={index} className="flex items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <ConditionEditor
-              condition={child}
-              onChange={(next) =>
-                update(
-                  children.map((candidate, candidateIndex) =>
-                    candidateIndex === index ? next : candidate,
-                  ),
-                )
-              }
-              devices={devices}
-              groups={groups}
-              scenes={scenes}
-              helpers={helpers}
-              depth={depth + 1}
-            />
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            aria-label="Remove condition"
-            onClick={() =>
-              update(
-                children.filter(
-                  (_, candidateIndex) => candidateIndex !== index,
-                ),
-              )
-            }
+      {children.map((child, index) => {
+        const open = openChildIndex === index;
+        return (
+          <div
+            key={index}
+            className="flex items-start gap-2 rounded-xl border border-border/70 p-2"
           >
-            ✕
-          </Button>
-        </div>
-      ))}
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <span className="min-w-0 flex-1 text-sm">
+                  {describeCondition(child, resolveDeviceLabel)}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-expanded={open}
+                    onClick={() => setOpenChildIndex(open ? null : index)}
+                  >
+                    {open ? 'Close' : 'Edit'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    aria-label="Remove condition"
+                    onClick={() => {
+                      if (openChildIndex === index) {
+                        setOpenChildIndex(null);
+                      }
+                      update(
+                        children.filter(
+                          (_, candidateIndex) => candidateIndex !== index,
+                        ),
+                      );
+                    }}
+                  >
+                    ✕
+                  </Button>
+                </span>
+              </div>
+              {open ? (
+                <div className="border-t border-border pt-2">
+                  <ConditionEditor
+                    condition={child}
+                    onChange={(next) =>
+                      update(
+                        children.map((candidate, candidateIndex) =>
+                          candidateIndex === index ? next : candidate,
+                        ),
+                      )
+                    }
+                    devices={devices}
+                    groups={groups}
+                    scenes={scenes}
+                    helpers={helpers}
+                    depth={depth + 1}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
       {children.length === 0 ? (
         <p className="text-xs text-destructive">
           Add at least one condition; the server rejects an empty group.
@@ -512,7 +551,10 @@ export function ConditionEditor({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => update([...children, defaultCondition(newChildKind)])}
+          onClick={() => {
+            setOpenChildIndex(children.length);
+            update([...children, defaultCondition(newChildKind)]);
+          }}
         >
           Add condition
         </Button>

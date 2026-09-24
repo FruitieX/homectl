@@ -32,6 +32,13 @@ const devicesAtom = atom<DevicesState | null>(null);
 const scenesAtom = atom<FlattenedScenesConfig | null>(null);
 const groupsAtom = atom<FlattenedGroupsConfig | null>(null);
 const routineStatusesStateAtom = atom<RoutineStatuses | null>(null);
+/**
+ * When the displayed routine statuses last arrived over the socket. The socket
+ * does not carry an evaluation timestamp, so the routine detail page reports
+ * freshness as "received N ago" instead of implying the evaluation itself is
+ * that recent.
+ */
+const routineStatusesReceivedAtAtomLocal = atom<number | null>(null);
 const timersStateAtom = atom<TimerRuntimeStatus[] | null>(null);
 const helperStatusesStateAtom = atom<HelperRuntimeStatus[] | null>(null);
 const websocketUiStateAtom = atom<UiState | null>(null);
@@ -72,10 +79,7 @@ const websocketStateAtom = atom<StateUpdate | null>((get) => {
 });
 const websocketAtom = atom<WebSocket | null>(null);
 export type ConnectionStatus =
-  | 'connecting'
-  | 'connected'
-  | 'reconnecting'
-  | 'disconnected';
+  'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 const connectionStatusAtom = atom<ConnectionStatus>('connecting');
 
 function applyDevicesPatch(
@@ -105,6 +109,9 @@ export const useProvideWebsocketState = () => {
   const setScenes = useSetAtom(scenesAtom);
   const setGroups = useSetAtom(groupsAtom);
   const setRoutineStatuses = useSetAtom(routineStatusesStateAtom);
+  const setRoutineStatusesReceivedAt = useSetAtom(
+    routineStatusesReceivedAtAtomLocal,
+  );
   const setTimers = useSetAtom(timersStateAtom);
   const setHelperStatuses = useSetAtom(helperStatusesStateAtom);
   const setUiState = useSetAtom(websocketUiStateAtom);
@@ -258,6 +265,7 @@ export const useProvideWebsocketState = () => {
           setScenes(msg.State.scenes);
           setGroups(msg.State.groups);
           setRoutineStatuses(msg.State.routine_statuses);
+          setRoutineStatusesReceivedAt(Date.now());
           setTimers(msg.State.timers);
           setHelperStatuses(msg.State.helper_statuses);
           setUiState(msg.State.ui_state);
@@ -289,6 +297,7 @@ export const useProvideWebsocketState = () => {
             setGroups(patch.groups);
           }
           if (patch.routine_statuses) {
+            setRoutineStatusesReceivedAt(Date.now());
             const { upserted, removed } = patch.routine_statuses;
             setRoutineStatuses((current) => {
               const next: RoutineStatuses = { ...(current ?? {}) };
@@ -356,6 +365,7 @@ export const useProvideWebsocketState = () => {
     setDevices,
     setGroups,
     setRoutineStatuses,
+    setRoutineStatusesReceivedAt,
     setScenes,
     setTimers,
     setHelperStatuses,
@@ -495,6 +505,11 @@ export const useUiState = <T>(key: string): T | undefined => {
 export const useRoutineStatuses = (): RoutineStatuses | undefined => {
   return useAtomValue(routineStatusesAtom) ?? undefined;
 };
+
+export const routineStatusesReceivedAtAtom = routineStatusesReceivedAtAtomLocal;
+
+export const useRoutineStatusesReceivedAt = (): number | null =>
+  useAtomValue(routineStatusesReceivedAtAtomLocal);
 
 export const timersAtom = timersStateAtom;
 

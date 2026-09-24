@@ -143,6 +143,16 @@ function v2Routine(
   };
 }
 
+/** A scene activation step in the real native-action shape. */
+function sceneStep(sceneId, groupKeys) {
+  return {
+    action: 'activate_scene',
+    scene_id: sceneId,
+    targets: { groups: groupKeys },
+    use_scene_transition: true,
+  };
+}
+
 function v1Routine(id, name, { rules, actions, enabled = true }) {
   return {
     id,
@@ -362,13 +372,7 @@ function normalHome() {
             kind: 'all',
             conditions: [{ kind: 'literal', value: true }],
           },
-          steps: [
-            {
-              kind: 'activate_scene',
-              scene_id: 'dark',
-              group_keys: ['bedroom'],
-            },
-          ],
+          steps: [sceneStep('dark', ['bedroom'])],
         }),
         v2Routine('motion_on', 'Living room motion on', {
           triggers: [
@@ -405,13 +409,7 @@ function normalHome() {
               },
             ],
           },
-          steps: [
-            {
-              kind: 'activate_scene',
-              scene_id: 'normal',
-              group_keys: ['living_room'],
-            },
-          ],
+          steps: [sceneStep('normal', ['living_room'])],
         }),
         v2Routine('entryway_nightlight', 'Entryway nightlight', {
           triggers: [
@@ -440,13 +438,7 @@ function normalHome() {
               },
             ],
           },
-          steps: [
-            {
-              kind: 'activate_scene',
-              scene_id: 'dark',
-              group_keys: ['hallway'],
-            },
-          ],
+          steps: [sceneStep('dark', ['hallway'])],
         }),
         v1Routine('legacy_hallway', 'Hallway motion (legacy)', {
           rules: [
@@ -507,16 +499,8 @@ function normalHome() {
             ],
           },
           steps: [
-            {
-              kind: 'activate_scene',
-              scene_id: 'normal',
-              group_keys: ['kitchen'],
-            },
-            {
-              kind: 'activate_scene',
-              scene_id: 'normal',
-              group_keys: ['living_room'],
-            },
+            sceneStep('normal', ['kitchen']),
+            sceneStep('normal', ['living_room']),
           ],
         }),
       ],
@@ -768,16 +752,15 @@ function largeHome() {
     ],
   };
   const manySteps = [
-    { kind: 'activate_scene', scene_id: 'normal', group_keys: ['living_room'] },
-    { kind: 'activate_scene', scene_id: 'dark', group_keys: ['bedroom'] },
-    { kind: 'set_helper_value', helper_id: 'entryway_cooldown', value: true },
-    { kind: 'delay', seconds: 30 },
-    { kind: 'activate_scene', scene_id: 'night', group_keys: ['kitchen'] },
-    { kind: 'activate_scene', scene_id: 'movie', group_keys: ['living_room'] },
+    sceneStep('normal', ['living_room']),
+    sceneStep('dark', ['bedroom']),
+    { action: 'set_helper', helper: 'entryway_cooldown', value: true },
+    sceneStep('night', ['kitchen']),
+    sceneStep('movie', ['living_room']),
     {
-      kind: 'set_device_state',
+      action: 'set_power',
       device: { integration_id: 'mqtt', device_id: 'hallway_strip' },
-      state: { power: false },
+      power: false,
     },
   ];
 
@@ -822,11 +805,9 @@ function largeHome() {
             conditions: [{ kind: 'literal', value: true }],
           },
           steps: [
-            {
-              kind: 'activate_scene',
-              scene_id: i % 2 === 0 ? 'normal' : 'dark',
-              group_keys: [rooms[i % rooms.length]],
-            },
+            sceneStep(i % 2 === 0 ? 'normal' : 'dark', [
+              rooms[i % rooms.length],
+            ]),
           ],
           enabled: i % 7 !== 0,
         },

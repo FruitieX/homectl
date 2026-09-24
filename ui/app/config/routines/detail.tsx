@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useInterval } from 'usehooks-ts';
 import { Link, useParams } from 'react-router-dom';
 
 import type { ConditionExpr } from '@/bindings/ConditionExpr';
@@ -17,10 +18,12 @@ import {
 import {
   useDevicesState,
   useRoutineStatuses,
+  useRoutineStatusesReceivedAt,
   useTimers,
 } from '@/hooks/websocket';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { describeExecutionPolicy } from '@/lib/routinePolicy';
+import { formatFreshness } from '@/lib/configSection';
 import { useDirtyNavigationGuard } from '@/ui/config/useDirtyNavigationGuard';
 import { useSectionEditor } from '@/ui/config/useSectionEditor';
 import { useSectionParams } from '@/ui/config/useSectionParams';
@@ -90,6 +93,13 @@ export default function RoutineDetailPage() {
   const { devicesState: apiDevices } = useDevicesApi();
   const liveDevices = useDevicesState();
   const routineStatuses = useRoutineStatuses();
+  const statusReceivedAt = useRoutineStatusesReceivedAt();
+  const [freshnessNow, setFreshnessNow] = useState(() => Date.now());
+  // Keep "received N ago" honest while the page stays open.
+  useInterval(
+    () => setFreshnessNow(Date.now()),
+    statusReceivedAt === null ? null : 30_000,
+  );
   const timers = useTimers() ?? [];
   const groups = useGroupsState();
   const { activeSection, openSection } = useSectionParams();
@@ -402,6 +412,13 @@ export default function RoutineDetailPage() {
           {lastRunLine ? (
             <span className="block text-muted-foreground">{lastRunLine}</span>
           ) : null}
+          {routine.enabled && status ? (
+            <span className="block text-muted-foreground">
+              {statusReceivedAt === null
+                ? 'Live status has no receipt time yet.'
+                : `Live status received ${formatFreshness(statusReceivedAt, freshnessNow)}.`}
+            </span>
+          ) : null}
         </>
       }
     >
@@ -444,6 +461,7 @@ export default function RoutineDetailPage() {
                   }))}
                   helpers={helpers}
                   runtimeStatus={routineStatusForPreview}
+                  deviceDisplayNameMap={deviceDisplayNameMap}
                 />
               );
             }}

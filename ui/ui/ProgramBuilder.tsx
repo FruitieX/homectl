@@ -12,6 +12,7 @@ import type { SceneSelection } from '@/bindings/SceneSelection';
 import type { TargetSpec } from '@/bindings/TargetSpec';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
 import { DurationInput, selectClassName } from '@/ui/builder-fields';
+import { Copy } from 'lucide-react';
 import { ConditionEditor, describeCondition } from '@/ui/ConditionBuilder';
 import {
   DeviceMultiSelect,
@@ -1427,9 +1428,12 @@ function StepEditor({
   routines,
   helpers,
   existingIds,
+  open = true,
+  onToggleOpen,
   onChange,
   onRemove,
   onMove,
+  onDuplicate,
 }: {
   step: NativeAction;
   index: number;
@@ -1440,9 +1444,16 @@ function StepEditor({
   routines: Array<{ id: string; name: string }>;
   helpers: HelperRuntimeStatus[];
   existingIds: string[];
+  /**
+   * Only one step's fields are open at a time; the row stays a sentence. Left
+   * undefined the fields stay open, which is what nested branch steps do.
+   */
+  open?: boolean;
+  onToggleOpen?: () => void;
   onChange: (step: NativeAction) => void;
   onRemove: () => void;
   onMove: (offset: number) => void;
+  onDuplicate?: () => void;
 }) {
   return (
     <Card className="rounded-2xl">
@@ -1457,53 +1468,81 @@ function StepEditor({
                 {summarizeStep(step)}
               </span>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <ConfigField
-                label="Step type"
-                description="Changing the type replaces this step's settings."
-              >
-                <SearchablePicker
-                  options={stepKindOptions.map((option) => ({
-                    value: option.value,
-                    label: option.label,
-                  }))}
-                  value={step.action}
-                  onChange={(kind) =>
-                    onChange(
-                      defaultStep(
-                        kind as StepKind,
-                        nextNodeId(
-                          kind,
-                          existingIds.filter((id) => id !== step.id),
+            {open ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <ConfigField
+                  label="Step type"
+                  description="Changing the type replaces this step's settings."
+                >
+                  <SearchablePicker
+                    options={stepKindOptions.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    }))}
+                    value={step.action}
+                    onChange={(kind) =>
+                      onChange(
+                        defaultStep(
+                          kind as StepKind,
+                          nextNodeId(
+                            kind,
+                            existingIds.filter((id) => id !== step.id),
+                          ),
                         ),
-                      ),
-                    )
-                  }
-                />
-              </ConfigField>
-              <ConfigField
-                label="Step ID"
-                description="Stable node id used in logs."
-              >
-                <Input
-                  className="font-mono"
-                  value={step.id}
-                  onChange={(event) =>
-                    onChange({
-                      ...step,
-                      id: event.target.value,
-                    } as NativeAction)
-                  }
-                />
-              </ConfigField>
-            </div>
+                      )
+                    }
+                  />
+                </ConfigField>
+                <ConfigField
+                  label="Step ID"
+                  description="Stable node id used in logs."
+                >
+                  <Input
+                    className="font-mono"
+                    value={step.id}
+                    onChange={(event) =>
+                      onChange({
+                        ...step,
+                        id: event.target.value,
+                      } as NativeAction)
+                    }
+                  />
+                </ConfigField>
+                <ConfigField
+                  label="Step ID"
+                  description="Stable node id used in logs."
+                >
+                  <Input
+                    className="font-mono"
+                    value={step.id}
+                    onChange={(event) =>
+                      onChange({
+                        ...step,
+                        id: event.target.value,
+                      } as NativeAction)
+                    }
+                  />
+                </ConfigField>
+              </div>
+            ) : null}
           </div>
           <div className="flex items-center gap-1">
+            {onToggleOpen ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-expanded={open}
+                onClick={onToggleOpen}
+              >
+                {open ? 'Close' : 'Edit'}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              aria-label="Move step up"
+              aria-label="Move earlier"
               disabled={index === 0}
               onClick={() => onMove(-1)}
             >
@@ -1513,12 +1552,23 @@ function StepEditor({
               type="button"
               variant="ghost"
               size="sm"
-              aria-label="Move step down"
+              aria-label="Move later"
               disabled={index === total - 1}
               onClick={() => onMove(1)}
             >
               ↓
             </Button>
+            {onDuplicate ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label={`Duplicate step ${index + 1}`}
+                onClick={onDuplicate}
+              >
+                <Copy aria-hidden />
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="ghost"
@@ -1531,16 +1581,18 @@ function StepEditor({
           </div>
         </div>
 
-        <StepFields
-          step={step}
-          onChange={onChange}
-          devices={devices}
-          groups={groups}
-          scenes={scenes}
-          routines={routines}
-          helpers={helpers}
-          existingIds={existingIds}
-        />
+        {open ? (
+          <StepFields
+            step={step}
+            onChange={onChange}
+            devices={devices}
+            groups={groups}
+            scenes={scenes}
+            routines={routines}
+            helpers={helpers}
+            existingIds={existingIds}
+          />
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -1792,6 +1844,8 @@ export function ProgramBuilder({
   helpers: HelperRuntimeStatus[];
 }) {
   const [newStepKind, setNewStepKind] = useState<StepKind>('activate_scene');
+  // One step's fields open at a time: the row stays a sentence until opened.
+  const [openStepId, setOpenStepId] = useState<string | null>(null);
 
   const handleStepChange = useCallback(
     (index: number, next: NativeAction) => {
@@ -1848,13 +1902,26 @@ export function ProgramBuilder({
   );
 
   const addStep = (kind: StepKind) => {
+    const step = defaultStep(
+      kind,
+      nextNodeId(kind, [...existingIds, ...duplicateIds]),
+    );
+    onChange({ kind: 'native', steps: [...steps, step] });
+    setOpenStepId(step.id);
+  };
+
+  const duplicateStep = (index: number) => {
+    const source = steps[index];
+    if (!source) {
+      return;
+    }
+    const id = nextNodeId(source.action, [...existingIds, ...duplicateIds]);
+    const copy = { ...JSON.parse(JSON.stringify(source)), id } as NativeAction;
     onChange({
       kind: 'native',
-      steps: [
-        ...steps,
-        defaultStep(kind, nextNodeId(kind, [...existingIds, ...duplicateIds])),
-      ],
+      steps: [...steps.slice(0, index + 1), copy, ...steps.slice(index + 1)],
     });
+    setOpenStepId(id);
   };
 
   return (
@@ -1951,6 +2018,11 @@ export function ProgramBuilder({
                   step={step}
                   index={index}
                   total={steps.length}
+                  open={openStepId === step.id}
+                  onToggleOpen={() =>
+                    setOpenStepId(openStepId === step.id ? null : step.id)
+                  }
+                  onDuplicate={() => duplicateStep(index)}
                   devices={devices}
                   groups={groups}
                   scenes={scenes}
@@ -1958,14 +2030,17 @@ export function ProgramBuilder({
                   helpers={helpers}
                   existingIds={existingIds}
                   onChange={(next) => handleStepChange(index, next)}
-                  onRemove={() =>
+                  onRemove={() => {
+                    if (openStepId === step.id) {
+                      setOpenStepId(null);
+                    }
                     onChange({
                       kind: 'native',
                       steps: steps.filter(
                         (_, stepIndex) => stepIndex !== index,
                       ),
-                    })
-                  }
+                    });
+                  }}
                   onMove={(offset) => handleMove(index, offset)}
                 />
               ))}

@@ -18,9 +18,9 @@ import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import {
   StatusBadge,
-  formatDue,
-  formatUnknownReason,
   triggerBadge,
+  triggerLabel,
+  triggerStateSentence,
 } from '@/ui/routine-runtime';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
@@ -513,9 +513,11 @@ export function TriggerBuilder({
   scenes,
   helpers,
   runtimeStatus,
+  deviceDisplayNameMap,
 }: {
   triggers: TriggerSpec[];
   onChange: (triggers: TriggerSpec[]) => void;
+  deviceDisplayNameMap?: Record<string, string>;
   devices: DevicesState;
   groups: FlattenedGroupsConfig;
   scenes: Array<{ id: string; name: string }>;
@@ -523,6 +525,9 @@ export function TriggerBuilder({
   runtimeStatus?: RoutineRuntimeStatus;
 }) {
   const [draft, setDraft] = useState<TriggerSpec | null>(null);
+  // Only one trigger's fields are open at a time; the row shows a sentence with
+  // its live state until it is opened for editing.
+  const [openTriggerId, setOpenTriggerId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const liveTriggers = runtimeStatus?.v2?.triggers ?? [];
   const hasArmed = liveTriggers.some(
@@ -546,6 +551,7 @@ export function TriggerBuilder({
       return;
     }
     onChange([...triggers, draft]);
+    setOpenTriggerId(draft.id);
     setDraft(null);
   };
 
@@ -656,23 +662,74 @@ export function TriggerBuilder({
           const badge = live ? triggerBadge(live) : null;
           const duplicateId =
             triggers.filter((other) => other.id === trigger.id).length > 1;
+          const open = openTriggerId === trigger.id;
 
           return (
             <Card key={`${trigger.id}:${index}`} className="rounded-2xl">
-              <CardContent className="space-y-4 p-4">
+              <CardContent className="space-y-3 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1 space-y-3">
+                  <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge kind={trigger.kind} />
+                      <span className="text-sm font-medium">
+                        {triggerLabel(
+                          trigger,
+                          devices,
+                          deviceDisplayNameMap ?? {},
+                        ) ?? `${triggerKindLabels[trigger.kind]} trigger`}
+                      </span>
                       {badge ? (
                         <StatusBadge label={badge.label} tone={badge.tone} />
                       ) : null}
-                      {live?.armed && live.due_wall_ms !== undefined ? (
-                        <span className="text-xs text-muted-foreground">
-                          Next fire {formatDue(Number(live.due_wall_ms), now)}
-                        </span>
-                      ) : null}
                     </div>
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {trigger.id}
+                    </p>
+                    {open || duplicateId ? null : (
+                      <p className="text-xs text-muted-foreground">
+                        {triggerStateSentence(live, now)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-expanded={open}
+                      onClick={() => setOpenTriggerId(open ? null : trigger.id)}
+                    >
+                      {open ? 'Close' : 'Edit'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => {
+                        if (openTriggerId === trigger.id) {
+                          setOpenTriggerId(null);
+                        }
+                        onChange(
+                          triggers.filter(
+                            (_, candidateIndex) => candidateIndex !== index,
+                          ),
+                        );
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+
+                {duplicateId ? (
+                  <p className="text-xs text-destructive">
+                    Trigger IDs must be unique within the routine.
+                  </p>
+                ) : null}
+
+                {open ? (
+                  <div className="space-y-4 border-t border-border pt-3">
                     <ConfigField label="Trigger ID" className="max-w-md">
                       <Input
                         className="font-mono"
@@ -691,51 +748,31 @@ export function TriggerBuilder({
                         }
                       />
                     </ConfigField>
-                    {duplicateId ? (
-                      <p className="text-xs text-destructive">
-                        Trigger IDs must be unique within the routine.
+
+                    <TriggerFields
+                      trigger={trigger}
+                      onChange={(next) =>
+                        onChange(
+                          triggers.map((candidate, candidateIndex) =>
+                            candidateIndex === index ? next : candidate,
+                          ),
+                        )
+                      }
+                      devices={devices}
+                      groups={groups}
+                      scenes={scenes}
+                      helpers={helpers}
+                    />
+
+                    {live?.error ? (
+                      <p className="text-sm text-destructive">{live.error}</p>
+                    ) : null}
+                    {live?.unknown_reason ? (
+                      <p className="text-sm text-muted-foreground">
+                        {triggerStateSentence(live, now)}
                       </p>
                     ) : null}
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() =>
-                      onChange(
-                        triggers.filter(
-                          (_, candidateIndex) => candidateIndex !== index,
-                        ),
-                      )
-                    }
-                  >
-                    Remove
-                  </Button>
-                </div>
-
-                <TriggerFields
-                  trigger={trigger}
-                  onChange={(next) =>
-                    onChange(
-                      triggers.map((candidate, candidateIndex) =>
-                        candidateIndex === index ? next : candidate,
-                      ),
-                    )
-                  }
-                  devices={devices}
-                  groups={groups}
-                  scenes={scenes}
-                  helpers={helpers}
-                />
-
-                {live?.error ? (
-                  <p className="text-sm text-destructive">{live.error}</p>
-                ) : null}
-                {live?.unknown_reason ? (
-                  <p className="text-sm text-muted-foreground">
-                    Unknown: {formatUnknownReason(live.unknown_reason)}
-                  </p>
                 ) : null}
               </CardContent>
             </Card>

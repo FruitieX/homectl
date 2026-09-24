@@ -216,6 +216,32 @@ function ConditionTraceTree({ node }: { node: ConditionTraceNode }) {
   );
 }
 
+/**
+ * One sentence for a trigger's live state, shared by the routine read view and
+ * the trigger editor rows so both explain the same runtime facts the same way:
+ * armed with a next fire time, otherwise why it is idle or unavailable.
+ */
+export function triggerStateSentence(
+  trigger: TriggerRuntimeStatus | undefined,
+  now: number = Date.now(),
+): string {
+  if (!trigger) {
+    return 'No live state yet: enable the routine and wait for the next status update.';
+  }
+  if (trigger.error) {
+    return `Cannot be evaluated: ${trigger.error}`;
+  }
+  if (trigger.armed && trigger.due_wall_ms !== undefined) {
+    return `Armed — next fire ${formatDue(Number(trigger.due_wall_ms), now)}`;
+  }
+  if (trigger.unknown_reason) {
+    return `Unknown: ${formatUnknownReason(trigger.unknown_reason)}`;
+  }
+  return trigger.eligible
+    ? 'Eligible, but no deadline is armed for it right now.'
+    : 'Not eligible in the current evaluation frame.';
+}
+
 export function triggerBadge(trigger: TriggerRuntimeStatus): {
   label: string;
   tone: Tone;
