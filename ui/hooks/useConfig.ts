@@ -45,9 +45,7 @@ export interface Scene {
 
 // Scene device configuration - can be a device link, scene link, or direct state
 export type SceneDeviceConfig =
-  | SceneDeviceLink
-  | ActivateSceneDescriptor
-  | SceneDeviceState;
+  SceneDeviceLink | ActivateSceneDescriptor | SceneDeviceState;
 
 export interface SceneDeviceLink {
   brightness?: number;
@@ -130,9 +128,7 @@ export interface UiLogEntry {
 }
 
 export type RoutineHistoryTriggerKind =
-  | 'rule_match'
-  | 'force_trigger'
-  | 'v2_run';
+  'rule_match' | 'force_trigger' | 'v2_run' | 'v2_blocked';
 
 export interface RoutineHistoryEntry {
   id: string;
@@ -144,6 +140,12 @@ export interface RoutineHistoryEntry {
   action_count: number;
   status?: RoutineRuntimeStatus | null;
   v2?: RoutineV2RuntimeStatus | null;
+  /** Identical blocked attempts coalesced into this entry; read as one. */
+  occurrence_count?: number | null;
+  /** First attempt of a coalesced blocked entry. */
+  first_timestamp?: string | null;
+  /** Why a matched trigger produced no run. */
+  blocked_reason?: string | null;
 }
 
 export interface RuntimeStatus {

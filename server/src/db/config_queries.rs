@@ -3935,6 +3935,9 @@ mod consistency_tests {
                 action_count: index as usize,
                 status: None,
                 v2: None,
+                occurrence_count: None,
+                first_timestamp: None,
+                blocked_reason: None,
             };
             save_routine_history_entry_on(&db, &entry).await.unwrap();
         }

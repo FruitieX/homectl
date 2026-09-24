@@ -50,6 +50,7 @@ const triggerLabels: Record<RoutineHistoryTriggerKind, string> = {
   rule_match: 'Rule match',
   force_trigger: 'Force trigger',
   v2_run: 'v2 run',
+  v2_blocked: 'Blocked run',
 };
 
 function truthLabel(truth: TruthValue) {
@@ -161,9 +162,25 @@ function explainEntry(entry: RoutineHistoryEntry): string {
     if (entry.trigger_kind === 'force_trigger') {
       return `Manually triggered: ${entry.action_count} stored v1 action${entry.action_count === 1 ? '' : 's'} replayed.`;
     }
+    // v1 only ever recorded runs, so nothing here can be read as evidence
+    // that a past evaluation did or did not match.
     return entry.status?.will_trigger
       ? `Rules matched${entry.event_source_device_key ? ` from ${entry.event_source_device_key}` : ''}; ${entry.action_count} action${entry.action_count === 1 ? '' : 's'} dispatched.`
-      : 'Rules were evaluated but did not all match, so nothing ran.';
+      : 'A v1 routine ran. Non-runs are not recorded for v1 routines, so past evaluations cannot be reconstructed here.';
+  }
+
+  if (entry.trigger_kind === 'v2_blocked') {
+    const reason = entry.blocked_reason ?? 'the condition blocked the run';
+    const count = entry.occurrence_count ?? 1;
+    const latest = formatShortTime(entry.timestamp);
+    const since = entry.first_timestamp
+      ? `, first at ${formatShortTime(entry.first_timestamp)}`
+      : '';
+    const howOften =
+      count > 1
+        ? `Blocked ${count} times; latest at ${latest}${since}.`
+        : `Blocked once at ${latest}.`;
+    return `An event matched, but the routine did not run: ${reason}. ${howOften}`;
   }
 
   if (v2.condition.error) {
@@ -184,7 +201,7 @@ function explainEntry(entry: RoutineHistoryEntry): string {
 
   if (v2.last_run && !v2.last_run.accepted) {
     const reason = suppressed.find((step) => step.reason)?.reason;
-    return `Blocked by the execution policy: ${reason ?? 'the plan was rejected before dispatch'}.`;
+    return `A run was rejected by the execution policy: ${reason ?? 'the plan was rejected before dispatch'}.`;
   }
 
   const triggerText =
@@ -193,7 +210,7 @@ function explainEntry(entry: RoutineHistoryEntry): string {
       : 'a trigger';
   let summary = `Ran because ${triggerText} matched and the condition was true.`;
   if (dispatched > 0) {
-    summary += ` ${dispatched} step${dispatched === 1 ? '' : 's'} dispatched.`;
+    summary += ` ${dispatched} step${dispatched === 1 ? '' : 's'} dispatched; the device's own report confirms delivery, dispatch alone does not.`;
   }
   if (suppressed.length > 0) {
     summary += ` ${suppressed.length} step${suppressed.length === 1 ? '' : 's'} suppressed (${suppressed[0].reason ?? 'no reason recorded'}).`;
@@ -418,6 +435,9 @@ export default function RoutineHistoryPage() {
     (entry) => entry.trigger_kind === 'force_trigger',
   ).length;
   const v2Runs = data.filter((entry) => entry.trigger_kind === 'v2_run').length;
+  const blockedRuns = data.filter(
+    (entry) => entry.trigger_kind === 'v2_blocked',
+  ).length;
   const entriesWithErrors = data.filter(
     (entry) => countEntryErrors(entry) > 0,
   ).length;
@@ -517,7 +537,7 @@ export default function RoutineHistoryPage() {
                 icon={<Activity className="size-5" />}
                 label="v2 runs"
                 value={v2Runs}
-                description="Dispatched v2 plans with traces."
+                description={`Dispatched v2 plans with traces.${blockedRuns > 0 ? ` ${blockedRuns} blocked attempt${blockedRuns === 1 ? '' : 's'} recorded.` : ''}`}
               />
               <HistoryStatCard
                 icon={<AlertTriangle className="size-5" />}
@@ -549,6 +569,9 @@ export default function RoutineHistoryPage() {
                         Manual triggers
                       </SelectItem>
                       <SelectItem value="v2_run">v2 runs</SelectItem>
+                      <SelectItem value="v2_blocked">
+                        Triggered but blocked
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -597,7 +620,7 @@ export default function RoutineHistoryPage() {
               description={
                 filtersActive
                   ? 'Nothing matches the current trigger type and search filters.'
-                  : 'Routine rule matches and manual routine triggers will appear here after the server records them.'
+                  : 'No matching event in retained history. Blocked attempts are recorded here too, so a quiet list means no configured trigger matched.'
               }
               action={
                 filtersActive ? (

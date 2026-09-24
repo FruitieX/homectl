@@ -809,6 +809,11 @@ impl Routines {
                         .map(|id| id.0.as_str())
                         .collect::<Vec<_>>()
                 );
+            } else if !evaluation.matched_trigger_ids.is_empty() {
+                // A configured trigger matched and the condition blocked the
+                // run. Record it here, at the decision point, so the entry
+                // carries the frame that decided it (P12/X04).
+                self.record_v2_blocked(&evaluation.routine_id);
             }
         }
         evaluations
@@ -916,6 +921,22 @@ impl Routines {
     /// Push the current v2 evaluation and run snapshot into the history
     /// buffer. Only routines with a compiled definition are recorded, so
     /// status refreshes and quarantine writes cannot create entries.
+    /// Record “a trigger matched but the routine did not run” for one frame
+    /// evaluation, using the status the evaluation just wrote.
+    fn record_v2_blocked(&self, routine_id: &RoutineId) {
+        let Some(name) = self.v2_names.get(routine_id) else {
+            return;
+        };
+        let Some(status) = self.v2.statuses().get(routine_id) else {
+            return;
+        };
+        if status.matched_trigger_ids.is_empty() || status.will_trigger {
+            return;
+        }
+        let reason = routine_history::blocked_reason_for(status);
+        routine_history::record_v2_blocked(routine_id, name, status, &reason);
+    }
+
     fn record_v2_history(&self, routine_id: &RoutineId) {
         let Some(name) = self.v2_names.get(routine_id) else {
             return;

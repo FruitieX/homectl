@@ -11,4 +11,18 @@ export type RoutineHistoryEntry = { id: string, timestamp: string, routine_id: R
  * condition trace, and the planned step dispositions. Absent for v1
  * entries, which carry `status` instead.
  */
-v2?: RoutineV2RuntimeStatus, };
+v2?: RoutineV2RuntimeStatus, 
+/**
+ * How many identical blocked attempts this entry stands for. Absent on
+ * older entries and on runs; read it as one.
+ */
+occurrence_count?: number, 
+/**
+ * When the first of the coalesced attempts happened. Only set once an
+ * entry stands for more than one attempt.
+ */
+first_timestamp?: string, 
+/**
+ * Short reason a matched trigger produced no run.
+ */
+blocked_reason?: string, };
