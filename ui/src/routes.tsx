@@ -133,7 +133,7 @@ export const router = createBrowserRouter([
             element: withSuspense(<ConfigDevicesPage />),
           },
           {
-            path: 'devices/detail',
+            path: 'devices/detail/*',
             element: withSuspense(<ConfigDevicesPage />),
           },
           {

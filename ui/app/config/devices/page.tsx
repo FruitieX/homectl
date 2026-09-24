@@ -1,4 +1,9 @@
-import { Link, useSearchParams } from 'react-router-dom';
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
 import { Device } from '@/bindings/Device';
 import { DeviceColor } from '@/bindings/DeviceColor';
 import { DeviceStateSource } from '@/bindings/DeviceStateSource';
@@ -17,6 +22,7 @@ import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { useDevicesState } from '@/hooks/websocket';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
+import { Breadcrumbs } from '@/ui/config/Breadcrumbs';
 import { getDeviceKey } from '@/lib/device';
 import {
   canCalibrateDevice,
@@ -71,7 +77,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/ui/primitives/popover';
-import { CheckSquare, Search, SlidersHorizontal } from 'lucide-react';
+import {
+  CheckSquare,
+  ChevronLeft,
+  Search,
+  SlidersHorizontal,
+} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { selectClassNameLarge as selectClassName } from '@/ui/form-styles';
 
@@ -566,10 +577,16 @@ export default function DevicesPage() {
   const { replace: replaceConfigDevice, remove: removeConfigDevice } =
     useConfigDevices();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const routeParams = useParams();
+  // `/config/devices/detail/<integration>/<id>` is the item's own page; the
+  // legacy `?key=` link keeps working.
+  const routeKey = routeParams['*'] ? decodeURIComponent(routeParams['*']) : '';
   // /config/devices/detail?key=<encoded device key> is the canonical detail
   // link; ?device= stays supported for older links.
   const requestedDeviceKey =
     searchParams.get('key') ?? searchParams.get('device');
+  const detailKey = routeKey || requestedDeviceKey;
   const appliedDeviceRequest = useRef<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const resultsRef = useRef<HTMLSpanElement | null>(null);
@@ -1291,213 +1308,223 @@ export default function DevicesPage() {
 
   return (
     <div className="space-y-6">
-      <ConfigPageHeader
-        title="Devices"
-        description="Find a device, see its current state, and change how it appears or behaves."
-        actions={undefined}
-      />
+      {detailKey ? null : (
+        <>
+          <ConfigPageHeader
+            title="Devices"
+            description="Find a device, see its current state, and change how it appears or behaves."
+            actions={undefined}
+          />
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-      {notice && (
-        <Alert>
-          <AlertDescription className="flex items-center justify-between gap-3">
-            <span>{notice}</span>
-            <Button variant="ghost" size="sm" onClick={() => setNotice(null)}>
-              ✕
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
+          {notice && (
+            <Alert>
+              <AlertDescription className="flex items-center justify-between gap-3">
+                <span>{notice}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setNotice(null)}
+                >
+                  ✕
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
 
-      <Card className="sticky top-0 z-20 border-border/60 bg-background/95 backdrop-blur">
-        <CardContent className="space-y-2 p-3">
-          {/* Search has room to type; filters and bulk select sit in a second
+          <Card className="sticky top-0 z-20 border-border/60 bg-background/95 backdrop-blur">
+            <CardContent className="space-y-2 p-3">
+              {/* Search has room to type; filters and bulk select sit in a second
               row instead of competing with it for width. */}
-          <div className="relative min-w-0">
-            <div className="relative min-w-0">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="text"
-                className="h-9 pl-9"
-                placeholder="Search devices by label, id, or room"
-                aria-label="Search devices"
-                value={deviceSearch}
-                onChange={(e) => setDeviceSearch(e.target.value)}
-              />
-            </div>
-          </div>
+              <div className="relative min-w-0">
+                <div className="relative min-w-0">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    className="h-9 pl-9"
+                    placeholder="Search devices by label, id, or room"
+                    aria-label="Search devices"
+                    value={deviceSearch}
+                    onChange={(e) => setDeviceSearch(e.target.value)}
+                  />
+                </div>
+              </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 gap-1.5"
-              aria-expanded={filtersOpen}
-              aria-controls="device-filters"
-              onClick={() => setFiltersOpen((current) => !current)}
-            >
-              <SlidersHorizontal className="size-4" />
-              Filters
-              {activeFilterCount > 0 ? (
-                <Badge
-                  variant="secondary"
-                  className="h-5 min-w-5 justify-center rounded-full px-1 text-[0.65rem]"
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-1.5"
+                  aria-expanded={filtersOpen}
+                  aria-controls="device-filters"
+                  onClick={() => setFiltersOpen((current) => !current)}
                 >
-                  {activeFilterCount}
-                </Badge>
-              ) : null}
-            </Button>
-            <span className="sr-only" aria-hidden>
-              {''}
-            </span>
-            <div
-              id="device-filters"
-              hidden={!filtersOpen}
-              className="w-full space-y-4 rounded-xl border border-border bg-card p-3"
-            >
-              <label className="block space-y-1.5 text-sm">
-                <span className="font-medium">Type</span>
-                <select
-                  className={selectClassName + ' h-9 w-full'}
-                  value={deviceTypeFilter}
-                  onChange={(e) =>
-                    setDeviceTypeFilter(e.target.value as DeviceTypeFilter)
-                  }
+                  <SlidersHorizontal className="size-4" />
+                  Filters
+                  {activeFilterCount > 0 ? (
+                    <Badge
+                      variant="secondary"
+                      className="h-5 min-w-5 justify-center rounded-full px-1 text-[0.65rem]"
+                    >
+                      {activeFilterCount}
+                    </Badge>
+                  ) : null}
+                </Button>
+                <span className="sr-only" aria-hidden>
+                  {''}
+                </span>
+                <div
+                  id="device-filters"
+                  hidden={!filtersOpen}
+                  className="w-full space-y-4 rounded-xl border border-border bg-card p-3"
                 >
-                  <option value="all">All devices</option>
-                  <option value="controllable">Lights / devices</option>
-                  <option value="sensor">Sensors</option>
-                  <option value="other">Other</option>
-                </select>
-              </label>
-              <label className="block space-y-1.5 text-sm">
-                <span className="font-medium">Room</span>
-                <SearchablePicker
-                  options={[
-                    { value: 'all', label: 'All rooms' },
-                    ...availableGroups.map((group) => ({
-                      value: group.id,
-                      label: group.name,
-                      detail: group.hidden ? `${group.id} · hidden` : group.id,
-                    })),
-                  ]}
-                  value={deviceGroupFilter}
-                  onChange={setDeviceGroupFilter}
-                />
-              </label>
-              <label className="block space-y-1.5 text-sm">
-                <span className="font-medium">Integration</span>
-                <SearchablePicker
-                  options={[
-                    { value: 'all', label: 'All integrations' },
-                    ...integrationIds.map((integrationId) => ({
-                      value: integrationId,
-                      label: integrationId,
-                    })),
-                  ]}
-                  value={deviceIntegrationFilter}
-                  onChange={setDeviceIntegrationFilter}
-                />
-              </label>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full"
-                disabled={activeFilterCount === 0}
-                onClick={() => {
-                  setDeviceTypeFilter('all');
-                  setDeviceGroupFilter('all');
-                  setDeviceIntegrationFilter('all');
-                }}
-              >
-                Clear filters
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="w-full"
-                onClick={() => {
-                  setFiltersOpen(false);
-                  resultsRef.current?.focus();
-                }}
-              >
-                Show {visibleDevices.length} device
-                {visibleDevices.length === 1 ? '' : 's'}
-              </Button>
-            </div>
-
-            <Button
-              variant={selectMode ? 'secondary' : 'outline'}
-              size="sm"
-              className="h-9"
-              aria-pressed={selectMode}
-              onClick={() =>
-                setSelectMode((current) => {
-                  if (current) {
-                    setSelectedKeys([]);
-                  }
-                  return !current;
-                })
-              }
-            >
-              <CheckSquare className="size-4" />
-              {selectMode ? 'Done' : 'Select'}
-            </Button>
-
-            <span
-              ref={resultsRef}
-              tabIndex={-1}
-              className="ml-auto text-sm text-muted-foreground focus-visible:outline-none"
-            >
-              {visibleDevices.length === devices.length
-                ? `${devices.length} devices`
-                : `${visibleDevices.length} of ${devices.length} devices`}
-              {visibleDevices.length > batchDevices.length
-                ? ` · showing ${batchDevices.length}`
-                : ''}
-            </span>
-          </div>
-          {activeFilters.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-1.5">
-              {activeFilters.map((chip) => (
-                <Badge
-                  key={chip.label}
-                  variant="secondary"
-                  className="gap-1 pr-1 text-xs"
-                >
-                  {chip.label}
-                  <button
-                    type="button"
-                    aria-label={`Remove filter ${chip.label}`}
-                    className="rounded px-1 text-muted-foreground hover:text-foreground"
-                    onClick={chip.clear}
+                  <label className="block space-y-1.5 text-sm">
+                    <span className="font-medium">Type</span>
+                    <select
+                      className={selectClassName + ' h-9 w-full'}
+                      value={deviceTypeFilter}
+                      onChange={(e) =>
+                        setDeviceTypeFilter(e.target.value as DeviceTypeFilter)
+                      }
+                    >
+                      <option value="all">All devices</option>
+                      <option value="controllable">Lights / devices</option>
+                      <option value="sensor">Sensors</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+                  <label className="block space-y-1.5 text-sm">
+                    <span className="font-medium">Room</span>
+                    <SearchablePicker
+                      options={[
+                        { value: 'all', label: 'All rooms' },
+                        ...availableGroups.map((group) => ({
+                          value: group.id,
+                          label: group.name,
+                          detail: group.hidden
+                            ? `${group.id} · hidden`
+                            : group.id,
+                        })),
+                      ]}
+                      value={deviceGroupFilter}
+                      onChange={setDeviceGroupFilter}
+                    />
+                  </label>
+                  <label className="block space-y-1.5 text-sm">
+                    <span className="font-medium">Integration</span>
+                    <SearchablePicker
+                      options={[
+                        { value: 'all', label: 'All integrations' },
+                        ...integrationIds.map((integrationId) => ({
+                          value: integrationId,
+                          label: integrationId,
+                        })),
+                      ]}
+                      value={deviceIntegrationFilter}
+                      onChange={setDeviceIntegrationFilter}
+                    />
+                  </label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full"
+                    disabled={activeFilterCount === 0}
+                    onClick={() => {
+                      setDeviceTypeFilter('all');
+                      setDeviceGroupFilter('all');
+                      setDeviceIntegrationFilter('all');
+                    }}
                   >
-                    ✕
-                  </button>
-                </Badge>
-              ))}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-xs"
-                onClick={() => {
-                  setDeviceSearch('');
-                  setDeviceTypeFilter('all');
-                  setDeviceGroupFilter('all');
-                  setDeviceIntegrationFilter('all');
-                }}
-              >
-                Clear all
-              </Button>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+                    Clear filters
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      setFiltersOpen(false);
+                      resultsRef.current?.focus();
+                    }}
+                  >
+                    Show {visibleDevices.length} device
+                    {visibleDevices.length === 1 ? '' : 's'}
+                  </Button>
+                </div>
+
+                <Button
+                  variant={selectMode ? 'secondary' : 'outline'}
+                  size="sm"
+                  className="h-9"
+                  aria-pressed={selectMode}
+                  onClick={() =>
+                    setSelectMode((current) => {
+                      if (current) {
+                        setSelectedKeys([]);
+                      }
+                      return !current;
+                    })
+                  }
+                >
+                  <CheckSquare className="size-4" />
+                  {selectMode ? 'Done' : 'Select'}
+                </Button>
+
+                <span
+                  ref={resultsRef}
+                  tabIndex={-1}
+                  className="ml-auto text-sm text-muted-foreground focus-visible:outline-none"
+                >
+                  {visibleDevices.length === devices.length
+                    ? `${devices.length} devices`
+                    : `${visibleDevices.length} of ${devices.length} devices`}
+                  {visibleDevices.length > batchDevices.length
+                    ? ` · showing ${batchDevices.length}`
+                    : ''}
+                </span>
+              </div>
+              {activeFilters.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {activeFilters.map((chip) => (
+                    <Badge
+                      key={chip.label}
+                      variant="secondary"
+                      className="gap-1 pr-1 text-xs"
+                    >
+                      {chip.label}
+                      <button
+                        type="button"
+                        aria-label={`Remove filter ${chip.label}`}
+                        className="rounded px-1 text-muted-foreground hover:text-foreground"
+                        onClick={chip.clear}
+                      >
+                        ✕
+                      </button>
+                    </Badge>
+                  ))}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => {
+                      setDeviceSearch('');
+                      setDeviceTypeFilter('all');
+                      setDeviceGroupFilter('all');
+                      setDeviceIntegrationFilter('all');
+                    }}
+                  >
+                    Clear all
+                  </Button>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
         {batchDevices.map((entry) => {
@@ -1531,7 +1558,10 @@ export default function DevicesPage() {
           );
           const isSaving = savingKey === deviceKey;
           const isMutating = mutatingKey === deviceKey;
-          const isOpen = openDeviceKey === deviceKey;
+          // On the item's own page the detail is always shown; in the list the
+          // card is the way there, so it never opens in place.
+          const isDetailPage = detailKey === deviceKey;
+          const isOpen = isDetailPage || openDeviceKey === deviceKey;
           const replacementDraft = replacementDrafts[deviceKey] ?? '';
           const availableReplacementOptions = replacementOptions.filter(
             (option) => option.key !== deviceKey,
@@ -1563,556 +1593,598 @@ export default function DevicesPage() {
                   : null
                 : null;
 
+          if (detailKey && !isDetailPage) {
+            return null;
+          }
+
           return (
-            <ExpandableConfigCard
-              key={deviceKey}
-              open={isOpen}
-              onOpen={() => {
-                setOpenDeviceKey(deviceKey);
-                resetDeviceDrafts(deviceKey);
-              }}
-              onClose={() => {
-                setOpenDeviceKey((current) =>
-                  current === deviceKey ? null : current,
-                );
-                setFeedbackKey((current) =>
-                  current === deviceKey ? null : current,
-                );
-              }}
-              cardClassName="h-fit"
-              onLongPress={
-                canCalibrateDevice(device)
-                  ? () => selectDeviceByLongPress(deviceKey)
-                  : undefined
-              }
-              dialogTitle={label}
-              dialogSubtitle={deviceKey}
-              summary={
-                <div className="space-y-2">
-                  <div className="flex items-start justify-between gap-3">
-                    {selectMode && canCalibrateDevice(device) && (
-                      <label
-                        className="flex items-center gap-2 pt-1"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <input
-                          type="checkbox"
-                          className="size-5 accent-primary"
-                          aria-label={`Select ${label}`}
-                          checked={selectedKeys.includes(deviceKey)}
-                          disabled={assignCalibration.isPending}
-                          onChange={() =>
-                            setSelectedKeys((selected) =>
-                              toggleSelectedKey(selected, deviceKey),
-                            )
-                          }
-                        />
-                      </label>
+            <>
+              {isDetailPage ? (
+                <div className="flex flex-col gap-2">
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    className="-ml-2 w-fit text-muted-foreground"
+                  >
+                    <Link to="/config/devices">
+                      <ChevronLeft aria-hidden />
+                      Back to devices
+                    </Link>
+                  </Button>
+                  <Breadcrumbs
+                    items={[
+                      { label: 'Devices', to: '/config/devices' },
+                      { label },
+                    ]}
+                  />
+                </div>
+              ) : null}
+              <ExpandableConfigCard
+                key={deviceKey}
+                open={isOpen}
+                expandInline={isDetailPage}
+                onOpen={() => {
+                  if (isDetailPage) {
+                    setOpenDeviceKey(null);
+                    resetDeviceDrafts(deviceKey);
+                    setFeedbackKey(null);
+                    return;
+                  }
+                  resetDeviceDrafts(deviceKey);
+                  navigate(`/config/devices/detail/${deviceKey}`);
+                }}
+                onClose={() => {
+                  setOpenDeviceKey((current) =>
+                    current === deviceKey ? null : current,
+                  );
+                  setFeedbackKey((current) =>
+                    current === deviceKey ? null : current,
+                  );
+                }}
+                cardClassName="h-fit"
+                onLongPress={
+                  canCalibrateDevice(device)
+                    ? () => selectDeviceByLongPress(deviceKey)
+                    : undefined
+                }
+                dialogTitle={label}
+                dialogSubtitle={deviceKey}
+                summary={
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      {selectMode && canCalibrateDevice(device) && (
+                        <label
+                          className="flex items-center gap-2 pt-1"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            className="size-5 accent-primary"
+                            aria-label={`Select ${label}`}
+                            checked={selectedKeys.includes(deviceKey)}
+                            disabled={assignCalibration.isPending}
+                            onChange={() =>
+                              setSelectedKeys((selected) =>
+                                toggleSelectedKey(selected, deviceKey),
+                              )
+                            }
+                          />
+                        </label>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <h2 className="truncate text-base font-semibold">
+                          {label}
+                        </h2>
+                        {duplicateLabels.has(label) ? (
+                          <div className="truncate text-xs text-muted-foreground">
+                            {deviceKey}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {hasDisplayOverride && <Badge>Custom label</Badge>}
+                    </div>
+                    {calibrationAssignments.find(
+                      (row) => row.device_key === deviceKey,
+                    ) && (
+                      <Badge variant="outline">
+                        {calibrationProfiles.find(
+                          (profile) =>
+                            profile.id ===
+                            calibrationAssignments.find(
+                              (row) => row.device_key === deviceKey,
+                            )?.profile_id,
+                        )?.name ?? 'Calibrated'}
+                      </Badge>
                     )}
-                    <div className="min-w-0 flex-1">
-                      <h2 className="truncate text-base font-semibold">
-                        {label}
-                      </h2>
-                      {duplicateLabels.has(label) ? (
-                        <div className="truncate text-xs text-muted-foreground">
-                          {deviceKey}
-                        </div>
+
+                    <div className="text-sm text-foreground/80">
+                      {'Controllable' in device.data
+                        ? `Set to ${runtimeSummary}`
+                        : runtimeSummary}
+                    </div>
+
+                    {resolvedColorPreview && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span
+                          title={
+                            stateSource && stateSource.kind !== 'device_state'
+                              ? 'Colour resolved from its scene or source'
+                              : 'Colour the device reports'
+                          }
+                        >
+                          <ResolvedColorDot
+                            color={resolvedColorPreview.color}
+                            isPowered={resolvedColorPreview.isPowered}
+                          />
+                        </span>
+                      </div>
+                    )}
+
+                    {discrepancy && (
+                      <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                        {discrepancy}
+                      </p>
+                    )}
+                  </div>
+                }
+              >
+                {isOpen ? (
+                  <div className="space-y-4">
+                    <div className="space-y-4">
+                      {'Controllable' in device.data ? (
+                        <ConfigFormSection
+                          title="Live controls"
+                          description="The same power, brightness, and color controls available from the floorplan device modal. These are immediate commands, not settings."
+                          actions={
+                            <DeviceReportStatus devices={[device]} detail />
+                          }
+                        >
+                          <DeviceQuickControls devices={[device]} />
+                        </ConfigFormSection>
                       ) : null}
                     </div>
 
-                    {hasDisplayOverride && <Badge>Custom label</Badge>}
-                  </div>
-                  {calibrationAssignments.find(
-                    (row) => row.device_key === deviceKey,
-                  ) && (
-                    <Badge variant="outline">
-                      {calibrationProfiles.find(
-                        (profile) =>
-                          profile.id ===
-                          calibrationAssignments.find(
-                            (row) => row.device_key === deviceKey,
-                          )?.profile_id,
-                      )?.name ?? 'Calibrated'}
-                    </Badge>
-                  )}
-
-                  <div className="text-sm text-foreground/80">
-                    {'Controllable' in device.data
-                      ? `Set to ${runtimeSummary}`
-                      : runtimeSummary}
-                  </div>
-
-                  {resolvedColorPreview && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span
-                        title={
-                          stateSource && stateSource.kind !== 'device_state'
-                            ? 'Colour resolved from its scene or source'
-                            : 'Colour the device reports'
-                        }
-                      >
-                        <ResolvedColorDot
-                          color={resolvedColorPreview.color}
-                          isPowered={resolvedColorPreview.isPowered}
-                        />
-                      </span>
-                    </div>
-                  )}
-
-                  {discrepancy && (
-                    <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
-                      {discrepancy}
-                    </p>
-                  )}
-                </div>
-              }
-            >
-              {isOpen ? (
-                <div className="space-y-4">
-                  <div className="space-y-4">
-                    {'Controllable' in device.data ? (
+                    <div className="grid gap-4 xl:grid-cols-2">
                       <ConfigFormSection
-                        title="Live controls"
-                        description="The same power, brightness, and color controls available from the floorplan device modal. These are immediate commands, not settings."
-                        actions={
-                          <DeviceReportStatus devices={[device]} detail />
-                        }
+                        title="What this device reports"
+                        description="Current information from its connection. Values may lag behind a physical change."
                       >
-                        <DeviceQuickControls devices={[device]} />
-                      </ConfigFormSection>
-                    ) : null}
-                  </div>
+                        {'Controllable' in device.data ? (
+                          <div className="space-y-4">
+                            <DeviceFactRow
+                              label="Active scene"
+                              value={getSceneLabel(
+                                activeSceneId,
+                                sceneNameById,
+                              )}
+                            />
+                            <DeviceFactRow
+                              label="Requested state"
+                              value={runtimeSummary}
+                            />
+                            <DeviceFactRow
+                              label="State source"
+                              value={sourceSummary.description}
+                            />
 
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    <ConfigFormSection
-                      title="What this device reports"
-                      description="Current information from its connection. Values may lag behind a physical change."
-                    >
-                      {'Controllable' in device.data ? (
+                            {stateDetails.length > 0 && (
+                              <div className="space-y-2 pt-1">
+                                <div className="text-xs text-muted-foreground">
+                                  State details
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {stateDetails.map((detail) => (
+                                    <Badge
+                                      key={`${deviceKey}-${detail}`}
+                                      variant="outline"
+                                    >
+                                      {detail}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            <DeviceFactRow
+                              label="Current value"
+                              value={runtimeSummary}
+                            />
+                            <DeviceFactRow
+                              label="Payload shape"
+                              value={sensorDetails.kind}
+                            />
+                            <DeviceFactRow
+                              label="Sensor UI"
+                              value={getSensorInteractionLabel(
+                                resolvedInteraction.kind,
+                              )}
+                            />
+                            <DeviceFactRow
+                              label="Mapping source"
+                              value={
+                                resolvedInteraction.source === 'saved'
+                                  ? 'Saved sensor mapping'
+                                  : 'Auto detected from payload'
+                              }
+                            />
+                          </div>
+                        )}
+                        <Button
+                          asChild
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                        >
+                          <Link
+                            to={`/config/routine-history?q=${encodeURIComponent(deviceKey)}`}
+                          >
+                            See automations started by this device
+                          </Link>
+                        </Button>
+                      </ConfigFormSection>
+
+                      <ConfigFormSection
+                        title="Identity"
+                        description="Static ids, display names, capabilities, and config group membership."
+                      >
                         <div className="space-y-4">
                           <DeviceFactRow
-                            label="Active scene"
-                            value={getSceneLabel(activeSceneId, sceneNameById)}
+                            label="Default label"
+                            value={entry.defaultLabel}
                           />
                           <DeviceFactRow
-                            label="Requested state"
-                            value={runtimeSummary}
+                            label="Integration"
+                            value={device.integration_id}
                           />
                           <DeviceFactRow
-                            label="State source"
-                            value={sourceSummary.description}
+                            label={
+                              'Sensor' in device.data
+                                ? 'Sensor ref'
+                                : 'Device key'
+                            }
+                            value={
+                              'Sensor' in device.data ? deviceRef : deviceKey
+                            }
                           />
 
-                          {stateDetails.length > 0 && (
+                          {manageLabel && (
+                            <DeviceFactRow
+                              label="Manage mode"
+                              value={manageLabel}
+                            />
+                          )}
+
+                          {capabilityLabels.length > 0 && (
                             <div className="space-y-2 pt-1">
                               <div className="text-xs text-muted-foreground">
-                                State details
+                                Capabilities
                               </div>
                               <div className="flex flex-wrap gap-2">
-                                {stateDetails.map((detail) => (
+                                {capabilityLabels.map((capability) => (
                                   <Badge
-                                    key={`${deviceKey}-${detail}`}
+                                    key={`${deviceKey}-${capability}`}
                                     variant="outline"
                                   >
-                                    {detail}
+                                    {capability}
                                   </Badge>
                                 ))}
                               </div>
                             </div>
                           )}
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          <DeviceFactRow
-                            label="Current value"
-                            value={runtimeSummary}
-                          />
-                          <DeviceFactRow
-                            label="Payload shape"
-                            value={sensorDetails.kind}
-                          />
-                          <DeviceFactRow
-                            label="Sensor UI"
-                            value={getSensorInteractionLabel(
-                              resolvedInteraction.kind,
-                            )}
-                          />
-                          <DeviceFactRow
-                            label="Mapping source"
-                            value={
-                              resolvedInteraction.source === 'saved'
-                                ? 'Saved sensor mapping'
-                                : 'Auto detected from payload'
-                            }
-                          />
-                        </div>
-                      )}
-                      <Button
-                        asChild
-                        variant="outline"
-                        size="sm"
-                        className="mt-2"
-                      >
-                        <Link
-                          to={`/config/routine-history?q=${encodeURIComponent(deviceKey)}`}
-                        >
-                          See automations started by this device
-                        </Link>
-                      </Button>
-                    </ConfigFormSection>
 
-                    <ConfigFormSection
-                      title="Identity"
-                      description="Static ids, display names, capabilities, and config group membership."
-                    >
-                      <div className="space-y-4">
-                        <DeviceFactRow
-                          label="Default label"
-                          value={entry.defaultLabel}
-                        />
-                        <DeviceFactRow
-                          label="Integration"
-                          value={device.integration_id}
-                        />
-                        <DeviceFactRow
-                          label={
-                            'Sensor' in device.data
-                              ? 'Sensor ref'
-                              : 'Device key'
-                          }
-                          value={
-                            'Sensor' in device.data ? deviceRef : deviceKey
-                          }
-                        />
-
-                        {manageLabel && (
-                          <DeviceFactRow
-                            label="Manage mode"
-                            value={manageLabel}
-                          />
-                        )}
-
-                        {capabilityLabels.length > 0 && (
                           <div className="space-y-2 pt-1">
                             <div className="text-xs text-muted-foreground">
-                              Capabilities
+                              Groups
                             </div>
-                            <div className="flex flex-wrap gap-2">
-                              {capabilityLabels.map((capability) => (
-                                <Badge
-                                  key={`${deviceKey}-${capability}`}
-                                  variant="outline"
-                                >
-                                  {capability}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="space-y-2 pt-1">
-                          <div className="text-xs text-muted-foreground">
-                            Groups
-                          </div>
-                          {groupNames.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {groupNames.map((groupName) => (
-                                <Badge
-                                  key={`${deviceKey}-${groupName}`}
-                                  variant="muted"
-                                >
-                                  {groupName}
-                                </Badge>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-sm text-muted-foreground">
-                              No config groups reference this device.
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </ConfigFormSection>
-                  </div>
-
-                  <div className="space-y-4">
-                    {canCalibrateDevice(device) ? (
-                      <ConfigFormSection
-                        title="Color calibration"
-                        description="Calibration corrects the color this light shows compared to what the app asked for. It needs the light switched on and takes a few steps; nothing changes until you finish the wizard."
-                      >
-                        {calibrationOpen === deviceKey ? (
-                          <ColorCalibrationWizard
-                            key={deviceKey}
-                            device={device}
-                            devices={liveDevices}
-                          />
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            aria-expanded={false}
-                            onClick={() => setCalibrationOpen(deviceKey)}
-                          >
-                            Start calibration
-                          </Button>
-                        )}
-                      </ConfigFormSection>
-                    ) : null}
-                    <ConfigFormSection
-                      title={
-                        'Sensor' in device.data
-                          ? 'Display and sensor behavior'
-                          : 'Display'
-                      }
-                      description={
-                        'Sensor' in device.data
-                          ? 'How this device is displayed, and how its sensor payload is presented in control surfaces.'
-                          : 'How this device is labelled and displayed in control surfaces.'
-                      }
-                    >
-                      <ConfigField
-                        label="Custom label"
-                        className="w-full max-w-md"
-                      >
-                        <Input
-                          type="text"
-                          placeholder="Use integration label"
-                          value={labelDraft}
-                          onChange={(e) =>
-                            setDisplayNameDrafts((previous) => ({
-                              ...previous,
-                              [deviceKey]: e.target.value,
-                            }))
-                          }
-                        />
-                      </ConfigField>
-
-                      {'Sensor' in device.data ? (
-                        <div className="space-y-4 rounded-2xl border border-border bg-muted/30 p-4">
-                          <div className="flex flex-wrap items-start gap-4">
-                            <ConfigField
-                              label="Map interaction"
-                              className="w-full max-w-sm"
-                            >
-                              <select
-                                className={selectClassName}
-                                value={interactionKind}
-                                onChange={(e) =>
-                                  updateSensorDraftKind(
-                                    deviceRef,
-                                    e.target.value as SensorInteractionKind,
-                                  )
-                                }
-                              >
-                                {SENSOR_INTERACTION_OPTIONS.map((option) => (
-                                  <option
-                                    key={option.value}
-                                    value={option.value}
+                            {groupNames.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                {groupNames.map((groupName) => (
+                                  <Badge
+                                    key={`${deviceKey}-${groupName}`}
+                                    variant="muted"
                                   >
-                                    {option.label}
-                                  </option>
+                                    {groupName}
+                                  </Badge>
                                 ))}
-                              </select>
-                            </ConfigField>
-
-                            <div className="space-y-2 text-sm text-muted-foreground">
-                              <div>Sensor reference: {deviceRef}</div>
-                              <div>
-                                Current payload mode:{' '}
-                                {getSensorInteractionLabel(
-                                  resolvedInteraction.kind,
-                                )}
                               </div>
-                              <div>
-                                Last seen sensor shape: {sensorDetails.kind}
+                            ) : (
+                              <div className="text-sm text-muted-foreground">
+                                No config groups reference this device.
                               </div>
-                            </div>
-                          </div>
-
-                          <SensorConfigFields
-                            kind={interactionKind}
-                            config={interactionConfig}
-                            resolvedLabel={getSensorInteractionLabel(
-                              resolvedInteraction.kind,
                             )}
-                            onChange={(field, value) =>
-                              updateSensorDraftField(deviceRef, field, value)
+                          </div>
+                        </div>
+                      </ConfigFormSection>
+                    </div>
+
+                    <div className="space-y-4">
+                      {canCalibrateDevice(device) ? (
+                        <ConfigFormSection
+                          title="Color calibration"
+                          description="Calibration corrects the color this light shows compared to what the app asked for. It needs the light switched on and takes a few steps; nothing changes until you finish the wizard."
+                        >
+                          {calibrationOpen === deviceKey ? (
+                            <ColorCalibrationWizard
+                              key={deviceKey}
+                              device={device}
+                              devices={liveDevices}
+                            />
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              aria-expanded={false}
+                              onClick={() => setCalibrationOpen(deviceKey)}
+                            >
+                              Start calibration
+                            </Button>
+                          )}
+                        </ConfigFormSection>
+                      ) : null}
+                      <ConfigFormSection
+                        title={
+                          'Sensor' in device.data
+                            ? 'Display and sensor behavior'
+                            : 'Display'
+                        }
+                        description={
+                          'Sensor' in device.data
+                            ? 'How this device is displayed, and how its sensor payload is presented in control surfaces.'
+                            : 'How this device is labelled and displayed in control surfaces.'
+                        }
+                      >
+                        <ConfigField
+                          label="Custom label"
+                          className="w-full max-w-md"
+                        >
+                          <Input
+                            type="text"
+                            placeholder="Use integration label"
+                            value={labelDraft}
+                            onChange={(e) =>
+                              setDisplayNameDrafts((previous) => ({
+                                ...previous,
+                                [deviceKey]: e.target.value,
+                              }))
                             }
                           />
-                        </div>
-                      ) : (
-                        <div className={dashedPanelClassName}>
-                          This device is not a sensor, so only the user-facing
-                          label applies here.
-                        </div>
-                      )}
+                        </ConfigField>
 
-                      {feedbackKey === deviceKey && (error || notice) ? (
-                        <Alert variant={error ? 'destructive' : 'default'}>
-                          <AlertDescription>{error ?? notice}</AlertDescription>
-                        </Alert>
-                      ) : null}
+                        {'Sensor' in device.data ? (
+                          <div className="space-y-4 rounded-2xl border border-border bg-muted/30 p-4">
+                            <div className="flex flex-wrap items-start gap-4">
+                              <ConfigField
+                                label="Map interaction"
+                                className="w-full max-w-sm"
+                              >
+                                <select
+                                  className={selectClassName}
+                                  value={interactionKind}
+                                  onChange={(e) =>
+                                    updateSensorDraftKind(
+                                      deviceRef,
+                                      e.target.value as SensorInteractionKind,
+                                    )
+                                  }
+                                >
+                                  {SENSOR_INTERACTION_OPTIONS.map((option) => (
+                                    <option
+                                      key={option.value}
+                                      value={option.value}
+                                    >
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </ConfigField>
 
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={isMutating}
-                          onClick={() =>
-                            setDisplayNameDrafts((previous) => ({
-                              ...previous,
-                              [deviceKey]: '',
-                            }))
-                          }
-                        >
-                          Use integration label
-                        </Button>
-                        {'Sensor' in device.data && (
+                              <div className="space-y-2 text-sm text-muted-foreground">
+                                <div>Sensor reference: {deviceRef}</div>
+                                <div>
+                                  Current payload mode:{' '}
+                                  {getSensorInteractionLabel(
+                                    resolvedInteraction.kind,
+                                  )}
+                                </div>
+                                <div>
+                                  Last seen sensor shape: {sensorDetails.kind}
+                                </div>
+                              </div>
+                            </div>
+
+                            <SensorConfigFields
+                              kind={interactionKind}
+                              config={interactionConfig}
+                              resolvedLabel={getSensorInteractionLabel(
+                                resolvedInteraction.kind,
+                              )}
+                              onChange={(field, value) =>
+                                updateSensorDraftField(deviceRef, field, value)
+                              }
+                            />
+                          </div>
+                        ) : (
+                          <div className={dashedPanelClassName}>
+                            This device is not a sensor, so only the user-facing
+                            label applies here.
+                          </div>
+                        )}
+
+                        {feedbackKey === deviceKey && (error || notice) ? (
+                          <Alert variant={error ? 'destructive' : 'default'}>
+                            <AlertDescription>
+                              {error ?? notice}
+                            </AlertDescription>
+                          </Alert>
+                        ) : null}
+
+                        <div className="flex flex-wrap justify-end gap-2">
                           <Button
                             variant="ghost"
                             size="sm"
                             disabled={isMutating}
                             onClick={() =>
-                              updateSensorDraftKind(deviceRef, 'auto')
+                              setDisplayNameDrafts((previous) => ({
+                                ...previous,
+                                [deviceKey]: '',
+                              }))
                             }
                           >
-                            Use auto sensor UI
+                            Use integration label
                           </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          disabled={isSaving || isMutating}
-                          onClick={() => void saveDeviceSettings(device)}
-                        >
-                          {isSaving && <span className={spinnerClassName} />}
-                          Save Changes
-                        </Button>
-                      </div>
-
-                      {hasDisplayOverride && (
-                        <div className="text-xs text-muted-foreground">
-                          A display name override is active for this device.
+                          {'Sensor' in device.data && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={isMutating}
+                              onClick={() =>
+                                updateSensorDraftKind(deviceRef, 'auto')
+                              }
+                            >
+                              Use auto sensor UI
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            disabled={isSaving || isMutating}
+                            onClick={() => void saveDeviceSettings(device)}
+                          >
+                            {isSaving && <span className={spinnerClassName} />}
+                            Save Changes
+                          </Button>
                         </div>
-                      )}
-                    </ConfigFormSection>
-                  </div>
 
-                  <div className="space-y-4">
-                    {'Sensor' in device.data ? (
-                      <ConfigFormSection
-                        title="Testing"
-                        description="These actions fake sensor input so you can test routines. They change nothing about the physical device and are separate from everyday controls."
-                      >
-                        <SensorActionPanel
-                          device={device}
-                          sensorConfig={
-                            deviceSensorConfigMap[deviceRef] ?? null
-                          }
-                        />
-                      </ConfigFormSection>
-                    ) : null}
-
-                    <div>
-                      <ConfigFormSection
-                        title="Technical details"
-                        description="The device key and the latest raw payload published by the integration, exactly as it arrived."
-                      >
-                        <p className="text-sm">
-                          <span className="text-muted-foreground">Key: </span>
-                          <span className="font-mono text-xs break-all">
-                            {deviceRef}
-                          </span>
-                        </p>
-                        {device.raw ? (
-                          <details>
-                            <summary className="cursor-pointer select-none text-sm text-foreground/80">
-                              Show live payload from the integration
-                            </summary>
-                            <pre className="mt-3 max-h-96 overflow-auto rounded-2xl border border-border bg-background p-3 text-xs font-mono whitespace-pre-wrap break-all">
-                              {JSON.stringify(device.raw, null, 2)}
-                            </pre>
-                          </details>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">
-                            This device has not published a raw payload.
-                          </p>
+                        {hasDisplayOverride && (
+                          <div className="text-xs text-muted-foreground">
+                            A display name override is active for this device.
+                          </div>
                         )}
                       </ConfigFormSection>
                     </div>
-                    <details className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
-                      <summary className="cursor-pointer text-sm font-semibold">
-                        Replace references or delete this device
-                      </summary>
-                      <div className="mt-3 space-y-4">
-                        <div className="space-y-2">
-                          <p className="text-xs text-muted-foreground">
-                            Replace references: scenes, rooms, and routines that
-                            name this device point at the replacement instead.
-                          </p>
-                          <ConfigField
-                            label="Replacement device"
-                            className="w-full max-w-md"
-                          >
-                            <SearchablePicker
-                              options={availableReplacementOptions.map(
-                                (option) => ({
-                                  value: option.key,
-                                  label: option.label,
-                                  detail: option.key,
-                                }),
-                              )}
-                              value={replacementDraft}
-                              onChange={(key) =>
-                                setReplacementDrafts((previous) => ({
-                                  ...previous,
-                                  [deviceKey]: key,
-                                }))
-                              }
-                              placeholder="Select replacement device…"
-                              disabled={isSaving || isMutating}
-                            />
-                          </ConfigField>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="border-amber-400/60 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
-                            disabled={
-                              isSaving || isMutating || !replacementDraft
-                            }
-                            onClick={() => void replaceDeviceReferences(device)}
-                          >
-                            {isMutating && (
-                              <span className={spinnerClassName} />
-                            )}
-                            Replace references
-                          </Button>
-                        </div>
 
-                        <div className="space-y-2 border-t border-destructive/30 pt-3">
-                          <p className="text-xs text-muted-foreground">
-                            Delete: the device disappears from runtime memory
-                            and the database, and saved references to it are
-                            removed.
+                    <div className="space-y-4">
+                      {'Sensor' in device.data ? (
+                        <ConfigFormSection
+                          title="Testing"
+                          description="These actions fake sensor input so you can test routines. They change nothing about the physical device and are separate from everyday controls."
+                        >
+                          <SensorActionPanel
+                            device={device}
+                            sensorConfig={
+                              deviceSensorConfigMap[deviceRef] ?? null
+                            }
+                          />
+                        </ConfigFormSection>
+                      ) : null}
+
+                      <div>
+                        <ConfigFormSection
+                          title="Technical details"
+                          description="The device key and the latest raw payload published by the integration, exactly as it arrived."
+                        >
+                          <p className="text-sm">
+                            <span className="text-muted-foreground">Key: </span>
+                            <span className="font-mono text-xs break-all">
+                              {deviceRef}
+                            </span>
                           </p>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            disabled={isSaving || isMutating}
-                            onClick={() => void deleteDeviceConfig(device)}
-                          >
-                            {isMutating && (
-                              <span className={spinnerClassName} />
-                            )}
-                            Delete device
-                          </Button>
-                        </div>
+                          {device.raw ? (
+                            <details>
+                              <summary className="cursor-pointer select-none text-sm text-foreground/80">
+                                Show live payload from the integration
+                              </summary>
+                              <pre className="mt-3 max-h-96 overflow-auto rounded-2xl border border-border bg-background p-3 text-xs font-mono whitespace-pre-wrap break-all">
+                                {JSON.stringify(device.raw, null, 2)}
+                              </pre>
+                            </details>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              This device has not published a raw payload.
+                            </p>
+                          )}
+                        </ConfigFormSection>
                       </div>
-                    </details>
+                      <details className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
+                        <summary className="cursor-pointer text-sm font-semibold">
+                          Replace references or delete this device
+                        </summary>
+                        <div className="mt-3 space-y-4">
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">
+                              Replace references: scenes, rooms, and routines
+                              that name this device point at the replacement
+                              instead.
+                            </p>
+                            <ConfigField
+                              label="Replacement device"
+                              className="w-full max-w-md"
+                            >
+                              <SearchablePicker
+                                options={availableReplacementOptions.map(
+                                  (option) => ({
+                                    value: option.key,
+                                    label: option.label,
+                                    detail: option.key,
+                                  }),
+                                )}
+                                value={replacementDraft}
+                                onChange={(key) =>
+                                  setReplacementDrafts((previous) => ({
+                                    ...previous,
+                                    [deviceKey]: key,
+                                  }))
+                                }
+                                placeholder="Select replacement device…"
+                                disabled={isSaving || isMutating}
+                              />
+                            </ConfigField>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-amber-400/60 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
+                              disabled={
+                                isSaving || isMutating || !replacementDraft
+                              }
+                              onClick={() =>
+                                void replaceDeviceReferences(device)
+                              }
+                            >
+                              {isMutating && (
+                                <span className={spinnerClassName} />
+                              )}
+                              Replace references
+                            </Button>
+                          </div>
+
+                          <div className="space-y-2 border-t border-destructive/30 pt-3">
+                            <p className="text-xs text-muted-foreground">
+                              Delete: the device disappears from runtime memory
+                              and the database, and saved references to it are
+                              removed.
+                            </p>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              disabled={isSaving || isMutating}
+                              onClick={() => void deleteDeviceConfig(device)}
+                            >
+                              {isMutating && (
+                                <span className={spinnerClassName} />
+                              )}
+                              Delete device
+                            </Button>
+                          </div>
+                        </div>
+                      </details>
+                    </div>
                   </div>
-                </div>
-              ) : null}
-            </ExpandableConfigCard>
+                ) : null}
+              </ExpandableConfigCard>
+            </>
           );
         })}
       </div>

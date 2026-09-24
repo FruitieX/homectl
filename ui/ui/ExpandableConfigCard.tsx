@@ -19,6 +19,11 @@ type Props = {
    * fires this instead of opening; a normal tap still opens the card.
    */
   onLongPress?: () => void;
+  /**
+   * Render the detail inline instead of in an overlay. Used by the item's own
+   * page, where the detail is the page rather than something to open.
+   */
+  expandInline?: boolean;
   children: ReactNode;
 };
 
@@ -32,6 +37,7 @@ export function ExpandableConfigCard({
   dialogBoxClassName,
   cardClassName,
   onLongPress,
+  expandInline = false,
   children,
 }: Props) {
   const longPressEnabled = Boolean(onLongPress);
@@ -75,8 +81,12 @@ export function ExpandableConfigCard({
         <CardContent className="p-4 sm:p-5">{summary}</CardContent>
       </Card>
 
+      {open && expandInline ? (
+        <div className="px-5 pb-5 md:px-0 md:pb-0">{children}</div>
+      ) : null}
+
       <ResponsiveOverlay
-        open={open}
+        open={open && !expandInline}
         onOpenChange={(nextOpen) => {
           if (nextOpen) {
             onOpen();

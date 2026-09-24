@@ -1,8 +1,8 @@
 /**
  * The item's own page for a configuration reference. Diagnostics, search, and
  * history all use this so no surface sends the user to a list to search again.
- * Device keys contain a slash, so devices use a query parameter instead of a
- * path segment.
+ * A device key contains a slash (`zigbee2mqtt/hallway_lamp`), so it keeps its
+ * slashes and each segment is escaped on its own.
  */
 const SECTION_BY_ENTITY: Record<string, string> = {
   group: 'groups',
@@ -25,7 +25,10 @@ export function configItemHref(entity: string, entityId: string): string {
     case 'integration':
       return `/config/${SECTION_BY_ENTITY[entity]}/${encoded}`;
     case 'device':
-      return `/config/devices/detail?key=${encoded}`;
+      return `/config/devices/detail/${entityId
+        .split('/')
+        .map((part) => encodeURIComponent(part))
+        .join('/')}`;
     default:
       return `/config?q=${encoded}`;
   }
