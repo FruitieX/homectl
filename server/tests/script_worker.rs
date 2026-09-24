@@ -330,6 +330,12 @@ async fn s03_long_computation_terminates_and_pool_stays_fair() {
     config.invocation_timeout = Duration::from_millis(800);
     let pool = Arc::new(JsWorkerPool::new(config).await.unwrap());
 
+    // A tight loop is bounded by the invocation timeout rather than by the
+    // in-engine loop budget: that budget has to stay large enough for
+    // `String.prototype.repeat` to build a result of MAX_RESULT_BYTES (Boa
+    // counts one loop iteration per repeated byte), which is more iterations
+    // than a wall-clock budget can afford. Either way the computation
+    // terminates and the worker is replaced, which is what this case pins.
     let start = Instant::now();
     let error = pool
         .execute(
@@ -338,7 +344,13 @@ async fn s03_long_computation_terminates_and_pool_stays_fair() {
         )
         .await
         .unwrap_err();
-    assert!(matches!(error, WorkerError::Script { .. }), "{error:?}");
+    assert!(
+        matches!(
+            error,
+            WorkerError::Script { .. } | WorkerError::Timeout { .. }
+        ),
+        "{error:?}"
+    );
     assert!(start.elapsed() < Duration::from_secs(5));
 
     // A natively hung worker must not block the other pool member.
