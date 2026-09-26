@@ -1,4 +1,4 @@
-FROM node:22.20.0-alpine@sha256:dbcedd8aeab47fbc0f4dd4bffa55b7c3c729a707875968d467aaaea42d6225af AS ui-builder
+FROM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS ui-builder
 
 RUN apk add --no-cache pango-dev g++ make jpeg-dev giflib-dev librsvg-dev
 RUN corepack enable && corepack prepare pnpm@10.18.0 --activate
