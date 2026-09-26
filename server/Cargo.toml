@@ -102,7 +102,7 @@ tokio-console = ["dep:console-subscriber"]
 datatest-stable = "=0.3.3"
 tokio = { version = "=1.53.1", features = ["test-util"] }
 reqwest = { version = "=0.13.5", features = ["blocking", "json"] }
-testcontainers = { version = "=0.27.3", features = ["blocking"] }
+testcontainers = { version = "=0.28.0", features = ["blocking"] }
 testcontainers-modules = { version = "=0.15.0", features = ["postgres"] }
 which = "=8.0.6"
 
