@@ -9,3 +9,9 @@ server/target
 target
 cli/target
 **/*.log
+.env
+.env.*
+.envrc
+**/.env
+**/.env.*
+**/.envrc
