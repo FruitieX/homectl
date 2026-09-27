@@ -29,6 +29,8 @@ const DEVICE_DB_WRITE_DEBOUNCE_MS: u64 = 100;
 /// in-flight instead of as drift that needs correcting.
 const DEVICE_CORRECTION_SETTLE_MARGIN_MS: i64 = 500;
 
+type ScenarioRolloutQueue = Arc<Mutex<Vec<(u64, Event)>>>;
+
 #[derive(Debug, PartialEq, Eq)]
 struct SpatialRolloutPlan {
     immediate_device_keys: Vec<DeviceKey>,
@@ -168,6 +170,9 @@ pub struct Devices {
     event_tx: TxEventChannel,
     state: DevicesState,
     cli: Cli,
+    /// Delayed spatial-rollout events queued for fake-clock delivery by the
+    /// scenario runner. `None` keeps production wall-clock scheduling.
+    scenario_rollout_events: Option<ScenarioRolloutQueue>,
     pending_db_updates: Arc<Mutex<BTreeMap<DeviceKey, Device>>>,
     db_write_flush_pending: Arc<AtomicBool>,
     event_sequencer: Arc<EventSequencer>,
@@ -191,6 +196,7 @@ impl Devices {
             event_tx,
             state: Default::default(),
             cli: cli.clone(),
+            scenario_rollout_events: None,
             pending_db_updates: Default::default(),
             db_write_flush_pending: Arc::new(AtomicBool::new(false)),
             event_sequencer: Arc::new(EventSequencer::new()),
@@ -199,6 +205,25 @@ impl Devices {
             current_frame_id: None,
             source_aliases: BTreeMap::new(),
         }
+    }
+
+    /// Create a hardware-free device runtime for deterministic scenario tests.
+    /// Spatial rollout delays are queued for the fake clock instead of sleeping.
+    pub fn new_simulated(event_tx: TxEventChannel, cli: &Cli) -> Self {
+        let mut devices = Self::new(event_tx, cli);
+        devices.scenario_rollout_events = Some(Arc::new(Mutex::new(Vec::new())));
+        devices
+    }
+
+    /// Take spatial rollout events scheduled by the simulated runtime.
+    pub fn take_scheduled_rollout_events(&self) -> Vec<(u64, Event)> {
+        self.scenario_rollout_events
+            .as_ref()
+            .map(|events| {
+                let mut events = events.lock().expect("scenario rollout queue poisoned");
+                std::mem::take(&mut *events)
+            })
+            .unwrap_or_default()
     }
 
     /// Replace the computed-source alias map (P11/D07).
@@ -1034,18 +1059,25 @@ impl Devices {
         // metadata of the command that scheduled them.
         let causation = self.mutation_causation;
         for (delay_ms, device) in delayed_devices {
-            let event_tx = self.event_tx.clone();
-
-            tokio::spawn(async move {
-                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-                event_tx.send(Event::ApplyDeviceState {
-                    device,
-                    skip_external_update: Some(false),
-                    skip_db_update: Some(false),
-                    origin: Some(EventOrigin::Derived),
-                    causation: Some(causation),
+            let event = Event::ApplyDeviceState {
+                device,
+                skip_external_update: Some(false),
+                skip_db_update: Some(false),
+                origin: Some(EventOrigin::Derived),
+                causation: Some(causation),
+            };
+            if let Some(events) = &self.scenario_rollout_events {
+                events
+                    .lock()
+                    .expect("scenario rollout queue poisoned")
+                    .push((delay_ms, event));
+            } else {
+                let event_tx = self.event_tx.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                    event_tx.send(event);
                 });
-            });
+            }
         }
     }
 

@@ -13,7 +13,9 @@ use crate::db::schema::{
 use color_eyre::Result;
 use eyre::eyre;
 use sea_orm::sea_query::{Alias, Expr, Order, Query};
-use sea_orm::{ConnectionTrait, Database, ExprTrait, QueryResult, StatementBuilder};
+use sea_orm::{
+    ConnectionTrait, Database, ExprTrait, QueryResult, StatementBuilder, TransactionTrait,
+};
 use serde::de::DeserializeOwned;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -42,10 +44,8 @@ pub async fn prepare_simulation_config(
                         )
                         .await?
                     }
-                    Err(error) => {
-                        warn!(
-                            "Failed to read simulation config from source PostgreSQL DB: {error}"
-                        );
+                    Err(_) => {
+                        warn!("Failed to read simulation config from source PostgreSQL DB; details redacted");
                         load_simulation_config_fallback(
                             config_path,
                             "Source PostgreSQL DB was not readable",
@@ -101,19 +101,30 @@ async fn export_from_sqlite_source_db(db_path: &Path) -> Result<ConfigExport> {
     }
 }
 
-/// Open a source PostgreSQL DB and export its config. Databases created before
-/// the additive v2 routine columns (P03) fall back to the same column-tolerant
-/// query-builder reader the SQLite path uses.
+/// Open a source PostgreSQL DB using read-only transactions. Databases created
+/// before the additive v2 routine columns (P03) fall back to the same
+/// column-tolerant query-builder reader the SQLite path uses.
 async fn export_from_postgres_source_db(database_url: &str) -> Result<ConfigExport> {
     let db = Database::connect(database_url).await?;
 
-    match config_queries::db_export_config_from_connection(&db).await {
+    let current_tx = db.begin().await?;
+    current_tx
+        .execute_unprepared("SET TRANSACTION READ ONLY")
+        .await?;
+    let current = config_queries::db_export_config_from_connection(&current_tx).await;
+    let _ = current_tx.rollback().await;
+
+    match current {
         Ok(export) => Ok(normalize_source_export(export)),
-        Err(error) => {
-            warn!(
-                "Failed to read PostgreSQL source using current schema, trying legacy schema fallback: {error}"
-            );
-            export_from_legacy_source_db(&db).await
+        Err(_) => {
+            warn!("Failed to read PostgreSQL source using current schema; details redacted; trying legacy schema fallback");
+            let legacy_tx = db.begin().await?;
+            legacy_tx
+                .execute_unprepared("SET TRANSACTION READ ONLY")
+                .await?;
+            let legacy = export_from_legacy_source_db(&legacy_tx).await;
+            let _ = legacy_tx.rollback().await;
+            legacy
         }
     }
 }

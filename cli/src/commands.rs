@@ -1,3 +1,10 @@
+use std::{env, fs, path::PathBuf};
+
+use homectl_server::core::{
+    scenario::{run_scenario_suite, ScenarioSuite},
+    simulate::prepare_simulation_config,
+};
+
 use crate::client::Client;
 use crate::output::{self, Format};
 use crate::{ActionCommand, DeviceAction, ListOrGet};
@@ -165,4 +172,92 @@ pub async fn health(client: &Client) -> Result<(), String> {
         return Err("Server is not responding".to_string());
     }
     Ok(())
+}
+
+/// Run a private suite against a read-only config export and simulated devices.
+pub async fn scenario_test(
+    source_db: Option<String>,
+    config_export: Option<PathBuf>,
+    scenarios: Option<PathBuf>,
+) -> Result<(), String> {
+    if source_db.is_some() && config_export.is_some() {
+        return Err("choose either --source-db or --config-export, not both".to_string());
+    }
+
+    let source_db = if config_export.is_some() {
+        None
+    } else {
+        source_db
+            .or_else(|| env::var("DATABASE_URL").ok())
+            .or_else(|| {
+                PathBuf::from("./homectl.db")
+                    .exists()
+                    .then(|| "./homectl.db".into())
+            })
+    };
+    if source_db.is_none() && config_export.is_none() {
+        return Err(
+            "no configuration source found; provide --source-db, --config-export, DATABASE_URL, or ./homectl.db"
+                .to_string(),
+        );
+    }
+
+    let scenario_path = scenarios.unwrap_or_else(default_scenario_path);
+    let scenario_text = fs::read_to_string(&scenario_path).map_err(|error| {
+        format!(
+            "could not read private scenario suite at {}: {error}",
+            scenario_path.display()
+        )
+    })?;
+    let suite: ScenarioSuite = serde_json::from_str(&scenario_text).map_err(|error| {
+        format!(
+            "invalid scenario suite at {}: {error}",
+            scenario_path.display()
+        )
+    })?;
+
+    let config = prepare_simulation_config(
+        source_db.as_deref(),
+        config_export.as_ref().and_then(|path| path.to_str()),
+    )
+    .await
+    .map_err(|error| {
+        if source_db.is_some() {
+            "could not read the database configuration in read-only mode; database details are redacted".to_string()
+        } else {
+            format!("could not load config export: {error:#}")
+        }
+    })?;
+    let report = run_scenario_suite(&config, &suite)
+        .await
+        .map_err(|error| format!("could not run scenario suite: {error:#}"))?;
+
+    println!(
+        "{} scenario(s): {} passed, {} failed",
+        report.scenarios.len(),
+        report.passed_count().to_string().green(),
+        report.failed_count().to_string().red()
+    );
+    for scenario in &report.scenarios {
+        if scenario.passed {
+            println!("{} {}", "PASS".green(), scenario.name);
+        } else {
+            println!("{} {}", "FAIL".red(), scenario.name);
+            for failure in &scenario.failures {
+                println!("  - {failure}");
+            }
+        }
+    }
+    if report.failed_count() > 0 {
+        return Err(format!("{} scenario(s) failed", report.failed_count()));
+    }
+    Ok(())
+}
+
+fn default_scenario_path() -> PathBuf {
+    let config_home = env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
+        .unwrap_or_else(|| PathBuf::from("."));
+    config_home.join("homectl").join("scenarios.json")
 }

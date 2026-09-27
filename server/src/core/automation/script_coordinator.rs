@@ -314,6 +314,11 @@ impl ScriptCoordinator {
             .map(|entry| entry.state_revision)
     }
 
+    /// Number of in-flight invocations across every registered owner.
+    pub fn total_pending_count(&self) -> usize {
+        self.owners.values().map(|entry| entry.pending.len()).sum()
+    }
+
     /// Number of in-flight invocations for an owner.
     pub fn pending_count(&self, owner: &ScriptOwnerId) -> usize {
         self.owners

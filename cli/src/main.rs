@@ -1,4 +1,4 @@
-use std::process;
+use std::{path::PathBuf, process};
 
 use clap::{Parser, Subcommand};
 use client::Client;
@@ -65,6 +65,27 @@ enum Commands {
     },
     /// Check server health
     Health,
+    /// Run private, simulated automation scenarios against the configured routines.
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigAction {
+    /// Test routines without sending commands to integrations or hardware.
+    Test {
+        /// Read configuration from a database in read-only mode (defaults to DATABASE_URL or ./homectl.db).
+        #[arg(long, env = "HOMECTL_SOURCE_DB")]
+        source_db: Option<String>,
+        /// Read a JSON config export instead of a database.
+        #[arg(long)]
+        config_export: Option<PathBuf>,
+        /// Private scenario suite (defaults to $XDG_CONFIG_HOME/homectl/scenarios.json).
+        #[arg(long, env = "HOMECTL_SCENARIOS")]
+        scenarios: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -164,6 +185,13 @@ async fn main() {
             commands::config_resource(&client, "integrations", action, &cli.format).await
         }
         Commands::Health => commands::health(&client).await,
+        Commands::Config { action } => match action {
+            ConfigAction::Test {
+                source_db,
+                config_export,
+                scenarios,
+            } => commands::scenario_test(source_db, config_export, scenarios).await,
+        },
     };
 
     if let Err(e) = result {

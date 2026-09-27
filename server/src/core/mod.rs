@@ -17,6 +17,7 @@ pub mod logs;
 pub mod routine_history;
 pub mod routine_validation;
 pub mod routines;
+pub mod scenario;
 pub mod scene_commands;
 pub mod scenes;
 pub mod scheduler;
