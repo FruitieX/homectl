@@ -485,7 +485,7 @@ impl Devices {
                 .state
                 .0
                 .values()
-                .filter(|d| d.get_scene_id().as_ref() == Some(scene_id))
+                .filter(|d| d.get_scene_id().as_ref() == Some(scene_id) && !d.is_scene_paused())
                 .map(|d| d.set_scene(Some(scene_id), scenes, self))
                 .collect();
 
@@ -791,6 +791,21 @@ impl Devices {
                 {
                     data.last_report.clone_from(&previous.last_report);
                 }
+                if origin == EventOrigin::Report {
+                    // Reports usually omit server-owned scene membership; retain it
+                    // unless the report explicitly names a different scene. A changed
+                    // association also resumes that device.
+                    let reported_scene_changed = data
+                        .scene_id
+                        .as_ref()
+                        .is_some_and(|scene_id| Some(scene_id) != previous.scene_id.as_ref());
+                    if reported_scene_changed {
+                        data.scene_paused = false;
+                    } else {
+                        data.scene_id.clone_from(&previous.scene_id);
+                        data.scene_paused = previous.scene_paused;
+                    }
+                }
                 if data.availability.is_none() {
                     data.availability.clone_from(&previous.availability);
                 }
@@ -958,7 +973,8 @@ impl Devices {
             .keys()
             .filter_map(|device_key| self.get_device(device_key))
             .map(|device| {
-                let scene_device = device.set_scene(Some(request.scene_id), request.scenes, self);
+                let scene_device =
+                    device.set_scene_and_resume(Some(request.scene_id), request.scenes, self);
 
                 if let Some(transition) = request.transition {
                     scene_device.set_transition(Some(transition.0))
@@ -1357,6 +1373,26 @@ mod tests {
             )),
             None,
         )
+    }
+
+    #[test]
+    fn reports_preserve_server_owned_scene_pause_and_association() {
+        let (mut devices, _event_rx) = test_devices();
+        let mut current = managed_controllable_device("lamp1", "Lamp 1");
+        let scene_id = crate::types::scene::SceneId::from_str("focus").unwrap();
+        let DeviceData::Controllable(data) = &mut current.data else {
+            unreachable!()
+        };
+        data.scene_id = Some(scene_id.clone());
+        data.scene_paused = true;
+        devices.set_state_with_origin(&current, true, true, EventOrigin::Startup);
+
+        let incoming = managed_controllable_device("lamp1", "Lamp 1");
+        devices.set_state_with_origin(&incoming, true, true, EventOrigin::Report);
+
+        let stored = devices.get_device(&current.get_device_key()).unwrap();
+        assert_eq!(stored.get_scene_id(), Some(scene_id));
+        assert!(stored.is_scene_paused());
     }
 
     #[tokio::test]
@@ -1904,8 +1940,13 @@ mod tests {
         let (mut devices, _event_rx) = test_devices();
         let groups = Groups::new(GroupsConfig::new());
         let scene_id = crate::types::scene::SceneId::from_str("focus").unwrap();
-        let target = managed_controllable_device("lamp1", "Lamp 1");
+        let mut target = managed_controllable_device("lamp1", "Lamp 1");
         let target_key = target.get_device_key();
+        if let DeviceData::Controllable(data) = &mut target.data {
+            data.scene_id = Some(scene_id.clone());
+            data.scene_paused = true;
+            data.state.brightness = Some(OrderedFloat(0.25));
+        }
 
         devices.set_state(&target, true, true);
 
@@ -1930,6 +1971,19 @@ mod tests {
         );
         let mut scenes = Scenes::new(scenes_config);
         scenes.force_invalidate(&devices, &groups);
+
+        devices.invalidate(
+            &target_key,
+            &[scene_id.clone()].into_iter().collect(),
+            &scenes,
+            &[],
+        );
+        let stored = devices.get_device(&target_key).unwrap();
+        let DeviceData::Controllable(data) = &stored.data else {
+            panic!("expected controllable device");
+        };
+        assert!(data.scene_paused);
+        assert_eq!(data.state.brightness, Some(OrderedFloat(0.25)));
 
         let result = devices
             .activate_scene(ActivateSceneRequest {
@@ -1957,6 +2011,7 @@ mod tests {
 
         assert_eq!(data.state.transition, Some(OrderedFloat(1.5)));
         assert_eq!(data.state.brightness, Some(OrderedFloat(0.7)));
+        assert!(!data.scene_paused);
     }
 
     #[tokio::test]

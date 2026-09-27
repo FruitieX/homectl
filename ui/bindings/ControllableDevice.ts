@@ -19,6 +19,10 @@ export type ControllableDevice = {
   last_report?: DeviceReport;
   requested_at_ms?: number;
   scene_id: SceneId | null;
+  /**
+   * Manual state is held until the associated scene is explicitly activated again.
+   */
+  scene_paused: boolean;
   state_source: DeviceStateSource | null;
   capabilities: Capabilities;
   state: ControllableState;

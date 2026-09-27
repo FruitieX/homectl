@@ -5,7 +5,7 @@ import {
 } from '@/lib/deviceCapabilities';
 import { useCarHeaterModalOpenState } from '@/hooks/carHeaterModalState';
 import { useEffect, useState } from 'react';
-import { useAtomValue } from 'jotai';
+
 import { toast } from 'sonner';
 import { createUuid } from '@/lib/uuid';
 import { sendSceneCommand } from '@/lib/deviceCommands';
@@ -13,10 +13,7 @@ import type { DeviceColor } from '@/bindings/DeviceColor';
 import { Lightbulb, Power, SlidersHorizontal } from 'lucide-react';
 import type { Device } from '@/bindings/Device';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
-import {
-  previousDeviceScenesAtom,
-  useSetDeviceState,
-} from '@/hooks/useSetDeviceColor';
+import { useSetDeviceState } from '@/hooks/useSetDeviceColor';
 import {
   useConnectionStatus,
   useScenesState,
@@ -31,7 +28,7 @@ import Color, { type ColorInstance } from 'color';
 
 type Color = ColorInstance;
 
-// Preserve the existing scene override mode when changing live controls.
+// Keep the explicit scene-autosave preference when changing live controls.
 export function useLiveDeviceControls() {
   const setState = useSetDeviceState();
   const scenes = useScenesState();
@@ -45,7 +42,7 @@ export function useLiveDeviceControls() {
     const sceneId = device.data.Controllable.scene_id;
     const persist = Boolean(
       sceneId &&
-        scenes?.[sceneId]?.active_overrides.includes(getDeviceKey(device)),
+      scenes?.[sceneId]?.active_overrides.includes(getDeviceKey(device)),
     );
     // Omitted color/brightness preserve each device's own state and color mode.
     setState(device, persist, power, undefined, brightness, undefined, color);
@@ -168,7 +165,6 @@ export function DeviceQuickControls({
   );
   const scenes = useScenesState();
   const ws = useWebsocket();
-  const previousScenes = useAtomValue(previousDeviceScenesAtom);
   const allControllable = devices.filter(
     (device) => 'Controllable' in device.data,
   );
@@ -178,12 +174,12 @@ export function DeviceQuickControls({
   const readonlyCount = allControllable.length - controllable.length;
   const dimmable = controllable.filter(supportsDeviceBrightness);
   const restorable = controllable.filter((device) => {
-    const id = previousScenes[getDeviceKey(device)];
-    return (
-      'Controllable' in device.data &&
-      !device.data.Controllable.scene_id &&
-      id &&
-      scenes?.[id]?.devices[getDeviceKey(device)]
+    if (!('Controllable' in device.data)) return false;
+    const { scene_id, scene_paused } = device.data.Controllable;
+    return Boolean(
+      scene_paused &&
+      scene_id &&
+      scenes?.[scene_id]?.devices[getDeviceKey(device)],
     );
   });
   const restoreScenes = async () => {
@@ -191,7 +187,11 @@ export function DeviceQuickControls({
     const targets = new Map<string, string[]>();
     for (const device of restorable) {
       const key = getDeviceKey(device);
-      const id = previousScenes[key];
+      const id =
+        'Controllable' in device.data
+          ? device.data.Controllable.scene_id
+          : null;
+      if (!id) continue;
       targets.set(id, [...(targets.get(id) ?? []), key]);
     }
     try {
@@ -379,7 +379,7 @@ export function DeviceQuickControls({
           onNativeChange={setState}
         />
       )}
-      {!compact && restorable.length > 0 && (
+      {restorable.length > 0 && (
         <Button
           variant="outline"
           disabled={!connected}
@@ -387,7 +387,11 @@ export function DeviceQuickControls({
         >
           Restore{' '}
           {new Set(
-            restorable.map((device) => previousScenes[getDeviceKey(device)]),
+            restorable.map((device) =>
+              'Controllable' in device.data
+                ? device.data.Controllable.scene_id
+                : null,
+            ),
           ).size > 1
             ? 'scenes'
             : 'scene'}

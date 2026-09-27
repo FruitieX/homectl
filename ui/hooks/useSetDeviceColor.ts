@@ -13,14 +13,8 @@ import {
   sendDeviceCommand,
 } from '@/lib/deviceCommands';
 import type { DeviceColor } from '@/bindings/DeviceColor';
-import { atom, useSetAtom } from 'jotai';
-
-// Session history for returning manually adjusted devices to their last scene.
-export const previousDeviceScenesAtom = atom<Record<string, string>>({});
-
 export const useSetDeviceState = () => {
   const ws = useWebsocket();
-  const rememberScenes = useSetAtom(previousDeviceScenesAtom);
   return useCallback(
     (
       device: Device,
@@ -40,17 +34,6 @@ export const useSetDeviceState = () => {
         return;
       }
       const hsv = color?.hsv();
-      if (
-        !preserveScene &&
-        'Controllable' in device.data &&
-        device.data.Controllable.scene_id
-      ) {
-        const sceneId = device.data.Controllable.scene_id;
-        rememberScenes((previous) => ({
-          ...previous,
-          [getDeviceKey(device)]: sceneId,
-        }));
-      }
       void sendDeviceCommand(ws, {
         request_id: createUuid(),
         device_key: getDeviceKey(device),
@@ -67,6 +50,6 @@ export const useSetDeviceState = () => {
         toast.error(error.message, { id: 'device-command-error' }),
       );
     },
-    [ws, rememberScenes],
+    [ws],
   );
 };

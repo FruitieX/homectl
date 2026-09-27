@@ -64,14 +64,18 @@ pub fn prepare_device_command(state: &AppState, command: &DeviceCommand) -> Resu
     if let Some(power) = command.power {
         data.state.power = power;
     }
-    if !command.preserve_scene {
-        data.scene_id = None;
+    let preserve_scene = command.preserve_scene && !data.scene_paused;
+    let pause_scene = data.scene_id.is_some() && !preserve_scene;
+    data.scene_paused = pause_scene;
+    if !preserve_scene {
         data.state_source = None;
     }
     Ok(Event::SetInternalState {
         device,
         skip_external_update: Some(false),
-        skip_db_update: None,
+        // The pause flag is durable device state; persist it with the normal
+        // device JSON row even though ordinary commands skip that write.
+        skip_db_update: Some(!pause_scene),
         origin: Some(crate::types::automation_event::EventOrigin::Command),
         causation: None,
         integration_epoch: None,
@@ -86,6 +90,7 @@ mod tests {
         color::Capabilities,
         device::{ControllableDevice, Device, DeviceId, ManageKind},
         integration::IntegrationId,
+        scene::SceneId,
     };
 
     fn fixture(
@@ -122,6 +127,38 @@ mod tests {
         };
         state.devices.set_state(&device, true, true);
         (state, command, event_rx)
+    }
+
+    #[tokio::test]
+    async fn manual_command_keeps_the_scene_association_for_server_side_pause() {
+        let (mut state, command, _event_rx) = fixture(ManageKind::Unmanaged, true);
+        let scene_id = SceneId::new("evening".into());
+        let mut device = state
+            .devices
+            .get_device(&command.device_key)
+            .unwrap()
+            .clone();
+        let DeviceData::Controllable(data) = &mut device.data else {
+            unreachable!()
+        };
+        data.scene_id = Some(scene_id.clone());
+        state.devices.set_state(&device, true, true);
+
+        let Event::SetInternalState {
+            device,
+            skip_db_update,
+            ..
+        } = prepare_device_command(&state, &command).unwrap()
+        else {
+            panic!("expected device event")
+        };
+
+        assert_eq!(device.get_scene_id(), Some(scene_id));
+        assert_eq!(skip_db_update, Some(false));
+        let DeviceData::Controllable(data) = &device.data else {
+            unreachable!()
+        };
+        assert!(data.scene_paused);
     }
 
     #[tokio::test]

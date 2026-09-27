@@ -371,7 +371,7 @@ fn apply_internal_state(
 ) -> Result<EventOutcome> {
     let mut outcome = EventOutcome::default();
 
-    let has_scene_override = state.scenes.has_override(device);
+    let has_scene_override = state.scenes.has_override(device) && !device.is_scene_paused();
     if has_scene_override {
         let (scene_id, overrides) = state.scenes.store_scene_override_in_memory(device, true)?;
         outcome.push(DeferredEventWork::PersistSceneOverride {
