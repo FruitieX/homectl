@@ -20,11 +20,7 @@ import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import {
   affectedDevicesSummary,
   describeAssistantActionChange,
-  scenesToRemember,
 } from '@/lib/assistant-stream';
-import { useDevicesState } from '@/hooks/websocket';
-import { useSetAtom } from 'jotai';
-import { previousDeviceScenesAtom } from '@/hooks/useSetDeviceColor';
 import { cn } from '@/lib/cn';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
@@ -52,8 +48,6 @@ export function ActionCard({
   const [devicesOpen, setDevicesOpen] = useState(false);
 
   const applied = results !== null;
-  const devices = useDevicesState();
-  const rememberScenes = useSetAtom(previousDeviceScenesAtom);
   const resultsByDevice = useMemo(
     () => new Map((results ?? []).map((result) => [result.deviceKey, result])),
     [results],
@@ -78,15 +72,6 @@ export function ActionCard({
   const apply = () => {
     if (action.changes.length === 0 || applyAction.isPending) {
       return;
-    }
-    // Applying clears each light's scene link server-side, so remember the
-    // scene here to keep the device list able to restore it.
-    const remembered = scenesToRemember(
-      action.changes.map((change) => change.deviceKey),
-      devices,
-    );
-    if (Object.keys(remembered).length > 0) {
-      rememberScenes((previous) => ({ ...previous, ...remembered }));
     }
     applyAction.mutate(action.actionId, {
       onSuccess: (response) => {
@@ -235,9 +220,7 @@ export function ActionCard({
           disabled={action.changes.length === 0 || applyAction.isPending}
           onClick={apply}
         >
-          {applyAction.isPending ? (
-            <Loader2 className="animate-spin" />
-          ) : null}
+          {applyAction.isPending ? <Loader2 className="animate-spin" /> : null}
           {applyAction.isPending
             ? 'Applying…'
             : applied

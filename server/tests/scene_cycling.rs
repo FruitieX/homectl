@@ -35,6 +35,7 @@ fn create_device(
         name.to_string(),
         DeviceData::Controllable(ControllableDevice {
             scene_id: scene_id.map(|s| SceneId::from_str(s).unwrap()),
+            scene_paused: false,
             state_source: None,
             capabilities: Capabilities {
                 brightness: Some(true),

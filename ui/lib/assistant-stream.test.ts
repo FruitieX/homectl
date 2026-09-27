@@ -8,7 +8,6 @@ import {
   describeAssistantActionChange,
   formatTokenCount,
   parseAssistantSseEvents,
-  scenesToRemember,
 } from './assistant-stream.ts';
 
 import type { AssistantActionChange } from '../bindings/AssistantActionChange.ts';
@@ -128,22 +127,6 @@ test('contextUsagePercent clamps to the context window', () => {
     }),
     100,
   );
-});
-
-test('scenesToRemember keeps only devices that are in a scene', () => {
-  const devices = {
-    'dummy/lamp': {
-      data: { Controllable: { scene_id: 'evening' } },
-    },
-    'dummy/plain': {
-      data: { Controllable: { scene_id: null } },
-    },
-  };
-  assert.deepEqual(
-    scenesToRemember(['dummy/lamp', 'dummy/plain', 'dummy/missing'], devices as never),
-    { 'dummy/lamp': 'evening' },
-  );
-  assert.deepEqual(scenesToRemember(['dummy/lamp'], null), {});
 });
 
 test('affectedDevicesSummary counts devices and surfaces failures', () => {

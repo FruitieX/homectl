@@ -223,6 +223,9 @@ pub struct ControllableDevice {
     #[ts(optional, type = "number")]
     pub requested_at_ms: Option<i64>,
     pub scene_id: Option<SceneId>,
+    /// Manual state is held until the associated scene is explicitly activated again.
+    #[serde(default)]
+    pub scene_paused: bool,
     #[serde(default)]
     pub state_source: Option<DeviceStateSource>,
     #[serde(default)]
@@ -263,6 +266,7 @@ impl ControllableDevice {
             last_report: None,
             requested_at_ms: None,
             scene_id: scene,
+            scene_paused: false,
             state_source: None,
             state: ControllableState {
                 power,
@@ -362,6 +366,7 @@ impl DeviceData {
                 // Also compare scene_id - if scene changes, state should be considered
                 // different even if visual state (power, color, brightness) is identical
                 a.scene_id == b.scene_id
+                    && a.scene_paused == b.scene_paused
                     && a.state_source == b.state_source
                     && cmp_device_states(a, &b.state)
             }
@@ -570,6 +575,16 @@ impl Device {
         }
     }
 
+    pub fn is_scene_paused(&self) -> bool {
+        matches!(
+            &self.data,
+            DeviceData::Controllable(ControllableDevice {
+                scene_paused: true,
+                ..
+            })
+        )
+    }
+
     /// Sets scene to the provided scene_id.
     ///
     /// If scene_id is set, the returned device's state will be computed from
@@ -583,10 +598,13 @@ impl Device {
         let mut device = self.clone();
 
         if let DeviceData::Controllable(ref mut data) = device.data {
+            if data.scene_id.as_ref() != scene_id {
+                data.scene_paused = false;
+            }
             data.scene_id = scene_id.cloned();
             data.state_source = None;
 
-            if let Some(scene_id) = scene_id {
+            if let Some(scene_id) = scene_id.filter(|_| !data.scene_paused) {
                 let state = scenes.get_device_scene_state_details(scene_id, self, devices);
 
                 if let Some((state, state_source)) = state {
@@ -603,6 +621,21 @@ impl Device {
         }
 
         device
+    }
+
+    /// Explicit scene activation resumes a paused device, including when the
+    /// activated scene has the same ID as the device's current scene.
+    pub fn set_scene_and_resume(
+        &self,
+        scene_id: Option<&SceneId>,
+        scenes: &Scenes,
+        devices: &Devices,
+    ) -> Self {
+        let mut device = self.clone();
+        if let DeviceData::Controllable(data) = &mut device.data {
+            data.scene_paused = false;
+        }
+        device.set_scene(scene_id, scenes, devices)
     }
 
     pub fn is_powered_on(&self) -> Option<bool> {
@@ -884,6 +917,31 @@ mod tests {
     use super::*;
     use crate::types::color::Rgb;
     use serde_json;
+
+    #[test]
+    fn scene_pause_round_trips_and_defaults_for_legacy_device_json() {
+        let mut device = ControllableDevice::new(
+            None,
+            true,
+            Some(0.6),
+            None,
+            None,
+            Capabilities::default(),
+            ManageKind::Unmanaged,
+        );
+        device.scene_id = Some(SceneId::new("evening".to_string()));
+        device.scene_paused = true;
+
+        let serialized = serde_json::to_value(&device).unwrap();
+        assert_eq!(serialized["scene_paused"], true);
+        let restored: ControllableDevice = serde_json::from_value(serialized.clone()).unwrap();
+        assert!(restored.scene_paused);
+
+        let mut legacy = serialized;
+        legacy.as_object_mut().unwrap().remove("scene_paused");
+        let restored: ControllableDevice = serde_json::from_value(legacy).unwrap();
+        assert!(!restored.scene_paused);
+    }
 
     #[test]
     fn report_and_scene_comparison_share_tolerance_and_reported_mode() {
