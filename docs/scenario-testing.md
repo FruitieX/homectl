@@ -76,9 +76,23 @@ enabled, compile, and that the scenario includes their referenced devices.
 `integration_action` entries can assert custom integration actions. Every initial
 device must appear in `final_state` or `unchanged`, so scenarios cannot silently
 skip checking unrelated devices. Sensor events must retain the value type seeded
-for that sensor. `advance_time` events move the fake wall and monotonic clocks and
-fire due routine timers. Script-backed routines use the same supervised worker
-path and have a bounded 15-second result timeout.
+for that sensor. `advance_time` events move the fake wall and monotonic clocks and fire due routine
+timers. Script-backed routines use the same supervised worker path and have a
+bounded 15-second result timeout.
+
+## Worker timezone
+
+Workers do not inherit the server or CLI environment wholesale. If `TZ` is set,
+the supervisor passes that variable to the script worker, plus `TZDIR` when set
+(for hosts such as NixOS that use a nonstandard zoneinfo directory). No other
+environment variables are passed. Thus `Date.getHours()` follows the configured
+zone; without `TZ`, it uses the host's system timezone. Set `TZ` on the test
+command to make time-dependent scenarios deterministic, for example:
+
+```sh
+TZ=Europe/Helsinki homectl config test --config-export ./sanitized-config.json --scenarios ./private-scenarios.json
+TZ=UTC homectl config test --config-export ./sanitized-config.json --scenarios ./private-scenarios.json
+```
 
 Run locally with:
 

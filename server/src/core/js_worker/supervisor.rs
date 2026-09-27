@@ -25,9 +25,11 @@
 //! * **Diagnostics:** stderr is drained continuously and capped at
 //!   [`SupervisorConfig::max_diagnostics_bytes`], so a worker cannot deadlock
 //!   the supervisor on a full stderr pipe or grow server memory with logs.
-//! * **Environment:** children are spawned with an empty environment, no DB
-//!   handles, no sockets, and no live state. Boa 0.20 core exposes no
-//!   filesystem, network, process, or secret APIs to scripts.
+//! * **Environment:** children receive no inherited environment. `TZ` and,
+//!   when set, `TZDIR` are the only allowlisted variables, so script-local time
+//!   can follow the server's timezone without exposing secrets or unrelated
+//!   vars. Workers also receive no DB handles, sockets, or live state. Boa core
+//!   exposes no filesystem, network, process, or secret APIs to scripts.
 //!
 //! This is **fault containment**, not a hostile-code security sandbox: a
 //! worker is a child process with the same uid as the server. The deployment
@@ -39,6 +41,7 @@
 //! invocations.
 
 use std::collections::{HashMap, VecDeque};
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -342,6 +345,8 @@ impl Worker {
 /// Supervised worker pool.
 pub struct JsWorkerPool {
     config: SupervisorConfig,
+    worker_timezone: Option<OsString>,
+    worker_tzdir: Option<OsString>,
     idle: Mutex<Vec<Worker>>,
     busy: AtomicUsize,
     outstanding: AtomicUsize,
@@ -356,8 +361,14 @@ impl JsWorkerPool {
     /// Spawn the configured number of workers.
     pub async fn new(config: SupervisorConfig) -> Result<Self, WorkerError> {
         config.validate()?;
+        let worker_timezone = std::env::var_os("TZ");
+        let worker_tzdir = worker_timezone
+            .as_ref()
+            .and_then(|_| std::env::var_os("TZDIR"));
         let pool = Self {
             config,
+            worker_timezone,
+            worker_tzdir,
             idle: Mutex::new(Vec::new()),
             busy: AtomicUsize::new(0),
             outstanding: AtomicUsize::new(0),
@@ -714,6 +725,13 @@ impl JsWorkerPool {
             .stderr(Stdio::piped())
             .env_clear()
             .kill_on_drop(true);
+
+        if let Some(timezone) = &self.worker_timezone {
+            command.env("TZ", timezone);
+            if let Some(tzdir) = &self.worker_tzdir {
+                command.env("TZDIR", tzdir);
+            }
+        }
 
         #[cfg(unix)]
         configure_resource_limits(&mut command, &self.config);

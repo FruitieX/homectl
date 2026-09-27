@@ -13,11 +13,12 @@
 //!   working replacement worker.
 //! * S06: globals and prototype mutations never leak between invocations.
 //! * S07: scripts get no ambient process/network/filesystem capability and
-//!   workers inherit no environment.
+//!   workers receive only allowlisted timezone environment variables.
 //! * S08: timed-out workers are killed and reaped, not abandoned.
 //! * S09: validation/preview work uses the same supervision limits.
 
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -28,6 +29,19 @@ use serde_json::json;
 
 fn worker_binary() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_script-worker"))
+}
+
+fn test_zoneinfo_dir() -> PathBuf {
+    std::env::var_os("TZDIR")
+        .map(PathBuf::from)
+        .filter(|path| path.join("Europe/Helsinki").is_file())
+        .or_else(|| {
+            ["/etc/zoneinfo", "/usr/share/zoneinfo", "/usr/lib/zoneinfo"]
+                .into_iter()
+                .map(PathBuf::from)
+                .find(|path| path.join("Europe/Helsinki").is_file())
+        })
+        .expect("find zoneinfo directory containing Europe/Helsinki")
 }
 
 fn test_config(workers: usize) -> SupervisorConfig {
@@ -509,7 +523,7 @@ async fn s06_globals_and_prototypes_do_not_leak_between_invocations() {
 }
 
 #[tokio::test]
-async fn s07_no_ambient_capabilities_and_no_inherited_environment() {
+async fn s07_no_ambient_capabilities_and_allowlisted_environment() {
     let pool = test_pool(1).await;
 
     let value = pool
@@ -542,13 +556,132 @@ async fn s07_no_ambient_capabilities_and_no_inherited_environment() {
         .run_request(test_request(pool.next_request_id(), TestMode::Env))
         .await
         .unwrap();
-    assert_eq!(
-        env["env"],
-        json!([]),
-        "worker inherited environment variables"
-    );
+    let mut expected_env = Vec::new();
+    if std::env::var_os("TZ").is_some() {
+        expected_env.push("TZ");
+        if std::env::var_os("TZDIR").is_some() {
+            expected_env.push("TZDIR");
+        }
+    }
+    assert_eq!(env["env"], json!(expected_env));
 
     pool.shutdown().await;
+}
+
+#[tokio::test]
+async fn script_worker_uses_parent_timezone_environment() {
+    const PROBE_ENV: &str = "HOMECTL_SCRIPT_WORKER_TZ_PROBE";
+
+    if std::env::var_os(PROBE_ENV).is_some() {
+        let timezone = std::env::var("TZ").expect("probe subprocess sets TZ");
+        let (expected_hour, expected_offset) = match timezone.as_str() {
+            "UTC" => (4, 0),
+            "Europe/Helsinki" => (7, -180),
+            other => panic!("unexpected probe timezone {other}"),
+        };
+        let pool = test_pool(1).await;
+        let env = pool
+            .run_request(test_request(pool.next_request_id(), TestMode::Env))
+            .await
+            .unwrap();
+        assert_eq!(env["env"], json!(["TZ", "TZDIR"]));
+        let result = pool
+            .execute(
+                "var d = new Date(); return { hour: d.getHours(), utcHour: d.getUTCHours(), offsetMinutes: d.getTimezoneOffset() };",
+                json!({"now_ms": 1790481600000_i64}),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            result,
+            json!({"hour": expected_hour, "utcHour": 4, "offsetMinutes": expected_offset}),
+            "script worker did not honor parent TZ={timezone}"
+        );
+        pool.shutdown().await;
+        return;
+    }
+
+    let test_binary = std::env::current_exe().expect("locate integration test binary");
+    let zoneinfo_dir = test_zoneinfo_dir();
+    for timezone in ["UTC", "Europe/Helsinki"] {
+        let output = Command::new(&test_binary)
+            .args([
+                "--exact",
+                "script_worker_uses_parent_timezone_environment",
+                "--nocapture",
+            ])
+            .env(PROBE_ENV, "1")
+            .env("TZ", timezone)
+            .env("TZDIR", &zoneinfo_dir)
+            .output()
+            .unwrap_or_else(|error| panic!("launch timezone probe for {timezone}: {error}"));
+        assert!(
+            output.status.success(),
+            "timezone probe failed for {timezone}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+#[tokio::test]
+async fn script_worker_forwards_only_timezone_allowlisted_environment() {
+    const PROBE_ENV: &str = "HOMECTL_SCRIPT_WORKER_TZ_ENV_PROBE";
+
+    if let Some(probe) = std::env::var_os(PROBE_ENV) {
+        let probe = probe.to_string_lossy();
+        let expected_env: Vec<&str> = match probe.as_ref() {
+            "both" => vec!["TZ", "TZDIR"],
+            "tz_only" => vec!["TZ"],
+            "tzdir_only" => vec![],
+            other => panic!("unexpected timezone environment probe {other}"),
+        };
+        let pool = test_pool(1).await;
+        let env = pool
+            .run_request(test_request(pool.next_request_id(), TestMode::Env))
+            .await
+            .unwrap();
+        assert_eq!(env["env"], json!(expected_env));
+        pool.shutdown().await;
+        return;
+    }
+
+    let test_binary = std::env::current_exe().expect("locate integration test binary");
+    let tzdir = "/homectl-test-zoneinfo-does-not-need-to-exist";
+    for (probe, timezone, zoneinfo_dir) in [
+        ("both", Some("UTC"), Some(tzdir)),
+        ("tz_only", Some("UTC"), None),
+        ("tzdir_only", None, Some(tzdir)),
+    ] {
+        let mut command = Command::new(&test_binary);
+        command
+            .args([
+                "--exact",
+                "script_worker_forwards_only_timezone_allowlisted_environment",
+                "--nocapture",
+            ])
+            .env(PROBE_ENV, probe);
+        if let Some(timezone) = timezone {
+            command.env("TZ", timezone);
+        } else {
+            command.env_remove("TZ");
+        }
+        if let Some(zoneinfo_dir) = zoneinfo_dir {
+            command.env("TZDIR", zoneinfo_dir);
+        } else {
+            command.env_remove("TZDIR");
+        }
+        let output = command
+            .output()
+            .unwrap_or_else(|error| panic!("launch environment probe {probe}: {error}"));
+        assert!(
+            output.status.success(),
+            "environment probe {probe} failed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }
 
 #[tokio::test]
