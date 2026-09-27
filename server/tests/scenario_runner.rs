@@ -177,6 +177,12 @@ fn behavior_config() -> ConfigExport {
                           "power": false },
                         { "action": "set_power", "id": "hall_off",
                           "device": { "integration_id": "sim", "device_id": "hall_light" },
+                          "power": false },
+                        { "action": "set_power", "id": "living_off",
+                          "device": { "integration_id": "sim", "device_id": "living_light" },
+                          "power": false },
+                        { "action": "set_power", "id": "office_off",
+                          "device": { "integration_id": "sim", "device_id": "office_light" },
                           "power": false }
                     ]}
                 },
@@ -243,26 +249,31 @@ fn behavior_suite() -> ScenarioSuite {
                 }
             },
             {
-                "name": "entry dimmer off turns off only entry and hall lights",
+                "name": "entry dimmer off turns off all lights",
                 "routines": ["Entry dimmer off"],
                 "initial_state": [
                     { "kind": "sensor", "device": "sim/entry_dimmer_off", "value": false },
                     { "kind": "light", "device": "sim/entry_light", "power": true, "brightness": 0.5 },
                     { "kind": "light", "device": "sim/hall_light", "power": true, "brightness": 0.3 },
+                    { "kind": "light", "device": "sim/living_light", "power": true, "brightness": 0.6 },
                     { "kind": "light", "device": "sim/office_light", "power": true, "brightness": 0.8 }
                 ],
                 "events": [{ "type": "sensor", "device": "sim/entry_dimmer_off", "value": true }],
                 "expect": {
                     "commands": [
                         { "type": "device_state", "device": "sim/entry_light", "power": false, "brightness": 0.5 },
-                        { "type": "device_state", "device": "sim/hall_light", "power": false, "brightness": 0.3 }
+                        { "type": "device_state", "device": "sim/hall_light", "power": false, "brightness": 0.3 },
+                        { "type": "device_state", "device": "sim/living_light", "power": false, "brightness": 0.6 },
+                        { "type": "device_state", "device": "sim/office_light", "power": false, "brightness": 0.8 }
                     ],
                     "final_state": [
                         { "kind": "sensor", "device": "sim/entry_dimmer_off", "value": true },
                         { "kind": "light", "device": "sim/entry_light", "power": false, "brightness": 0.5 },
-                        { "kind": "light", "device": "sim/hall_light", "power": false, "brightness": 0.3 }
+                        { "kind": "light", "device": "sim/hall_light", "power": false, "brightness": 0.3 },
+                        { "kind": "light", "device": "sim/living_light", "power": false, "brightness": 0.6 },
+                        { "kind": "light", "device": "sim/office_light", "power": false, "brightness": 0.8 }
                     ],
-                    "unchanged": ["sim/office_light"]
+                    "unchanged": []
                 }
             }
         ]
