@@ -73,12 +73,22 @@ enabled, compile, and that the scenario includes their referenced devices.
 ```
 
 `commands` is an exact, ordered dispatch assertion, including full light state;
-`integration_action` entries can assert custom integration actions. Every initial
-device must appear in `final_state` or `unchanged`, so scenarios cannot silently
-skip checking unrelated devices. Sensor events must retain the value type seeded
-for that sensor. `advance_time` events move the fake wall and monotonic clocks and fire due routine
-timers. Script-backed routines use the same supervised worker path and have a
-bounded 15-second result timeout.
+`integration_action` entries can assert custom integration actions. Use
+`device_power` and `light_power` assertions when only on/off matters; these ignore
+brightness, color, and transition. A power-only command looks like
+`{"type":"device_power","device":"sim/lamp","power":true}`; its final-state
+counterpart is `{"kind":"light_power","device":"sim/lamp","power":true}`.
+The existing `device_state` and `light` assertions continue to compare the
+complete light state. Light entries in `initial_state` may include `scene_id` to
+seed active-scene metadata for scene-aware group conditions and scene mirroring;
+it should reference a scene in the configuration under test. Seeding a scene is
+simulation-only and does not activate hardware or change configuration.
+
+Every initial device must appear in `final_state` or `unchanged`, so scenarios
+cannot silently skip checking unrelated devices. Sensor events must retain the
+value type seeded for that sensor. `advance_time` events move the fake wall and
+monotonic clocks and fire due routine timers. Script-backed routines use the same
+supervised worker path and have a bounded 15-second result timeout.
 
 ## Worker timezone
 

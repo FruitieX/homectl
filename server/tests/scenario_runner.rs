@@ -411,3 +411,99 @@ async fn scenario_rejects_sensor_events_with_a_different_value_type() {
         "{error:#}"
     );
 }
+
+fn scene_guard_config() -> ConfigExport {
+    serde_json::from_value(json!({
+        "version": 1,
+        "core": {},
+        "integrations": [],
+        "groups": [{
+            "id": "kids",
+            "name": "Kids",
+            "hidden": false,
+            "devices": [
+                { "integration_id": "sim", "device_id": "kids_left" },
+                { "integration_id": "sim", "device_id": "kids_right" }
+            ],
+            "linked_groups": []
+        }],
+        "scenes": [{
+            "id": "night",
+            "name": "Night",
+            "hidden": false,
+            "script": null,
+            "device_states": {},
+            "group_states": {}
+        }],
+        "routines": [{
+            "id": "stairs_motion",
+            "name": "Stairs motion",
+            "enabled": true,
+            "semantics_version": 2,
+            "revision": 1,
+            "definition_v2": {
+                "triggers": [{
+                    "kind": "state_change",
+                    "id": "motion",
+                    "device": { "integration_id": "sim", "device_id": "stairs_motion" }
+                }],
+                "condition": {
+                    "kind": "group",
+                    "group_id": "kids",
+                    "quantifier": "any",
+                    "scene": "night"
+                },
+                "program": { "kind": "native", "steps": [
+                    { "action": "set_power", "id": "left_on",
+                      "device": { "integration_id": "sim", "device_id": "kids_left" },
+                      "power": true }
+                ]}
+            },
+            "rules": [],
+            "actions": []
+        }],
+        "floorplan": null,
+        "dashboard_layouts": [],
+        "dashboard_widgets": []
+    }))
+    .expect("synthetic scene-guard config should decode")
+}
+
+#[tokio::test]
+async fn scenario_seeds_a_light_scene_for_group_conditions() {
+    let suite: ScenarioSuite = serde_json::from_value(json!({
+        "version": 1,
+        "devices": [
+            { "kind": "sensor", "device": "sim/stairs_motion", "name": "Stairs motion" },
+            { "kind": "light", "device": "sim/kids_left", "name": "Kids left lamp", "capabilities": { "brightness": true } },
+            { "kind": "light", "device": "sim/kids_right", "name": "Kids right lamp", "capabilities": { "brightness": true } }
+        ],
+        "scenarios": [{
+            "name": "motion detects an initially active scene",
+            "routines": ["Stairs motion"],
+            "initial_state": [
+                { "kind": "sensor", "device": "sim/stairs_motion", "value": false },
+                { "kind": "light", "device": "sim/kids_left", "power": false, "brightness": 0.1, "scene_id": "night" },
+                { "kind": "light", "device": "sim/kids_right", "power": false, "brightness": 0.1, "scene_id": "night" }
+            ],
+            "events": [{ "type": "sensor", "device": "sim/stairs_motion", "value": true }],
+            "expect": {
+                "commands": [
+                    { "type": "device_power", "device": "sim/kids_left", "power": true }
+                ],
+                "final_state": [
+                    { "kind": "sensor", "device": "sim/stairs_motion", "value": true },
+                    { "kind": "light_power", "device": "sim/kids_left", "power": true }
+                ],
+                "unchanged": ["sim/kids_right"]
+            }
+        }]
+    }))
+    .expect("synthetic scene-guard scenario should decode");
+
+    let report = run_scenario_suite(&scene_guard_config(), &suite)
+        .await
+        .expect("scenario suite should run");
+
+    assert!(report.scenarios[0].passed, "{report:#?}");
+}

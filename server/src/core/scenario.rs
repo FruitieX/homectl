@@ -27,6 +27,7 @@ use crate::types::{
         SensorDevice,
     },
     event::{mk_event_channel, Event, RxEventChannel},
+    scene::SceneId,
 };
 use crate::utils::cli::Cli;
 use color_eyre::eyre::{eyre, Result, WrapErr};
@@ -100,6 +101,10 @@ pub enum ScenarioDevice {
         color: Option<DeviceColor>,
         #[serde(default)]
         transition: Option<f32>,
+        /// Currently active scene, when the starting state needs to exercise
+        /// scene-aware group conditions or scene mirroring.
+        #[serde(default)]
+        scene_id: Option<SceneId>,
         #[serde(default)]
         capabilities: Option<Capabilities>,
     },
@@ -153,6 +158,10 @@ pub enum ExpectedCommand {
         #[serde(flatten)]
         state: LightState,
     },
+    DevicePower {
+        device: DeviceKey,
+        power: bool,
+    },
     IntegrationAction {
         integration_id: String,
         payload: Value,
@@ -178,6 +187,10 @@ pub enum ExpectedDeviceState {
         #[serde(flatten)]
         state: LightState,
     },
+    LightPower {
+        device: DeviceKey,
+        power: bool,
+    },
     Sensor {
         device: DeviceKey,
         value: SensorValue,
@@ -189,6 +202,10 @@ enum RecordedCommand {
     DeviceState {
         device: DeviceKey,
         state: LightState,
+    },
+    DevicePower {
+        device: DeviceKey,
+        power: bool,
     },
     IntegrationAction {
         integration_id: String,
@@ -905,7 +922,7 @@ fn validate_expectations(
         let kind_matches = matches!(
             (expected, &initial.data),
             (
-                ExpectedDeviceState::Light { .. },
+                ExpectedDeviceState::Light { .. } | ExpectedDeviceState::LightPower { .. },
                 DeviceData::Controllable(_)
             ) | (ExpectedDeviceState::Sensor { .. }, DeviceData::Sensor(_))
         );
@@ -925,7 +942,9 @@ fn validate_expectations(
         }
     }
     for command in &scenario.expect.commands {
-        if let ExpectedCommand::DeviceState { device, .. } = command {
+        if let ExpectedCommand::DeviceState { device, .. }
+        | ExpectedCommand::DevicePower { device, .. } = command
+        {
             let Some(initial) = initial_devices.get(device) else {
                 return Err(eyre!(
                     "scenario '{}' expects a command for unknown device '{}'",
@@ -1015,6 +1034,10 @@ fn compare_commands(
                 device: device.clone(),
                 state: state.clone(),
             },
+            ExpectedCommand::DevicePower { device, power } => RecordedCommand::DevicePower {
+                device: device.clone(),
+                power: *power,
+            },
             ExpectedCommand::IntegrationAction {
                 integration_id,
                 payload,
@@ -1026,7 +1049,17 @@ fn compare_commands(
         .collect::<Vec<_>>();
     let expected_sequences = command_sequences(expected.iter());
     let actual_sequences = command_sequences(actual.iter());
-    if expected_sequences != actual_sequences {
+    let sequences_match = expected_sequences.keys().eq(actual_sequences.keys())
+        && expected_sequences.iter().all(|(target, expected)| {
+            actual_sequences.get(target).is_some_and(|actual| {
+                expected.len() == actual.len()
+                    && expected
+                        .iter()
+                        .zip(actual)
+                        .all(|(expected, actual)| recorded_commands_match(expected, actual))
+            })
+        });
+    if !sequences_match {
         let expected_text = expected_sequences
             .values()
             .flatten()
@@ -1045,13 +1078,50 @@ fn compare_commands(
     }
 }
 
+fn recorded_commands_match(expected: &RecordedCommand, actual: &RecordedCommand) -> bool {
+    match (expected, actual) {
+        (
+            RecordedCommand::DeviceState {
+                device: expected_device,
+                state: expected_state,
+            },
+            RecordedCommand::DeviceState {
+                device: actual_device,
+                state: actual_state,
+            },
+        ) => expected_device == actual_device && expected_state == actual_state,
+        (
+            RecordedCommand::DevicePower {
+                device: expected_device,
+                power: expected_power,
+            },
+            RecordedCommand::DeviceState {
+                device: actual_device,
+                state: actual_state,
+            },
+        ) => expected_device == actual_device && expected_power == &actual_state.power,
+        (
+            RecordedCommand::IntegrationAction {
+                integration_id: expected_id,
+                payload: expected_payload,
+            },
+            RecordedCommand::IntegrationAction {
+                integration_id: actual_id,
+                payload: actual_payload,
+            },
+        ) => expected_id == actual_id && expected_payload == actual_payload,
+        _ => false,
+    }
+}
+
 fn command_sequences<'a>(
     commands: impl IntoIterator<Item = &'a RecordedCommand>,
 ) -> BTreeMap<String, Vec<RecordedCommand>> {
     let mut sequences = BTreeMap::new();
     for command in commands {
         let target = match command {
-            RecordedCommand::DeviceState { device, .. } => {
+            RecordedCommand::DeviceState { device, .. }
+            | RecordedCommand::DevicePower { device, .. } => {
                 format!("device:{}/{}", device.integration_id, device.device_id)
             }
             RecordedCommand::IntegrationAction { integration_id, .. } => {
@@ -1084,6 +1154,9 @@ fn compare_final_state(
         let matches = match (expected, &actual.data) {
             (ExpectedDeviceState::Light { state, .. }, DeviceData::Controllable(light)) => {
                 *state == LightState::from_controllable(&light.state)
+            }
+            (ExpectedDeviceState::LightPower { power, .. }, DeviceData::Controllable(light)) => {
+                *power == light.state.power
             }
             (ExpectedDeviceState::Sensor { value, .. }, DeviceData::Sensor(sensor)) => {
                 value == &SensorValue::from_sensor(sensor)
@@ -1177,6 +1250,9 @@ fn describe_command(command: &RecordedCommand, labels: &HashMap<DeviceKey, Strin
             state.color,
             state.transition
         ),
+        RecordedCommand::DevicePower { device, power } => {
+            format!("{} -> power={power}", label(device, labels))
+        }
         RecordedCommand::IntegrationAction { integration_id, .. } => {
             format!("integration action {integration_id} (payload redacted)")
         }
@@ -1206,6 +1282,7 @@ impl ScenarioDevice {
                 brightness,
                 color,
                 transition,
+                scene_id,
                 capabilities,
             } => {
                 let (resolved_name, resolved_capabilities) = match seed {
@@ -1254,7 +1331,7 @@ impl ScenarioDevice {
                     device.device_id.clone(),
                     resolved_name,
                     DeviceData::Controllable(ControllableDevice::new(
-                        None,
+                        scene_id.clone(),
                         *power,
                         *brightness,
                         color.clone(),
@@ -1375,7 +1452,9 @@ impl LightState {
 impl ExpectedDeviceState {
     fn device(&self) -> &DeviceKey {
         match self {
-            Self::Light { device, .. } | Self::Sensor { device, .. } => device,
+            Self::Light { device, .. }
+            | Self::LightPower { device, .. }
+            | Self::Sensor { device, .. } => device,
         }
     }
 }
