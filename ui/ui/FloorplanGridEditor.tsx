@@ -117,6 +117,12 @@ interface AvailableFloorplanDevice {
   name: string;
   type: FloorplanDeviceType;
   groupIds: string[];
+  preview?: {
+    color: string;
+    brightness: number;
+    power: boolean;
+    disabled: boolean;
+  };
 }
 
 export interface FloorplanGrid {
@@ -1198,31 +1204,91 @@ export function FloorplanGridEditor({
         return;
       }
 
-      const deviceRadius = Math.max(4, Math.min(column.size, row.size) / 3);
-      const scaledRadius = deviceRadius * deviceScale;
-      const labelFontSize = 10 * deviceScale;
+      // Keep labels and markers readable in CSS pixels independently of the
+      // high-resolution backing canvas. Geometry still uses exact grid cells.
+      const pixelScale = canvasWidth / displayWidth;
+      const scaledRadius =
+        Math.max(
+          7 * pixelScale,
+          Math.min(14 * pixelScale, Math.min(column.size, row.size) / 3),
+        ) * deviceScale;
+      const labelFontSize = 12 * pixelScale;
+      const info = availableDevices.find(
+        (item) => item.key === device.deviceKey,
+      );
+      const preview = info?.preview;
+      const color =
+        preview?.disabled || (preview && !preview.power)
+          ? '#94a3b8'
+          : (preview?.color ?? '#10b981');
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(
+        position.x,
+        position.y,
+        scaledRadius + 4 * pixelScale,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = isSelected ? '#d97706' : '#64748b';
+      ctx.lineWidth = (isSelected ? 2 : 1) * pixelScale;
+      ctx.stroke();
 
       ctx.beginPath();
       ctx.arc(position.x, position.y, scaledRadius, 0, Math.PI * 2);
-      ctx.fillStyle = isSelected ? '#f59e0b' : '#10b981';
+      ctx.fillStyle = color;
       ctx.fill();
-      ctx.strokeStyle = isSelected ? '#d97706' : '#059669';
-      ctx.lineWidth = Math.max(1, 2 * deviceScale);
-      ctx.stroke();
+      if (preview?.power && !preview.disabled) {
+        ctx.beginPath();
+        ctx.arc(
+          position.x,
+          position.y,
+          scaledRadius + 2 * pixelScale,
+          -Math.PI / 2,
+          -Math.PI / 2 +
+            Math.max(0, Math.min(1, preview.brightness)) * Math.PI * 2,
+        );
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2 * pixelScale;
+        ctx.stroke();
+      }
+      if (preview?.disabled) {
+        ctx.beginPath();
+        ctx.moveTo(position.x - scaledRadius, position.y + scaledRadius);
+        ctx.lineTo(position.x + scaledRadius, position.y - scaledRadius);
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 2 * pixelScale;
+        ctx.stroke();
+      }
 
       ctx.font = `${labelFontSize}px sans-serif`;
       ctx.textAlign = 'center';
-      const labelY = position.y + scaledRadius + 12 * deviceScale;
-      if (labelY < canvasHeight) {
-        const deviceLabel = device.deviceName.slice(0, 10);
-        ctx.lineJoin = 'round';
-        ctx.miterLimit = 2;
-        ctx.lineWidth = Math.max(2, 3 * deviceScale);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-        ctx.strokeText(deviceLabel, position.x, labelY);
-        ctx.fillStyle = '#000';
-        ctx.fillText(deviceLabel, position.x, labelY);
-      }
+      const name = info?.name ?? device.deviceName;
+      const deviceLabel = name.length > 22 ? `${name.slice(0, 21)}…` : name;
+      const textWidth = ctx.measureText(deviceLabel).width;
+      const labelX = Math.max(
+        textWidth / 2 + 4 * pixelScale,
+        Math.min(canvasWidth - textWidth / 2 - 4 * pixelScale, position.x),
+      );
+      const labelY = Math.min(
+        canvasHeight - 5 * pixelScale,
+        position.y + scaledRadius + 19 * pixelScale,
+      );
+      ctx.fillStyle = isSelected ? '#fef3c7' : 'rgba(255,255,255,0.93)';
+      ctx.beginPath();
+      ctx.roundRect(
+        labelX - textWidth / 2 - 4 * pixelScale,
+        labelY - 13 * pixelScale,
+        textWidth + 8 * pixelScale,
+        17 * pixelScale,
+        3 * pixelScale,
+      );
+      ctx.fill();
+      ctx.fillStyle = '#0f172a';
+      ctx.fillText(deviceLabel, labelX, labelY);
+      ctx.restore();
     });
   }, [
     width,
@@ -1245,6 +1311,8 @@ export function FloorplanGridEditor({
     gridOpacity,
     selectedTool,
     deviceScale,
+    displayWidth,
+    availableDevices,
   ]);
 
   // Use a layout effect so the canvas is repainted before the browser

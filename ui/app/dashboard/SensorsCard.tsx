@@ -100,19 +100,22 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
     preview.find((sensor) => sensor.device_id === primarySensorId) ??
     preview[0];
   const active = sensors.find((s) => s.device_id === activeId);
+  const filterGroup = filter.startsWith('group:')
+    ? sensorGroups.find((group) => group.id === filter.slice(6))
+    : undefined;
   const chosen = active
     ? [active]
-    : sensors.filter(
-        (s) =>
-          filter === 'all' ||
-          (filter === 'indoor'
-            ? s.is_indoor
-            : sensorGroups.find((group) => group.id === filter)
-              ? sensorGroups
-                  .find((group) => group.id === filter)
-                  ?.sensorIds.includes(s.device_id)
-              : !s.is_indoor),
-      );
+    : filterGroup
+      ? filterGroup.sensorIds.flatMap((id) =>
+          sensors.filter((sensor) => sensor.device_id === id),
+        )
+      : sensors.filter(
+          (s) =>
+            filter === 'all' ||
+            (filter === 'indoor'
+              ? s.is_indoor
+              : filter === 'outdoor' && !s.is_indoor),
+        );
   const temperature = active
       ? calculateTemperatureStats(active.temp_data, now)
       : null,
@@ -219,10 +222,14 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All locations</SelectItem>
-                  <SelectItem value="indoor">Indoor</SelectItem>
-                  <SelectItem value="outdoor">Outdoor</SelectItem>
+                  {!sensorGroups.some((group) => group.id === 'indoor') && (
+                    <SelectItem value="indoor">Indoor</SelectItem>
+                  )}
+                  {!sensorGroups.some((group) => group.id === 'outdoor') && (
+                    <SelectItem value="outdoor">Outdoor</SelectItem>
+                  )}
                   {sensorGroups.map((group) => (
-                    <SelectItem key={group.id} value={group.id}>
+                    <SelectItem key={group.id} value={`group:${group.id}`}>
                       {group.name}
                     </SelectItem>
                   ))}

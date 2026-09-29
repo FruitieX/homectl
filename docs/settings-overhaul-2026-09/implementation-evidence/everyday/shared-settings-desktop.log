@@ -1,0 +1,12 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "Shared autocomplete results have an inset on both sides",
+   "Widget sources use one shared-color divider per row and a single outer border",
+   "Source list and related links fit the viewport"
+  ],
+  "width": 1440
+ }
+}
+{"url":"http://127.0.0.1:3021/config/sensors","viewport":{"width":1440,"height":1080},"problems":[]}

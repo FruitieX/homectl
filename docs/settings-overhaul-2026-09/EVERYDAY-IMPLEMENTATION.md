@@ -244,3 +244,16 @@ row is retired with a recovery copy so old browser clients stop scheduling it.
   Text/link/image/embed widgets have configuration recovery links, and images
   have an explicit failed-load state and retry. Acceptance of these refinements
   is still in progress.
+
+### Floorplan and sensor acceptance checkpoint — 2026-09-29
+
+- Ten desktop / eleven phone native placement checks pass, including actual
+  dragging, touch cancellation, zoomed coordinates, Fit/resize and undo.
+- Editor labels use display pixels and markers show actual color/brightness;
+  room SVG previews distinguish disabled and attention states.
+- Six keyboard sensor checks at each size confirm retained ordering and its
+  downstream effect on widgets and group charts. Fixed group filter ID collisions.
+- Disabled scene invalidation and re-enable regression passes; seven diagnostic
+  regressions preserve enabled errors while suppressing disabled unresolved state.
+- Type checking, lint and production build pass. Existing lazy Monaco bundle
+  size warnings remain. Remaining room/map/timer/chart gates stay in WORK-QUEUE.md.

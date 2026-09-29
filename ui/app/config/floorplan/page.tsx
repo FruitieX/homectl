@@ -16,6 +16,7 @@ import {
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { getDeviceKey } from '@/lib/device';
+import { getResolvedDeviceColorState } from '@/lib/colors';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { readFloorplanDraft } from '@/lib/floorplanDraft';
 import { entityDraftStore } from '@/lib/entityDraft';
@@ -220,17 +221,30 @@ function FloorplanEditor({
     {},
   );
   const available = devices.devices
-    .map((device) => ({
-      key: getDeviceKey(device),
-      name: getDeviceDisplayLabel(device, displayNames),
-      type:
-        'Sensor' in device.data
-          ? ('sensor' as const)
-          : 'Controllable' in device.data
-            ? ('controllable' as const)
-            : ('other' as const),
-      groupIds: memberGroups[getDeviceKey(device)] ?? [],
-    }))
+    .map((device) => {
+      const state = getResolvedDeviceColorState(device.data);
+      return {
+        key: getDeviceKey(device),
+        name: getDeviceDisplayLabel(device, displayNames),
+        type:
+          'Sensor' in device.data
+            ? ('sensor' as const)
+            : 'Controllable' in device.data
+              ? ('controllable' as const)
+              : ('other' as const),
+        groupIds: memberGroups[getDeviceKey(device)] ?? [],
+        preview: state
+          ? {
+              color: state.color.hex(),
+              brightness: state.brightness,
+              power: state.power,
+              disabled:
+                'Controllable' in device.data &&
+                !!device.data.Controllable.disabled,
+            }
+          : undefined,
+      };
+    })
     .sort((a, b) => a.name.localeCompare(b.name));
   const savedImage = `${api.apiEndpoint}/api/v1/config/floorplan/image?id=${encodeURIComponent(id)}&revision=${value?.image.kind === 'stored' ? value.image.revision : ''}`;
   const background =

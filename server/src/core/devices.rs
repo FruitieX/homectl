@@ -1946,6 +1946,84 @@ mod tests {
         assert_eq!(stored, &incoming);
     }
 
+    #[test]
+    fn disabled_scene_invalidation_resumes_after_reenabling() {
+        use crate::db::config_queries::IntegrationRow;
+        let (mut devices, mut events) = test_devices();
+        let groups = Groups::new(GroupsConfig::new());
+        let scene_id = crate::types::scene::SceneId::from_str("focus").unwrap();
+        let mut lamp = managed_controllable_device("lamp", "Lamp");
+        let key = lamp.get_device_key();
+        if let DeviceData::Controllable(data) = &mut lamp.data {
+            data.scene_id = Some(scene_id.clone());
+        }
+        devices.set_state(&lamp, true, true);
+        let config = [(
+            scene_id.clone(),
+            SceneConfig {
+                name: "Focus".into(),
+                devices: Some(create_scene_device_config(
+                    &key.to_string(),
+                    SceneDeviceConfig::DeviceState(SceneDeviceState {
+                        power: Some(true),
+                        brightness: Some(OrderedFloat(0.7)),
+                        color: None,
+                        transition: None,
+                    }),
+                )),
+                groups: None,
+                hidden: None,
+                script: None,
+            },
+        )]
+        .into_iter()
+        .collect();
+        let mut scenes = Scenes::new(config);
+        scenes.force_invalidate(&devices, &groups);
+        while events.try_recv().is_ok() {}
+        let mut integration = IntegrationRow {
+            id: "mqtt".into(),
+            plugin: "mqtt".into(),
+            config: json!({"disabled_device_ids": ["lamp"]}),
+            enabled: true,
+        };
+        let changed = [scene_id.clone()].into_iter().collect();
+        for _ in 0..3 {
+            devices.invalidate(&key, &changed, &scenes, &[], &[integration.clone()]);
+        }
+        assert_eq!(
+            devices.get_device(&key).unwrap(),
+            &lamp,
+            "disabled invalidation preserves the assigned scene and last state"
+        );
+        assert!(
+            events.try_recv().is_err(),
+            "disabled invalidation queues no device work"
+        );
+        let mut projected = lamp.clone();
+        if let DeviceData::Controllable(data) = &mut projected.data {
+            data.disabled = Some(true);
+        }
+        assert_eq!(
+            projected
+                .set_scene(Some(&scene_id), &scenes, &devices)
+                .get_controllable_state()
+                .unwrap()
+                .brightness,
+            Some(OrderedFloat(0.5)),
+            "a projected disabled device skips scene resolution too"
+        );
+        integration.config = json!({});
+        devices.invalidate(&key, &changed, &scenes, &[], &[integration]);
+        let enabled = devices.get_device(&key).unwrap();
+        assert_eq!(enabled.get_scene_id(), Some(scene_id));
+        assert_eq!(
+            enabled.get_controllable_state().unwrap().brightness,
+            Some(OrderedFloat(0.7)),
+            "reenabling restores normal scene resolution"
+        );
+    }
+
     #[tokio::test]
     async fn activate_scene_applies_transition_override() {
         let (mut devices, _event_rx) = test_devices();

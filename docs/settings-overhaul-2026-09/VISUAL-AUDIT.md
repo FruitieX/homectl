@@ -56,8 +56,21 @@ Add final screenshots and results only after reviewing the rendered output.
 ## Completion gate
 
 - [x] Routine desktop and phone match the approved structure, including a complex definition.
-- [ ] New widget can be chosen, configured, previewed and created without raw layout fields.
+- [x] New widget can be chosen, configured, previewed and created without raw layout fields.
 - [ ] Floorplan previews appear consistently for placed rooms in all intended locations.
 - [ ] Room controls, scenes, map inspectors and dashboard have been compared.
 - [ ] Keyboard and phone interaction checks pass; no accidental commands from previews.
 - [ ] Corrections are committed and pushed in verified checkpoints.
+
+## Floorplan and shared settings review — 2026-09-29
+
+The tall 24 × 32 fixture now fits both canvas dimensions. Reviewed desktop and
+phone captures show readable labels and color/brightness markers at Fit. Native
+mouse/touch checks cover placement, drag, zoomed movement, cancellation, undo and
+explicit persistence. Room thumbnails now use disabled slashes and attention dots
+consistent with the interactive map; full map inspector acceptance is still open.
+
+The phone Widget sources capture shows compact, single shared-color dividers.
+Browser checks confirm the autocomplete result inset and separator geometry.
+Sensor keyboard journeys verify catalog/group/member ordering and dashboard/chart
+propagation, including independent explicit widget order.

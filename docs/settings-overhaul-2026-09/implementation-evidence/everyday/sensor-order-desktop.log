@@ -1,0 +1,15 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   "First/last ordering boundaries are disabled",
+   "Native keyboard reorders catalog, groups and scoped members without early writes",
+   "Save persists all three orders, preserves shared memberships and extension fields",
+   "Ordering controls fit the viewport",
+   "Dashboard follows catalog order while explicit widget selection keeps its own order",
+   "Group picker follows configured order without reserved-ID collisions; charts follow group member order"
+  ],
+  "width": 1440
+ }
+}
+{"url":"http://127.0.0.1:3021/config/sensors","viewport":{"width":1440,"height":1080},"problems":[]}

@@ -94,22 +94,39 @@ Implemented locally: two-dimensional Fit, additional zoom-out range, backing
 resolution adjustments, searchable placed/unplaced lists and brightness rings.
 Desktop Fit check passes; further interaction acceptance remains.
 
-- [ ] Verify Fit, zoom, resize and placement coordinates on desktop and phone.
-- [ ] Verify placing, moving, removing and undoing device placement.
+- [x] Verify Fit, zoom, resize and placement coordinates on desktop and phone.
+- [x] Verify placing, moving, removing and undoing device placement.
 - [ ] Review map device/group inspectors, shared previews, scope, related links,
       dismissal and fallback controls against the mockups.
 - [ ] Check marker readability, brightness/off/attention states and rendering
       sharpness with representative floorplans.
 
+Floorplan checkpoint: ten desktop and eleven phone checks cover native placement
+and dragging, cancelled touch, zoomed coordinates, consecutive Undo, Save without
+losing other devices or extension fields, and Fit after viewport resizing. Editor
+labels are now 12 CSS pixels independently of backing resolution; markers use
+actual light color, off/disabled styling and a brightness ring. SVG room previews
+now also distinguish disabled lights and show attention badges. Map inspector and
+representative state review remain open below. Evidence and screenshots:
+`implementation-evidence/everyday/floorplan-placement-*`.
+
 ## 5. Earlier refinements
 
-- [ ] Finish sensor ordering acceptance: catalog, groups and group members.
-      Phone persistence journey passes all seven checks; verify the remaining
-      desktop/keyboard behavior and displayed dashboard order as needed.
-- [ ] Close disabled-device invalidation/re-enable verification. Diagnostic
-      suppression is delivered and its tests pass; real enabled errors must stay.
-- [ ] Verify and publish shared autocomplete padding and widget-source separators.
+- [x] Finish sensor ordering acceptance: catalog, groups and group members.
+      Native keyboard checks at both sizes verify persistence, independent
+      memberships, catalog/widget ordering and group chart ordering.
+- [x] Close disabled-device invalidation/re-enable verification. Diagnostic
+      suppression tests preserve real enabled errors; a new regression verifies
+      repeated disabled invalidation and restored scene resolution after re-enable.
+- [x] Verify and publish shared autocomplete padding and widget-source separators.
 - [ ] Recheck shared control/overlay consistency where the latest changes touch it.
+
+Refinements checkpoint: six native keyboard checks at each viewport verify the
+three sensor orders, retained drafts, unchanged shared membership/extension data,
+widget-specific ordering and group ordering in charts. Sensor filters use prefixed
+values so a group named `all` cannot collide with a built-in filter. Seven diagnostic
+tests (plus four generated binding checks) and the disabled/re-enable regression
+pass. Shared autocomplete insets and source-list dividers are checked in the browser.
 
 ## 6. Outstanding overhaul acceptance
 
@@ -149,6 +166,8 @@ empty/error visual review remains in the outstanding acceptance gate.
 - `dafcb2dc`: embedded floorplan preview reliability and initial visual audit.
 - `e5d7983e`: generic server timers, mixed script/native actions, routine board,
   reviewed assistant action scope and disabled-device scene suppression.
+- `57ec86b4`: everyday views, generic timer UI, visual widget designer, retained
+  calibration editors and the shared control/widget dependencies.
 
 Physical dashboard Chromium launch behavior has not been tested on the user's
 actual device. Browser checks cover persisted layout, denied fullscreen restore,

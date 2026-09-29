@@ -17,27 +17,27 @@ the remaining implementation and acceptance work there.
 
 ## Sensor configuration
 
-- [ ] Reorder the sensor catalog, sensor groups, and members within each group.
+- [x] Reorder the sensor catalog, sensor groups, and members within each group.
       Keep ordering in the retained page draft until Save; preserve IDs and
       membership. Dashboard readings should respect configured ordering.
-- [ ] Align Widget sources rows and separators with the other settings lists.
-- [ ] Give autocomplete results space between their rounded hover background
+- [x] Align Widget sources rows and separators with the other settings lists.
+- [x] Give autocomplete results space between their rounded hover background
       and the edges of the list. Apply consistently to shared selectors.
 
 ## Disabled devices
 
-- [ ] Stop repeated “Could not find device scene state” warnings for disabled
+- [x] Stop repeated “Could not find device scene state” warnings for disabled
       devices. Disabled devices deliberately retain their saved assignments.
-- [ ] Do not flag a disabled device on the settings overview merely because its
+- [x] Do not flag a disabled device on the settings overview merely because its
       assigned scene has no resolved state. Keep real errors on enabled devices.
-- [ ] Verify disable and re-enable behavior without changing household devices.
+- [x] Verify disable and re-enable behavior without changing household devices.
 
 ## Floorplan
 
-- [ ] Fit the entire drawing inside the canvas viewport, considering both
+- [x] Fit the entire drawing inside the canvas viewport, considering both
       width and height. Allow zooming out further. Avoid unnecessary scaling
       blur; maintain accurate placement coordinates at every zoom level.
-- [ ] Replace the long chip lists used for device placement with a compact,
+- [x] Replace the long chip lists used for device placement with a compact,
       searchable list that distinguishes placed and unplaced devices and keeps
       the selected placement clear. Preserve moving, removal and undo.
 - [ ] Use the shared visual language for light markers: color dot with a ring
@@ -133,3 +133,9 @@ The comparison gallery contains refreshed routine and creation-state captures.
   fullscreen. This does not yet verify the physical Linux dashboard's launch
   configuration. UI type check, lint and production build pass (existing large
   bundle warning). Evidence: `implementation-evidence/refinements/`.
+
+Floorplan/sensor checkpoint: native placement and dragging, Fit/resize, keyboard
+sensor ordering and downstream widget/group order are verified at both sizes.
+Editor markers and labels now remain readable independently of backing resolution.
+Disabled invalidation/re-enable and diagnostic suppression regressions pass.
+Evidence is recorded in WORK-QUEUE.md and `implementation-evidence/everyday/`.

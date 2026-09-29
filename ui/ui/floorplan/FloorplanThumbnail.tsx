@@ -1,4 +1,5 @@
 import type { FloorplanScene } from '@/lib/floorplan-scene';
+import { reachabilityLabels } from '@/lib/deviceReachability';
 
 /** Lightweight static preview: no GPU context per room and no blurry canvas scaling. */
 export function FloorplanThumbnail({
@@ -58,10 +59,18 @@ export function FloorplanThumbnail({
           />
         ))}
       {scene.lights.map((light) => {
-        const level = light.power
-          ? Math.max(0, Math.min(1, light.intensity))
-          : 0;
-        const color = `rgb(${light.color.join(',')})`;
+        const disabled = light.health === 'disabled';
+        const attention =
+          light.health === 'offline' ||
+          light.health === 'stale' ||
+          light.health === 'unknown';
+        const level =
+          light.power && !disabled
+            ? Math.max(0, Math.min(1, light.intensity))
+            : 0;
+        const color = disabled
+          ? 'hsl(var(--muted-foreground))'
+          : `rgb(${light.color.join(',')})`;
         return (
           <g
             key={light.deviceKey}
@@ -69,12 +78,19 @@ export function FloorplanThumbnail({
           >
             <title>
               {light.label ?? light.deviceKey} ·{' '}
-              {light.power ? `${Math.round(level * 100)}%` : 'Off'}
+              {disabled
+                ? 'Disabled'
+                : light.power
+                  ? `${Math.round(level * 100)}%`
+                  : 'Off'}
+              {!disabled && light.health && light.health !== 'online'
+                ? ` · ${reachabilityLabels[light.health]}`
+                : ''}
             </title>
             <circle r={radius * 1.4} fill="hsl(var(--card))" />
             <circle
               r={radius}
-              fill={light.power ? color : 'hsl(var(--muted))'}
+              fill={light.power && !disabled ? color : 'hsl(var(--muted))'}
             />
             <circle
               r={radius * 1.3}
@@ -91,6 +107,23 @@ export function FloorplanThumbnail({
               strokeDasharray={`${level * 100} 100`}
               transform="rotate(-90)"
             />
+            {disabled && (
+              <path
+                d={`M ${-radius} ${radius} L ${radius} ${-radius}`}
+                stroke={color}
+                strokeWidth={radius * 0.25}
+              />
+            )}
+            {attention && (
+              <circle
+                cx={radius}
+                cy={-radius}
+                r={radius * 0.45}
+                fill="#f59e0b"
+                stroke="hsl(var(--card))"
+                strokeWidth={radius * 0.15}
+              />
+            )}
           </g>
         );
       })}
