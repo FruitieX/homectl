@@ -62,7 +62,11 @@ export function HomeOverview({ title = 'Home' }: { title?: string }) {
               if (!group) return null;
               const members = resolveGroupDeviceKeys(id, groups ?? {});
               const on = members.filter(
-                (key) => devices?.[key] && getPower(devices[key]!.data),
+                (key) =>
+                  devices?.[key] &&
+                  'Controllable' in devices[key]!.data &&
+                  !devices[key]!.data.Controllable.disabled &&
+                  getPower(devices[key]!.data),
               ).length;
               return (
                 <Link

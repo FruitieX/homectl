@@ -25,7 +25,7 @@ the entire overhaul is finished.
 
 ## Delivery gates
 
-- [ ] Controls-first room details, no-map case, nested groups, direct links,
+- [x] Controls-first room details, no-map case, nested groups, direct links,
       available/missing/read-only devices and shared attention.
 - [ ] Shared device/group state previews, compact live controls and sensor rows;
       capability, mixed/off/unknown, pending and disconnect behavior.
@@ -257,3 +257,29 @@ row is retired with a recovery copy so old browser clients stop scheduling it.
   regressions preserve enabled errors while suppressing disabled unresolved state.
 - Type checking, lint and production build pass. Existing lazy Monaco bundle
   size warnings remain. Remaining room/map/timer/chart gates stay in WORK-QUEUE.md.
+
+### Rooms and dashboard preview checkpoint — 2026-09-30
+
+Sixteen browser checks pass at both 1440 × 1080 and 390 × 844. These verify nested
+preview scope, disabled/readonly/missing members, empty rooms, actual editor Save
+refreshing room/list/dashboard previews, failed-read recovery, exact room command
+scope and compact-widget composition. The catalog and individual floorplan query
+recovery cases both exhaust their initial attempts before succeeding without focus
+or reload. Previews read grid/image metadata together and use image revisions.
+
+Conditions now show exact-source temperature/humidity samples and timestamps,
+with a keyboard-inspectable history plot. A same-ID source from another integration
+is excluded, missing humidity stays empty, and refresh failures keep dated samples
+with Retry. Room-card summaries avoid invented multi-source averages. Disabled
+devices no longer count as on, while readonly lights retain their observed state.
+Attention keeps its count and first issue visible and expands the rest on demand.
+
+A second phone Fit bug involved the editor grid column inheriting the canvas
+minimum width; the wide-plan fixture now verifies the constraint fix. Original
+tall-plan, placement and drag checks remain in the preceding checkpoint.
+
+Type checking, lint and production build pass. Evidence: `room-review-*.log`,
+`room-review-*.png` and `rooms-*.log` under `implementation-evidence/everyday/`.
+The comparison gallery includes Study 05 references and current room/list/dashboard
+views. Map inspectors, timers, remaining chart/overlay/recovery gates and the final
+settings audit remain open in WORK-QUEUE.md.

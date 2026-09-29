@@ -57,7 +57,7 @@ Add final screenshots and results only after reviewing the rendered output.
 
 - [x] Routine desktop and phone match the approved structure, including a complex definition.
 - [x] New widget can be chosen, configured, previewed and created without raw layout fields.
-- [ ] Floorplan previews appear consistently for placed rooms in all intended locations.
+- [x] Floorplan previews appear consistently for placed rooms in all intended locations.
 - [ ] Room controls, scenes, map inspectors and dashboard have been compared.
 - [ ] Keyboard and phone interaction checks pass; no accidental commands from previews.
 - [ ] Corrections are committed and pushed in verified checkpoints.
@@ -74,3 +74,23 @@ The phone Widget sources capture shows compact, single shared-color dividers.
 Browser checks confirm the autocomplete result inset and separator geometry.
 Sensor keyboard journeys verify catalog/group/member ordering and dashboard/chart
 propagation, including independent explicit widget order.
+
+## Rooms and dashboard comparison — 2026-09-30
+
+Reviewed Study 05 desktop/phone room, room-list and home references against new
+rendered captures. Current room details retain the two-column controls/conditions
+composition on desktop, stack it on phone, use a wrapping scene strip and embed
+a framed map. Climate uses real source units, timestamps and a precise history
+plot; the fixture deliberately lacks humidity. List cards now pair floorplan and
+climate summaries. Dashboard still respects configured widget sizes rather than
+forcing the illustrative home layout; a separate compact-widget capture verifies
+that the name, power control and preview remain usable. Attention is bounded to
+the count and first issue until expanded.
+
+The wider floorplan fixture exposed a phone minimum-width bug despite the earlier
+tall-plan Fit passing. The wrapper now allows its grid column to shrink. Browser
+checks prove saved placements reach all preview locations; failed catalog and
+grid reads recover without requiring a wall dashboard to reload.
+
+Sixteen checks per viewport pass; current screenshots and logs are linked in the
+gallery. Map inspector comparison and the broader cross-view audit remain open.

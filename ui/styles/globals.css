@@ -100,9 +100,84 @@
       var(--dashboard-widget-span-mobile);
   }
 
+  @container dashboard-widget (max-width: 22rem) {
+    .dashboard-widget-container .dashboard-room-row {
+      align-items: flex-start;
+    }
+    .dashboard-widget-container .dashboard-room-link {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 8px;
+    }
+    .dashboard-widget-container .dashboard-room-link > svg:first-child {
+      width: 28px;
+      height: 28px;
+    }
+    .dashboard-widget-container .dashboard-room-link > svg:last-child {
+      display: none;
+    }
+    .dashboard-widget-container .dashboard-room-preview {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+    .dashboard-widget-container .dashboard-room-preview > div > div {
+      width: 100%;
+    }
+    .dashboard-widget-container .dashboard-room-name {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  @container dashboard-widget (max-width: 12rem) {
+    .dashboard-widget-container .dashboard-room-row {
+      padding-block: 4px;
+    }
+    .dashboard-widget-container .dashboard-room-name {
+      font-size: 12px;
+      line-height: 16px;
+    }
+    .dashboard-widget-container .dashboard-room-summary,
+    .dashboard-widget-container .dashboard-room-attention {
+      display: none;
+    }
+    .dashboard-widget-container .dashboard-room-preview > div > div {
+      height: 36px;
+    }
+    .dashboard-widget-container
+      .dashboard-room-link[data-attention='true']
+      .dashboard-room-name::after {
+      content: ' •';
+      color: #b45309;
+    }
+  }
+
   @container dashboard-widget (min-width: 14rem) {
     .dashboard-weather-layout {
       grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    }
+  }
+
+  @container dashboard-widget (max-height: 12rem) {
+    .dashboard-widget-container .dashboard-room-row {
+      padding-block: 4px;
+    }
+    .dashboard-widget-container .dashboard-room-preview > div > div {
+      height: 36px;
+    }
+    .dashboard-widget-container .dashboard-room-summary {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .dashboard-widget-container .dashboard-room-attention {
+      display: none;
+    }
+    .dashboard-widget-container
+      .dashboard-room-link[data-attention='true']
+      .dashboard-room-name::after {
+      content: ' •';
+      color: #b45309;
     }
   }
 

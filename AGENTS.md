@@ -352,12 +352,21 @@ written before the user applies. The AppBar has no search field: search lives
 in the navigation rail / bottom navigation and the Ctrl+K command palette.
 
 Room previews (`GroupFloorplanPreview` in `ui/ui/floorplan/`) render on the
-rooms list and room detail pages. The floorplan is picked by the group's
+rooms list, room details and dashboard room widgets. The floorplan is picked by the group's
 placement mask (`grid.groups[groupId]`) when one exists, otherwise by which
 floorplan holds the most of the group's nested-resolved member devices, with
-deterministic tie-breaks; the Pixi renderer's `focusBounds` option zooms to the
-bounding box of the group's placed devices plus padding. Groups with no placed
-devices render no preview.
+deterministic tie-breaks. Static previews use SVG and frame placed member devices
+plus padding, falling back to a placement mask's bounds when it has no devices.
+Groups with neither placements nor a mask render no preview. Shared queries read
+the floorplan editor API's grid and image metadata; only stored images are fetched,
+using their revision. Failed catalog/grid reads retry in the background so wall
+dashboards recover without a focus event or reload.
+
+Room conditions match temperature/humidity history to nested-resolved room members
+by the full `integration_id/device_id` key. Generic numeric sensors have no unit,
+so their names/values are never used to infer temperature or humidity. Conditions
+show sample timestamps, missing readings and refresh failures; room-card summaries
+do not invent an average when several climate sources belong to a room.
 
 Device state travels to websocket clients as targeted `Patch` messages
 (upserted/removed devices only). `State`/`Patch` carry a monotonic `revision`;

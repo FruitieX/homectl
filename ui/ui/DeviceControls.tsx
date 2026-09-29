@@ -10,7 +10,7 @@ import { createUuid } from '@/lib/uuid';
 import { sendSceneCommand } from '@/lib/deviceCommands';
 import type { DeviceColor } from '@/bindings/DeviceColor';
 import { LoaderCircle, Power, SlidersHorizontal } from 'lucide-react';
-import { LiveStatePreview } from '@/ui/LiveStatePreview';
+import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
 import type { Device } from '@/bindings/Device';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { useSetDeviceState } from '@/hooks/useSetDeviceColor';
@@ -80,6 +80,8 @@ export function DeviceRow({
   const active = getPower(device.data);
   const state =
     'Controllable' in device.data ? device.data.Controllable.state : null;
+  const disabled =
+    'Controllable' in device.data && device.data.Controllable.disabled;
   if (!state) return null;
   return (
     <div
@@ -94,11 +96,15 @@ export function DeviceRow({
           modal.setOpen(true);
         }}
       >
-        <LiveStatePreview states={[state]} />
+        <LiveStatePreview states={[devicePreviewState(device)]} />
         <span className="dashboard-device-label min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">{label}</span>
           <span className="block text-sm text-muted-foreground">
-            {isDeviceReadOnly(device) ? 'Read-only · ' : ''}
+            {disabled
+              ? 'Disabled · last known '
+              : isDeviceReadOnly(device)
+                ? 'Read-only · '
+                : ''}
             {active
               ? state.brightness === null
                 ? 'On'

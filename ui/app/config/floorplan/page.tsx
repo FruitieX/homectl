@@ -583,7 +583,7 @@ function FloorplanEditor({
         ) : (
           <div
             inert={draft.saving}
-            className={draft.saving ? 'opacity-60' : ''}
+            className={`min-w-0 ${draft.saving ? 'opacity-60' : ''}`}
           >
             <FloorplanGridEditor
               key={`${id}/${epoch}`}

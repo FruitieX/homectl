@@ -295,7 +295,11 @@ export async function readApiResponse<T>(
 }
 
 // Generic fetch hook for config API
-function useConfigApi<T>(endpoint: string, keyInBody = false) {
+function useConfigApi<T>(
+  endpoint: string,
+  keyInBody = false,
+  recoverReads = false,
+) {
   const recordWrite = useRecordConfigWrite();
   const { apiEndpoint } = useAppConfig();
   const queryClient = useQueryClient();
@@ -303,8 +307,11 @@ function useConfigApi<T>(endpoint: string, keyInBody = false) {
   const baseUrl = `${apiEndpoint}/api/v1/config`;
   const queryKey = ['config', baseUrl, endpoint] as const;
 
-  const query = useQuery({
+  const query = useQuery<T[]>({
     queryKey,
+    refetchOnWindowFocus: recoverReads,
+    refetchInterval: (query) =>
+      recoverReads && query.state.status === 'error' ? 30000 : false,
     queryFn: async ({ signal }) => {
       const response = await fetch(`${baseUrl}/${endpoint}`, {
         signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
@@ -836,7 +843,9 @@ export function useConfigDevices() {
 }
 
 export function useFloorplans() {
-  return useConfigApi<FloorplanMetadata>('floorplans');
+  // Room cards stay mounted on wall dashboards; retry exhausted catalog reads
+  // even if the browser never loses focus or disconnects its websocket.
+  return useConfigApi<FloorplanMetadata>('floorplans', false, true);
 }
 
 export function useLogs(pollIntervalMs = 5000, paused = false) {

@@ -10,7 +10,7 @@ the remaining implementation and acceptance work there.
       record omissions and corrections in [VISUAL-AUDIT.md](VISUAL-AUDIT.md).
 - [x] Prioritize the Study 04 complex routine. Preserve its three-column
       desktop board, compact readable nodes, and connected vertical phone flow.
-- [ ] Verify embedded floorplan previews on rooms list, room details and
+- [x] Verify embedded floorplan previews on rooms list, room details and
       dashboard room cards, including failure/recovery and saved map edits.
 - [x] Redesign New widget with a visual type gallery, layout presets/visual
       placement, and a preview of the configured widget before Create.
@@ -139,3 +139,10 @@ sensor ordering and downstream widget/group order are verified at both sizes.
 Editor markers and labels now remain readable independently of backing resolution.
 Disabled invalidation/re-enable and diagnostic suppression regressions pass.
 Evidence is recorded in WORK-QUEUE.md and `implementation-evidence/everyday/`.
+
+Room checkpoint, 2026-09-30: embedded previews are verified in all three locations,
+including nested membership, saved placement changes and exhausted-read recovery.
+Current screenshots are compared with Study 05. Room conditions use actual matched
+source samples and dated history; missing humidity remains empty. Wide floorplans
+now also fit on phones without expanding the surrounding grid column. Attention
+shows its count and first issue, with the remaining scoped issues expandable.

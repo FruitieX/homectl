@@ -356,7 +356,7 @@ export function TimeSeriesPlot({
             textAnchor="middle"
             className="fill-muted-foreground text-[11px]"
           >
-            {tick.getHours() === 0
+            {tick.getHours() === 0 && tick.getMinutes() === 0
               ? tick.toLocaleDateString(undefined, { weekday: 'short' })
               : tick.toLocaleTimeString(undefined, {
                   hour: '2-digit',

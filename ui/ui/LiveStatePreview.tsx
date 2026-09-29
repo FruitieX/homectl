@@ -16,6 +16,9 @@ export function LiveStatePreview({
 export function devicePreviewState(
   device: Device,
 ): ControllableState | undefined {
-  if ('Controllable' in device.data) return device.data.Controllable.state;
+  if ('Controllable' in device.data)
+    return device.data.Controllable.disabled
+      ? undefined
+      : device.data.Controllable.state;
   return 'power' in device.data.Sensor ? device.data.Sensor : undefined;
 }

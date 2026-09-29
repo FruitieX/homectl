@@ -18,12 +18,17 @@ import {
 } from '@/ui/primitives/popover';
 import { GroupFloorplanPreview } from '@/ui/floorplan/GroupFloorplanPreview';
 import { LiveSensorRow } from '@/ui/LiveSensorRow';
+import { RoomClimateSummary } from '@/ui/RoomConditions';
 import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
 import { LiveAttention } from '@/ui/LiveAttention';
 import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { resolveGroupDeviceKeys } from '@/lib/group-floorplan-preview';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import type { Device } from '@/bindings/Device';
+
+const isOn = (device: Device) =>
+  !('Controllable' in device.data && device.data.Controllable.disabled) &&
+  getPower(device.data);
 
 const roomPath = (id: string) => `/groups/${encodeURIComponent(id)}`;
 
@@ -72,7 +77,7 @@ export default function Page() {
       getDeviceDisplayLabel(device, names)
         .toLocaleLowerCase()
         .includes(query) &&
-      (!onOnly || getPower(device.data)) &&
+      (!onOnly || isOn(device)) &&
       (deviceType === 'all' ||
         (deviceType === 'lights'
           ? 'Controllable' in device.data
@@ -185,7 +190,7 @@ export default function Page() {
                 ([id]) =>
                   !onOnly ||
                   resolveGroupDeviceKeys(id, groups).some(
-                    (key) => state[key] && getPower(state[key]!.data),
+                    (key) => state[key] && isOn(state[key]!),
                   ),
               )
               .map(([id, group]) => {
@@ -197,7 +202,11 @@ export default function Page() {
                 const lights = roomDevices.filter(
                   (d) => 'Controllable' in d.data,
                 );
-                const on = lights.filter((d) => getPower(d.data)).length;
+                const enabled = lights.filter(
+                  (d) =>
+                    'Controllable' in d.data && !d.data.Controllable.disabled,
+                );
+                const on = enabled.filter((d) => getPower(d.data)).length;
                 const attention = health.isError
                   ? 0
                   : roomKeys.filter((key) =>
@@ -232,7 +241,7 @@ export default function Page() {
                           <span className="block truncate">{group.name}</span>
                           <span className="block text-xs font-normal text-muted-foreground">
                             {lights.length
-                              ? `${on} of ${lights.length} on`
+                              ? `${on} of ${enabled.length} on${lights.length > enabled.length ? ` · ${lights.length - enabled.length} disabled` : ''}`
                               : `${roomDevices.length} sensors`}
                             {roomDevices.length !== roomKeys.length
                               ? ` · ${roomKeys.length - roomDevices.length} unavailable`
@@ -260,6 +269,7 @@ export default function Page() {
                       group={group}
                       className="h-40"
                     />
+                    <RoomClimateSummary deviceKeys={roomKeys} />
                   </section>
                 );
               })}
@@ -267,7 +277,7 @@ export default function Page() {
               ([id]) =>
                 !onOnly ||
                 resolveGroupDeviceKeys(id, groups).some(
-                  (key) => state[key] && getPower(state[key]!.data),
+                  (key) => state[key] && isOn(state[key]!),
                 ),
             ).length === 0 && (
               <EmptyState

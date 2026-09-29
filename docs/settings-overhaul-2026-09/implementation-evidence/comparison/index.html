@@ -19,7 +19,7 @@
 </style>
 <header>
   <h1>Implementation compared with the approved studies</h1>
-  <p>Updated 29 September 2026. Click a screenshot to inspect the full image.
+  <p>Updated 30 September 2026. Click a screenshot to inspect the full image.
   The fixture uses different entities and the selected sky accent; the approved
   direction is Compact. These comparisons assess structure, controls and density.</p>
   <nav><a href="#routine">Routines</a><a href="#rooms">Rooms</a><a href="#widgets">Widget creator</a><a href="../../VISUAL-AUDIT.md">Acceptance ledger</a></nav>
@@ -45,13 +45,37 @@
 </section>
 <section id="rooms">
   <h2>Controls-first room details</h2>
-  <p>Interim comparison. The controls-first composition, embedded map, scene strip
-  and desktop brightness controls are implemented. Full room variant acceptance
-  is still tracked in the work queue.</p>
+  <p>Reviewed on desktop and phone: controls first, compact scenes, desktop brightness,
+  sourced conditions/history and the embedded map. The fixture deliberately includes
+  disabled, readonly and missing members, and no humidity samples. Sixteen browser
+  checks at each size cover scope, saved placement refresh and failed-read recovery.</p>
   <div class="grid">
     <figure><figcaption>Approved mockup</figcaption><a href="room-desktop-mockup.png"><img loading="lazy" src="room-desktop-mockup.png" alt="Approved room detail mockup"></a></figure>
     <figure><figcaption>Before this visual pass</figcaption><a href="room-desktop-before.png"><img loading="lazy" src="room-desktop-before.png" alt="Earlier room detail implementation"></a></figure>
     <figure><figcaption>Current working implementation</figcaption><a href="room-desktop-after.png"><img loading="lazy" src="room-desktop-after.png" alt="Room detail with compact scenes and brightness controls"></a></figure>
+  </div>
+  <div class="phones">
+    <figure><figcaption>Approved room · phone</figcaption><a href="room-phone-mockup.png"><img loading="lazy" src="room-phone-mockup.png" alt="Approved room phone layout"></a></figure>
+    <figure><figcaption>Current room · phone</figcaption><a href="room-phone-after.png"><img loading="lazy" src="room-phone-after.png" alt="Current controls-first room on phone"></a></figure>
+    <figure><figcaption>Conditions and map · phone</figcaption><a href="../everyday/room-review-phone-conditions.png"><img loading="lazy" src="../everyday/room-review-phone-conditions.png" alt="Room conditions with dated readings, missing humidity and history"></a></figure>
+  </div>
+</section>
+<section id="room-list">
+  <h2>Rooms list and dashboard</h2>
+  <p>The list shows previews only for placed rooms. Climate summaries use actual
+  matched sources. The configured dashboard preserves widget sizes and order; its
+  synthetic membership differs from the mockup. Phone captures are 390 × 844, while
+  the prototype includes its study toolbar and a taller viewport.</p>
+  <div class="grid">
+    <figure><figcaption>Approved list · desktop</figcaption><a href="../../previews/everyday/rooms-desktop.png"><img loading="lazy" src="../../previews/everyday/rooms-desktop.png" alt="Approved room list"></a></figure>
+    <figure><figcaption>Current list · desktop</figcaption><a href="../everyday/room-review-desktop-list.png"><img loading="lazy" src="../everyday/room-review-desktop-list.png" alt="Current room list with bounded attention and floorplans"></a></figure>
+    <figure><figcaption>Current list · phone</figcaption><a href="../everyday/room-review-phone-list.png"><img loading="lazy" src="../everyday/room-review-phone-list.png" alt="Room list with floorplan and sourced climate sample on phone"></a></figure>
+  </div>
+  <div class="grid">
+    <figure><figcaption>Approved home · desktop</figcaption><a href="../../previews/everyday/home-desktop.png"><img loading="lazy" src="../../previews/everyday/home-desktop.png" alt="Approved widget-based home layout"></a></figure>
+    <figure><figcaption>Current dashboard · desktop</figcaption><a href="../everyday/room-review-desktop-dashboard.png"><img loading="lazy" src="../everyday/room-review-desktop-dashboard.png" alt="Rooms, scenes, climate and a compact room widget"></a></figure>
+    <figure><figcaption>Current dashboard · phone</figcaption><a href="../everyday/room-review-phone-dashboard.png"><img loading="lazy" src="../everyday/room-review-phone-dashboard.png" alt="Room and scene widgets on phone"></a></figure>
+    <figure><figcaption>Compact room widget · phone</figcaption><a href="../everyday/room-review-phone-compact-widget.png"><img loading="lazy" src="../everyday/room-review-phone-compact-widget.png" alt="Small room widget keeps its name, preview and power control"></a></figure>
   </div>
 </section>
 <section id="widgets">

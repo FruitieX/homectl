@@ -1,0 +1,26 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   "Exhausted preview retries recover through background polling without focus or reload",
+   "Nested members are deduplicated and unrelated lights stay out of the preview",
+   "Disabled preview has a distinct label and slash",
+   "Conditions use the latest exact-source sample, retain its timestamp and leave missing humidity empty",
+   "Room history supports precise keyboard inspection and Escape dismissal",
+   "Room summary excludes disabled power; missing and read-only members remain visible",
+   "Attention keeps the count and first issue glanceable; expanding reveals the remaining scoped issues",
+   "Room list shows the placed preview and sourced climate summary, without an empty map for unplaced rooms",
+   "An empty room keeps controls-first recovery with no fictional readings or empty floorplan",
+   "Compact room widget keeps its name, preview and power control inside the card",
+   "Dashboard room widget contains the same scoped preview and disabled count at its configured size",
+   "Wide floorplan fits the phone/desktop editor without expanding its grid column",
+   "Explicit map Save refreshes room preview coordinates in the existing page session",
+   "Saved placement refresh reaches both rooms list and dashboard",
+   "History refresh failure keeps dated samples; Retry recovers",
+   "Room power sends only one writable member command, excluding disabled/read-only/missing members"
+  ],
+  "width": 1440,
+  "layout": 3
+ }
+}
+{"url":"http://127.0.0.1:3021/config/timers","viewport":{"width":1440,"height":1080},"problems":[]}

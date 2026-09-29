@@ -105,16 +105,24 @@ export function RoomsCard({ widget }: { widget: DashboardWidget }) {
               state[key] ? [state[key]!] : [],
             );
             const controls = devices.filter((d) => 'Controllable' in d.data);
-            const on = controls.filter(
+            const enabled = controls.filter(
+              (d) => 'Controllable' in d.data && !d.data.Controllable.disabled,
+            );
+            const on = enabled.filter(
               (d) =>
                 'Controllable' in d.data && d.data.Controllable.state.power,
             ).length;
             const issues = keys.filter((key) => attention.has(key)).length;
             return (
-              <div key={id} className="flex items-center gap-2 py-2">
+              <div
+                key={id}
+                className="dashboard-room-row flex items-center gap-2 py-2"
+              >
                 <Link
                   to={`/groups/${encodeURIComponent(id)}`}
-                  className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={`Open ${group.name}. ${on} of ${enabled.length} on${controls.length > enabled.length ? `, ${controls.length - enabled.length} disabled` : ''}${keys.length !== devices.length ? `, ${keys.length - devices.length} unavailable` : ''}${showAttention && issues ? `, ${issues} need attention` : ''}`}
+                  data-attention={showAttention && issues > 0}
+                  className="dashboard-room-link flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <LiveStatePreview
                     states={[
@@ -127,26 +135,28 @@ export function RoomsCard({ widget }: { widget: DashboardWidget }) {
                     'showFloorplan',
                     true,
                   ) && (
-                    <GroupFloorplanPreview
-                      groupId={id}
-                      group={group}
-                      className="h-14 w-20"
-                    />
+                    <div className="dashboard-room-preview shrink-0 empty:hidden">
+                      <GroupFloorplanPreview
+                        groupId={id}
+                        group={group}
+                        className="h-14 w-20"
+                      />
+                    </div>
                   )}
                   <span className="min-w-0 flex-1">
-                    <strong className="block truncate text-sm font-medium">
+                    <strong className="dashboard-room-name block truncate text-sm font-medium">
                       {group.name}
                     </strong>
-                    <span className="block text-xs text-muted-foreground">
+                    <span className="dashboard-room-summary block text-xs text-muted-foreground">
                       {controls.length
-                        ? `${on} of ${controls.length} on`
+                        ? `${on} of ${enabled.length} on${controls.length > enabled.length ? ` · ${controls.length - enabled.length} disabled` : ''}`
                         : `${devices.length} sensors`}
                       {keys.length !== devices.length
                         ? ` · ${keys.length - devices.length} unavailable`
                         : ''}
                     </span>
                     {showAttention && issues > 0 && (
-                      <span className="block text-xs text-amber-700 dark:text-amber-400">
+                      <span className="dashboard-room-attention block text-xs text-amber-700 dark:text-amber-400">
                         {issues}{' '}
                         {issues === 1 ? 'device needs' : 'devices need'}{' '}
                         attention

@@ -18,7 +18,7 @@ import {
 } from '@/lib/group-floorplan-preview';
 import { DeviceRow, DevicePowerToggle } from '@/ui/DeviceControls';
 import { LiveAttention } from '@/ui/LiveAttention';
-import { LiveSensorRow } from '@/ui/LiveSensorRow';
+import { RoomConditions } from '@/ui/RoomConditions';
 import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
 import { GroupFloorplanPreview } from '@/ui/floorplan/GroupFloorplanPreview';
 import { Button } from '@/ui/primitives/button';
@@ -61,7 +61,11 @@ export default function GroupViewport() {
   const controls = devices.filter((device) => 'Controllable' in device.data);
   const sensors = devices.filter((device) => 'Sensor' in device.data);
   const writable = controls.filter((device) => !isDeviceReadOnly(device));
-  const on = writable.filter(
+  const enabled = controls.filter(
+    (device) =>
+      'Controllable' in device.data && !device.data.Controllable.disabled,
+  );
+  const on = enabled.filter(
     (device) =>
       'Controllable' in device.data && device.data.Controllable.state.power,
   ).length;
@@ -155,7 +159,7 @@ export default function GroupViewport() {
                   />
                   <div className="min-w-0 flex-1">
                     <p className="text-lg font-medium">
-                      {on} of {writable.length} on
+                      {on} of {enabled.length} on
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {controls.length - writable.length > 0
@@ -252,24 +256,11 @@ export default function GroupViewport() {
             )}
           </div>
           <div className="space-y-5">
-            <section className={panel} aria-label="Room sensors">
-              <h2 className="text-base font-semibold">Sensors</h2>
-              {sensors.length ? (
-                <div className="space-y-2">
-                  {sensors.map((device) => (
-                    <LiveSensorRow
-                      key={getDeviceKey(device)}
-                      device={device}
-                      displayNames={names}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No sensors assigned to this room.
-                </p>
-              )}
-            </section>
+            <RoomConditions
+              deviceKeys={keys}
+              sensors={sensors}
+              displayNames={names}
+            />
             {placement && (
               <section className={panel}>
                 <div className="flex items-center justify-between gap-3">

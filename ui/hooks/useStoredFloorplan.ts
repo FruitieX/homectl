@@ -64,7 +64,7 @@ export type StoredFloorplan = {
   id: string;
   name: string;
   grid: FloorplanGrid | null;
-  imageUrl: string;
+  imageUrl?: string;
 };
 
 /** Shared query keys deduplicate previews and participate in config invalidation.
@@ -76,34 +76,40 @@ export function useAllFloorplans(): { floorplans: StoredFloorplan[] } {
   const queries = useQueries({
     queries: metadata.map(({ id }) => ({
       queryKey: ['config', apiEndpoint, 'floorplan-grid', id],
-      queryFn: async () => {
+      queryFn: async ({ signal }: { signal: AbortSignal }) => {
         const response = await fetch(
-          apiEndpoint +
-            '/api/v1/config/floorplan/grid?id=' +
-            encodeURIComponent(id),
+          `${apiEndpoint}/api/v1/config/floorplans/${encodeURIComponent(id)}/editor`,
+          { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]) },
         );
         if (!response.ok) throw new Error('Could not load floorplan.');
         const result = await response.json();
         if (!result.success)
           throw new Error(result.error ?? 'Could not load floorplan.');
-        return typeof result.data === 'string'
-          ? deserializeGrid(result.data)
-          : null;
+        return {
+          grid:
+            typeof result.data?.grid_data === 'string'
+              ? deserializeGrid(result.data.grid_data)
+              : null,
+          imageUrl:
+            result.data?.image?.kind === 'stored'
+              ? `${apiEndpoint}/api/v1/config/floorplan/image?id=${encodeURIComponent(id)}&revision=${encodeURIComponent(result.data.image.revision)}`
+              : undefined,
+        };
       },
       staleTime: 30000,
+      retry: 2,
+      // An exhausted initial read must not hide previews for the rest of a
+      // wall dashboard session, where focus/reconnect events may never occur.
+      refetchInterval: (query: { state: { status: string } }) =>
+        query.state.status === 'error' ? 30000 : false,
       refetchOnWindowFocus: true,
     })),
   });
   const floorplans = metadata.map(({ id, name }, index) => ({
     id,
     name,
-    grid: queries[index].data ?? null,
-    imageUrl:
-      apiEndpoint +
-      '/api/v1/config/floorplan/image?id=' +
-      encodeURIComponent(id) +
-      '&v=' +
-      queries[index].dataUpdatedAt,
+    grid: queries[index].data?.grid ?? null,
+    imageUrl: queries[index].data?.imageUrl,
   }));
   return { floorplans };
 }

@@ -1,6 +1,6 @@
 # Remaining UI overhaul work queue
 
-Updated: 2026-09-29. User explicitly requested documenting this queue and
+Updated: 2026-09-30. User explicitly requested documenting this queue and
 pursuing it as a goal. This is the ordered completion checklist for the
 existing overhaul goal, not a replacement design proposal.
 
@@ -49,7 +49,7 @@ and `routine-script-*-checkpoint.log`; UI type/lint/build pass.
 
 ## 2. New widget and widget editing
 
-Implemented locally: visual searchable type gallery, size presets, desktop/phone
+Delivered: visual searchable type gallery, size presets, desktop/phone
 width diagrams, real read-only widget preview, explicit Create/Save, retained
 per-type drafts. Eight creation checks pass on desktop and phone.
 
@@ -75,22 +75,34 @@ are in the comparison gallery; logs are under `implementation-evidence/everyday/
 Preview reliability fix `dafcb2dc` is pushed: shared refreshable grid queries,
 SVG thumbnails without a GPU context per room, interactive renderer fallback,
 and room-mask framing when no individual device is placed.
-Local additions include dashboard thumbnails, compact wrapping scene buttons,
+Delivered additions include dashboard thumbnails, compact wrapping scene buttons,
 divided room device rows, desktop brightness sliders and Save as scene.
 
-- [ ] Compare rooms list, room detail, dashboard and widget views against the
+- [x] Compare rooms list, room detail, dashboard and widget views against the
       approved Compact mockups on desktop and phone.
-- [ ] Verify embedded previews in the rooms list, room detail and dashboard,
+- [x] Verify embedded previews in the rooms list, room detail and dashboard,
       including nested members, no placement, saved map changes and recovery.
-- [ ] Finish room conditions/climate composition using real available readings;
+- [x] Finish room conditions/climate composition using real available readings;
       keep missing data honest rather than adding fictional values.
-- [ ] Preserve scoped actions, related links, read-only/disabled/missing devices,
+- [x] Preserve scoped actions, related links, read-only/disabled/missing devices,
       attention counts and appropriate sizing for small widgets.
-- [ ] Review final screenshots and push the everyday UI checkpoint.
+- [x] Review final screenshots and push the everyday UI checkpoint.
+
+Room checkpoint, 2026-09-30: sixteen checks pass at each viewport. The journey
+covers nested membership, disabled/readonly/missing devices, no-map rooms, exact
+climate source identity, missing humidity, timestamps, keyboard chart inspection,
+small widget composition, attention expansion and exact writable command scope.
+Actual editor Save refreshes all three preview locations without a page reload.
+Catalog and individual floorplan reads recover after exhausted retries; stored
+image metadata avoids requesting nonexistent images. A wide-plan phone check
+found and fixed a grid minimum-width constraint missed by the tall-plan fixture.
+The room/list/dashboard screenshots are compared with Study 05 in the gallery.
+Final captures also caught an after-midnight chart label issue: minute ticks now
+show the time instead of repeating the weekday throughout the first hour.
 
 ## 4. Floorplan editor, map and inspectors
 
-Implemented locally: two-dimensional Fit, additional zoom-out range, backing
+Delivered: two-dimensional Fit, additional zoom-out range, backing
 resolution adjustments, searchable placed/unplaced lists and brightness rings.
 Desktop Fit check passes; further interaction acceptance remains.
 
@@ -168,6 +180,8 @@ empty/error visual review remains in the outstanding acceptance gate.
   reviewed assistant action scope and disabled-device scene suppression.
 - `57ec86b4`: everyday views, generic timer UI, visual widget designer, retained
   calibration editors and the shared control/widget dependencies.
+- `26b97b75`: readable floorplan markers, native placement/drag verification,
+  sensor ordering propagation and disabled-device re-enable regression.
 
 Physical dashboard Chromium launch behavior has not been tested on the user's
 actual device. Browser checks cover persisted layout, denied fullscreen restore,

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useId, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { configItemHref } from '@/lib/configItemHref';
@@ -10,6 +11,8 @@ export function LiveAttention({
 }: {
   deviceKeys?: readonly string[];
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const listId = useId();
   const health = useDeviceHealth();
   if (health.isError)
     return (
@@ -39,13 +42,25 @@ export function LiveAttention({
     >
       <div className="flex items-start gap-2 text-sm text-amber-800 dark:text-amber-300">
         <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-        <span>
+        <span className="flex-1">
           {keys.length} {keys.length === 1 ? 'device needs' : 'devices need'}{' '}
           attention
         </span>
+        {keys.length > 1 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-my-1 h-auto shrink-0 py-1 text-xs"
+            aria-expanded={expanded}
+            aria-controls={listId}
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? 'Show fewer' : `${keys.length - 1} more`}
+          </Button>
+        )}
       </div>
-      <ul className="mt-2 space-y-2 pl-6">
-        {keys.map((key) => {
+      <ul id={listId} className="mt-2 space-y-2 pl-6">
+        {keys.slice(0, expanded ? undefined : 1).map((key) => {
           const item = health.data?.devices[key];
           return (
             <li key={key} className="text-xs">
