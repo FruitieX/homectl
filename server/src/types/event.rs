@@ -146,6 +146,9 @@ pub enum Event {
         definition_revision: i64,
         state_revision: u64,
         causation: EventCausation,
+        /// Frozen matched report source for scripted spatial rollouts.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        triggering_device: Option<crate::types::device::DeviceKey>,
         /// Strictly serialized worker result when the invocation succeeded.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<serde_json::Value>,

@@ -18,7 +18,7 @@ use crate::types::{
     automation_trace::{
         PlannedRunStatus, PlannedStepStatus, RoutineV2RuntimeStatus, StepDisposition,
     },
-    device::DevicesState,
+    device::{DeviceKey, DevicesState},
     rule::RoutineId,
 };
 
@@ -28,7 +28,7 @@ use super::{
         evaluate_condition, evaluate_routine_frame, seed_routine_memory, EvaluationView,
         FrameContext, RoutineFrameEvaluation, TriggerMemory,
     },
-    plan::{plan_evaluation, plan_script_actions, PlanInputs, RoutinePlan},
+    plan::{plan_evaluation, plan_script_actions, triggering_device, PlanInputs, RoutinePlan},
 };
 
 /// One compiled, enabled v2 definition plus its stored revision.
@@ -299,11 +299,27 @@ impl V2Runtime {
         routine_id: &RoutineId,
         actions: &[NativeAction],
         inputs: &PlanInputs<'_>,
+        source_device: Option<DeviceKey>,
     ) -> Option<RoutinePlan> {
         let definition_revision = self.definitions.get(routine_id)?.revision;
-        let mut plan = plan_script_actions(routine_id, definition_revision, actions, inputs);
+        let mut plan = plan_script_actions(
+            routine_id,
+            definition_revision,
+            actions,
+            inputs,
+            source_device,
+        );
         plan.run_id = self.allocate_run_id();
         Some(plan)
+    }
+
+    pub fn script_triggering_device(
+        &self,
+        routine_id: &RoutineId,
+        matched_trigger_ids: &[NodeId],
+    ) -> Option<DeviceKey> {
+        let definition = self.definitions.get(routine_id)?;
+        triggering_device(&definition.compiled, matched_trigger_ids)
     }
 
     /// Record the dispatched outcome of one run for status displays (X03).

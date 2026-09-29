@@ -907,8 +907,19 @@ impl Routines {
         routine_id: &RoutineId,
         actions: &[crate::types::automation_definition::NativeAction],
         inputs: &PlanInputs<'_>,
+        triggering_device: Option<DeviceKey>,
     ) -> Option<RoutinePlan> {
-        self.v2.plan_script_run(routine_id, actions, inputs)
+        self.v2
+            .plan_script_run(routine_id, actions, inputs, triggering_device)
+    }
+
+    pub fn v2_script_triggering_device(
+        &self,
+        routine_id: &RoutineId,
+        matched_trigger_ids: &[crate::types::automation_definition::NodeId],
+    ) -> Option<DeviceKey> {
+        self.v2
+            .script_triggering_device(routine_id, matched_trigger_ids)
     }
 
     /// Record a visible rejected script run (worker failure, stale result, or

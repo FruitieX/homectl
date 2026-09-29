@@ -78,11 +78,34 @@ enabled, compile, and that the scenario includes their referenced devices.
 brightness, color, and transition. A power-only command looks like
 `{"type":"device_power","device":"sim/lamp","power":true}`; its final-state
 counterpart is `{"kind":"light_power","device":"sim/lamp","power":true}`.
+Set `expect.check_commands` to `false` when the behavior contract is the resulting
+state and exact dispatch count or payload is an implementation detail. Final
+state, unchanged-device, and helper assertions still run. The default is `true`,
+so guard scenarios continue to assert that no commands were dispatched.
+Use `expect.forbidden_command_devices` to ban commands to specific lights even
+when `check_commands` is false, for example when staircase motion may light a
+hall but must not send any command to a sleeping child's room.
 The existing `device_state` and `light` assertions continue to compare the
-complete light state. Light entries in `initial_state` may include `scene_id` to
+complete light state.
+Use `{"kind":"light_visual","device":"sim/lamp","power":true,"brightness":0.33,"color":{"h":0,"s":1}}`
+to assert the visible output while ignoring transition timing.
+Light entries in `initial_state` may include `scene_id` to
 seed active-scene metadata for scene-aware group conditions and scene mirroring;
-it should reference a scene in the configuration under test. Seeding a scene is
+it should reference a scene in the configuration under test. When seeding a
+light that is already following a scene, `state_source` may also be provided
+with the exported `scope`, `kind`, `group_id`, `linked_scene_id`, and
+`linked_device_key` fields. This matters for `unchanged` assertions, which
+compare scene tracking metadata as well as physical state. Final-state entries
+may use `{"kind":"light_scene","device":"sim/lamp","scene_id":"night"}`
+to assert tracked scene identity independently of physical state, or
+`{"kind":"light_scene_power","device":"sim/lamp","scene_id":"night","power":false}`
+to assert scene identity and power together. Seeding or asserting a scene is
 simulation-only and does not activate hardware or change configuration.
+Scenes that link to a computed color source need that source in `initial_state`.
+Seed its published or legacy alias key as
+`{"kind":"color_source","device":"circadian/color","name":"Circadian rhythm","power":true,"brightness":1.0}`
+and list it in `unchanged`. This creates a simulated read-only color sensor;
+the runner does not start the source integration or compute its value.
 
 Every initial device must appear in `final_state` or `unchanged`, so scenarios
 cannot silently skip checking unrelated devices. Sensor events must retain the

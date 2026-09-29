@@ -19,7 +19,7 @@ use serde_json::Value;
 use crate::types::automation_definition::NativeAction;
 use crate::types::automation_trace::{TruthValue, UnknownReason};
 
-use super::compile::MAX_PROGRAM_ACTIONS;
+use super::compile::{MAX_PROGRAM_ACTIONS, MAX_ROLLOUT_DURATION_MS};
 
 /// Maximum total action nodes in one script result (including `choose`
 /// branches), matching the compiler's stored-program bound.
@@ -316,8 +316,38 @@ fn normalize_script_action(action: &Value, index: usize) -> Result<NativeAction,
         normalized.insert("id".to_string(), Value::String(format!("script/{index}")));
     }
 
-    serde_json::from_value::<NativeAction>(Value::Object(normalized))
-        .map_err(|error| format!("actions/{index} is not a valid action: {error}"))
+    let action = serde_json::from_value::<NativeAction>(Value::Object(normalized))
+        .map_err(|error| format!("actions/{index} is not a valid action: {error}"))?;
+    validate_script_action_rollout(&action, &format!("actions/{index}"))?;
+    Ok(action)
+}
+
+fn validate_script_action_rollout(action: &NativeAction, path: &str) -> Result<(), String> {
+    match action {
+        NativeAction::ActivateScene { rollout, .. } | NativeAction::CycleScenes { rollout, .. } => {
+            if rollout
+                .as_ref()
+                .and_then(|rollout| rollout.duration_ms)
+                .is_some_and(|duration| duration > MAX_ROLLOUT_DURATION_MS)
+            {
+                return Err(format!(
+                    "{path} rollout duration exceeds {MAX_ROLLOUT_DURATION_MS} ms"
+                ));
+            }
+        }
+        NativeAction::Choose { branches, .. } => {
+            for (branch_index, branch) in branches.iter().enumerate() {
+                for (step_index, step) in branch.steps.iter().enumerate() {
+                    validate_script_action_rollout(
+                        step,
+                        &format!("{path}/branches/{branch_index}/steps/{step_index}"),
+                    )?;
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn count_action_nodes(action: &NativeAction) -> usize {
@@ -404,6 +434,37 @@ mod tests {
         assert_eq!(outcome.actions[0].id().as_str(), "script/0");
         assert_eq!(outcome.actions[1].id().as_str(), "keep");
         assert_eq!(outcome.next_state, Some(json!({"step": 2})));
+    }
+
+    #[test]
+    fn handler_contract_bounds_script_scene_rollout() {
+        let result = parse_routine_handler_outcome(
+            &json!({"actions": [{
+                "action": "activate_scene",
+                "scene_id": "evening",
+                "targets": {"groups": ["room"]},
+                "rollout": {"style": "spatial", "duration_ms": MAX_ROLLOUT_DURATION_MS + 1}
+            }]}),
+            MAX_SCRIPT_STATE_BYTES,
+        );
+        assert!(result.unwrap_err().contains("rollout duration"));
+        let nested = parse_routine_handler_outcome(
+            &json!({"actions": [{
+                "action": "choose",
+                "branches": [{
+                    "id": "branch",
+                    "condition": {"kind": "literal", "value": true},
+                    "steps": [{
+                        "action": "activate_scene",
+                        "id": "scene",
+                        "scene_id": "evening",
+                        "rollout": {"style": "spatial", "duration_ms": MAX_ROLLOUT_DURATION_MS + 1}
+                    }]
+                }]
+            }]}),
+            MAX_SCRIPT_STATE_BYTES,
+        );
+        assert!(nested.unwrap_err().contains("rollout duration"));
     }
 
     #[test]

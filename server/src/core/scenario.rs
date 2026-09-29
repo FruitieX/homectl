@@ -23,14 +23,15 @@ use crate::types::{
     automation_event::EventOrigin,
     color::{Capabilities, DeviceColor},
     device::{
-        ControllableDevice, ControllableState, Device, DeviceData, DeviceKey, ManageKind,
-        SensorDevice,
+        ControllableDevice, ControllableState, Device, DeviceData, DeviceKey, DeviceStateSource,
+        ManageKind, SensorDevice,
     },
     event::{mk_event_channel, Event, RxEventChannel},
     scene::SceneId,
 };
 use crate::utils::cli::Cli;
 use color_eyre::eyre::{eyre, Result, WrapErr};
+use ordered_float::OrderedFloat;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -106,7 +107,22 @@ pub enum ScenarioDevice {
         #[serde(default)]
         scene_id: Option<SceneId>,
         #[serde(default)]
+        state_source: Option<DeviceStateSource>,
+        #[serde(default)]
         capabilities: Option<Capabilities>,
+    },
+    /// A read-only color state supplied by a computed source or integration.
+    ColorSource {
+        device: DeviceKey,
+        #[serde(default)]
+        name: Option<String>,
+        power: bool,
+        #[serde(default)]
+        brightness: Option<f32>,
+        #[serde(default)]
+        color: Option<DeviceColor>,
+        #[serde(default)]
+        transition: Option<f32>,
     },
     Sensor {
         device: DeviceKey,
@@ -138,8 +154,13 @@ pub enum ScenarioEvent {
 
 #[derive(Debug, Deserialize)]
 pub struct ScenarioExpectations {
+    #[serde(default = "default_check_commands")]
+    pub check_commands: bool,
     #[serde(default)]
     pub commands: Vec<ExpectedCommand>,
+    /// Targets that must not receive a device command, regardless of dispatch shape.
+    #[serde(default)]
+    pub forbidden_command_devices: Vec<DeviceKey>,
     #[serde(default)]
     pub final_state: Vec<ExpectedDeviceState>,
     #[serde(default)]
@@ -187,8 +208,23 @@ pub enum ExpectedDeviceState {
         #[serde(flatten)]
         state: LightState,
     },
+    /// Power, brightness, and color, ignoring transition timing.
+    LightVisual {
+        device: DeviceKey,
+        #[serde(flatten)]
+        state: LightState,
+    },
     LightPower {
         device: DeviceKey,
+        power: bool,
+    },
+    LightScene {
+        device: DeviceKey,
+        scene_id: SceneId,
+    },
+    LightScenePower {
+        device: DeviceKey,
+        scene_id: SceneId,
         power: bool,
     },
     Sensor {
@@ -240,6 +276,10 @@ impl ScenarioReport {
 
 fn default_start_time_ms() -> i64 {
     DEFAULT_START_TIME_MS
+}
+
+fn default_check_commands() -> bool {
+    true
 }
 
 /// Run every scenario against the same exported configuration, compiling its
@@ -428,7 +468,15 @@ async fn run_scenario(
     .wrap_err_with(|| format!("scenario '{}' final dispatch failed", scenario.name))?;
 
     let mut failures = Vec::new();
-    compare_commands(&scenario.expect.commands, &commands, &labels, &mut failures);
+    if scenario.expect.check_commands {
+        compare_commands(&scenario.expect.commands, &commands, &labels, &mut failures);
+    }
+    compare_forbidden_command_devices(
+        &scenario.expect.forbidden_command_devices,
+        &commands,
+        &labels,
+        &mut failures,
+    );
     compare_final_state(&state, &scenario.expect.final_state, &labels, &mut failures);
     compare_unchanged(
         &starting_devices,
@@ -450,6 +498,29 @@ async fn run_scenario(
         passed: failures.is_empty(),
         failures,
     })
+}
+
+fn compare_forbidden_command_devices(
+    forbidden: &[DeviceKey],
+    commands: &[RecordedCommand],
+    labels: &HashMap<DeviceKey, String>,
+    failures: &mut Vec<String>,
+) {
+    let forbidden: HashSet<_> = forbidden.iter().collect();
+    for command in commands {
+        let device = match command {
+            RecordedCommand::DeviceState { device, .. }
+            | RecordedCommand::DevicePower { device, .. } => device,
+            RecordedCommand::IntegrationAction { .. } => continue,
+        };
+        if forbidden.contains(device) {
+            failures.push(format!(
+                "{} received a forbidden command: {}",
+                label(device, labels),
+                describe_command(command, labels)
+            ));
+        }
+    }
 }
 
 fn validate_tested_routines(
@@ -922,7 +993,11 @@ fn validate_expectations(
         let kind_matches = matches!(
             (expected, &initial.data),
             (
-                ExpectedDeviceState::Light { .. } | ExpectedDeviceState::LightPower { .. },
+                ExpectedDeviceState::Light { .. }
+                    | ExpectedDeviceState::LightVisual { .. }
+                    | ExpectedDeviceState::LightPower { .. }
+                    | ExpectedDeviceState::LightScene { .. }
+                    | ExpectedDeviceState::LightScenePower { .. },
                 DeviceData::Controllable(_)
             ) | (ExpectedDeviceState::Sensor { .. }, DeviceData::Sensor(_))
         );
@@ -959,6 +1034,30 @@ fn validate_expectations(
                     label(device, labels)
                 ));
             }
+        }
+    }
+    let mut forbidden = HashSet::new();
+    for device in &scenario.expect.forbidden_command_devices {
+        let Some(initial) = initial_devices.get(device) else {
+            return Err(eyre!(
+                "scenario '{}' forbids a command to unknown device '{}'",
+                scenario.name,
+                label(device, labels)
+            ));
+        };
+        if !matches!(&initial.data, DeviceData::Controllable(_)) {
+            return Err(eyre!(
+                "scenario '{}' forbids a light command to sensor '{}'",
+                scenario.name,
+                label(device, labels)
+            ));
+        }
+        if !forbidden.insert(device) {
+            return Err(eyre!(
+                "scenario '{}' lists '{}' more than once as a forbidden command target",
+                scenario.name,
+                label(device, labels)
+            ));
         }
     }
     for (key, device) in initial_devices {
@@ -1155,17 +1254,66 @@ fn compare_final_state(
             (ExpectedDeviceState::Light { state, .. }, DeviceData::Controllable(light)) => {
                 *state == LightState::from_controllable(&light.state)
             }
+            (ExpectedDeviceState::LightVisual { state, .. }, DeviceData::Controllable(light)) => {
+                state.power == light.state.power
+                    && state.brightness == light.state.brightness.map(|value| value.0)
+                    && state.color == light.state.color
+            }
             (ExpectedDeviceState::LightPower { power, .. }, DeviceData::Controllable(light)) => {
                 *power == light.state.power
             }
+            (ExpectedDeviceState::LightScene { scene_id, .. }, DeviceData::Controllable(light)) => {
+                light.scene_id.as_ref() == Some(scene_id)
+            }
+            (
+                ExpectedDeviceState::LightScenePower {
+                    scene_id, power, ..
+                },
+                DeviceData::Controllable(light),
+            ) => light.scene_id.as_ref() == Some(scene_id) && *power == light.state.power,
             (ExpectedDeviceState::Sensor { value, .. }, DeviceData::Sensor(sensor)) => {
                 value == &SensorValue::from_sensor(sensor)
             }
             _ => false,
         };
         if !matches {
+            let detail = match (expected, &actual.data) {
+                (
+                    ExpectedDeviceState::LightVisual { state, .. },
+                    DeviceData::Controllable(light),
+                ) => format!(
+                    "expected power={}, brightness={:?}, color={:?}; actual power={}, brightness={:?}, color={:?}",
+                    state.power,
+                    state.brightness,
+                    state.color,
+                    light.state.power,
+                    light.state.brightness.map(|value| value.0),
+                    light.state.color
+                ),
+                (
+                    ExpectedDeviceState::LightPower { power, .. },
+                    DeviceData::Controllable(light),
+                ) => format!("expected power={power}, actual power={}", light.state.power),
+                (
+                    ExpectedDeviceState::LightScene { scene_id, .. },
+                    DeviceData::Controllable(light),
+                ) => format!(
+                    "expected scene={scene_id}, actual scene={:?}",
+                    light.scene_id
+                ),
+                (
+                    ExpectedDeviceState::LightScenePower {
+                        scene_id, power, ..
+                    },
+                    DeviceData::Controllable(light),
+                ) => format!(
+                    "expected scene={scene_id}, power={power}; actual scene={:?}, power={}",
+                    light.scene_id, light.state.power
+                ),
+                _ => "unexpected state".to_string(),
+            };
             failures.push(format!(
-                "{} final state did not match expectation",
+                "{} final state did not match: {detail}",
                 label(key, labels)
             ));
         }
@@ -1183,9 +1331,19 @@ fn compare_unchanged(
         let before = initial.get(key);
         let after = state.devices.get_device(key);
         if !matches!((before, after), (Some(before), Some(after)) if before.is_state_eq(after)) {
+            let detail = match (before.map(|d| &d.data), after.map(|d| &d.data)) {
+                (Some(DeviceData::Controllable(before)), Some(DeviceData::Controllable(after))) => {
+                    format!(
+                        ": before scene={:?}, source={:?}, state={:?}; after scene={:?}, source={:?}, state={:?}",
+                        before.scene_id, before.state_source, before.state,
+                        after.scene_id, after.state_source, after.state
+                    )
+                }
+                _ => String::new(),
+            };
             failures.push(format!(
-                "{} changed but was expected to remain untouched",
-                label(key, labels)
+                "{} changed but was expected to remain untouched{detail}",
+                label(key, labels),
             ));
         }
     }
@@ -1269,7 +1427,9 @@ fn label(key: &DeviceKey, labels: &HashMap<DeviceKey, String>) -> String {
 impl ScenarioDevice {
     fn key(&self) -> DeviceKey {
         match self {
-            Self::Light { device, .. } | Self::Sensor { device, .. } => device.clone(),
+            Self::Light { device, .. }
+            | Self::ColorSource { device, .. }
+            | Self::Sensor { device, .. } => device.clone(),
         }
     }
 
@@ -1283,6 +1443,7 @@ impl ScenarioDevice {
                 color,
                 transition,
                 scene_id,
+                state_source,
                 capabilities,
             } => {
                 let (resolved_name, resolved_capabilities) = match seed {
@@ -1326,19 +1487,69 @@ impl ScenarioDevice {
                         capabilities.clone().unwrap_or_default(),
                     ),
                 };
+                let mut light = ControllableDevice::new(
+                    scene_id.clone(),
+                    *power,
+                    *brightness,
+                    color.clone(),
+                    *transition,
+                    resolved_capabilities,
+                    ManageKind::Unmanaged,
+                );
+                light.state_source = state_source.clone();
                 Ok(Device::new(
                     device.integration_id.clone(),
                     device.device_id.clone(),
                     resolved_name,
-                    DeviceData::Controllable(ControllableDevice::new(
-                        scene_id.clone(),
-                        *power,
-                        *brightness,
-                        color.clone(),
-                        *transition,
-                        resolved_capabilities,
-                        ManageKind::Unmanaged,
-                    )),
+                    DeviceData::Controllable(light),
+                    None,
+                ))
+            }
+            Self::ColorSource {
+                device,
+                name,
+                power,
+                brightness,
+                color,
+                transition,
+            } => {
+                let resolved_name = match seed {
+                    Some(ScenarioDeviceSeed::Sensor {
+                        name: seed_name, ..
+                    }) => {
+                        if name.as_ref().is_some_and(|name| name != seed_name) {
+                            return Err(eyre!(
+                                "scenario device '{}' name conflicts with the suite device catalog",
+                                seed_name
+                            ));
+                        }
+                        seed_name.clone()
+                    }
+                    Some(ScenarioDeviceSeed::Light {
+                        name: seed_name, ..
+                    }) => {
+                        return Err(eyre!(
+                            "scenario device '{}' is a color source but the suite device catalog defines it as a light",
+                            seed_name
+                        ));
+                    }
+                    None => name.clone().ok_or_else(|| {
+                        eyre!(
+                            "legacy scenario device '{}' is missing its name",
+                            device_key_label(device)
+                        )
+                    })?,
+                };
+                Ok(Device::new(
+                    device.integration_id.clone(),
+                    device.device_id.clone(),
+                    resolved_name,
+                    DeviceData::Sensor(SensorDevice::Color(ControllableState {
+                        power: *power,
+                        brightness: brightness.map(OrderedFloat),
+                        color: color.clone(),
+                        transition: transition.map(OrderedFloat),
+                    })),
                     None,
                 ))
             }
@@ -1453,7 +1664,10 @@ impl ExpectedDeviceState {
     fn device(&self) -> &DeviceKey {
         match self {
             Self::Light { device, .. }
+            | Self::LightVisual { device, .. }
             | Self::LightPower { device, .. }
+            | Self::LightScene { device, .. }
+            | Self::LightScenePower { device, .. }
             | Self::Sensor { device, .. } => device,
         }
     }

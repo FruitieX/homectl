@@ -777,6 +777,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
             definition_revision,
             state_revision,
             causation,
+            triggering_device,
             value,
             error,
         } => {
@@ -793,6 +794,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 routine_id,
                 &token,
                 *causation,
+                triggering_device.clone(),
                 value.clone(),
                 error.clone(),
             );
@@ -1309,6 +1311,7 @@ fn apply_script_result(
     routine_id: &RoutineId,
     token: &InvocationToken,
     causation: EventCausation,
+    triggering_device: Option<DeviceKey>,
     value: Option<serde_json::Value>,
     error: Option<String>,
 ) {
@@ -1338,9 +1341,12 @@ fn apply_script_result(
                     helpers: &state.helpers,
                     intents: &state.intents,
                 };
-                state
-                    .rules
-                    .plan_v2_script_run(routine_id, &outcome.actions, &inputs)
+                state.rules.plan_v2_script_run(
+                    routine_id,
+                    &outcome.actions,
+                    &inputs,
+                    triggering_device,
+                )
             };
             match plan {
                 Some(plan) => {
@@ -1919,6 +1925,7 @@ impl AppState {
                 run.source_body,
                 run.context,
                 run.causation,
+                run.triggering_device,
             );
         }
     }
@@ -2155,6 +2162,10 @@ impl AppState {
                             origin,
                             frame_causation,
                             evaluation_time_ms,
+                            self.rules.v2_script_triggering_device(
+                                &evaluation.routine_id,
+                                &evaluation.matched_trigger_ids,
+                            ),
                         ) {
                             Ok(run) => {
                                 self.rules

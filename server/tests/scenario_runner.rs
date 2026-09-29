@@ -295,6 +295,67 @@ async fn scenario_runner_executes_arrival_home_and_dimmer_scenarios() {
 }
 
 #[tokio::test]
+async fn scenario_can_skip_dispatch_shape_while_still_checking_final_state() {
+    let mut suite = behavior_suite();
+    let scenario_index = suite
+        .scenarios
+        .iter()
+        .position(|scenario| scenario.name == "entry dimmer off turns off all lights")
+        .expect("entry dimmer scenario exists");
+    let scenario = suite
+        .scenarios
+        .get_mut(scenario_index)
+        .expect("entry dimmer scenario exists");
+    scenario.expect.check_commands = false;
+    scenario.expect.commands.clear();
+
+    let report = run_scenario_suite(&behavior_config(), &suite)
+        .await
+        .expect("scenario suite should run");
+
+    assert_eq!(report.scenarios.len(), 3);
+    assert!(
+        report.scenarios.iter().all(|scenario| scenario.passed),
+        "{report:#?}"
+    );
+
+    suite.scenarios[scenario_index]
+        .expect
+        .forbidden_command_devices
+        .push(serde_json::from_value(json!("sim/entry_light")).unwrap());
+    let report = run_scenario_suite(&behavior_config(), &suite)
+        .await
+        .expect("scenario suite should run");
+    assert!(report.scenarios[scenario_index]
+        .failures
+        .iter()
+        .any(|failure| failure.contains("received a forbidden command")));
+    suite.scenarios[scenario_index]
+        .expect
+        .forbidden_command_devices
+        .clear();
+
+    let first_light = suite.scenarios[scenario_index]
+        .expect
+        .final_state
+        .iter_mut()
+        .find_map(|expected| match expected {
+            ExpectedDeviceState::Light { state, .. } => Some(state),
+            _ => None,
+        })
+        .expect("entry dimmer scenario checks a light");
+    first_light.power = true;
+    let report = run_scenario_suite(&behavior_config(), &suite)
+        .await
+        .expect("scenario suite should run");
+    assert!(!report.scenarios[scenario_index].passed);
+    assert!(report.scenarios[scenario_index]
+        .failures
+        .iter()
+        .any(|failure| failure.contains("final state did not match")));
+}
+
+#[tokio::test]
 async fn scenario_runner_executes_compiled_routines_and_checks_commands_and_state() {
     let report = run_scenario_suite(&stairs_config(), &stairs_suite())
         .await
@@ -493,9 +554,10 @@ async fn scenario_seeds_a_light_scene_for_group_conditions() {
                 ],
                 "final_state": [
                     { "kind": "sensor", "device": "sim/stairs_motion", "value": true },
-                    { "kind": "light_power", "device": "sim/kids_left", "power": true }
+                    { "kind": "light_power", "device": "sim/kids_left", "power": true },
+                    { "kind": "light_scene_power", "device": "sim/kids_right", "scene_id": "night", "power": false }
                 ],
-                "unchanged": ["sim/kids_right"]
+                "unchanged": []
             }
         }]
     }))
@@ -505,5 +567,72 @@ async fn scenario_seeds_a_light_scene_for_group_conditions() {
         .await
         .expect("scenario suite should run");
 
+    assert!(report.scenarios[0].passed, "{report:#?}");
+}
+
+#[tokio::test]
+async fn scenario_seeds_a_color_source_used_by_a_linked_scene() {
+    let config: ConfigExport = serde_json::from_value(json!({
+        "version": 1,
+        "core": {},
+        "integrations": [],
+        "groups": [{
+            "id": "lights", "name": "Lights", "hidden": false,
+            "devices": [{ "integration_id": "sim", "device_id": "lamp" }],
+            "linked_groups": []
+        }],
+        "scenes": [{
+            "id": "normal", "name": "Normal", "hidden": false,
+            "script": null, "device_states": {},
+            "group_states": { "lights": { "integration_id": "source", "device_id": "color" } },
+            "group_state_order": ["lights"]
+        }],
+        "routines": [{
+            "id": "arrival", "name": "Arrival", "enabled": true,
+            "semantics_version": 2, "revision": 1,
+            "definition_v2": {
+                "triggers": [{
+                    "kind": "state_change", "id": "motion",
+                    "device": { "integration_id": "sim", "device_id": "motion" }
+                }],
+                "program": { "kind": "native", "steps": [{
+                    "action": "activate_scene", "id": "normal",
+                    "scene_id": "normal", "targets": { "groups": ["lights"] },
+                    "use_scene_transition": false
+                }] }
+            },
+            "rules": [], "actions": []
+        }],
+        "floorplan": null, "dashboard_layouts": [], "dashboard_widgets": []
+    }))
+    .expect("linked scene config should decode");
+    let suite: ScenarioSuite = serde_json::from_value(json!({
+        "version": 1,
+        "scenarios": [{
+            "name": "arrival follows the seeded color source",
+            "routines": ["Arrival"],
+            "initial_state": [
+                { "kind": "sensor", "device": "sim/motion", "name": "Motion", "value": false },
+                { "kind": "color_source", "device": "source/color", "name": "Color source",
+                  "power": true, "brightness": 0.7 },
+                { "kind": "light", "device": "sim/lamp", "name": "Lamp",
+                  "power": false, "brightness": 0.2 }
+            ],
+            "events": [{ "type": "sensor", "device": "sim/motion", "value": true }],
+            "expect": {
+                "check_commands": false,
+                "final_state": [
+                    { "kind": "sensor", "device": "sim/motion", "value": true },
+                    { "kind": "light_scene_power", "device": "sim/lamp", "scene_id": "normal", "power": true }
+                ],
+                "unchanged": ["source/color"]
+            }
+        }]
+    }))
+    .expect("linked scene scenario should decode");
+
+    let report = run_scenario_suite(&config, &suite)
+        .await
+        .expect("scenario suite should run");
     assert!(report.scenarios[0].passed, "{report:#?}");
 }

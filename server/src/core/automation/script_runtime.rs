@@ -61,6 +61,7 @@ pub struct PreparedScriptRun {
     pub source_body: String,
     pub context: Value,
     pub causation: EventCausation,
+    pub triggering_device: Option<DeviceKey>,
 }
 
 /// One admitted legacy (v1) rule-script leaf ready for the worker pool.
@@ -394,6 +395,7 @@ impl ScriptExecution {
         origin: EventOrigin,
         causation: EventCausation,
         now_ms: i64,
+        triggering_device: Option<DeviceKey>,
     ) -> Result<PreparedScriptRun, String> {
         let owner = ScriptOwnerId::routine(routine_id.0.clone());
         let context =
@@ -415,6 +417,7 @@ impl ScriptExecution {
                     source_body: spec.source_body.clone(),
                     context,
                     causation,
+                    triggering_device,
                 })
             }
             Err(error) => Err(admission_error_text(&error)),
@@ -592,6 +595,7 @@ impl ScriptExecution {
         source_body: String,
         context: Value,
         causation: EventCausation,
+        triggering_device: Option<DeviceKey>,
     ) {
         tokio::spawn(async move {
             let outcome = pool.execute(&source_body, context).await;
@@ -608,6 +612,7 @@ impl ScriptExecution {
                     definition_revision: token.definition_revision,
                     state_revision: token.state_revision,
                     causation,
+                    triggering_device,
                     value,
                     error,
                 })
