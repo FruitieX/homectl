@@ -322,6 +322,7 @@ function ChooseStepEditor({
   helpers: HelperRuntimeStatus[];
   existingIds: string[];
 }) {
+  const { draftKey } = useRoutineAuthoring();
   const updateBranch = (index: number, branch: ChooseBranch) =>
     onChange({
       ...step,
@@ -347,14 +348,28 @@ function ChooseStepEditor({
               branches: moveSibling(step.branches, index, offset),
             })
           }
-          onRemove={() =>
+          onRemove={() => {
+            if (draftKey) {
+              const prefixes = [
+                `step/${step.id}/choose/branch/${branch.id}`,
+                ...collectStepIds(branch.steps).map((id) => `step/${id}`),
+              ];
+              entityDraftStore.remapEditorPaths(draftKey, (path) =>
+                prefixes.some(
+                  (prefix) => path === prefix || path.startsWith(prefix + '/'),
+                )
+                  ? null
+                  : path,
+              );
+            }
             onChange({
               ...step,
               branches: step.branches.filter((_, i) => i !== index),
-            })
-          }
+            });
+          }}
         >
           <ConditionEditor
+            path={`step/${step.id}/choose/branch/${branch.id}/condition`}
             condition={branch.condition}
             onChange={(condition) =>
               updateBranch(index, { ...branch, condition })
@@ -1567,7 +1582,19 @@ function StepEditor({
       index={index}
       total={total}
       onMove={onMove}
-      onRemove={onRemove}
+      onRemove={() => {
+        if (draftKey) {
+          const prefixes = collectStepIds([step]).map((id) => `step/${id}`);
+          entityDraftStore.remapEditorPaths(draftKey, (path) =>
+            prefixes.some(
+              (prefix) => path === prefix || path.startsWith(prefix + '/'),
+            )
+              ? null
+              : path,
+          );
+        }
+        onRemove();
+      }}
       onDuplicate={onDuplicate}
     >
       {known ? (

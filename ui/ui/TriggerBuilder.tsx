@@ -467,6 +467,7 @@ function TriggerFields({
       return (
         <div className="space-y-4">
           <ConditionEditor
+            path={`trigger/${trigger.id}/${trigger.kind}/predicate`}
             condition={trigger.predicate}
             onChange={(predicate) => onChange({ ...trigger, predicate })}
             devices={devices}

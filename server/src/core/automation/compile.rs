@@ -2443,6 +2443,54 @@ mod tests {
         );
     }
 
+    #[test]
+    fn comparison_values_distinguish_absence_from_false_zero_and_structured_values() {
+        let definition = |operator: &str, value: Option<serde_json::Value>| {
+            let mut condition = json!({
+                "kind": "comparison",
+                "source": {"kind":"device", "device":{"integration_id":"dummy","device_id":"lamp1"}, "path":"/power"},
+                "operator": operator
+            });
+            if let Some(value) = value {
+                condition["value"] = value;
+            }
+            json!({
+                "triggers":[{"kind":"manual","id":"manual"}],
+                "condition":condition,
+                "program":{"kind":"native","steps":[{"action":"cancel_timer","id":"cancel","timer":"test"}]}
+            })
+        };
+        for operator in ["exists", "truthy"] {
+            compile_ok(definition(operator, None), &catalog());
+            assert!(error_codes(
+                &compile_definition_value(&definition(operator, Some(json!(false))), &catalog())
+                    .unwrap_err()
+            )
+            .contains(&"unexpected_operator_value".to_string()));
+        }
+        for value in [
+            json!(false),
+            json!(0),
+            json!(""),
+            json!([]),
+            json!({"future":[null,false,0]}),
+        ] {
+            let compiled = compile_ok(definition("eq", Some(value.clone())), &catalog());
+            let ConditionExpr::Comparison { value: actual, .. } = compiled.normalized.condition
+            else {
+                panic!("comparison expected")
+            };
+            assert_eq!(actual, Some(value));
+        }
+        // The current wire contract treats a top-level null like an absent operand.
+        for value in [None, Some(serde_json::Value::Null)] {
+            assert!(error_codes(
+                &compile_definition_value(&definition("eq", value), &catalog()).unwrap_err()
+            )
+            .contains(&"missing_operator_value".to_string()));
+        }
+    }
+
     // K01/K02: the six-field grammar and calendar policy are validated at
     // compile time so stored definitions and fingerprints are stable.
     #[test]

@@ -3,7 +3,11 @@ import {
   FlowBlock,
   AddFlowBlock,
   UnknownFlowValue,
+  useRoutineAuthoring,
 } from '@/ui/settings/FlowBlock';
+import { entityDraftStore, remapArrayEditorPath } from '@/lib/entityDraft';
+import { editableCondition, valueSourceKey } from '@/lib/conditionEditing';
+import { DraftNumberInput } from '@/ui/settings/DraftNumberInput';
 import { moveSibling } from '@/lib/routineDraft';
 import type { ConditionExpr } from '@/bindings/ConditionExpr';
 import type { DevicesState } from '@/bindings/DevicesState';
@@ -15,18 +19,13 @@ import type { JsonValue } from '@/bindings/serde_json/JsonValue';
 import { useSources, useDeviceDisplayNames } from '@/hooks/useConfig';
 import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { getDeviceDisplayLabelFromKey } from '@/lib/deviceLabel';
-import {
-  OPERATORS_WITHOUT_VALUE,
-  conditionWords,
-  fieldLabel,
-} from '@/lib/conditionWords';
+import { conditionWords, fieldLabel } from '@/lib/conditionWords';
 import {
   ReferenceField,
   GroupSelect,
   splitDeviceKey,
 } from '@/ui/config-selectors';
 import { ConfigField } from '@/ui/config-form';
-import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { ValuePathPicker } from '@/ui/ValuePathPicker';
 import { SearchablePicker } from '@/ui/SearchablePicker';
@@ -128,17 +127,6 @@ function sourceSubject(
   }
 }
 
-function describeSource(
-  source: ValueSource,
-  resolveDevice?: (ref: {
-    integration_id: string;
-    device_id: string;
-  }) => string,
-): string {
-  const { subject, field } = sourceSubject(source, resolveDevice);
-  return `${subject} ${field}`;
-}
-
 export function describeCondition(
   condition: unknown,
   resolveDevice?: (ref: {
@@ -146,7 +134,7 @@ export function describeCondition(
     device_id: string;
   }) => string,
 ): string {
-  if (!condition || typeof condition !== 'object') {
+  if (!editableCondition(condition)) {
     return 'condition';
   }
   const expr = condition as ConditionExpr;
@@ -176,11 +164,14 @@ function ComparisonValueEditor({
   operator,
   value,
   onChange,
+  path,
 }: {
   operator: RawRuleOperator;
   value: unknown;
   onChange: (value: unknown) => void;
+  path: string;
 }) {
+  const { draftKey } = useRoutineAuthoring();
   if (operatorsWithoutValue.has(operator)) {
     return null;
   }
@@ -208,17 +199,28 @@ function ComparisonValueEditor({
             { value: 'text', label: 'Text' },
             { value: 'json', label: 'JSON' },
           ]}
-          onValueChange={(next) =>
-            onChange(
+          onValueChange={(next) => {
+            const fallback =
               next === 'json'
                 ? []
                 : next === 'number'
                   ? 0
                   : next === 'boolean'
                     ? true
-                    : '',
-            )
-          }
+                    : '';
+            onChange(
+              draftKey
+                ? entityDraftStore.switchVariant(
+                    draftKey,
+                    path,
+                    valueType,
+                    value,
+                    next,
+                    fallback,
+                  )
+                : fallback,
+            );
+          }}
         />
       </div>
       {valueType === 'json' ? (
@@ -232,6 +234,14 @@ function ComparisonValueEditor({
             { value: 'false', label: 'False' },
           ]}
           onValueChange={(next) => onChange(next === 'true')}
+        />
+      ) : valueType === 'number' && draftKey ? (
+        <DraftNumberInput
+          aria-label="Expected value"
+          draftKey={draftKey}
+          path={`${path}/number`}
+          value={typeof value === 'number' ? value : undefined}
+          onValueChange={onChange}
         />
       ) : valueType === 'number' ? (
         <Input
@@ -261,13 +271,16 @@ function ValueSourceEditor({
   onChooseValue,
   devices,
   helpers,
+  path,
 }: {
   source: ValueSource;
   onChange: (source: ValueSource) => void;
   onChooseValue?: (value: unknown) => void;
   devices: DevicesState;
   helpers: HelperRuntimeStatus[];
+  path: string;
 }) {
+  const { draftKey } = useRoutineAuthoring();
   const sources = useSources().data ?? [];
   const names = useDeviceDisplayNames().data;
   const displayNames = Object.fromEntries(
@@ -328,8 +341,9 @@ function ValueSourceEditor({
               const split = selected.indexOf(':');
               const kind = selected.slice(0, split);
               const id = selected.slice(split + 1);
+              let next: ValueSource | undefined;
               if (kind === 'device')
-                onChange({
+                next = {
                   ...(source.kind === 'device' ? source : {}),
                   kind: 'device',
                   device: splitDeviceKey(id) ?? {
@@ -342,20 +356,33 @@ function ValueSourceEditor({
                       : devices[id] && 'Controllable' in devices[id]!.data
                         ? '/power'
                         : '/value',
-                });
+                };
               else if (kind === 'helper')
-                onChange({
+                next = {
                   ...(source.kind === 'helper' ? source : {}),
                   kind: 'helper',
                   helper: id,
-                });
+                };
               else if (kind === 'computed_source')
-                onChange({
+                next = {
                   ...(source.kind === 'computed_source' ? source : {}),
                   kind: 'computed_source',
                   source: id,
                   path: source.kind === 'computed_source' ? source.path : '/',
-                });
+                };
+              if (next)
+                onChange(
+                  draftKey
+                    ? entityDraftStore.switchVariant(
+                        draftKey,
+                        path,
+                        valueSourceKey(source),
+                        source,
+                        selected,
+                        next,
+                      )
+                    : next,
+                );
             }}
           />
         </ReferenceField>
@@ -369,6 +396,7 @@ function ValueSourceEditor({
       ) : (
         <ConfigField label="Field">
           <ValuePathPicker
+            key={valueSourceKey(source)}
             devices={devices}
             deviceKey={
               source.kind === 'device' ? selectedId : 'computed/' + selectedId
@@ -449,6 +477,7 @@ export function ConditionEditor({
   helpers,
   depth = 0,
   hideKind = false,
+  path = 'condition',
 }: {
   condition: ConditionExpr;
   onChange: (condition: ConditionExpr) => void;
@@ -458,22 +487,28 @@ export function ConditionEditor({
   helpers: HelperRuntimeStatus[];
   depth?: number;
   hideKind?: boolean;
+  path?: string;
 }) {
-  if (
-    !condition ||
-    typeof condition !== 'object' ||
-    ((condition.kind === 'all' || condition.kind === 'any') &&
-      !Array.isArray(condition.conditions)) ||
-    (condition.kind === 'comparison' &&
-      (!condition.source || typeof condition.source !== 'object'))
-  )
+  const { draftKey } = useRoutineAuthoring();
+  if (!editableCondition(condition))
     return <UnknownFlowValue value={condition} />;
   const kindSelect = (
     <SettingsSelect
       aria-label="Condition type"
       value={condition.kind}
       onValueChange={(kind) =>
-        onChange(defaultCondition(kind as ConditionKind))
+        onChange(
+          draftKey
+            ? entityDraftStore.switchVariant(
+                draftKey,
+                path,
+                condition.kind,
+                condition,
+                kind,
+                defaultCondition(kind as ConditionKind),
+              )
+            : defaultCondition(kind as ConditionKind),
+        )
       }
       options={conditionKindOptions}
     />
@@ -482,39 +517,69 @@ export function ConditionEditor({
   const renderChildren = (
     children: ConditionExpr[],
     update: (next: ConditionExpr[]) => void,
-  ) => (
-    <div className="flow-conditions">
-      {children.map((child, index) =>
-        !child || typeof child !== 'object' ? (
-          <UnknownFlowValue key={index} value={child} />
-        ) : (
+  ) => {
+    const arrayPath = `${path}/${condition.kind}/conditions`;
+    const reorder = (order: number[]) => {
+      if (draftKey)
+        entityDraftStore.remapEditorPaths(draftKey, (slot) =>
+          remapArrayEditorPath(slot, arrayPath, order),
+        );
+      update(order.map((index) => children[index]));
+    };
+    return (
+      <div className="flow-conditions">
+        {children.map((child, index) => (
           <FlowBlock
             key={index}
             className="flow-condition-node"
             title={
-              <SettingsSelect
-                className="w-full"
-                aria-label="Condition type"
-                value={child.kind}
-                options={conditionKindOptions}
-                onValueChange={(kind) =>
-                  update(
-                    children.map((entry, i) =>
-                      i === index
-                        ? defaultCondition(kind as ConditionKind)
-                        : entry,
-                    ),
-                  )
-                }
-              />
+              editableCondition(child) ? (
+                <SettingsSelect
+                  className="w-full"
+                  aria-label="Condition type"
+                  value={child.kind}
+                  options={conditionKindOptions}
+                  onValueChange={(kind) =>
+                    update(
+                      children.map((entry, i) =>
+                        i === index
+                          ? draftKey
+                            ? entityDraftStore.switchVariant(
+                                draftKey,
+                                `${arrayPath}/${index}`,
+                                child.kind,
+                                child,
+                                kind,
+                                defaultCondition(kind as ConditionKind),
+                              )
+                            : defaultCondition(kind as ConditionKind)
+                          : entry,
+                      ),
+                    )
+                  }
+                />
+              ) : (
+                'Unsupported condition'
+              )
             }
             index={index}
             total={children.length}
-            onMove={(offset) => update(moveSibling(children, index, offset))}
-            onRemove={() => update(children.filter((_, i) => i !== index))}
+            onMove={(offset) =>
+              reorder(
+                moveSibling(
+                  children.map((_, i) => i),
+                  index,
+                  offset,
+                ),
+              )
+            }
+            onRemove={() =>
+              reorder(children.map((_, i) => i).filter((i) => i !== index))
+            }
           >
             <ConditionEditor
               condition={child}
+              path={`${arrayPath}/${index}`}
               onChange={(next) =>
                 update(children.map((entry, i) => (i === index ? next : entry)))
               }
@@ -526,25 +591,25 @@ export function ConditionEditor({
               hideKind
             />
           </FlowBlock>
-        ),
-      )}
-      {!children.length && (
-        <p className="text-xs text-destructive">
-          Add a condition or remove this empty group.
-        </p>
-      )}
-      <AddFlowBlock
-        label="Add condition"
-        options={conditionKindOptions}
-        onAdd={(kind) => update([...children, defaultCondition(kind)])}
-      />
-    </div>
-  );
+        ))}
+        {!children.length && (
+          <p className="text-xs text-destructive">
+            Add a condition or remove this empty group.
+          </p>
+        )}
+        <AddFlowBlock
+          label="Add condition"
+          options={conditionKindOptions}
+          onAdd={(kind) => update([...children, defaultCondition(kind)])}
+        />
+      </div>
+    );
+  };
   if (!conditionKindOptions.some((option) => option.value === condition.kind))
     return <UnknownFlowValue value={condition} />;
 
   return (
-    <div className={'flow-condition space-y-3'}>
+    <div className={'flow-condition space-y-3'} data-condition-path={path}>
       {!hideKind && <ConfigField label="Match">{kindSelect}</ConfigField>}
 
       {condition.kind === 'literal' ? (
@@ -582,6 +647,7 @@ export function ConditionEditor({
           </p>
           <ConditionEditor
             condition={condition.condition}
+            path={`${path}/not/condition`}
             onChange={(next) => onChange({ ...condition, condition: next })}
             devices={devices}
             groups={groups}
@@ -596,9 +662,20 @@ export function ConditionEditor({
         <div className="space-y-3">
           <ValueSourceEditor
             source={condition.source}
+            path={`${path}/comparison/source`}
             onChange={(source) => onChange({ ...condition, source })}
-            onChooseValue={(value) =>
-              onChange({ ...condition, value: value as JsonValue })
+            onChooseValue={
+              operatorsWithoutValue.has(condition.operator)
+                ? undefined
+                : (value) => {
+                    if (draftKey)
+                      entityDraftStore.remapEditorPaths(draftKey, (slot) =>
+                        slot.startsWith(`${path}/comparison/value/`)
+                          ? null
+                          : slot,
+                      );
+                    onChange({ ...condition, value: value as JsonValue });
+                  }
             }
             devices={devices}
             helpers={helpers}
@@ -608,18 +685,43 @@ export function ConditionEditor({
               <SettingsSelect
                 aria-label="Comparison operator"
                 value={condition.operator}
-                onValueChange={(operator) =>
+                onValueChange={(operator) => {
+                  const from = operatorsWithoutValue.has(condition.operator)
+                    ? 'none'
+                    : 'value';
+                  const to = operatorsWithoutValue.has(
+                    operator as RawRuleOperator,
+                  )
+                    ? 'none'
+                    : 'value';
+                  const value =
+                    from === to
+                      ? condition.value
+                      : draftKey
+                        ? entityDraftStore.switchVariant(
+                            draftKey,
+                            `${path}/comparison/value`,
+                            from,
+                            condition.value,
+                            to,
+                            to === 'none' ? undefined : true,
+                          )
+                        : to === 'none'
+                          ? undefined
+                          : true;
                   onChange({
                     ...condition,
                     operator: operator as RawRuleOperator,
-                  })
-                }
+                    value,
+                  });
+                }}
                 options={operatorOptions}
               />
             </ConfigField>
             <ComparisonValueEditor
               operator={condition.operator}
               value={condition.value}
+              path={`${path}/comparison/value/typed`}
               onChange={(value) =>
                 onChange({
                   ...condition,
@@ -682,27 +784,38 @@ export function ConditionEditor({
             />
           </ConfigField>
           <ConfigField label="Scene">
-            <SettingsSelect
-              aria-label="Group scene"
-              value={
-                condition.scene === undefined
-                  ? 'any'
-                  : `scene:${condition.scene}`
-              }
-              onValueChange={(scene) =>
-                onChange({
-                  ...condition,
-                  scene: scene === 'any' ? undefined : scene.slice(6),
-                })
-              }
-              options={[
-                { value: 'any', label: 'Any scene' },
-                ...scenes.map((scene) => ({
-                  value: `scene:${scene.id}`,
-                  label: scene.name,
-                })),
-              ]}
-            />
+            <ReferenceField kind="scene" value={condition.scene ?? ''}>
+              <SettingsSelect
+                aria-label="Group scene"
+                value={
+                  condition.scene === undefined
+                    ? 'any'
+                    : `scene:${condition.scene}`
+                }
+                onValueChange={(scene) =>
+                  onChange({
+                    ...condition,
+                    scene: scene === 'any' ? undefined : scene.slice(6),
+                  })
+                }
+                options={[
+                  { value: 'any', label: 'Any scene' },
+                  ...(condition.scene &&
+                  !scenes.some((scene) => scene.id === condition.scene)
+                    ? [
+                        {
+                          value: `scene:${condition.scene}`,
+                          label: `Unavailable scene: ${condition.scene}`,
+                        },
+                      ]
+                    : []),
+                  ...scenes.map((scene) => ({
+                    value: `scene:${scene.id}`,
+                    label: scene.name,
+                  })),
+                ]}
+              />
+            </ReferenceField>
           </ConfigField>
         </div>
       ) : null}

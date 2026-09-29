@@ -318,7 +318,11 @@
   text-align: left;
 }
 @container (min-width: 290px) {
-  .condition-comparison,
+  .condition-comparison {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+@container (min-width: 400px) {
   .condition-source {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }

@@ -1,0 +1,20 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/homectl_server-deb79e13f06b027d)
+
+running 9 tests
+test core::automation::evaluate::tests::c02_any_truth_table_including_unknown ... ok
+test core::automation::evaluate::tests::c01_all_truth_table_including_unknown ... ok
+test core::automation::evaluate::tests::c03_not_truth_table_including_unknown ... ok
+test core::automation::evaluate::tests::c06_missing_entity_and_field_are_structured_unknowns ... ok
+test core::automation::evaluate::tests::c04_evaluation_error_dominates_not_all_and_any ... ok
+test core::automation::evaluate::tests::c08_fresh_report_without_availability_metadata_is_known ... ok
+test core::automation::evaluate::tests::c09_no_global_freshness_timeout_is_invented ... ok
+test core::automation::evaluate::tests::c07_offline_observed_is_unknown_but_requested_intent_stays_known ... ok
+test core::automation::evaluate::tests::c05_omitted_condition_normalizes_to_literal_true ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 798 filtered out; finished in 0.00s
+

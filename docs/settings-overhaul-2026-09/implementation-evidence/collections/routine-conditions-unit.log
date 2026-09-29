@@ -1,0 +1,391 @@
+$ node --experimental-strip-types --test 'lib/**/*.test.ts'
+(node:2470076) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/assistant-diff.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ stableStringify sorts object keys deterministically (1.126476ms)
+✔ diffTopLevelFields reports added, removed, and changed fields (0.924847ms)
+✔ diffTopLevelFields is order-insensitive for nested objects (0.151599ms)
+✔ assistantFieldLabel uses per-kind labels and humanizes the rest (0.09815ms)
+✔ describeJsonValue summarizes values (0.442719ms)
+✔ formatJson pretty prints values (0.169819ms)
+✔ operationTarget resolves create and existing entities (0.272069ms)
+✔ operationChangeSummary describes creates, deletes, and updates (0.208939ms)
+✔ operationFieldChanges ignores server bookkeeping fields (0.271049ms)
+✔ operationDetails summarizes scene target changes (0.391648ms)
+✔ operationDetails summarizes group membership changes (0.212309ms)
+✔ operationDetails summarizes routine section changes (0.378109ms)
+✔ operationDetails summarizes integration config changes (0.111299ms)
+✔ destructive and default acceptance rules (0.07283ms)
+✔ collectChangedDeviceKeys unions scene, group, and device operations (1.627274ms)
+✔ collectChangedGroupIds unions group and scene operations (0.221289ms)
+✔ planOperationCounts counts each operation kind (0.20124ms)
+✔ describeRoutineDefinition summarizes triggers and program (0.284058ms)
+✔ upsertAssistantAttachment replaces matching kind/id pairs (0.19983ms)
+(node:2470077) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/assistant-stream.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ parseAssistantSseEvents parses complete frames and buffers partial ones (1.037616ms)
+✔ parseAssistantSseEvents handles CRLF, usage, results, and errors (0.206839ms)
+✔ buildAssistantHistory keeps the newest turns and caps sizes (0.19505ms)
+✔ formatTokenCount renders compact approximate counts (0.09212ms)
+✔ describeAssistantActionChange summarizes power, brightness, and color (0.10573ms)
+✔ contextUsagePercent clamps to the context window (0.085129ms)
+✔ affectedDevicesSummary counts devices and surfaces failures (0.986997ms)
+(node:2470078) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/axisSpan.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ a flat temperature series is widened to the minimum span (0.564488ms)
+✔ a wide temperature series is untouched (0.540037ms)
+✔ humidity uses its own floor (0.1276ms)
+✔ units without a floor keep their range, and bad input passes through (0.13502ms)
+(node:2470079) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/brightnessCalibration.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ suggestions are editable points, not a required sequence (1.214417ms)
+✔ percentages round-trip through typed text and steps (0.224ms)
+✔ validation names the row that is wrong (0.329858ms)
+✔ the client maps brightness exactly like the server does (0.240669ms)
+✔ the review says what the edges do, including a capped ceiling (1.990377ms)
+✔ dimmable means the brightness capability, colour or not (0.17088ms)
+(node:2470080) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/colorBytes.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ hsToRgbBytes returns 0-255 components the renderer can use (1.148395ms)
+✔ a desaturated hue renders as bright white, not black (0.189449ms)
+✔ saturated hues never collapse to near-black (0.328479ms)
+✔ hue wraps and saturation clamps like the device colour path (0.126799ms)
+(node:2470086) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/conditionEditing.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ unknown or malformed condition fields remain unsupported instead of being coerced (1.396935ms)
+✔ source identities distinguish kinds and preserve path-independent editor identity (0.234069ms)
+(node:2470102) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/conditionWords.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ fieldLabel names known fields and falls back to the pointer tail (0.648447ms)
+✔ operatorWords reads as words, never as tokens (0.168469ms)
+✔ valueWords renders booleans and brightness as people say them (0.132079ms)
+✔ conditionWords reads as one sentence (0.10006ms)
+(node:2470108) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/configSection.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ deepCopy isolates nested values (1.037846ms)
+✔ deepEqual compares nested objects without identity (0.422868ms)
+✔ pickFields returns only the section fields (0.584218ms)
+✔ mergeFields keeps fields outside the section (0.170349ms)
+✔ sectionChangedElsewhere detects concurrent edits to the same fields (0.265219ms)
+✔ formatFreshness describes known and unknown freshness (0.152499ms)
+✔ firstInvalidField points at the first invalid subsection (1.32245ms)
+✔ pickFields keeps nested paths nested so sections can own sub-fields (0.255619ms)
+✔ mergeFields merges nested paths without dropping sibling fields (0.394847ms)
+✔ mergeFields creates missing parents and replaces arrays wholesale (0.276639ms)
+✔ sectionChangedElsewhere compares only the fields the section owns (0.254409ms)
+(node:2470114) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/conflictPresentation.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ conflict reviews mask credentials throughout nested objects and arrays (1.241556ms)
+(node:2470116) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/creationDraft.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ a draft round-trips through sessionStorage (1.610764ms)
+✔ payloads that look like credentials are refused and never read back (0.22809ms)
+✔ a draft from another version or another kind is ignored (0.150679ms)
+✔ no storage at all is survivable (0.309558ms)
+✔ draft age reads in plain language (0.215429ms)
+(node:2470118) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/deviceColor.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ device colour wire format
+  ✔ edits and previews Kelvin directly, matching the backend DeviceColor contract (1.4705ms)
+  ✔ recognises every untagged variant (0.11689ms)
+  ✔ does not recognise the tagged shapes the old editor assumed (0.067419ms)
+  ✔ keeps a saved HS value (screenshot 7 regression) (0.276679ms)
+  ✔ loads, changes, saves, and reloads each variant unchanged (0.292289ms)
+  ✔ does not silently drop an XY value it cannot edit directly (0.093289ms)
+  ✔ gives each mode a valid starting value (0.10375ms)
+  ✔ names colours accessibly without colour being the only signal (0.230559ms)
+  ✔ previews brightness without changing the colour itself (0.179479ms)
+  ✔ uses full-value HSV so zero saturation is white and hue stays vivid (0.186439ms)
+✔ device colour wire format (5.118137ms)
+(node:2470121) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/durationInput.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ durations retain exact milliseconds across fractional units (1.070072ms)
+✔ duration validation distinguishes incomplete, optional and unsafe values (0.14708ms)
+(node:2470149) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/entityDraft.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ unfinished numeric input retains its type, blocks saves and survives navigation until discarded (2.118618ms)
+✔ raw numeric state is never submitted and only acknowledged input is cleared by a save (0.363708ms)
+✔ clean refresh and reviewed remote values cannot leave a stale numeric display (0.281189ms)
+✔ collection variants and unfinished inputs follow reordered items and disappear with removed items (0.507268ms)
+✔ switching type clears incomplete inputs and distinguishes cached null from an absent variant (0.13801ms)
+✔ draft retains all collections and unknown fields across background refreshes and discard (0.137429ms)
+✔ edits made while saving survive response normalization and a delayed response cannot clear newer work (0.127389ms)
+✔ failed save retains draft and reviewed conflict choices preserve unrelated server changes (0.273179ms)
+✔ inactive variants survive navigation and are discarded explicitly (0.374549ms)
+✔ nested conflict choices preserve remote siblings and treat arrays and variants as units (0.762617ms)
+(node:2470150) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/floorplanDraft.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ floorplan authoring preserves labels, unavailable placements and extension data (2.60935ms)
+✔ malformed or future layouts are kept out of drawing controls instead of silently repaired (0.415399ms)
+✔ floorplan conflict summaries show layout dimensions and omit uploaded image bytes (0.664308ms)
+(node:2470152) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/group-floorplan-preview.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ resolveGroupDeviceKeys flattens nested groups and deduplicates (1.722974ms)
+✔ resolveGroupDeviceKeys falls back to raw device refs (0.187419ms)
+✔ selectGroupFloorplan prefers an explicit placement mask (0.343769ms)
+✔ selectGroupFloorplan picks the floorplan with the most devices (0.270709ms)
+✔ selectGroupFloorplan tie-breaks deterministically by id (4.896071ms)
+✔ selectGroupFloorplan returns null when nothing is placed (0.446289ms)
+✔ getGroupFocusBounds pads and clamps to the floorplan (0.317839ms)
+✔ getGroupFocusBounds ignores unplaced devices and empty input (0.295339ms)
+✔ getGroupFocusBounds caps a lone device zoom with a minimum span (0.350649ms)
+✔ getGroupFocusBounds keeps tight bounds when the minimum span is disabled (0.335808ms)
+✔ getGroupFocusBounds shifts at floorplan edges to keep the minimum span (0.332159ms)
+✔ getGroupFocusBounds keeps wide clusters at their own span (0.095389ms)
+(node:2470190) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/groupGraph.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ findNestedCycle detects a direct nesting loop (1.382205ms)
+✔ findNestedCycle follows the candidate down to the group (0.299359ms)
+✔ findExistingPath reports redundant nesting (0.156329ms)
+✔ findNestedCycle stops on an existing unrelated loop (0.14119ms)
+✔ describeGroupUsage lists the scenes and routines that target a room (1.993672ms)
+✔ describeGroupUsage finds group keys nested inside steps (0.236879ms)
+✔ missingGroupDevices keeps unresolved members visible (0.153369ms)
+✔ suggestId slugifies a name and avoids collisions (0.238949ms)
+✔ v2 group targets and comparison sources are included in usage (0.758597ms)
+(node:2470191) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/integrationDraft.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ editing a nested field preserves omission, false, zero, ordered collections and unknown siblings (1.501235ms)
+✔ legacy MQTT inference controls visibility without materializing an explicit mode (0.17652ms)
+✔ nested extension names stay own properties without changing prototypes (0.1192ms)
+✔ capability temperature ranges use positive ascending Kelvin values (0.616468ms)
+✔ validation checks all sensor pointers, range bounds and integer ports (0.421609ms)
+✔ capability validation distinguishes optional dimming from required booleans and u16 bounds (1.882973ms)
+✔ dummy initial readings support all sensor variants and retain false, zero, empty text and extensions (0.503829ms)
+✔ malformed dummy collections and initial states stay invalid until explicitly repaired (0.267049ms)
+(node:2470192) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/liveStateSummary.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ equal state previews do not depend on color key order (4.965022ms)
+✔ mixed brightness never becomes an average shared value (0.238459ms)
+✔ unknown members prevent a misleading complete preview (0.07298ms)
+✔ off and unspecified values retain their meaning (0.234749ms)
+(node:2470198) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/longPress.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ a press that stays within the tolerance stays a hold (0.592318ms)
+✔ a press that travels past the tolerance is a scroll (0.079759ms)
+✔ the tolerance is a straight-line distance, not per axis (0.05905ms)
+✔ a custom tolerance overrides the default (0.070999ms)
+✔ the shared defaults match the gesture contract (0.05645ms)
+(node:2470204) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/preferences.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ pushRecent dedupes, prepends, and bounds the list (1.069556ms)
+✔ toggleFavoriteKey adds and removes keys (0.306579ms)
+✔ rankByPreference orders favorites, then recents, then original (0.215549ms)
+✔ rankByPreference keeps original order without preferences (0.09976ms)
+(node:2470215) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/preview-mount-budget.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ mounts at most the capacity, prioritising visible previews (1.041536ms)
+✔ keeps previously visible previews mounted while capacity remains (0.1631ms)
+✔ evicts the least recently visible preview for a new one (0.155019ms)
+✔ unregister frees capacity and promotes a visible waiter (0.123939ms)
+✔ notifies subscribers only when the mounted set changes (0.12785ms)
+(node:2470217) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/query-client.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ cache sharing preserves nested special keys, omission, null and non-JSON leaf values (1.158785ms)
+✔ configuration cache preserves arbitrary JSON keys through repeated updates (1.152735ms)
+(node:2470226) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/routineActivity.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ an evaluation without a run outcome never claims dispatch or successful execution (0.766827ms)
+✔ blocked coalesced attempts remain separate from old run evidence (9.779152ms)
+✔ policy rejection, suppression and unknown conditions keep their recorded meaning (0.257319ms)
+✔ legacy history without a condition trace still records a run, not a failed evaluation (0.168469ms)
+(node:2470231) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/routineDraft.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ future and malformed dynamic selections remain outside the editable renderer (1.400565ms)
+✔ reordering preserves node and branch identities, scopes and unknown values (0.847637ms)
+✔ duplicating a branch allocates new identities throughout without renaming timer references (4.127974ms)
+✔ JSON transport converts safe bigint durations and refuses precision loss and nonfinite values (0.416798ms)
+✔ empty logic groups and duplicate nested IDs have visible validation errors (0.411248ms)
+✔ arbitrary JSON payload identities and unknown fields survive duplication and validation (0.358419ms)
+(node:2470247) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/routineJourney.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ a device key splits into an integration and device id (1.936937ms)
+✔ device fields come from the live payload, with values and freshness (0.485413ms)
+✔ time parsing rejects nonsense instead of guessing (0.286749ms)
+✔ cron is derived from a local time and weekday choice (0.346139ms)
+✔ the definition follows the chosen intent (0.668961ms)
+✔ “stays this way for” becomes a predicate_for trigger body (0.231419ms)
+✔ the outcome becomes a scene activation or a power step (0.323929ms)
+✔ values are coerced to the field kind (0.287529ms)
+✔ validation names each missing piece (0.417008ms)
+✔ the review sentence reads like a sentence (0.628448ms)
+✔ nothing is preselected until a card is chosen (0.260039ms)
+✔ copying an existing routine reuses its definition (0.16681ms)
+✔ ids are slugged for the config key (0.236339ms)
+(node:2470249) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/routineNarrative.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ state-change triggers read as a sentence, not a mode (1.179876ms)
+✔ report triggers name the field (0.16737ms)
+✔ schedules translate cron into words and keep the raw form as detail (0.447919ms)
+✔ comparisons name the reading and the limit (0.596238ms)
+✔ missing readings are reported as waiting for data, not as false (0.193659ms)
+✔ nested conditions join with and/or and keep their evidence (0.222769ms)
+✔ room conditions read as membership statements (0.179729ms)
+✔ readings carry their units (0.401949ms)
+✔ a false condition says which reading is short (0.298969ms)
+✔ waiting for data is reserved for unreadable inputs (0.376229ms)
+✔ disabled and unevaluated routines say so plainly (0.180589ms)
+✔ the last recorded outcome stays separate from live evaluation (0.147459ms)
+✔ durations read as words (0.07862ms)
+(node:2470251) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/routinePolicy.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ describeExecutionPolicy explains overlapping runs and action caps (0.500139ms)
+✔ describeExecutionPolicy reports rate limits in seconds or minutes (0.095259ms)
+(node:2470262) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/routineRuntimeText.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ triggerStateSentence
+  ✔ names the absent evidence when enabled with no report yet (0.498888ms)
+  ✔ names the trigger that has not reported (0.083989ms)
+  ✔ says a disabled routine is not evaluated (0.157ms)
+  ✔ keeps an armed schedule and an unknown input apart (9.653784ms)
+  ✔ does not claim a deadline when none is armed (0.095579ms)
+✔ triggerStateSentence (11.346502ms)
+(node:2470264) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/sceneCapture.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ a power-only device captures power and omits the rest (1.250234ms)
+✔ supported brightness and hue color are captured in the scene color shape (0.14981ms)
+✔ a color space the device does not advertise is left out with a reason (0.110049ms)
+✔ a supported field with no requested value is omitted with a reason (0.06833ms)
+✔ capture follows the requested state when the report disagrees (0.874947ms)
+✔ an offline device still captures the requested state and says so (0.119659ms)
+✔ sensors and unknown payloads cannot be captured (0.09316ms)
+✔ color shapes convert from live to scene form and match capabilities (0.10318ms)
+✔ brightness is inferred from color capabilities but never overridden (0.08427ms)
+✔ room targets start from a manual shared state (0.241929ms)
+(node:2470293) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/sceneDraft.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ draft target preview follows the same device through ordered scene group targets (1.152666ms)
+✔ device link scales brightness and preserves source color representation (0.124599ms)
+✔ omission, zero, off and unknown fields remain distinct during editing (0.201479ms)
+✔ links neither invent aliases nor recurse forever (0.18721ms)
+✔ group order is deduplicated and remaining IDs are alphabetical (0.21034ms)
+✔ invalid color and nonfinite brightness are rejected without changing a draft (0.20433ms)
+(node:2470299) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/sceneEffects.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ a room target expands to the devices it changes (1.701314ms)
+✔ a device target after a room target wins, and says so (0.285529ms)
+✔ later room targets win over earlier ones in saved order (0.198149ms)
+✔ an unresolved room explains itself and offers a repair (0.206629ms)
+✔ an unavailable device target is named, not silently dropped (0.283639ms)
+✔ a scene target that sets nothing is flagged rather than described as a change (0.139259ms)
+✔ missing references are counted by where they live (0.238689ms)
+✔ a missing room counts as a room target, not a member (0.291685ms)
+✔ colour words never leak raw hue numbers (0.246369ms)
+✔ state words read as an effect list (0.24969ms)
+(node:2470300) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/sceneTargets.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ sceneTargetMode classifies the three target shapes (0.598828ms)
+✔ describeSceneTarget summarizes an explicit device state (0.161329ms)
+✔ describeSceneTarget reports a precise reason when a linked scene is gone (0.11802ms)
+✔ describeSceneTarget reports a precise reason when a tracked device is gone (0.189469ms)
+✔ describeSceneTarget accepts omitted explicit state and flags unchosen links (0.767757ms)
+✔ orderedSceneTargets honors the saved order and keeps unknown keys out (0.448848ms)
+✔ sceneTargetsSummary counts targets, unresolved references, and a script (0.140979ms)
+✔ a device link survives an integration rename instead of reading as gone (0.09956ms)
+✔ a device link is only reported missing when the id is gone too (0.262518ms)
+(node:2470302) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/sourceDraft.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ source script params preserve every JSON shape and require exactly one body or pin (10.757449ms)
+✔ circadian timing rejects invalid windows and focuses the editable parameter (1.336085ms)
+✔ only known circadian versions use the circadian parameter contract (0.14961ms)
+✔ source aliases distinguish omission and empty lists from malformed or duplicate entries (0.301989ms)
+✔ unknown built-in versions and script pins retain separate identities (0.293479ms)
+(node:2470303) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/visualViewport.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ a keyboard-sized inset sizes the sheet to the visual viewport (0.459568ms)
+✔ browser chrome changes leave the sheet on the dynamic viewport height (0.144269ms)
+✔ an inset at the keyboard threshold counts as a keyboard (0.121819ms)
+✔ a missing or nonsensical height falls back to the dynamic viewport (0.11508ms)
+(node:2470319) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/websocketReconnect.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ backs off exponentially and caps the delay (0.823137ms)
+✔ treats a negative or fractional attempt count as zero (0.14031ms)
+✔ reconnects at once when the socket is gone or closing (0.138509ms)
+✔ waits for an in-flight connection instead of racing it (0.131649ms)
+✔ probes a socket the browser still reports as open (0.10824ms)
+✔ maps websocket readyState values onto readiness (0.13987ms)
+(node:2470320) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/websocketRevision.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ applies a patch that follows the last revision (0.515188ms)
+✔ requests a resync when a patch skips revisions (0.115199ms)
+✔ requests a resync when no revision was seen yet (0.07889ms)
+✔ ignores duplicate and stale patches (0.13332ms)
+ℹ tests 234
+ℹ suites 2
+ℹ pass 234
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 317.582361

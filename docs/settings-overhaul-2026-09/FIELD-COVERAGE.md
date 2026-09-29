@@ -30,7 +30,7 @@ rows marked **open** are not acceptance sign-off. Paths below are relative to
 | Scene `group_state_order[]` | Same editor; target actions move earlier/later; removed targets leave the order list; unresolved order entries normalized by resolver helper | Explicit precedence; remaining targets deterministic | Scene journey edits and saves order; `lib/sceneDraft.test.ts` and `sceneTargets.test.ts` cover ordering/resolution. |
 | Scene-link `device_keys[]`, `group_keys[]` | Scene target row's linked-scene scope controls; selected device/group collections | Scope membership, not action sequence | `dev/scene-collections-review.mjs` edits multiple devices/groups, removes unavailable references, and distinguishes empty arrays from omitted default scope. These are stored activation descriptors: target-level scene links resolve the same device regardless of these scopes (`core/scenes.rs` and `lib/sceneDraft.test.ts`). |
 | Routine `triggers[]` | `ui/TriggerBuilder.tsx`: add/change/duplicate/remove start blocks, preserve IDs; empty definition subject to compiler validation | Retained authoring order; multiple subscriptions | `dev/routine-triggers-review.mjs` edits and saves all eight trigger kinds, both schedule modes, bounded catch-up and optional report-field removal. Stable IDs, false predicates, exact duration units, navigation and reload are checked. Existing routine journeys cover ordering/removal; remaining nested predicate/unknown-value contracts are listed below. |
-| Nested condition `all.conditions[]`, `any.conditions[]`, `not.condition` | `ui/ConditionBuilder.tsx`: recursive condition rows; All/Any require a child; Not remains unary | Preserve nesting and sibling order | `lib/routineDraft.test.ts` rejects empty logic groups; current visual audit covers nested layout. **Open:** save/reload multi-child All/Any/Not edits and unknown-value semantics. |
+| Nested condition `all.conditions[]`, `any.conditions[]`, `not.condition` | `ui/ConditionBuilder.tsx`: recursive condition rows; All/Any require a child; Not remains unary | Preserve nesting and sibling order | `dev/routine-conditions-review.mjs` edits nested All/Any/Not trees, moves unfinished numeric drafts, changes/restores whole subtrees, saves and reloads. Nine Rust evaluation tests cover three-valued truth tables, errors, missing/offline readings and Not. Existing draft tests reject empty All/Any groups. |
 | Native `steps[]` and `choose.branches[].steps[]` | `ui/ProgramBuilder.tsx`: direct fields, add/remove/duplicate/move; empty native sequence shown honestly | Sequential; first matching branch, stable IDs | Routine journey edits/moves/duplicates/saves branch subtrees, including a script. `lib/routineDraft.test.ts` checks identity and opaque payload preservation. **Open:** variant matrix below. |
 | `cycle_scenes.scenes[]` | `ProgramBuilder` cycle rows: add/remove/move scenes, per-entry fields | Explicit cycle order | `dev/routine-selection-review.mjs` edits, reorders, removes/adds and saves entries with independent targets/transitions/extensions. **Open:** explicitly empty cycle validation against the compiler; remaining optional rollout fields. |
 | `TargetSpec.devices[]`, `groups[]` | `ProgramBuilder.TargetSpecEditor`: independent device and group multiselects; empty means the action's documented default, not invented “all” behavior | Scope membership | `dev/routine-selection-review.mjs` edits multiple activation targets, cycle detection targets, entry scopes and timer capture. **Open:** dim/random-color consumers and empty/default targets; do not infer their semantics from activation. |
@@ -55,13 +55,13 @@ schema; server compiler/resolver behavior remains authoritative.
 | Schema group | Current controls | Required remaining fixtures |
 | --- | --- | --- |
 | `TriggerSpec`, `StateChangeMode`, `ScheduleSpec` | `TriggerBuilder`: report, state change, predicate transition/held, schedule, timer fired, startup, manual; schedule/timezone/backlog controls | Each trigger edited; report field omitted/present; change modes; cron/interval; explicit Helsinki timezone; catch-up lateness required only for catch-up. |
-| `ConditionExpr`, `ValueSource`, comparison operators, group quantifiers | `ConditionBuilder`: literal, All/Any/Not, comparison, group; device/helper/source values | Every source/quantifier/operator family; valueless operators; false/zero/null/missing distinctions; optional group power/scene. |
+| `ConditionExpr`, `ValueSource`, comparison operators, group quantifiers | `ConditionBuilder`: literal, All/Any/Not, comparison, group; device/helper/source values | The condition journey saves all 11 comparison operators and all four group quantifiers, edits device/helper/computed-source choices, optional scene removal and false/zero/structured values. Value-free operators omit their operand. Source paths and type drafts restore; malformed/future sources remain visible for explicit removal. The compiler rejects top-level null operands, now explained in the JSON dialog; nested nulls persist. Remaining unavailable-reference recovery is part of the final cross-family gate. |
 | `NativeAction` | `ProgramBuilder`: script, activate/cycle, power, dim, random color, choose, schedule/replace/cancel timer, helper write, routine invocation | Each variant edited through Save/reload, including singular SetPower device; no false multi-target claim. |
 | Scene selection, cycle entry, rollout | `ProgramBuilder` scene/target/transition/selection/rollout controls | Direct/helper/group modes, independent fallbacks, stale-key removal and cycle scope/order are edited in the routine selection journey. **Open:** rollout fields/defaults and unavailable references. |
 | `ProgramBody`, `ScriptSpec` declarations | `ProgramBuilder`, `RoutineScriptEditor`: native/mixed scripts; explicit whole-script conversion; declaration rows | Mixed script and whole-program conversion journeys already pass. Still name each declaration collection and persistence/limits default fixture. |
 | Scene explicit/device-link/scene-link state | `app/config/scenes/target-row.tsx`, shared color controls | Scene collection journey edits explicit/device-link/scene-link modes, source and multiplier, default power, zero brightness/fade, full stored scopes, missing-target replacement, and retained inactive variants. Nullable transition and unknown siblings survive. Color variants/capture and creation-return still need ledger reconciliation. |
 | Helper boolean/enum/number/string and initial value | Helper definition fields plus separate current-value control | All four types and initial values now have edited save/reload evidence, including false/zero/empty text/optional bounds. Separate command tests cover rejection, pending state, acknowledgement and retained configuration drafts. Visibility and full dependency-link reconciliation remain open. |
-| `SourceCompute`: circadian compatibility, script preset, custom script | Source detail, day/night color controls, params JSON, script editor, draft preview | Edited pinned/custom/built-in computations, exact forked and edited bodies, unknown-pin conversion, null/list/object params, extra-field preservation, switches/Discard/reload and preview recovery now have native browser evidence. Timing-input/error-focus and complete visibility/reference reconciliation remain open. |
+| `SourceCompute`: circadian compatibility, script preset, custom script | Source detail, day/night color controls, params JSON, script editor, draft preview | Edited pinned/custom/built-in computations, exact forked and edited bodies, unknown-pin conversion, null/list/object params, extra-field preservation, switches/Discard/reload and preview recovery now have native browser evidence. Timing-input/error-focus is covered by the source timing checkpoint; complete visibility/reference reconciliation remains open. |
 | Integration config primitive/JSON fields; MQTT mode; dummy state/capabilities | Schema fields plus typed adapters | Missing/null/false capability overrides; Kelvin bounds; payload paths; secret unchanged/replace/remove; malformed known collection repair; reload failure without misleading “saved” state. |
 | Device overrides, reporting preferences, shared advanced preference | Device settings, reporting field and system preferences | Tie each default/inherit/custom/ignore state to exact backend persistence/export test; disabled-device suppression already has separate regression evidence. |
 | Widget types, source references and optional dimensions/settings | Visual widget designer and sources pages | Existing 17-type preview evidence proves composition/inertness; pair each persisted field with round-trip/default compatibility evidence. |
@@ -291,3 +291,38 @@ Remaining gates include nested conditions/value sources, unknown definitions,
 action-specific targets/rollout and execution-policy fields. The generic duration
 control's trigger drafts are covered here; unfinished action/policy durations
 still need their per-editor draft paths during that follow-up.
+
+### Nested routine condition checkpoint
+
+`dev/routine-conditions-review.mjs` passes 32 checks at each 1440/390 px.
+All/Any/Not subtrees and value types retain their last valid drafts through type
+changes. Incomplete numbers stay editable, follow their condition on reorder,
+survive navigation and focus on Save. Removing an action with an unfinished branch
+condition clears that discarded input state. Stable paths isolate trigger, main
+condition and branch editors; indexed child paths move with collection edits.
+
+All 11 comparison operators and all four group quantifiers are explicitly saved.
+Exists/Truthy now omit the operand rather than sending a hidden value rejected by
+the compiler. Switching back before Save restores the previous operand. The journey
+covers false predicates, zero, optional group scene removal, structured values
+containing nested null/false/zero, and unrelated extension fields. Device and
+computed-source field paths restore when changing references; helper references
+remain linked. Group scenes now have related-page links and missing-scene labels.
+
+A malformed future source fixture stays visible without a rendering exception;
+it is explicitly removed before Save. This proves repair and preservation while
+viewing, not server acceptance of unknown definitions. The JSON dialog rejects a
+top-level null with an explanation because the current server treats that operand
+as missing. A new compiler test verifies this contract alongside false, zero,
+empty text, arrays, objects and value-free operators. No runtime semantics changed.
+
+All 234 UI tests, nine targeted Rust condition evaluation tests, the new compiler
+contract test and type/lint/build pass. Screenshot review caught truncated phone
+source names; narrow blocks now stack source and field controls. Wider desktop
+blocks keep side-by-side controls. The gallery retains Study 04's dotted canvas,
+colored columns and nested rails. Evidence is under
+`implementation-evidence/collections/routine-conditions-*`.
+
+Remaining routine gates: action/target/rollout fields, execution policy, remaining
+script/program variants and cross-family reference/recovery acceptance. All browser
+writes use the marked local fixture; runtime badges there are synthetic.

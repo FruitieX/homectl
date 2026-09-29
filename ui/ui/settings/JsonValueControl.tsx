@@ -22,9 +22,11 @@ export function JsonValueControl({
     parsed: unknown;
   try {
     parsed = JSON.parse(text);
+    if (parsed === null)
+      error =
+        'A comparison needs a value other than null. Use Exists to check whether a field is present.';
   } catch {
-    error =
-      'Enter valid JSON: an array, object, number, text, boolean or null.';
+    error = 'Enter valid JSON: an array, object, number, text or boolean.';
   }
   return (
     <>

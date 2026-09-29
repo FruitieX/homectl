@@ -1,0 +1,136 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Unsupported source data remains visible without crashing known siblings",
+    "passed": true
+   },
+   {
+    "name": "Inspecting unsupported data does not write or normalize it",
+    "passed": true
+   },
+   {
+    "name": "Incomplete expected number stays blank and receives focus",
+    "passed": true
+   },
+   {
+    "name": "Moving a condition moves its unfinished numeric draft",
+    "passed": true
+   },
+   {
+    "name": "Nested numeric drafts survive navigation",
+    "passed": true
+   },
+   {
+    "name": "Value type switches restore zero instead of a default",
+    "passed": true
+   },
+   {
+    "name": "Valueless operators hide expected-value controls and shortcuts",
+    "passed": true
+   },
+   {
+    "name": "Exists saves with no comparison value",
+    "passed": true
+   },
+   {
+    "name": "Operator switches restore the previous expected value",
+    "passed": true
+   },
+   {
+    "name": "Changing a condition type retains its previous fields",
+    "passed": true
+   },
+   {
+    "name": "All/Any switches retain the complete nested subtree",
+    "passed": true
+   },
+   {
+    "name": "Returning to a device restores its field",
+    "passed": true
+   },
+   {
+    "name": "Returning to a computed source restores its custom path",
+    "passed": true
+   },
+   {
+    "name": "Group quantifier persists: any",
+    "passed": true
+   },
+   {
+    "name": "Group quantifier persists: none",
+    "passed": true
+   },
+   {
+    "name": "Group quantifier persists: partial",
+    "passed": true
+   },
+   {
+    "name": "Group quantifier persists: all",
+    "passed": true
+   },
+   {
+    "name": "Nested All/Any/Not, false and group fields persist without losing extensions",
+    "passed": true
+   },
+   {
+    "name": "Optional group scene clears without changing power",
+    "passed": true
+   },
+   {
+    "name": "Comparison operator persists: ne",
+    "passed": true
+   },
+   {
+    "name": "Comparison operator persists: gt",
+    "passed": true
+   },
+   {
+    "name": "Comparison operator persists: gte",
+    "passed": true
+   },
+   {
+    "name": "Comparison operator persists: lt",
+    "passed": true
+   },
+   {
+    "name": "Comparison operator persists: lte",
+    "passed": true
+   },
+   {
+    "name": "Comparison operator persists: contains",
+    "passed": true
+   },
+   {
+    "name": "Comparison operator persists: starts_with",
+    "passed": true
+   },
+   {
+    "name": "Comparison operator persists: regex",
+    "passed": true
+   },
+   {
+    "name": "Comparison operator persists: truthy",
+    "passed": true
+   },
+   {
+    "name": "Top-level null explains the API restriction before applying",
+    "passed": true
+   },
+   {
+    "name": "Structured values preserve nested null, false and zero",
+    "passed": true
+   },
+   {
+    "name": "Removing a branch action clears its incomplete condition drafts",
+    "passed": true
+   },
+   {
+    "name": "Nested conditions remain editable after reload",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/routines","viewport":{"width":1440,"height":1080},"problems":[]}

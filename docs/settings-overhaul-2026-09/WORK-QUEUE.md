@@ -293,6 +293,15 @@ survive navigation and focus errors. All 232 UI tests, the targeted server calen
 policy test and type/lint/build pass. Remaining: nested conditions/value sources,
 action/policy variants and the broader final acceptance gates.
 
+Nested condition checkpoint, 2026-09-30: 32 checks pass at each 1440/390 px.
+All/Any/Not edits, every comparison operator and group quantifier, false/zero/
+structured operands, type/source restoration and Save/reload are covered. Numeric
+drafts follow reordering, and discarded branch errors cannot block Save. Unknown
+formats stay visible for explicit removal. Phone source controls now stack to
+keep names readable. All 234 UI tests, ten targeted Rust tests and type/lint/build
+pass. Remaining routine work: actions, rollout, policies and the final reference/
+recovery contracts. Full overhaul acceptance remains open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before
