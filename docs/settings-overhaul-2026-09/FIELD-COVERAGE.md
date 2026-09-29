@@ -29,7 +29,7 @@ rows marked **open** are not acceptance sign-off. Paths below are relative to
 | Scene `group_states`, `device_states` maps | `app/config/scenes/editor.tsx`, `target-row.tsx`: add multiple targets; remove a target; empty maps remain maps | Group map uses `group_state_order`; device overrides are separate | `dev/scene-collections-review.mjs` now edits both link variants, persists multi-add/remove and target replacement, removes all targets, and reloads empty maps. Existing scene journey covers color editing and Discard. |
 | Scene `group_state_order[]` | Same editor; target actions move earlier/later; removed targets leave the order list; unresolved order entries normalized by resolver helper | Explicit precedence; remaining targets deterministic | Scene journey edits and saves order; `lib/sceneDraft.test.ts` and `sceneTargets.test.ts` cover ordering/resolution. |
 | Scene-link `device_keys[]`, `group_keys[]` | Scene target row's linked-scene scope controls; selected device/group collections | Scope membership, not action sequence | `dev/scene-collections-review.mjs` edits multiple devices/groups, removes unavailable references, and distinguishes empty arrays from omitted default scope. These are stored activation descriptors: target-level scene links resolve the same device regardless of these scopes (`core/scenes.rs` and `lib/sceneDraft.test.ts`). |
-| Routine `triggers[]` | `ui/TriggerBuilder.tsx`: add/change/duplicate/remove start blocks, preserve IDs; empty definition subject to compiler validation | Retained authoring order; multiple subscriptions | `dev/settings-routine-journey.js`, `lib/routineDraft.test.ts`. **Open:** edited fixture for each of eight trigger variants and optional report field. |
+| Routine `triggers[]` | `ui/TriggerBuilder.tsx`: add/change/duplicate/remove start blocks, preserve IDs; empty definition subject to compiler validation | Retained authoring order; multiple subscriptions | `dev/routine-triggers-review.mjs` edits and saves all eight trigger kinds, both schedule modes, bounded catch-up and optional report-field removal. Stable IDs, false predicates, exact duration units, navigation and reload are checked. Existing routine journeys cover ordering/removal; remaining nested predicate/unknown-value contracts are listed below. |
 | Nested condition `all.conditions[]`, `any.conditions[]`, `not.condition` | `ui/ConditionBuilder.tsx`: recursive condition rows; All/Any require a child; Not remains unary | Preserve nesting and sibling order | `lib/routineDraft.test.ts` rejects empty logic groups; current visual audit covers nested layout. **Open:** save/reload multi-child All/Any/Not edits and unknown-value semantics. |
 | Native `steps[]` and `choose.branches[].steps[]` | `ui/ProgramBuilder.tsx`: direct fields, add/remove/duplicate/move; empty native sequence shown honestly | Sequential; first matching branch, stable IDs | Routine journey edits/moves/duplicates/saves branch subtrees, including a script. `lib/routineDraft.test.ts` checks identity and opaque payload preservation. **Open:** variant matrix below. |
 | `cycle_scenes.scenes[]` | `ProgramBuilder` cycle rows: add/remove/move scenes, per-entry fields | Explicit cycle order | `dev/routine-selection-review.mjs` edits, reorders, removes/adds and saves entries with independent targets/transitions/extensions. **Open:** explicitly empty cycle validation against the compiler; remaining optional rollout fields. |
@@ -259,3 +259,35 @@ lint and production build pass. Screenshots/logs are in
 `implementation-evidence/collections/source-timing-*`. This closes typed timing
 and validation-focus review, leaving the reference/visibility and database gates
 listed above open. No live household configuration was edited.
+
+### Routine starts and duration controls checkpoint
+
+Fourteen native browser checks pass at each 1440/390 px in
+`dev/routine-triggers-review.mjs`. The fixture edits every trigger kind:
+calendar/interval schedules, report fields, state-change mode, held and transition
+predicates, named timers, startup and manual. It saves false predicates, removes
+an optional report field, and preserves stable node IDs. These checks concern
+authoring and serialization, not actual scheduling/execution of the fixture.
+
+Calendar/interval switches retain separate schedule drafts until Save/Discard.
+Switching catch-up off now omits its lateness field; the old hidden value caused
+server validation failures. Switching it back on before Save restores the edited
+lateness. Interval schedules cannot acquire calendar-only backlog settings.
+Selectors for schedule type, backlog, state-change mode and duration units now
+use the shared controls.
+
+Trigger duration fields retain incomplete raw text and the selected units across
+navigation, focus validation errors and reset on Discard. Switching away from a
+trigger type clears its inactive numeric errors. A 1.001-second duration remains
+exactly 1001 milliseconds when displayed in minutes and saved, both in a trigger
+and a timer action. The shared duration parser rejects incomplete, negative,
+sub-millisecond and unsafe values; all 232 UI tests pass. The server compiler's
+`k01_calendar_grammar_and_policy_are_validated` test passes, as do type/lint/build.
+
+Screenshots in `implementation-evidence/collections/routine-triggers-*` retain
+Study 04's dotted background, colored columns, direct fields and visible move
+buttons. The isolated fixture provides synthetic runtime badges/preview results.
+Remaining gates include nested conditions/value sources, unknown definitions,
+action-specific targets/rollout and execution-policy fields. The generic duration
+control's trigger drafts are covered here; unfinished action/policy durations
+still need their per-editor draft paths during that follow-up.

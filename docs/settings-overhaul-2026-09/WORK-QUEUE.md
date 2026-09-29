@@ -284,6 +284,15 @@ chart labels keep a readable size in Compact mode. All 230 UI tests, four Rust
 curve/validation tests and type/lint/build pass. Screenshots and field evidence
 are updated; source references/persistence and remaining routine variants stay open.
 
+Routine starts checkpoint, 2026-09-30: 14 checks pass at each 1440/390 px.
+All eight trigger kinds are edited and saved, including optional report fields,
+false predicates and calendar catch-up. Schedule switches retain drafts; disabled
+catch-up settings no longer leak into saved definitions. Shared selectors and
+precise duration units keep the approved routine layout. Trigger numeric drafts
+survive navigation and focus errors. All 232 UI tests, the targeted server calendar
+policy test and type/lint/build pass. Remaining: nested conditions/value sources,
+action/policy variants and the broader final acceptance gates.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

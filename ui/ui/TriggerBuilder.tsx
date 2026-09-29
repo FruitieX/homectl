@@ -17,7 +17,7 @@ import type { RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
 import type { ScheduleSpec } from '@/bindings/ScheduleSpec';
 import type { TriggerSpec } from '@/bindings/TriggerSpec';
 import { useSchedulePreview } from '@/hooks/useConfig';
-import { DurationInput, selectClassName } from '@/ui/builder-fields';
+import { DurationInput } from '@/ui/builder-fields';
 import { ConditionEditor } from '@/ui/ConditionBuilder';
 import { DeviceSelect, splitDeviceKey } from '@/ui/config-selectors';
 import { ConfigField } from '@/ui/config-form';
@@ -184,6 +184,7 @@ function TriggerFields({
   scenes: Array<{ id: string; name: string }>;
   helpers: HelperRuntimeStatus[];
 }) {
+  const { draftKey } = useRoutineAuthoring();
   const schedulePreview = useSchedulePreview(
     trigger.kind === 'schedule'
       ? {
@@ -210,34 +211,36 @@ function TriggerFields({
       return (
         <div className="space-y-4">
           <ConfigField label="Schedule type">
-            <select
-              className={`${selectClassName} w-full`}
+            <SettingsSelect
+              aria-label="Schedule type"
               value={mode}
-              onChange={(event) => {
-                if (event.target.value === 'cron') {
-                  onChange({
-                    ...trigger,
-                    schedule: {
-                      ...schedule,
-                      cron: schedule.cron ?? '',
-                      every_ms: undefined,
-                    },
-                  });
-                } else {
-                  onChange({
-                    ...trigger,
-                    schedule: {
-                      ...schedule,
-                      every_ms: 3_600_000,
-                      cron: undefined,
-                    },
-                  } as unknown as TriggerSpec);
-                }
+              options={[
+                { value: 'cron', label: 'Calendar (cron)' },
+                { value: 'every', label: 'Fixed interval' },
+              ]}
+              onValueChange={(next) => {
+                const fallback = {
+                  ...schedule,
+                  cron: next === 'cron' ? '' : undefined,
+                  every_ms: next === 'every' ? 3_600_000 : undefined,
+                  backlog: 'skip',
+                  catch_up_lateness_ms: undefined,
+                } as unknown as ScheduleSpec;
+                onChange({
+                  ...trigger,
+                  schedule: draftKey
+                    ? entityDraftStore.switchVariant(
+                        draftKey,
+                        `trigger/${trigger.id}/schedule`,
+                        mode,
+                        schedule,
+                        next,
+                        fallback,
+                      )
+                    : fallback,
+                });
               }}
-            >
-              <option value="cron">Calendar (cron)</option>
-              <option value="every">Fixed interval</option>
-            </select>
+            />
           </ConfigField>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -247,6 +250,7 @@ function TriggerFields({
                 description="Six fields: second minute hour day-of-month month day-of-week."
               >
                 <Input
+                  aria-label="Cron expression"
                   className="font-mono"
                   value={schedule.cron ?? ''}
                   placeholder="0 0 8 * * *"
@@ -261,6 +265,10 @@ function TriggerFields({
             ) : (
               <ConfigField label="Every">
                 <DurationInput
+                  label="Interval"
+                  draftKey={draftKey}
+                  path={`trigger/${trigger.id}/schedule/every/duration`}
+                  required
                   valueMs={
                     schedule.every_ms === undefined
                       ? undefined
@@ -281,6 +289,7 @@ function TriggerFields({
               description="IANA zone for calendar schedules; intervals ignore it."
             >
               <Input
+                aria-label="Schedule timezone"
                 list="v2-timezones"
                 value={schedule.timezone ?? ''}
                 placeholder="Europe/Helsinki"
@@ -296,31 +305,55 @@ function TriggerFields({
               />
             </ConfigField>
 
-            <ConfigField label="Missed occurrences">
-              <select
-                className={`${selectClassName} w-full`}
-                value={schedule.backlog}
-                onChange={(event) =>
-                  onChange({
-                    ...trigger,
-                    schedule: {
-                      ...schedule,
-                      backlog: event.target.value as BacklogPolicy,
-                    },
-                  })
-                }
-              >
-                <option value="skip">Skip</option>
-                <option value="catch_up_once">Run once on catch-up</option>
-              </select>
-            </ConfigField>
+            {mode === 'cron' && (
+              <ConfigField label="Missed occurrences">
+                <SettingsSelect
+                  aria-label="Missed occurrences"
+                  value={schedule.backlog}
+                  options={[
+                    { value: 'skip', label: 'Skip' },
+                    { value: 'catch_up_once', label: 'Run once on catch-up' },
+                  ]}
+                  onValueChange={(next) => {
+                    const fallback = {
+                      backlog: next as BacklogPolicy,
+                      catch_up_lateness_ms: undefined,
+                    };
+                    const policy = draftKey
+                      ? entityDraftStore.switchVariant(
+                          draftKey,
+                          `trigger/${trigger.id}/schedule/cron/backlog`,
+                          schedule.backlog,
+                          {
+                            backlog: schedule.backlog,
+                            catch_up_lateness_ms: schedule.catch_up_lateness_ms,
+                          },
+                          next,
+                          fallback,
+                        )
+                      : fallback;
+                    onChange({
+                      ...trigger,
+                      schedule: {
+                        ...schedule,
+                        ...policy,
+                      },
+                    });
+                  }}
+                />
+              </ConfigField>
+            )}
 
-            {schedule.backlog === 'catch_up_once' ? (
+            {mode === 'cron' && schedule.backlog === 'catch_up_once' ? (
               <ConfigField
                 label="Catch-up lateness"
                 description="A catch-up older than this is dropped."
               >
                 <DurationInput
+                  label="Catch-up lateness"
+                  draftKey={draftKey}
+                  path={`trigger/${trigger.id}/schedule/cron/backlog/duration`}
+                  required
                   valueMs={
                     schedule.catch_up_lateness_ms === undefined
                       ? undefined
@@ -370,19 +403,20 @@ function TriggerFields({
             />
           </ConfigField>
           <ConfigField label="Mode">
-            <select
-              className={`${selectClassName} w-full`}
+            <SettingsSelect
+              aria-label="State change mode"
               value={trigger.mode}
-              onChange={(event) =>
+              options={[
+                { value: 'transition', label: 'Transition (false to true)' },
+                { value: 'level', label: 'Level (while true)' },
+              ]}
+              onValueChange={(mode) =>
                 onChange({
                   ...trigger,
-                  mode: event.target.value as typeof trigger.mode,
+                  mode: mode as typeof trigger.mode,
                 })
               }
-            >
-              <option value="transition">Transition (false to true)</option>
-              <option value="level">Level (while true)</option>
-            </select>
+            />
           </ConfigField>
         </div>
       );
@@ -414,6 +448,7 @@ function TriggerFields({
             description="Optional report field to match; leave empty for any report."
           >
             <Input
+              aria-label="Report field"
               value={trigger.field ?? ''}
               placeholder="temperature"
               onChange={(event) =>
@@ -445,6 +480,10 @@ function TriggerFields({
               description="Fires after the predicate stays true this long."
             >
               <DurationInput
+                label="Held for"
+                draftKey={draftKey}
+                path={`trigger/${trigger.id}/predicate_for/duration`}
+                required
                 valueMs={Number(trigger.duration_ms)}
                 onChange={(duration_ms) =>
                   onChange({
@@ -465,6 +504,7 @@ function TriggerFields({
           description="Fires when this routine's named timer reaches its deadline."
         >
           <Input
+            aria-label="Timer name"
             className="font-mono"
             value={trigger.timer}
             placeholder="off"
@@ -583,7 +623,16 @@ export function TriggerBuilder({
             index={index}
             total={triggers.length}
             onMove={(offset) => onChange(moveSibling(triggers, index, offset))}
-            onRemove={() => onChange(triggers.filter((_, i) => i !== index))}
+            onRemove={() => {
+              if (draftKey)
+                entityDraftStore.remapEditorPaths(draftKey, (path) =>
+                  path === `trigger/${trigger.id}` ||
+                  path.startsWith(`trigger/${trigger.id}/`)
+                    ? null
+                    : path,
+                );
+              onChange(triggers.filter((_, i) => i !== index));
+            }}
           >
             {known ? (
               <>

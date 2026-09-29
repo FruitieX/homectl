@@ -1,0 +1,64 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Skipping catch-up removes its inapplicable field on Save",
+    "passed": true
+   },
+   {
+    "name": "Catch-up toggles retain the edited lateness before Save",
+    "passed": true
+   },
+   {
+    "name": "Intervals omit calendar-only policy controls",
+    "passed": true
+   },
+   {
+    "name": "Calendar draft restores cron, zone and catch-up",
+    "passed": true
+   },
+   {
+    "name": "Interval Save retains exact duration and unknown fields without calendar backlog",
+    "passed": true
+   },
+   {
+    "name": "A required empty duration stays blank and gets focus",
+    "passed": true
+   },
+   {
+    "name": "Incomplete duration cannot save",
+    "passed": true
+   },
+   {
+    "name": "Empty duration and its units survive navigation",
+    "passed": true
+   },
+   {
+    "name": "Changing duration units preserves exact milliseconds",
+    "passed": true
+   },
+   {
+    "name": "Action duration unit changes retain exact milliseconds",
+    "passed": true
+   },
+   {
+    "name": "Edited report, state, held predicate, transition, timer, startup and manual starts persist with stable IDs",
+    "passed": true
+   },
+   {
+    "name": "Omitted report fields and removed duration variants have no hidden errors",
+    "passed": true
+   },
+   {
+    "name": "Saved interval and report field survive reload",
+    "passed": true
+   },
+   {
+    "name": "Calendar cron and bounded catch-up survive Save/reload",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/routines","viewport":{"width":1440,"height":1080},"problems":[]}

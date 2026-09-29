@@ -1,6 +1,6 @@
 import { deepCopy, deepEqual, type FieldError } from './configSection.ts';
 
-export type DraftInput = { raw: string; error?: string };
+export type DraftInput = { raw: string; error?: string; unit?: string };
 const hasIncompleteInputs = (inputs: Record<string, DraftInput> | undefined) =>
   Object.values(inputs ?? {}).some((input) => Boolean(input.error));
 
