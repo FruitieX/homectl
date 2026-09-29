@@ -1,0 +1,80 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Switching behavior restores the complete explicit-state draft",
+    "passed": true
+   },
+   {
+    "name": "Device-link variant retains the edited multiplier",
+    "passed": true
+   },
+   {
+    "name": "Edited device-link source and multiplier persist",
+    "passed": true
+   },
+   {
+    "name": "Omitted power and explicit zero brightness/fade remain distinct",
+    "passed": true
+   },
+   {
+    "name": "Related scene navigation retains multiple scope entries without saving",
+    "passed": true
+   },
+   {
+    "name": "Edited scene link saves every scope member and transition",
+    "passed": true
+   },
+   {
+    "name": "Missing scope members are visible and removable",
+    "passed": true
+   },
+   {
+    "name": "Cancel leaves scope selection unchanged",
+    "passed": true
+   },
+   {
+    "name": "Explicit empty scopes preserve null and unknown fields",
+    "passed": true
+   },
+   {
+    "name": "Default scope omits the fields rather than storing empty arrays",
+    "passed": true
+   },
+   {
+    "name": "Removing and readding a target clears its old behavior cache",
+    "passed": true
+   },
+   {
+    "name": "Multiple added device targets persist together",
+    "passed": true
+   },
+   {
+    "name": "Group precedence moves independently of target values",
+    "passed": true
+   },
+   {
+    "name": "Removing one target preserves the remaining targets",
+    "passed": true
+   },
+   {
+    "name": "Replacing a missing target retains its inactive behavior draft and unknown fields",
+    "passed": true
+   },
+   {
+    "name": "Target controls fit the viewport",
+    "passed": true
+   },
+   {
+    "name": "Removing all targets saves empty maps and precedence without stale entries",
+    "passed": true
+   },
+   {
+    "name": "Empty scene survives a full page reload",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/scenes","viewport":{"width":390,"height":844},"problems":[]}

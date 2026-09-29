@@ -1,6 +1,7 @@
 import { ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/ui/primitives/button';
+import { SearchablePicker } from '@/ui/SearchablePicker';
 export function ReferenceSelect({
   value,
   options,
@@ -19,24 +20,19 @@ export function ReferenceSelect({
   'data-field'?: string;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-1">
-      <select
-        aria-label={label}
-        className="settings-select min-w-0 flex-1"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        {...props}
-      >
-        {allowEmpty && <option value="">Choose…</option>}
-        {value && !options.some((option) => option.id === value) && (
-          <option value={value}>{value} · Missing</option>
-        )}
-        {options.map((option) => (
-          <option key={option.id} value={option.id}>
-            {option.name}
-          </option>
-        ))}
-      </select>
+    <div className="flex min-w-0 items-start gap-1">
+      <div className="min-w-0 flex-1" {...props}>
+        <SearchablePicker
+          ariaLabel={label}
+          value={value}
+          onChange={onChange}
+          clearable={allowEmpty}
+          options={options.map((option) => ({
+            value: option.id,
+            label: option.name,
+          }))}
+        />
+      </div>
       {href && value && (
         <Button
           asChild

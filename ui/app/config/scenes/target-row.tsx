@@ -14,6 +14,7 @@ import {
   patchSceneTarget,
   resolveDraftTarget,
   targetDeviceKeys,
+  sceneTargetDraftPath,
   type SceneDraftContext,
 } from '@/lib/sceneDraft';
 import { sceneTargetMode } from '@/lib/sceneTargets';
@@ -32,6 +33,7 @@ import { StatePreview } from '@/ui/settings/StatePreview';
 import { SceneColorControl } from '@/ui/settings/SceneColorControl';
 import { ReferenceSelect } from '@/ui/settings/ReferenceSelect';
 import { EntityPicker } from '@/ui/settings/EntityPicker';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 
 export function SceneTargetRow({
   kind,
@@ -152,32 +154,34 @@ export function SceneTargetRow({
         <label className="scene-field-label" htmlFor={`${prefix}/mode`}>
           Behavior
         </label>
-        <select
+        <SettingsSelect
           id={`${prefix}/mode`}
           data-field={prefix}
-          className="settings-select w-full"
+          aria-label={`${name} behavior`}
+          className="w-full"
           value={mode}
-          onChange={(event) =>
+          onValueChange={(next) =>
             onChange(
               entityDraftStore.switchVariant(
                 draftKey,
-                prefix,
+                sceneTargetDraftPath(kind, targetKey),
                 mode,
                 config,
-                event.target.value,
-                event.target.value === 'device-link'
+                next,
+                next === 'device-link'
                   ? { integration_id: '', device_id: '' }
-                  : event.target.value === 'scene-link'
+                  : next === 'scene-link'
                     ? { scene_id: '' }
                     : {},
               ),
             )
           }
-        >
-          <option value="state">Set state</option>
-          <option value="device-link">Follow device</option>
-          <option value="scene-link">Follow scene</option>
-        </select>
+          options={[
+            { value: 'state', label: 'Set state' },
+            { value: 'device-link', label: 'Follow device' },
+            { value: 'scene-link', label: 'Follow scene' },
+          ]}
+        />
       </div>
       {mode === 'state' ? (
         <>
@@ -185,25 +189,24 @@ export function SceneTargetRow({
             <label className="scene-field-label" htmlFor={`${prefix}/power`}>
               Power
             </label>
-            <select
+            <SettingsSelect
               id={`${prefix}/power`}
-              className="settings-select w-full"
+              aria-label={`${name} power`}
+              className="w-full"
               value={
                 state.power == null ? 'default' : state.power ? 'on' : 'off'
               }
-              onChange={(event) =>
+              onValueChange={(next) =>
                 patch({
-                  power:
-                    event.target.value === 'default'
-                      ? undefined
-                      : event.target.value === 'on',
+                  power: next === 'default' ? undefined : next === 'on',
                 })
               }
-            >
-              <option value="default">Default · On</option>
-              <option value="on">On</option>
-              <option value="off">Off</option>
-            </select>
+              options={[
+                { value: 'default', label: 'Default · On' },
+                { value: 'on', label: 'On' },
+                { value: 'off', label: 'Off' },
+              ]}
+            />
           </div>
           <div role="cell">
             <label
@@ -489,6 +492,9 @@ export function SceneTargetRow({
           </div>
           {(advanced || 'mirror_from_group' in config) && (
             <div className="mt-2">
+              <p className="mb-1 text-xs text-muted-foreground">
+                Mirror group (activation only)
+              </p>
               <ReferenceSelect
                 label="Mirror group (activation only)"
                 value={String(

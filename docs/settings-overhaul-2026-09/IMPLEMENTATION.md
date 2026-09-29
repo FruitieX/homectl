@@ -355,3 +355,22 @@ Shared source/level selectors update URL filters, including a source named
 `all`; 200-row pagination, complete messages, canonical links and keyboard
 focus restoration are verified. Type checking, lint and production build pass.
 Full cross-family acceptance remains open in [ACCEPTANCE-AUDIT.md](ACCEPTANCE-AUDIT.md).
+
+### Scene collection acceptance — 2026-09-30
+
+Scene behavior and power now use the shared selector; source/scene/replacement
+references use the searchable picker with a separate related-page link. On phones
+that link stays beside the trigger when search results expand. Missing selected
+entries are visible/removable in the shared multi-entity dialog. Removed targets
+clear their type caches, while replacing a missing target carries the whole draft
+to the replacement. Session paths escape device keys to avoid prefix collisions.
+
+`ui/dev/scene-collections-review.mjs` passes 18 checks at 1440/390 px against its
+own marked fixture scene. It edits both link modes, multiple activation scopes,
+empty vs omitted scopes, null/unknown values, related navigation, target add/remove/
+replacement and group order, then reloads an empty scene. Stored activation scope
+is kept distinct from same-device scene-link resolution. The existing scene/color
+journey still passes; 25 scene/target/entity-draft unit checks and UI type/lint/build
+pass. Captures/logs are under `implementation-evidence/collections/scene-collections-*`.
+No household configuration was changed. Full schema/variant acceptance stays open
+in FIELD-COVERAGE.md, with routine dynamic-selection draft loss next to resolve.

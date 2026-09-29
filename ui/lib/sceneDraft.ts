@@ -23,6 +23,10 @@ export type SceneDraftContext = {
   devices: DevicesState;
   aliases?: Record<string, string>;
 };
+/** Session editor identity; escape keys so a device ID cannot overlap another slot. */
+export function sceneTargetDraftPath(kind: 'group' | 'device', key: string) {
+  return `scene-target/${kind}/${encodeURIComponent(key)}`;
+}
 export function groupMemberKeys(
   groupId: string,
   groups: readonly Group[],

@@ -20,7 +20,11 @@ import { entityDraftStore } from '@/lib/entityDraft';
 import { deepEqual } from '@/lib/configSection';
 import { configItemHref } from '@/lib/configItemHref';
 import { orderedSceneTargets, sourceAliasKeys } from '@/lib/sceneTargets';
-import { validateSceneDraft, type SceneDraftContext } from '@/lib/sceneDraft';
+import {
+  validateSceneDraft,
+  sceneTargetDraftPath,
+  type SceneDraftContext,
+} from '@/lib/sceneDraft';
 import { suggestId } from '@/lib/groupGraph';
 import { captureSceneDeviceState } from '@/lib/sceneCapture';
 import { createUuid } from '@/lib/uuid';
@@ -300,6 +304,14 @@ export function SceneEditor({ id }: { id?: string }) {
     const targets = Object.fromEntries(
       ids.map((id) => [id, scene[field][id] ?? {}]),
     );
+    const removed = Object.keys(scene[field])
+      .filter((id) => !ids.includes(id))
+      .map((id) => sceneTargetDraftPath(kind, id));
+    entityDraftStore.remapEditorPaths(key, (path) =>
+      removed.some((slot) => path === slot || path.startsWith(slot + '/'))
+        ? null
+        : path,
+    );
     draft.patch({
       [field]: targets,
       ...(kind === 'group'
@@ -470,6 +482,16 @@ export function SceneEditor({ id }: { id?: string }) {
                   const next = { ...scene[field] };
                   delete next[target];
                   next[replacement] = value;
+                  const previousSlot = sceneTargetDraftPath(kind, target);
+                  const replacementSlot = sceneTargetDraftPath(
+                    kind,
+                    replacement,
+                  );
+                  entityDraftStore.remapEditorPaths(key, (path) =>
+                    path === previousSlot || path.startsWith(previousSlot + '/')
+                      ? replacementSlot + path.slice(previousSlot.length)
+                      : path,
+                  );
                   draft.patch({
                     [field]: next,
                     ...(kind === 'group'

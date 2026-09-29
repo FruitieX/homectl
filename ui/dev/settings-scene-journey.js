@@ -47,7 +47,18 @@
     );
   const power = () => document.getElementById('group_states/living_room/power');
   await until(() => power(), 'Scene loaded');
-  set(power(), 'off');
+  power().dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+  );
+  await until(
+    () => document.querySelector('[role=option]'),
+    'Power choices opened',
+  );
+  [...document.querySelectorAll('[role=option]')]
+    .find((el) => el.textContent.trim() === 'Off')
+    .dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
   await pause();
   assert(
     field('group_states/living_room/brightness').value === '80',
@@ -79,7 +90,7 @@
   document.querySelector('[aria-label="Retained drafts"] a').click();
   await until(() => power(), 'Scene draft returned');
   assert(
-    power().value === 'off',
+    power().textContent.trim() === 'Off',
     'Target edits survive related-page navigation',
   );
   assert(
@@ -100,7 +111,15 @@
       JSON.stringify(original.device_states),
     'Untouched explicit, device-link, scene-link and missing targets survive the round trip',
   );
-  document.querySelector('[aria-label="Actions for Living room"]').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }));
+  document
+    .querySelector('[aria-label="Actions for Living room"]')
+    .dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        pointerType: 'mouse',
+      }),
+    );
   await pause();
   [...document.querySelectorAll('[role="menuitem"]')]
     .find((el) => el.textContent.includes('Move later'))

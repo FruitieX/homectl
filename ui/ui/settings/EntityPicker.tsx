@@ -33,14 +33,23 @@ export function EntityPicker({
   const [query, setQuery] = useState('');
   const [pending, setPending] = useState<string[]>([]);
   const [limit, setLimit] = useState(40);
-  const filtered = useMemo(
+  const filtered = useMemo<EntityOption[]>(
     () =>
-      options.filter((option) =>
+      [
+        ...options,
+        ...selected
+          .filter((id) => !options.some((option) => option.id === id))
+          .map((id) => ({
+            id,
+            name: id,
+            detail: 'Unavailable · remove this reference or keep it for later',
+          })),
+      ].filter((option) =>
         `${option.name} ${option.id} ${option.detail ?? ''}`
           .toLowerCase()
           .includes(query.toLowerCase().trim()),
       ),
-    [options, query],
+    [options, selected, query],
   );
   return (
     <>

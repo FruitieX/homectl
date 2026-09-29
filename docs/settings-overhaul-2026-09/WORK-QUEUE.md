@@ -221,6 +221,16 @@ re-add, nested-value preservation and Discard. All 219 UI unit tests, type check
 lint and build pass. The full field gate remains open: next are edited scene-link
 scopes, routine target/mapping collections and typed dummy-device variants.
 
+Scene collection checkpoint, 2026-09-30: 18 browser checks pass at 1440/390 px.
+Both link modes are edited and persisted; scope collections support multiple,
+missing, empty and omitted-default entries. Target replacement retains inactive
+behavior drafts; removal clears them. Empty target maps survive reload. Scene
+behavior/power and reference controls now use shared selectors/searchable pickers,
+with related-page links aligned on phones. The existing scene/color journey and
+25 draft/scene unit checks pass, as do type/lint/build. Evidence and comparisons
+are recorded in FIELD-COVERAGE.md and the gallery. Next: routine target collections
+and the confirmed loss of dynamic-selection mappings when changing selection mode.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

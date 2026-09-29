@@ -26,9 +26,9 @@ rows marked **open** are not acceptance sign-off. Paths below are relative to
 | Contract | Renderer and empty/add/remove behavior | Order | Existing fixture evidence and remaining work |
 | --- | --- | --- | --- |
 | Group `devices[]`, `linked_groups[]` | `app/config/groups/editor.tsx`, `shared.tsx`: separate direct-device and linked-group pickers; empty group allowed; missing members remain repairable | Membership; preserve submitted arrays | `dev/settings-group-journey.js` edits members and retains drafts/conflicts; `lib/groupGraph.test.ts` checks cycles/missing members. **Open:** enumerate empty/single/multiple fixtures separately. |
-| Scene `group_states`, `device_states` maps | `app/config/scenes/editor.tsx`, `target-row.tsx`: add multiple targets; remove a target; empty maps remain maps | Group map uses `group_state_order`; device overrides are separate | `dev/settings-scene-journey.js` edits explicit state and group precedence, preserves untouched link/missing targets; adding several devices is followed by Discard. **Open:** persist multi-add/remove and edit both link variants. |
-| Scene `group_state_order[]` | Same editor; target actions move earlier/later; unresolved order entries normalized by resolver helper | Explicit precedence; remaining targets deterministic | Scene journey edits and saves order; `lib/sceneDraft.test.ts` and `sceneTargets.test.ts` cover ordering/resolution. |
-| Scene-link `device_keys[]`, `group_keys[]` | Scene target row's linked-scene scope controls; selected device/group collections | Scope membership, not action sequence | Link targets preserved in scene journey. **Open:** edit several members, clear scope, reload and verify resolver scope. |
+| Scene `group_states`, `device_states` maps | `app/config/scenes/editor.tsx`, `target-row.tsx`: add multiple targets; remove a target; empty maps remain maps | Group map uses `group_state_order`; device overrides are separate | `dev/scene-collections-review.mjs` now edits both link variants, persists multi-add/remove and target replacement, removes all targets, and reloads empty maps. Existing scene journey covers color editing and Discard. |
+| Scene `group_state_order[]` | Same editor; target actions move earlier/later; removed targets leave the order list; unresolved order entries normalized by resolver helper | Explicit precedence; remaining targets deterministic | Scene journey edits and saves order; `lib/sceneDraft.test.ts` and `sceneTargets.test.ts` cover ordering/resolution. |
+| Scene-link `device_keys[]`, `group_keys[]` | Scene target row's linked-scene scope controls; selected device/group collections | Scope membership, not action sequence | `dev/scene-collections-review.mjs` edits multiple devices/groups, removes unavailable references, and distinguishes empty arrays from omitted default scope. These are stored activation descriptors: target-level scene links resolve the same device regardless of these scopes (`core/scenes.rs` and `lib/sceneDraft.test.ts`). |
 | Routine `triggers[]` | `ui/TriggerBuilder.tsx`: add/change/duplicate/remove start blocks, preserve IDs; empty definition subject to compiler validation | Retained authoring order; multiple subscriptions | `dev/settings-routine-journey.js`, `lib/routineDraft.test.ts`. **Open:** edited fixture for each of eight trigger variants and optional report field. |
 | Nested condition `all.conditions[]`, `any.conditions[]`, `not.condition` | `ui/ConditionBuilder.tsx`: recursive condition rows; All/Any require a child; Not remains unary | Preserve nesting and sibling order | `lib/routineDraft.test.ts` rejects empty logic groups; current visual audit covers nested layout. **Open:** save/reload multi-child All/Any/Not edits and unknown-value semantics. |
 | Native `steps[]` and `choose.branches[].steps[]` | `ui/ProgramBuilder.tsx`: direct fields, add/remove/duplicate/move; empty native sequence shown honestly | Sequential; first matching branch, stable IDs | Routine journey edits/moves/duplicates/saves branch subtrees, including a script. `lib/routineDraft.test.ts` checks identity and opaque payload preservation. **Open:** variant matrix below. |
@@ -59,7 +59,7 @@ schema; server compiler/resolver behavior remains authoritative.
 | `NativeAction` | `ProgramBuilder`: script, activate/cycle, power, dim, random color, choose, schedule/replace/cancel timer, helper write, routine invocation | Each variant edited through Save/reload, including singular SetPower device; no false multi-target claim. |
 | Scene selection, cycle entry, rollout | `ProgramBuilder` scene/target/transition/selection/rollout controls | Direct scene vs helper mapping; entry scopes and transitions; rollout fields and optional defaults; stale mapping keys. |
 | `ProgramBody`, `ScriptSpec` declarations | `ProgramBuilder`, `RoutineScriptEditor`: native/mixed scripts; explicit whole-script conversion; declaration rows | Mixed script and whole-program conversion journeys already pass. Still name each declaration collection and persistence/limits default fixture. |
-| Scene explicit/device-link/scene-link state | `app/config/scenes/target-row.tsx`, shared color controls | Edit each mode; omission vs explicit null where allowed; power/brightness/color/transition; source key and scale; complete link scopes. Existing unrelated-field preservation is insufficient. |
+| Scene explicit/device-link/scene-link state | `app/config/scenes/target-row.tsx`, shared color controls | Scene collection journey edits explicit/device-link/scene-link modes, source and multiplier, default power, zero brightness/fade, full stored scopes, missing-target replacement, and retained inactive variants. Nullable transition and unknown siblings survive. Color variants/capture and creation-return still need ledger reconciliation. |
 | Helper boolean/enum/number/string and initial value | Helper definition fields plus separate current-value control | Boolean false, number zero/optional bounds, string empty, enum options/invalid values; initial configuration save must never become a current-value command. |
 | `SourceCompute`: circadian compatibility, script preset, custom script | Source detail, day/night color controls, params JSON, script editor, draft preview | Preset id/version, unknown preset, optional source body, parameter null/list/object values and extra fields; type change and discard. |
 | Integration config primitive/JSON fields; MQTT mode; dummy state/capabilities | Schema fields plus typed adapters | Missing/null/false capability overrides; Kelvin bounds; payload paths; secret unchanged/replace/remove; malformed known collection repair; reload failure without misleading “saved” state. |
@@ -82,6 +82,15 @@ Verification: 14 browser checks at each viewport, ten entity-draft unit checks,
 and current UI unit/type/lint/build gates. Captures and logs are in
 `implementation-evidence/collections/`. No household configuration was changed.
 
-Next: close the open scene-link and routine collection rows with edited fixtures,
-then typed integration/helper/source cases. Continue to expand this matrix to
+Scene follow-up: `scene-collections-review.mjs` passes 18 checks at 1440/390 px.
+Scene behavior/power use the shared selector; references use the searchable
+picker and keep their Open button aligned on phones. Missing selected scope
+entries remain removable. Target removal clears cached variants; replacement
+moves them to the replacement target without prefix collisions. Captures/logs
+are in `implementation-evidence/collections/scene-collections-*`.
+
+Next: close routine collection rows with edited fixtures, then typed
+integration/helper/source cases. Code inspection found that switching dynamic
+scene-selection kinds, or dynamic/fixed selection, discards the nested mapping
+and fallback draft in `ProgramBuilder`; fix and verify this next. Continue to expand this matrix to
 individual persisted fields before closing PLAN.md's coverage gate.

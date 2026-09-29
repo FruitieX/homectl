@@ -64,9 +64,14 @@ Confirmed by 11 chart checks at 1440/390 px and 8 log checks at
    unless a later change affects their contracts.
 2. Continue [FIELD-COVERAGE.md](FIELD-COVERAGE.md), which now maps the minimum
    collection set and identifies variant/optional-field gaps. Close its open
-   rows with edited fixtures, beginning with scene links and routine scopes.
+   rows with edited fixtures, continuing with routine scopes and dynamic selection.
    The shared JSON editor repair passes 14 browser checks at each viewport;
    it does not close the domain-specific coverage gate.
+   Scene collections now have 18 edited browser checks at both sizes: full link
+   scopes, missing references, replacement, empty maps and reload. Stored scene
+   activation scopes do not alter target-link resolution; the ledger distinguishes
+   those contracts. Dynamic routine selection currently drops its nested draft
+   when switching modes; fix and verify that before closing the routine row.
 3. Use those gaps to select additional browser/backend checks. Do not rerun
    whole passing suites merely to increase test counts.
 4. Complete remaining everyday widget/assistant/navigation evidence, then the

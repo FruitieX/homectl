@@ -1,0 +1,45 @@
+(node:2449574) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/entityDraft.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ unfinished numeric input retains its type, blocks saves and survives navigation until discarded (1.954973ms)
+✔ raw numeric state is never submitted and only acknowledged input is cleared by a save (0.437518ms)
+✔ clean refresh and reviewed remote values cannot leave a stale numeric display (0.282939ms)
+✔ collection variants and unfinished inputs follow reordered items and disappear with removed items (0.583768ms)
+✔ switching type clears incomplete inputs and distinguishes cached null from an absent variant (0.22289ms)
+✔ draft retains all collections and unknown fields across background refreshes and discard (0.238689ms)
+✔ edits made while saving survive response normalization and a delayed response cannot clear newer work (0.18651ms)
+✔ failed save retains draft and reviewed conflict choices preserve unrelated server changes (0.295029ms)
+✔ inactive variants survive navigation and are discarded explicitly (0.332629ms)
+✔ nested conflict choices preserve remote siblings and treat arrays and variants as units (0.605938ms)
+(node:2449575) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/sceneDraft.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ draft target preview follows the same device through ordered scene group targets (1.098026ms)
+✔ device link scales brightness and preserves source color representation (0.103929ms)
+✔ omission, zero, off and unknown fields remain distinct during editing (0.190799ms)
+✔ links neither invent aliases nor recurse forever (0.229059ms)
+✔ group order is deduplicated and remaining IDs are alphabetical (0.18808ms)
+✔ invalid color and nonfinite brightness are rejected without changing a draft (0.17965ms)
+(node:2449576) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/rasse/homectl/ui/lib/sceneTargets.test.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/rasse/homectl/ui/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ sceneTargetMode classifies the three target shapes (0.701838ms)
+✔ describeSceneTarget summarizes an explicit device state (0.171009ms)
+✔ describeSceneTarget reports a precise reason when a linked scene is gone (0.172489ms)
+✔ describeSceneTarget reports a precise reason when a tracked device is gone (0.158229ms)
+✔ describeSceneTarget accepts omitted explicit state and flags unchosen links (0.817137ms)
+✔ orderedSceneTargets honors the saved order and keeps unknown keys out (0.551968ms)
+✔ sceneTargetsSummary counts targets, unresolved references, and a script (0.156159ms)
+✔ a device link survives an integration rename instead of reading as gone (0.10969ms)
+✔ a device link is only reported missing when the id is gone too (0.25356ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 90.983587
