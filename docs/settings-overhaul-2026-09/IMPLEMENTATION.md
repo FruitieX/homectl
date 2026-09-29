@@ -446,3 +446,21 @@ added to the comparison gallery; FIELD-COVERAGE.md names the remaining variants.
 The phone health journey also passes 10 checks after adapting its selector
 interaction: inheritance/override, attention deduplication, Ignore versus offline
 evidence and related log navigation remain correct on the isolated fixture.
+
+## Helper editing and live commands — 2026-09-30
+
+Helper type, boolean and persistence choices use shared selectors. Enum rows have
+named up/down/remove icon buttons, including 44 px phone targets. Removing an
+initial choice gives an immediate repair message. Repeated picker names/values
+now occupy one line when identical, while distinct reference IDs remain visible.
+Current-value controls are disabled during their pending command; failed commands
+show an alert and retain the chosen value for retry. Definition saves and live
+commands remain separate.
+
+Evidence: 21 helper-editing and six command checks at each 1440/390 px; the existing
+phone creation/conflict journey passes 11 checks after adapting its selectors.
+The expected HTTP 503/409 responses are intentional failure fixtures. Screenshots
+were inspected on both sizes. Two new server contract tests, the helper API
+concurrency test and the existing database export/import round-trip test pass.
+Type/lint/build pass. All writes were confined to the marked local fixture or
+isolated server tests. FIELD-COVERAGE.md records exact coverage and remaining work.

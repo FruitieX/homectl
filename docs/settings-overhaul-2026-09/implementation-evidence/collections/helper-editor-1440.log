@@ -1,0 +1,92 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Options move in both directions",
+    "passed": true
+   },
+   {
+    "name": "Duplicate enum choices cannot be saved",
+    "passed": true
+   },
+   {
+    "name": "Removing the initial choice shows an immediate repair message",
+    "passed": true
+   },
+   {
+    "name": "Unavailable initial value blocks saving",
+    "passed": true
+   },
+   {
+    "name": "Definition save leaves a valid current value intact",
+    "passed": true
+   },
+   {
+    "name": "Cancelling a reset issues no definition or live-value write",
+    "passed": true
+   },
+   {
+    "name": "Explicitly confirmed definition reset uses its initial value",
+    "passed": true
+   },
+   {
+    "name": "Empty enum stays unsaved and repairable",
+    "passed": true
+   },
+   {
+    "name": "Restoring the saved list clears its dirty state",
+    "passed": true
+   },
+   {
+    "name": "Editing a current value is not an immediate command",
+    "passed": true
+   },
+   {
+    "name": "Live command preserves the unsaved definition",
+    "passed": true
+   },
+   {
+    "name": "Definition draft remains visible after a live command",
+    "passed": true
+   },
+   {
+    "name": "Type switches retain numeric bounds and zero",
+    "passed": true
+   },
+   {
+    "name": "Reversed bounds do not change the saved type",
+    "passed": true
+   },
+   {
+    "name": "Empty numeric initial value cannot become zero implicitly",
+    "passed": true
+   },
+   {
+    "name": "Number zero and edited bounds persist",
+    "passed": true
+   },
+   {
+    "name": "Cleared optional bounds are omitted",
+    "passed": true
+   },
+   {
+    "name": "Boolean false persists",
+    "passed": true
+   },
+   {
+    "name": "Empty text and session persistence survive save",
+    "passed": true
+   },
+   {
+    "name": "Saved empty text survives reload",
+    "passed": true
+   },
+   {
+    "name": "Helper controls fit the viewport",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/helpers","viewport":{"width":1440,"height":1080},"problems":[]}

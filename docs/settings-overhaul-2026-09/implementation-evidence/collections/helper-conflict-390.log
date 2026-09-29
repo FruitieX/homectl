@@ -1,0 +1,19 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "Enum options support multiple entries and ordering",
+   "Changing type and returning preserves the previous variant draft",
+   "Create saves the complete ordered definition",
+   "Immediate value command does not save pending definition changes",
+   "Live value refresh preserves the configuration draft",
+   "Navigation retains unsaved helper changes",
+   "Reviewed save preserves remote persistence and current value",
+   "Changing options explains an incompatible current value before saving",
+   "Cancelling definition change leaves the live value alone",
+   "Discard restores the saved options",
+   "Helper controls fit the viewport"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/helpers/new","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 409 (Conflict)"]}

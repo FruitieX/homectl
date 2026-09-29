@@ -260,6 +260,14 @@ numeric errors. Four integration API tests and one rollback test pass. Evidence
 is recorded in FIELD-COVERAGE.md and the screenshot gallery. Next: helper/source
 variants, remaining routine contracts and the wider accessibility/recovery audit.
 
+Helper checkpoint, 2026-09-30: 21 editing and 6 live-command checks pass at
+1440/390 px, plus 11 phone creation/conflict checks. Shared selectors, two-way
+option ordering, initial-choice repair and explicit reset confirmation are verified.
+False/zero/empty text and omitted bounds persist; command failures and pending
+states preserve definition drafts. Four targeted Rust tests cover schema behavior,
+API concurrency and durable/session export. Type/lint/build pass. Next: computed
+sources and the remaining routine/module and final acceptance contracts.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

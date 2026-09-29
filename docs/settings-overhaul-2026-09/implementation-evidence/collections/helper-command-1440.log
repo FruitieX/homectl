@@ -1,0 +1,35 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Failed command leaves the saved value unchanged",
+    "passed": true
+   },
+   {
+    "name": "Failed command retains the selected value and definition draft",
+    "passed": true
+   },
+   {
+    "name": "Pending command locks its value control and shows pending status",
+    "passed": true
+   },
+   {
+    "name": "Pending command does not claim a changed server value",
+    "passed": true
+   },
+   {
+    "name": "Acknowledged retry changes only the live value",
+    "passed": true
+   },
+   {
+    "name": "Command acknowledgement keeps the definition draft",
+    "passed": true
+   }
+  ],
+  "expectedHttpErrors": [
+   503
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/helpers","viewport":{"width":1440,"height":1080},"problems":["log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)"]}

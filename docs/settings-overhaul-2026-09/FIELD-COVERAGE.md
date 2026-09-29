@@ -37,7 +37,7 @@ rows marked **open** are not acceptance sign-off. Paths below are relative to
 | `SceneSelection.mapping` and optional fallback | `ProgramBuilder.SceneSelectionEditor`: helper-option-to-scene rows and fallback selector | Keyed mapping | `dev/routine-selection-review.mjs` edits several mappings (including `__proto__`), removes an obsolete option, switches helper/group/fixed modes, retains independent fallbacks, navigates to the helper, saves/discards and reloads. **Open:** unavailable helper/scene recovery and empty mapping compiler validation. |
 | Timer `capture_target_intents` | `ProgramBuilder` schedule/replace timer controls with target picker | Optional captured scope | `dev/routine-selection-review.mjs` adds/removes scope members, retains the edited scope through off/on, saves every member and extension, then saves capture disabled as omission. Empty capture is rejected by the compiler (`compile.rs` timer validation test); existing stale-intent tests cover execution separately. |
 | Source `aliases[]` | `app/config/sources/detail.tsx`: repeatable text rows, add/remove, validation of unique full keys | Preserve array; aliases have no execution sequence | `dev/settings-source-journey.js` creates two aliases and checks the API result. **Open:** empty/removal and malformed alias repair. |
-| Helper enum `options[]` | `app/config/helpers/fields.tsx`: direct rows, add/remove/up/down; invalid initial selection must be repaired explicitly | Display order retained | `dev/settings-helper-journey.js` creates three options, reorders, switches type away/back and verifies saved order. **Open:** empty/duplicate validation and removal of selected current/initial values. |
+| Helper enum `options[]` | `app/config/helpers/fields.tsx`: direct rows, add/remove/up/down; invalid initial selection must be repaired explicitly | Display order retained | `dev/helper-editor-review.mjs` edits/reorders/removes options; validates empty/duplicate lists and removed initial values; verifies Cancel and confirmed reset when the current choice is removed. Existing helper journey additionally covers creation and conflict review. |
 | MQTT `sensor_value_fields[]`, `disabled_device_ids[]` | `app/config/integrations/fields.tsx` `StringEntries`: repeatable rows, add/remove/up/down; malformed values use typed JSON fallback | Preserve configured order | `dev/mqtt-editor-review.mjs` edits both collections, adds/removes/reorders entries, blocks invalid pointers/blank device IDs, saves empty arrays and reloads. `lib/integrationDraft.test.ts` checks every pointer. Malformed non-list repair remains a separate open case. |
 | Legacy cron schedules map | `app/config/integrations/detail.tsx`: visible read-only definition and current-format destination/offline conversion guidance | Preserved until explicit conversion | Deliberately not editable. **Open:** identify conversion round-trip test for multi-schedule legacy input. |
 | Dummy `devices` map | `app/config/integrations/fields.tsx` `DummyDevices`: keyed add/remove, direct initial-state and capability fields | Keyed identity; no semantic order | `dev/dummy-editor-review.mjs` saves/reloads multiple default/controllable/sensor devices, all four sensor variants and empty maps; remove/recreate clears metadata. Rust tests confirm shapes and null defaults. **Open:** browser repair of unknown/malformed states. |
@@ -60,7 +60,7 @@ schema; server compiler/resolver behavior remains authoritative.
 | Scene selection, cycle entry, rollout | `ProgramBuilder` scene/target/transition/selection/rollout controls | Direct/helper/group modes, independent fallbacks, stale-key removal and cycle scope/order are edited in the routine selection journey. **Open:** rollout fields/defaults and unavailable references. |
 | `ProgramBody`, `ScriptSpec` declarations | `ProgramBuilder`, `RoutineScriptEditor`: native/mixed scripts; explicit whole-script conversion; declaration rows | Mixed script and whole-program conversion journeys already pass. Still name each declaration collection and persistence/limits default fixture. |
 | Scene explicit/device-link/scene-link state | `app/config/scenes/target-row.tsx`, shared color controls | Scene collection journey edits explicit/device-link/scene-link modes, source and multiplier, default power, zero brightness/fade, full stored scopes, missing-target replacement, and retained inactive variants. Nullable transition and unknown siblings survive. Color variants/capture and creation-return still need ledger reconciliation. |
-| Helper boolean/enum/number/string and initial value | Helper definition fields plus separate current-value control | Boolean false, number zero/optional bounds, string empty, enum options/invalid values; initial configuration save must never become a current-value command. |
+| Helper boolean/enum/number/string and initial value | Helper definition fields plus separate current-value control | All four types and initial values now have edited save/reload evidence, including false/zero/empty text/optional bounds. Separate command tests cover rejection, pending state, acknowledgement and retained configuration drafts. Visibility and full dependency-link reconciliation remain open. |
 | `SourceCompute`: circadian compatibility, script preset, custom script | Source detail, day/night color controls, params JSON, script editor, draft preview | Preset id/version, unknown preset, optional source body, parameter null/list/object values and extra fields; type change and discard. |
 | Integration config primitive/JSON fields; MQTT mode; dummy state/capabilities | Schema fields plus typed adapters | Missing/null/false capability overrides; Kelvin bounds; payload paths; secret unchanged/replace/remove; malformed known collection repair; reload failure without misleading “saved” state. |
 | Device overrides, reporting preferences, shared advanced preference | Device settings, reporting field and system preferences | Tie each default/inherit/custom/ignore state to exact backend persistence/export test; disabled-device suppression already has separate regression evidence. |
@@ -175,3 +175,31 @@ passes all 10 checks: integration inheritance, device override, retained interva
 deduplicated attention, Ignore preserving explicit offline evidence, and related
 log navigation. It uses the normal isolated household fixture and synthetic health
 evidence. Log: `implementation-evidence/collections/mqtt-health-390.log`.
+
+### Helper types, choices and commands checkpoint
+
+`dev/helper-editor-review.mjs` passes 21 checks at each 1440/390 px: both ordering
+directions, duplicate/empty options, unavailable initial choice, removing the
+current choice with cancel/confirmed reset, false/zero/empty text, optional bounds,
+type draft retention, navigation, session persistence, Discard and reload.
+Definition writes never become a separate `/value` command. A still-valid current
+value survives a definition save; an incompatible one resets only after the UI's
+explicit confirmation. Empty enum drafts are editable but cannot be saved.
+
+`dev/helper-command-review.mjs` adds six checks at each size: a deliberately
+rejected live-value command retains its chosen value; a paused request disables
+its control and does not claim success; the acknowledged retry changes the live
+value while preserving the unsaved definition. Its HTTP 503 console entry is
+expected. Both native journeys create/remove only their own fixture helpers.
+The existing phone helper journey now uses shared selectors and passes 11 checks,
+including creation, keyboard selection, conflict review and related navigation;
+its HTTP 409 is an intentional conflict.
+
+Server evidence: two `core::helpers::tests` validate scalar/enum contracts and
+preserve/reset behavior, the helper API concurrency test passes, and
+`db::config_queries::consistency_tests::helper_definitions_and_durable_values_round_trip`
+passes for durable/session export policy and old-export defaults. This database
+fixture covers enum/string definitions; it is not a claim of a complete per-type
+restart test. Type checking, lint and build pass. Visibility/picker filtering,
+complete dependency links and the wider responsive/accessibility matrix remain
+part of the final audit; computed-source variants are next.

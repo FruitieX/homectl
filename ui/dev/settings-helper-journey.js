@@ -8,7 +8,7 @@
   )
     throw Error('Use the isolated fixture on port 3021.');
   const checks = [],
-    id = `settings_helper_${innerWidth}`,
+    id = `settings_helper_${innerWidth}_${Date.now()}`,
     pause = () => new Promise((resolve) => setTimeout(resolve, 150));
   const until = async (predicate, message) => {
     for (let i = 0; i < 80; i++) {
@@ -39,6 +39,20 @@
       }),
     );
   };
+  const kind = async (label) => {
+    document
+      .querySelector('[data-field=kind]')
+      .dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+      );
+    await until(() => document.querySelector('[role=option]'), 'Helper types');
+    [...document.querySelectorAll('[role=option]')]
+      .find((el) => el.textContent.trim() === label)
+      .dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+      );
+    await pause();
+  };
   const saved = async () =>
     (await (await fetch(root)).json()).data.find((row) => row.id === id);
   await fetch(`${root}/${id}`, { method: 'DELETE' });
@@ -48,7 +62,7 @@
   );
   input(document.querySelector('[data-field=id]'), id);
   input(document.querySelector('[data-field=name]'), 'Evening mode');
-  input(document.querySelector('[data-field=kind]'), 'enum');
+  await kind('Enum (fixed options)');
   await pause();
   button('Add option').click();
   await pause();
@@ -60,9 +74,9 @@
     document.querySelector('[aria-label="Option 2"]').value === 'away',
     'Enum options support multiple entries and ordering',
   );
-  input(document.querySelector('[data-field=kind]'), 'string');
+  await kind('String');
   await pause();
-  input(document.querySelector('[data-field=kind]'), 'enum');
+  await kind('Enum (fixed options)');
   await pause();
   assert(
     document.querySelector('[aria-label="Option 2"]').value === 'away',
@@ -88,7 +102,7 @@
     'Current value picker opened',
   );
   const off = [...document.querySelectorAll('[cmdk-item]')].find(
-    (el) => el.textContent.trim().replaceAll(/\s/g, '') === 'offoff',
+    (el) => el.textContent.trim().replaceAll(/\s/g, '') === 'off',
   );
   if (!off) throw Error('Off option missing');
   off.click();

@@ -41,6 +41,7 @@ function CurrentValue({ status }: { status: HelperRuntimeStatus }) {
     { advanced } = useSettingsPreferences();
   const [value, setValue] = useState<JsonValue>(status.value),
     [dirty, setDirty] = useState(false),
+    [failed, setFailed] = useState(false),
     [message, setMessage] = useState('');
   useEffect(() => {
     if (!dirty) setValue(status.value);
@@ -49,11 +50,13 @@ function CurrentValue({ status }: { status: HelperRuntimeStatus }) {
   async function apply() {
     if (invalid) return;
     setMessage('');
+    setFailed(false);
     try {
       await command.mutateAsync({ id: status.id, value });
       setDirty(false);
       setMessage('Current value updated.');
     } catch (error) {
+      setFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not change the value.',
       );
@@ -79,11 +82,14 @@ function CurrentValue({ status }: { status: HelperRuntimeStatus }) {
         <div className="min-w-0 flex-1">
           <ValueControl
             kind={status.kind}
+            ariaLabel="Current helper value"
+            disabled={command.isPending}
             value={value}
             onChange={(next) => {
               setValue(next);
               setDirty(true);
               setMessage('');
+              setFailed(false);
             }}
           />
         </div>
@@ -101,7 +107,10 @@ function CurrentValue({ status }: { status: HelperRuntimeStatus }) {
         </p>
       )}
       {message && (
-        <p role="status" className="mt-2 text-xs">
+        <p
+          role={failed ? 'alert' : 'status'}
+          className={`mt-2 text-xs ${failed ? 'text-destructive' : ''}`}
+        >
           {message}
         </p>
       )}

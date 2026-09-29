@@ -159,3 +159,79 @@ impl Helpers {
         removed
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::automation_value::HelperKind;
+    use serde_json::json;
+
+    #[test]
+    fn option_edits_preserve_valid_current_values_and_reset_removed_choices() {
+        let mut helpers = Helpers::new();
+        let mut definition = HelperDefinition::new(
+            "mode",
+            "Mode",
+            HelperKind::Enum {
+                options: vec!["on".into(), "off".into(), "away".into()],
+            },
+        );
+        definition.initial_value = json!("off");
+        helpers.upsert_definition(definition.clone()).unwrap();
+        helpers.set_value(&definition.id, json!("away")).unwrap();
+        definition.kind = HelperKind::Enum {
+            options: vec!["on".into(), "away".into()],
+        };
+        assert!(
+            helpers.upsert_definition(definition.clone()).is_err(),
+            "removing the initial choice requires repair"
+        );
+        assert_eq!(helpers.value(&definition.id), Some(&json!("away")));
+        definition.initial_value = json!("on");
+        helpers.upsert_definition(definition.clone()).unwrap();
+        assert_eq!(helpers.value(&definition.id), Some(&json!("away")));
+        definition.kind = HelperKind::Enum {
+            options: vec!["on".into()],
+        };
+        helpers.upsert_definition(definition.clone()).unwrap();
+        assert_eq!(helpers.value(&definition.id), Some(&json!("on")));
+        for options in [vec![], vec!["".into()], vec!["on".into(), "on".into()]] {
+            definition.kind = HelperKind::Enum { options };
+            assert!(helpers.upsert_definition(definition.clone()).is_err());
+            assert_eq!(helpers.value(&definition.id), Some(&json!("on")));
+        }
+    }
+
+    #[test]
+    fn scalar_initial_values_and_numeric_bounds_follow_the_editor_contract() {
+        for (kind, value) in [
+            (HelperKind::Boolean, json!(false)),
+            (HelperKind::String, json!("")),
+            (
+                HelperKind::Number {
+                    min: Some(-10.0),
+                    max: Some(10.0),
+                },
+                json!(0),
+            ),
+        ] {
+            let mut definition = HelperDefinition::new("value", "Value", kind);
+            definition.initial_value = value;
+            assert!(definition.validate().is_ok());
+            definition.initial_value = json!(null);
+            assert!(definition.validate().is_err());
+        }
+        assert!(HelperKind::Number {
+            min: None,
+            max: None
+        }
+        .validate_value(&json!(-12.5))
+        .is_ok());
+        assert!(HelperKind::Number {
+            min: Some(11.0),
+            max: Some(10.0)
+        }
+        .validate()
+        .is_err());
+    }
+}

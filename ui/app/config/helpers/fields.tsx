@@ -1,7 +1,9 @@
 import type { HelperDefinition } from '@/bindings/HelperDefinition';
 import type { HelperKind } from '@/bindings/HelperKind';
 import { ConfigField, ConfigFormGrid, ConfigToggleRow } from '@/ui/config-form';
-import { checkboxClassName, selectClassName } from '@/ui/form-styles';
+import { checkboxClassName } from '@/ui/form-styles';
+import { ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 
@@ -9,6 +11,7 @@ import {
   KIND_OPTIONS,
   ValueControl,
   defaultKind,
+  invalidHelperValue,
   defaultValueForKind,
 } from './shared';
 
@@ -30,6 +33,7 @@ export function HelperNameFields({
         >
           <Input
             data-field="id"
+            aria-label="Helper ID"
             disabled={!isNew}
             placeholder="staircase_mode"
             type="text"
@@ -41,6 +45,7 @@ export function HelperNameFields({
       <ConfigField label="Name">
         <Input
           data-field="name"
+          aria-label="Helper name"
           placeholder="Staircase mode"
           type="text"
           value={draft.name}
@@ -95,20 +100,13 @@ export function HelperKindFields({
         label="Type"
         description="The declared type constrains every write; the server rejects values outside it."
       >
-        <select
+        <SettingsSelect
           data-field="kind"
-          className={selectClassName}
+          aria-label="Helper type"
           value={kind.kind}
-          onChange={(event) =>
-            changeKind(event.target.value as HelperKind['kind'])
-          }
-        >
-          {KIND_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          onValueChange={(next) => changeKind(next as HelperKind['kind'])}
+          options={KIND_OPTIONS}
+        />
       </ConfigField>
 
       {kind.kind === 'enum' ? (
@@ -118,8 +116,9 @@ export function HelperKindFields({
         >
           <div className="space-y-2">
             {kind.options.map((option, index) => (
-              <div key={index} className="flex items-center gap-2">
+              <div key={index} className="flex min-w-0 items-center gap-1">
                 <Input
+                  className="min-w-0 flex-1"
                   aria-label={`Option ${index + 1}`}
                   type="text"
                   value={option}
@@ -129,38 +128,45 @@ export function HelperKindFields({
                     updateEnumOptions(options);
                   }}
                 />
+                {[-1, 1].map((offset) => (
+                  <Button
+                    key={offset}
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 md:size-8"
+                    disabled={
+                      index + offset < 0 ||
+                      index + offset >= kind.options.length
+                    }
+                    aria-label={`Move option ${index + 1} ${offset < 0 ? 'up' : 'down'}`}
+                    onClick={() => {
+                      const options = [...kind.options];
+                      [options[index], options[index + offset]] = [
+                        options[index + offset],
+                        options[index],
+                      ];
+                      updateEnumOptions(options);
+                    }}
+                  >
+                    {offset < 0 ? <ArrowUp /> : <ArrowDown />}
+                  </Button>
+                ))}
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
-                  disabled={index === 0}
-                  aria-label={`Move option ${index + 1} up`}
-                  onClick={() => {
-                    const options = [...kind.options];
-                    [options[index - 1], options[index]] = [
-                      options[index],
-                      options[index - 1],
-                    ];
-                    updateEnumOptions(options);
-                  }}
-                >
-                  ↑
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                  disabled={kind.options.length <= 1}
+                  size="icon"
+                  className="shrink-0 text-destructive hover:text-destructive md:size-8"
+                  aria-label={`Remove option ${index + 1}`}
                   onClick={() =>
                     updateEnumOptions(
                       kind.options.filter(
-                        (_candidate, candidate) => candidate !== index,
+                        (_, candidate) => candidate !== index,
                       ),
                     )
                   }
                 >
-                  Remove
+                  <Trash2 />
                 </Button>
               </div>
             ))}
@@ -180,6 +186,7 @@ export function HelperKindFields({
         <ConfigFormGrid>
           <ConfigField label="Minimum" description="Optional lower bound.">
             <Input
+              aria-label="Minimum"
               step="any"
               type="number"
               value={kind.min ?? ''}
@@ -201,6 +208,7 @@ export function HelperKindFields({
           </ConfigField>
           <ConfigField label="Maximum" description="Optional upper bound.">
             <Input
+              aria-label="Maximum"
               step="any"
               type="number"
               value={kind.max ?? ''}
@@ -241,9 +249,15 @@ export function HelperInitialValueField({
       <div data-field="initial_value" tabIndex={-1}>
         <ValueControl
           kind={draft.kind}
+          ariaLabel="Initial value"
           value={draft.initial_value}
           onChange={(initial_value) => setDraft({ ...draft, initial_value })}
         />
+        {invalidHelperValue(draft.kind, draft.initial_value) && (
+          <p role="alert" className="mt-2 text-xs text-destructive">
+            {invalidHelperValue(draft.kind, draft.initial_value)}
+          </p>
+        )}
       </div>
     </ConfigField>
   );
@@ -262,20 +276,20 @@ export function HelperPersistenceFields({
         label="Persistence"
         description="Durable values are stored in the database and survive restarts; session values reset to the initial value."
       >
-        <select
-          className={selectClassName}
+        <SettingsSelect
+          aria-label="Persistence"
           value={draft.persistence}
-          onChange={(event) =>
+          onValueChange={(next) =>
             setDraft({
               ...draft,
-              persistence: event.target
-                .value as HelperDefinition['persistence'],
+              persistence: next as HelperDefinition['persistence'],
             })
           }
-        >
-          <option value="durable">Durable (stored in the database)</option>
-          <option value="session">Session — resets on restart</option>
-        </select>
+          options={[
+            { value: 'durable', label: 'Durable (stored in the database)' },
+            { value: 'session', label: 'Session — resets on restart' },
+          ]}
+        />
       </ConfigField>
       <ConfigToggleRow
         label="Hidden"

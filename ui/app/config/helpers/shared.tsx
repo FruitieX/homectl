@@ -4,7 +4,7 @@ import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
 import { Input } from '@/ui/primitives/input';
 import { SearchablePicker } from '@/ui/SearchablePicker';
-const selectClassName = 'settings-select';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 export const KIND_OPTIONS: Array<{ value: HelperKind['kind']; label: string }> =
   [
     { value: 'boolean', label: 'Boolean' },
@@ -114,27 +114,35 @@ export function ValueControl({
   kind,
   value,
   onChange,
+  ariaLabel = 'Helper value',
+  disabled = false,
 }: {
   kind: HelperKind;
   value: JsonValue;
   onChange: (value: JsonValue) => void;
+  ariaLabel?: string;
+  disabled?: boolean;
 }) {
   switch (kind.kind) {
     case 'boolean':
       return (
-        <select
-          className={selectClassName}
+        <SettingsSelect
+          aria-label={ariaLabel}
+          disabled={disabled}
           value={value === true ? 'true' : 'false'}
-          onChange={(event) => onChange(event.target.value === 'true')}
-        >
-          <option value="true">On / true</option>
-          <option value="false">Off / false</option>
-        </select>
+          onValueChange={(next) => onChange(next === 'true')}
+          options={[
+            { value: 'true', label: 'On / true' },
+            { value: 'false', label: 'Off / false' },
+          ]}
+        />
       );
     case 'enum':
       return (
         <SearchablePicker
-          options={kind.options.map((option) => ({
+          ariaLabel={ariaLabel}
+          disabled={disabled}
+          options={[...new Set(kind.options)].map((option) => ({
             value: option,
             label: option,
           }))}
@@ -146,6 +154,8 @@ export function ValueControl({
     case 'number':
       return (
         <Input
+          aria-label={ariaLabel}
+          disabled={disabled}
           max={kind.max}
           min={kind.min}
           step="any"
@@ -164,6 +174,8 @@ export function ValueControl({
     case 'string':
       return (
         <Input
+          aria-label={ariaLabel}
+          disabled={disabled}
           type="text"
           value={typeof value === 'string' ? value : ''}
           onChange={(event) => onChange(event.target.value)}

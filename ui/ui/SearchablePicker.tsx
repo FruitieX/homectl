@@ -92,9 +92,11 @@ export function SearchablePicker({
             />
             <span className="min-w-0">
               <span className="block truncate">{option.label}</span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {option.detail ?? option.value}
-              </span>
+              {(option.detail ?? option.value) !== option.label && (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {option.detail ?? option.value}
+                </span>
+              )}
             </span>
           </CommandItem>
         ))}
