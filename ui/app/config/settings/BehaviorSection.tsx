@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppConfig } from '@/hooks/appConfig';
 import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
@@ -143,11 +144,10 @@ export function BehaviorSection() {
                     {field === 'default_transition_ms'
                       ? 'Device transition'
                       : 'Scene transition'}
-                    <select
-                      className="settings-select"
+                    <SettingsSelect
                       aria-label={`${field} mode`}
                       value={value[field] === null ? 'default' : 'custom'}
-                      onChange={(event) =>
+                      onValueChange={(mode) =>
                         draft.patch({
                           [field]: entityDraftStore.switchVariant<
                             number | null
@@ -156,15 +156,16 @@ export function BehaviorSection() {
                             field,
                             value[field] === null ? 'default' : 'custom',
                             value[field],
-                            event.target.value,
-                            event.target.value === 'default' ? null : 1000,
+                            mode,
+                            mode === 'default' ? null : 1000,
                           ),
                         })
                       }
-                    >
-                      <option value="default">Use default</option>
-                      <option value="custom">Set duration</option>
-                    </select>
+                      options={[
+                        { value: 'default', label: 'Use default' },
+                        { value: 'custom', label: 'Set duration' },
+                      ]}
+                    />
                   </label>
                   {value[field] !== null && (
                     <label className="grid gap-2">

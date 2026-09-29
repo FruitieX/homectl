@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { Switch } from '@/ui/primitives/switch';
 import { useAtom } from 'jotai';
 import { accentAtom, densityAtom } from '@/hooks/preferences';
 import { useTheme } from '@/hooks/theme';
@@ -120,11 +121,11 @@ export function AppearanceSection() {
       <SettingsSection id="browser-tools" title="Display & troubleshooting">
         <div className="grid gap-4 lg:grid-cols-2">
           <label className="flex items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              className="mt-1"
+            <Switch
+              aria-label="Blur effects"
+              className="mt-0.5"
               checked={value.blur}
-              onChange={(event) => draft.patch({ blur: event.target.checked })}
+              onCheckedChange={(checked) => draft.patch({ blur: checked })}
             />
             <span>
               <strong className="font-medium">Blur effects</strong>
@@ -134,12 +135,12 @@ export function AppearanceSection() {
             </span>
           </label>
           <label className="flex items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              className="mt-1"
+            <Switch
+              aria-label="Developer mode"
+              className="mt-0.5"
               checked={value.developerMode}
-              onChange={(event) =>
-                draft.patch({ developerMode: event.target.checked })
+              onCheckedChange={(checked) =>
+                draft.patch({ developerMode: checked })
               }
             />
             <span>

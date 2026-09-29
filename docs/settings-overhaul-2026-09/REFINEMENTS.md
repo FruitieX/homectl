@@ -94,3 +94,29 @@ disabled-device scene checks, routine layout and visible ordering controls,
 two-dimensional canvas fitting, a placement list, and brightness-ring map
 markers. These remain under verification. Script action runtime support is in
 progress; no completed acceptance is claimed yet.
+
+### Settings tabs and fullscreen checkpoint
+
+- Fixed the tab loop's focus-restoration feedback: tab navigation controls are
+  no longer recorded or restored as editor focus targets. Native mouse-input
+  journeys pass at 1440px and 390px, including Assistant → each other tab →
+  Assistant, sampled over 30 frames per sequence.
+- App & system now uses shared switches, checkboxes and select menus, with
+  theme-colored radio choices. Save/Discard contracts are preserved.
+- Fullscreen layout preference loads synchronously. Browser fullscreen is
+  tracked separately, failed requests are caught, and exiting the app layout
+  works even if browser fullscreen was already lost. Existing window fullscreen
+  detected via `display-mode` does not request a second DOM fullscreen layer.
+- At 04:00 fullscreen displays refetch queries without navigating away. Automatic
+  WebSocket reload commands also respect fullscreen and unsaved drafts. Manual
+  browser reload remains available. The daily timer now has stable dependencies
+  and chooses today's 04:00 when started before that time.
+- On browsers that deny restoring fullscreen after a manual reload, the saved
+  layout stays active and a Restore fullscreen button appears on activity.
+  [The Fullscreen API requires transient user activation](https://developer.mozilla.org/en-US/docs/Web/API/Element/requestFullscreen),
+  so unattended document navigation cannot reliably restore DOM fullscreen.
+- Seven browser checks pass for reload persistence, denied restoration, exit,
+  automatic reload/draft guards, daily scheduling and simulated existing kiosk
+  fullscreen. This does not yet verify the physical Linux dashboard's launch
+  configuration. UI type check, lint and production build pass (existing large
+  bundle warning). Evidence: `implementation-evidence/refinements/`.

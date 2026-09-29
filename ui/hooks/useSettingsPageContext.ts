@@ -15,6 +15,12 @@ export function useSettingsPageContext() {
     const recordFocus = (event: FocusEvent) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
+      // Tabs activate on focus. Saving the next tab under the outgoing URL
+      // would activate it again during restoration, ping-ponging both URLs.
+      if (target.closest('[role="tablist"]')) {
+        lastFocus = null;
+        return;
+      }
       if (target.dataset.field)
         lastFocus = `[data-field="${CSS.escape(target.dataset.field)}"]`;
       else if (target.id) lastFocus = `#${CSS.escape(target.id)}`;
@@ -24,10 +30,11 @@ export function useSettingsPageContext() {
     element.addEventListener('focusin', recordFocus);
     const frame = requestAnimationFrame(() => {
       if (!previous) return;
-      if (previous.focus)
-        element
-          .querySelector<HTMLElement>(previous.focus)
-          ?.focus({ preventScroll: true });
+      if (previous.focus) {
+        const target = element.querySelector<HTMLElement>(previous.focus);
+        if (!target?.closest('[role="tablist"]'))
+          target?.focus({ preventScroll: true });
+      }
       element.scrollTop = previous.top;
     });
     return () => {

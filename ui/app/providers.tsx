@@ -2,7 +2,11 @@ import { SettingsDraftGuard } from '@/ui/settings/SettingsDrafts';
 import { entityDraftStore } from '@/lib/entityDraft';
 import { HomectlLogo } from '@/ui/HomectlLogo';
 import { Provider as JotaiProvider } from 'jotai';
-import { QueryClientProvider } from '@tanstack/react-query';
+import {
+  mayAutomaticallyReload,
+  nextDailyRefresh,
+} from '@/lib/automaticReload';
+import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import {
   useConnectionStatus,
   useProvideWebsocketState,
@@ -142,28 +146,29 @@ export const Layout = ({ children }: { children: ReactNode }) => {
   useApplyAppearance();
   useApplyBackdropBlurEffects();
 
-  // Reload app at 4am
+  const queryClient = useQueryClient();
+  // Refetch at 04:00 while fullscreen or editing; preserve the document.
   useEffect(() => {
-    const now = new Date();
-    const reloadAt = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      4,
-      0,
-      0,
-    );
-    reloadAt.setDate(reloadAt.getDate() + 1);
-
-    const reloadTimeout = setTimeout(() => {
-      if (!entityDraftStore.list().some((draft) => draft.dirty || draft.saving))
-        window.location.reload();
-    }, reloadAt.getTime() - now.getTime());
-
-    return () => {
-      clearTimeout(reloadTimeout);
+    let timeout: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      const now = new Date();
+      timeout = setTimeout(
+        () => {
+          const hasDraft = entityDraftStore
+            .list()
+            .some((draft) => draft.dirty || draft.saving);
+          if (mayAutomaticallyReload(hasDraft)) window.location.reload();
+          else {
+            void queryClient.invalidateQueries();
+            schedule();
+          }
+        },
+        nextDailyRefresh(now).getTime() - now.getTime(),
+      );
     };
-  });
+    schedule();
+    return () => clearTimeout(timeout);
+  }, [queryClient]);
 
   return (
     <div className="app-ambient relative flex min-h-0 flex-1 overflow-hidden bg-background text-foreground">

@@ -1,0 +1,16 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   "Saved display layout restored across document reload",
+   "Denied browser restore is handled once with explicit restore control",
+   "Automatic reload is blocked in display mode",
+   "Exit exits the layout even after browser fullscreen was lost",
+   "Normal reload allowed; unsaved drafts protected",
+   "04:00 schedule uses today before 04:00 and tomorrow afterwards",
+   "Existing browser fullscreen does not request nested DOM fullscreen"
+  ],
+  "width": 1440
+ }
+}
+{"url":"http://127.0.0.1:3021/dashboard","viewport":{"width":1440,"height":1000},"problems":[]}

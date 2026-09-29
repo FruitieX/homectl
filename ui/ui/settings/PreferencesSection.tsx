@@ -4,6 +4,7 @@ import { useEntityDraft } from '@/hooks/useEntityDraft';
 import { EntitySaveBar } from './EntitySaveBar';
 import { SettingsSection } from './SettingsSection';
 import { Button } from '@/ui/primitives/button';
+import { Switch } from '@/ui/primitives/switch';
 export function PreferencesSection() {
   const preferences = useSettingsPreferences();
   const { apiEndpoint } = useAppConfig();
@@ -31,12 +32,12 @@ export function PreferencesSection() {
         <p className="text-sm text-muted-foreground">Loading preferences…</p>
       ) : (
         <label className="flex items-start gap-3 text-sm">
-          <input
-            className="mt-1"
-            type="checkbox"
+          <Switch
+            className="mt-0.5"
+            aria-label="Show advanced details"
             checked={draft.value.show_advanced_details}
-            onChange={(event) =>
-              draft.patch({ show_advanced_details: event.target.checked })
+            onCheckedChange={(checked) =>
+              draft.patch({ show_advanced_details: checked })
             }
           />
           <span>

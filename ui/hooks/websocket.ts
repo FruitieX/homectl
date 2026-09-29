@@ -1,3 +1,5 @@
+import { mayAutomaticallyReload } from '@/lib/automaticReload';
+import { entityDraftStore } from '@/lib/entityDraft';
 import {
   disconnectDeviceCommands,
   receiveDeviceCommandResult,
@@ -257,7 +259,14 @@ export const useProvideWebsocketState = () => {
         } else if ('SceneCommandResult' in msg) {
           receiveSceneCommandResult(socket, msg.SceneCommandResult);
         } else if ('Command' in msg && msg.Command === 'reload') {
-          window.location.reload();
+          if (
+            mayAutomaticallyReload(
+              entityDraftStore
+                .list()
+                .some((draft) => draft.dirty || draft.saving),
+            )
+          )
+            window.location.reload();
         } else if ('State' in msg) {
           revisionRef.current = msg.State.revision ?? null;
           setRevision(msg.State.revision ?? null);

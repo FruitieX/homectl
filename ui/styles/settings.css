@@ -472,6 +472,31 @@
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
+.settings-choice input[type='radio'] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid hsl(var(--muted-foreground) / 0.6);
+  border-radius: 50%;
+  background: hsl(var(--card));
+  display: grid;
+  place-content: center;
+  flex-shrink: 0;
+}
+.settings-choice input[type='radio']::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  transform: scale(0);
+}
+.settings-choice input[type='radio']:checked {
+  border-color: hsl(var(--primary));
+}
+.settings-choice input[type='radio']:checked::before {
+  transform: scale(1);
+}
 @media (max-width: 767px) {
   .settings-choice {
     min-height: 44px;

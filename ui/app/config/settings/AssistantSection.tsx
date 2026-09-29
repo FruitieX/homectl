@@ -1,3 +1,5 @@
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
+import { Checkbox } from '@/ui/primitives/checkbox';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppConfig } from '@/hooks/appConfig';
 import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
@@ -220,12 +222,11 @@ export function AssistantSection() {
                 </label>
                 {value.apiKeySet && (
                   <label className="flex min-h-9 items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       aria-label="Remove stored API key on save"
                       checked={value.clearApiKey}
-                      onChange={(event) =>
-                        draft.patch({ clearApiKey: event.target.checked })
+                      onCheckedChange={(checked) =>
+                        draft.patch({ clearApiKey: checked === true })
                       }
                     />
                     Remove stored key on Save
@@ -254,21 +255,23 @@ export function AssistantSection() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <label className="grid content-start gap-2 text-xs">
               Reasoning effort
-              <select
-                className="settings-select"
+              <SettingsSelect
+                aria-label="Reasoning effort"
                 {...entityFieldProps(draft, 'reasoningEffort')}
-                value={value.reasoningEffort ?? ''}
-                onChange={(event) =>
-                  draft.patch({ reasoningEffort: event.target.value || null })
+                value={value.reasoningEffort || '$default'}
+                onValueChange={(effort) =>
+                  draft.patch({
+                    reasoningEffort: effort === '$default' ? null : effort,
+                  })
                 }
-              >
-                <option value="">Provider default</option>
-                {['low', 'medium', 'high'].map((effort) => (
-                  <option key={effort} value={effort}>
-                    {effort[0].toUpperCase() + effort.slice(1)}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: '$default', label: 'Provider default' },
+                  ...['low', 'medium', 'high'].map((effort) => ({
+                    value: effort,
+                    label: effort[0].toUpperCase() + effort.slice(1),
+                  })),
+                ]}
+              />
             </label>
             <label className="grid content-start gap-2 text-xs">
               Timezone
