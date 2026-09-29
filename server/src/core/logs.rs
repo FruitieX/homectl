@@ -32,6 +32,12 @@ pub fn recent_logs() -> Vec<UiLogEntry> {
     read_log_buffer().iter().cloned().collect()
 }
 
+/// Health transition events carry explicit entity references and remain
+/// available in the bounded UI buffer independently of console verbosity.
+pub fn record_structured(entry: UiLogEntry) {
+    push_log_entry(entry);
+}
+
 fn log_filters_from_env_or_default(env_filters: Option<&str>) -> &str {
     env_filters
         .map(str::trim)
@@ -59,6 +65,8 @@ impl Log for BufferedLogger {
             level: map_level(record.level()),
             target: record.target().to_string(),
             message: record.args().to_string(),
+            references: Vec::new(),
+            details: None,
         });
     }
 
@@ -142,6 +150,8 @@ mod tests {
                 level: LogLevel::Error,
                 target: "homectl_server::tests".to_string(),
                 message: format!("entry-{index}"),
+                references: Vec::new(),
+                details: None,
             });
         }
 

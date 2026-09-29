@@ -33,6 +33,7 @@ pub struct SnapshotChanges {
     pub timers: bool,
     pub ui_state: bool,
     pub warming_up: bool,
+    pub device_health: bool,
 }
 
 impl SnapshotChanges {
@@ -47,6 +48,7 @@ impl SnapshotChanges {
             timers: false,
             ui_state: false,
             warming_up: false,
+            device_health: false,
         }
     }
 
@@ -61,6 +63,7 @@ impl SnapshotChanges {
             timers: true,
             ui_state: true,
             warming_up: true,
+            device_health: true,
         }
     }
 
@@ -117,6 +120,7 @@ impl SnapshotChanges {
         self.timers |= other.timers;
         self.ui_state |= other.ui_state;
         self.warming_up |= other.warming_up;
+        self.device_health |= other.device_health;
     }
 
     pub const fn is_empty(self) -> bool {
@@ -129,11 +133,13 @@ impl SnapshotChanges {
             && !self.timers
             && !self.ui_state
             && !self.warming_up
+            && !self.device_health
     }
 }
 
 #[derive(Clone)]
 pub struct RuntimeSnapshot {
+    pub device_health: Arc<crate::types::device_health::DeviceHealthSnapshot>,
     pub runtime_config: Arc<ConfigExport>,
     pub devices: Arc<DevicesState>,
     pub flattened_groups: Arc<FlattenedGroupsConfig>,

@@ -18,7 +18,9 @@ for (let i = 2; i < process.argv.length; i += 2) {
 }
 const url = args.get('url');
 if (!url) {
-  console.error('usage: node dev/cdp-probe.mjs --url <url> [--out shot.png] [--eval expr]');
+  console.error(
+    'usage: node dev/cdp-probe.mjs --url <url> [--out shot.png] [--eval expr]',
+  );
   process.exit(2);
 }
 const width = Number(args.get('width') ?? 430);
@@ -89,14 +91,16 @@ try {
   cdp.on('Network.requestWillBeSent', (params) => {
     const { method, url: requestUrl } = params.request;
     if (method === 'GET' || method === 'OPTIONS' || method === 'HEAD') return;
-    if (/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/)/.test(requestUrl)) return;
+    if (/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/)/.test(requestUrl))
+      return;
     problems.push(`NON_LOCAL_WRITE ${method} ${requestUrl}`);
   });
   cdp.on('Runtime.exceptionThrown', (params) => {
     problems.push(`exception: ${params.exceptionDetails?.text ?? 'unknown'}`);
   });
   cdp.on('Log.entryAdded', (params) => {
-    if (params.entry.level === 'error') problems.push(`log: ${params.entry.text}`);
+    if (params.entry.level === 'error')
+      problems.push(`log: ${params.entry.text}`);
   });
   await cdp.send('Emulation.setDeviceMetricsOverride', {
     width,
@@ -105,16 +109,39 @@ try {
     mobile: width < 700,
   });
   await cdp.send('Page.navigate', { url });
+  await cdp.send('Page.bringToFront');
   await new Promise((resolve) => setTimeout(resolve, settleMs));
 
-  if (args.get('eval')) {
-    const expression = args.get('eval');
+  if (args.get('driver-file')) {
+    const { pathToFileURL } = await import('node:url');
+    const { resolve } = await import('node:path');
+    const driver = await import(
+      pathToFileURL(resolve(args.get('driver-file'))).href
+    );
+    const result = await driver.default(cdp, { width, height, url });
+    console.log(JSON.stringify({ driven: result }, null, 1));
+    if (result?.passed === false) process.exitCode = 1;
+  }
+
+  if (args.get('eval') || args.get('eval-file')) {
+    const source =
+      args.get('eval') ??
+      (await (
+        await import('node:fs/promises')
+      ).readFile(args.get('eval-file'), 'utf8'));
     const result = await cdp.send('Runtime.evaluate', {
-      expression: `(async () => (${expression}))()`,
+      expression: `(async () => (${source.trim().replace(/;$/, '')}))()`,
       returnByValue: true,
       awaitPromise: true,
     });
-    console.log(JSON.stringify({ evaluated: result.result?.value ?? null }, null, 1));
+    console.log(
+      JSON.stringify({ evaluated: result.result?.value ?? null }, null, 1),
+    );
+    if (result.exceptionDetails || result.result?.value?.passed === false) {
+      if (result.exceptionDetails)
+        console.error(JSON.stringify(result.exceptionDetails));
+      process.exitCode = 1;
+    }
   }
 
   if (args.get('out')) {
@@ -126,7 +153,15 @@ try {
     writeFileSync(args.get('out'), Buffer.from(shot.data, 'base64'));
   }
 } finally {
-  console.log(JSON.stringify({ url, viewport: { width, height }, problems: problems.slice(0, 8) }));
+  console.log(
+    JSON.stringify({
+      url,
+      viewport: { width, height },
+      problems: problems.slice(0, 8),
+    }),
+  );
   socket.close();
-  await fetch(`http://127.0.0.1:${port}/json/close/${targetId}`).catch(() => {});
+  await fetch(`http://127.0.0.1:${port}/json/close/${targetId}`).catch(
+    () => {},
+  );
 }

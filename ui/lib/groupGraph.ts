@@ -79,12 +79,13 @@ function collectGroupKeys(
     return;
   }
   for (const [key, item] of Object.entries(value as GroupKeyCarrier)) {
-    if (key === 'group_keys' && Array.isArray(item)) {
+    if ((key === 'group_keys' || key === 'groups') && Array.isArray(item)) {
       for (const entry of item) {
         if (typeof entry === 'string') found.add(entry);
       }
       continue;
     }
+    if (key === 'group_id' && typeof item === 'string') found.add(item);
     collectGroupKeys(item, found, seen);
   }
 }
@@ -161,4 +162,33 @@ export function suggestId(
   let suffix = 2;
   while (existingIds.includes(`${base}_${suffix}`)) suffix += 1;
   return `${base}_${suffix}`;
+}
+
+/** Resolve inherited membership while retaining its immediate source links. */
+export function inheritedGroupDevices(
+  group: GroupNode & GroupLike,
+  groups: readonly (GroupNode & GroupLike)[],
+): { key: string; via: string[] }[] {
+  const byId = new Map(groups.map((row) => [row.id, row]));
+  const direct = new Set((group.devices ?? []).map(groupDeviceKey));
+  const inherited = new Map<string, Set<string>>();
+  for (const source of group.linked_groups ?? []) {
+    const pending = [source];
+    const seen = new Set([group.id]);
+    while (pending.length) {
+      const id = pending.pop()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const row = byId.get(id);
+      if (!row) continue;
+      for (const device of row.devices ?? []) {
+        const key = groupDeviceKey(device);
+        if (direct.has(key)) continue;
+        if (!inherited.has(key)) inherited.set(key, new Set());
+        inherited.get(key)!.add(source);
+      }
+      pending.push(...(row.linked_groups ?? []));
+    }
+  }
+  return [...inherited].map(([key, via]) => ({ key, via: [...via] }));
 }

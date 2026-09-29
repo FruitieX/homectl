@@ -77,7 +77,7 @@ struct RuntimeStatusResponse {
     memory_only_mode: bool,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 struct CoreConfigPayload {
     warmup_time_seconds: i32,
     #[serde(default)]
@@ -96,14 +96,25 @@ struct CoreConfigPayload {
 #[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 struct CoreConfigPatch {
+    expected: Option<CoreConfigPayload>,
     warmup_time_seconds: Option<i32>,
+    #[serde(default, deserialize_with = "present_nullable")]
     default_transition_ms: Option<Option<u64>>,
+    #[serde(default, deserialize_with = "present_nullable")]
     scene_transition_ms: Option<Option<u64>>,
     weather_api_url: Option<String>,
     train_api_url: Option<String>,
     influx_url: Option<String>,
     influx_token: Option<String>,
     calendar_ics_url: Option<String>,
+}
+
+fn present_nullable<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 impl CoreConfigPatch {
@@ -222,18 +233,6 @@ impl<T: Serialize> ApiResponse<T> {
             StatusCode::OK,
         )
     }
-
-    fn created(data: T) -> warp::reply::WithStatus<warp::reply::Json> {
-        warp::reply::with_status(
-            warp::reply::json(&ApiResponse {
-                success: true,
-                data: Some(data),
-                error: None,
-                write: None,
-            }),
-            StatusCode::CREATED,
-        )
-    }
 }
 
 /// Serialize configuration writes through persistence without blocking the state actor.
@@ -327,6 +326,13 @@ async fn apply_runtime_config_snapshot(
     runtime_config: ConfigExport,
     _guard: &tokio::sync::OwnedMutexGuard<()>,
 ) -> color_eyre::Result<()> {
+    for setting in &runtime_config.widget_settings {
+        crate::types::device_health::ReportingPolicy::validate_setting(
+            &setting.key,
+            &setting.config,
+        )
+        .map_err(|error| eyre::eyre!(error))?;
+    }
     runtime_config
         .validate_calibration_profiles()
         .map_err(|error| eyre::eyre!(error))?;
@@ -376,12 +382,19 @@ async fn validate_imported_routines(
         .await?;
     let catalog = ConfigCatalog::new(device_keys, runtime_config);
 
+    validate_routine_catalog(runtime_config, &catalog)
+}
+
+fn validate_routine_catalog(
+    runtime_config: &ConfigExport,
+    catalog: &ConfigCatalog,
+) -> color_eyre::Result<()> {
     for row in &runtime_config.routines {
         match automation::row_semantics(row) {
             RoutineSemantics::V1 => {}
             RoutineSemantics::V2 => {
                 if row.enabled {
-                    if let Err(report) = automation::compile_row(row, &catalog) {
+                    if let Err(report) = automation::compile_row(row, catalog) {
                         return Err(eyre::eyre!(
                             "Routine '{}' is enabled but invalid: {}",
                             row.id,
@@ -1550,15 +1563,18 @@ fn group_response_row(
 }
 
 fn legacy_default_floorplan(config: &config_queries::ConfigExport) -> Option<FloorplanExportRow> {
-    let floorplan = config.floorplan.as_ref();
+    if !config.floorplans.is_empty() {
+        return None;
+    }
+    let floorplan = config.floorplan.as_ref()?;
 
     Some(FloorplanExportRow {
         id: "default".to_string(),
         name: "Default".to_string(),
-        image_data: floorplan.and_then(|floorplan| floorplan.image_data.clone()),
-        image_mime_type: floorplan.and_then(|floorplan| floorplan.image_mime_type.clone()),
-        width: floorplan.and_then(|floorplan| floorplan.width),
-        height: floorplan.and_then(|floorplan| floorplan.height),
+        image_data: floorplan.image_data.clone(),
+        image_mime_type: floorplan.image_mime_type.clone(),
+        width: floorplan.width,
+        height: floorplan.height,
         grid_data: None,
     })
 }
@@ -1610,35 +1626,62 @@ pub fn config(
     snapshot: &SnapshotHandle,
     handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("config").and(
-        core_routes(snapshot, handle)
-            .or(runtime_status_routes())
-            .or(diagnostics_routes(snapshot))
-            .or(logs_routes())
-            .or(routine_history_routes())
-            .or(value_history_routes())
-            .or(value_fields_routes(handle))
-            .or(routine_preview_routes(handle))
-            .or(device_display_name_routes(snapshot, handle))
-            .or(device_color_calibration_routes(snapshot, handle))
-            .or(device_sensor_config_routes(snapshot, handle))
-            .or(sensor_catalog_routes(snapshot, handle))
-            .or(device_config_routes(handle))
-            .or(integration_schema_routes())
-            .or(integrations_routes(snapshot, handle))
-            .or(groups_routes(snapshot, handle))
-            .or(scenes_routes(snapshot, handle))
-            .or(routines_routes(snapshot, handle))
-            .or(helpers_routes(snapshot, handle))
-            .or(sources_routes(snapshot, handle))
-            .or(assistant_routes(snapshot, handle))
-            .or(floorplans_routes(snapshot, handle))
-            .or(floorplan_routes(snapshot, handle))
-            .or(dashboard_routes(snapshot, handle))
-            .or(scenario_suite_routes(snapshot, handle))
-            .or(export_import_routes(snapshot, handle))
-            .or(migrate_routes(snapshot, handle)),
-    )
+    warp::path("config")
+        .and(
+            core_routes(snapshot, handle)
+                .or(preferences::preferences_routes(snapshot, handle))
+                .or(widget_sources::routes(snapshot, handle))
+                .or(warp::path!("device-health")
+                    .and(warp::get())
+                    .and(with_snapshot(snapshot))
+                    .map(|snapshot: SnapshotHandle| {
+                        let snapshot = snapshot.load();
+                        let mut health = snapshot.device_health.as_ref().clone();
+                        let diagnostics =
+                            crate::core::config_diagnostics::inspect_config(&snapshot);
+                        for issue in diagnostics.issues {
+                            if issue.severity
+                                == crate::types::config_diagnostics::DiagnosticSeverity::Warning
+                            {
+                                health.attention_device_keys.extend(issue.device_keys);
+                            }
+                        }
+                        health.attention_device_keys.sort();
+                        health.attention_device_keys.dedup();
+                        ApiResponse::success(health)
+                    }))
+                .or(runtime_status_routes())
+                .or(diagnostics_routes(snapshot))
+                .or(logs_routes())
+                .or(routine_history_routes())
+                .or(value_history_routes())
+                .or(value_fields_routes(handle))
+                .or(routine_preview_routes(handle))
+                .or(device_display_name_routes(snapshot, handle))
+                .or(device_settings::routes(snapshot, handle))
+                .or(device_color_calibration_routes(snapshot, handle))
+                .or(device_sensor_config_routes(snapshot, handle))
+                .or(sensor_catalog_routes(snapshot, handle))
+                .or(device_config_routes(handle))
+                .or(integration_schema_routes())
+                .or(integrations_routes(snapshot, handle))
+                .or(groups_routes(snapshot, handle))
+                .or(scenes_routes(snapshot, handle))
+                .map(warp::Reply::into_response)
+                .boxed()
+                .or(routines_routes(snapshot, handle))
+                .or(helpers_routes(snapshot, handle))
+                .or(sources_routes(snapshot, handle))
+                .or(assistant_routes(snapshot, handle))
+                .or(floorplans_routes(snapshot, handle))
+                .or(floorplan_routes(snapshot, handle))
+                .or(dashboard::routes(snapshot, handle))
+                .or(scenario_suite_routes(snapshot, handle))
+                .or(export_import_routes(snapshot, handle))
+                .or(migrate_routes(snapshot, handle)),
+        )
+        .map(warp::Reply::into_response)
+        .boxed()
 }
 
 // ============================================================================
@@ -1654,6 +1697,8 @@ pub struct SensorCatalogItem {
     pub source: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    #[serde(default, flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1663,6 +1708,8 @@ pub struct SensorCatalogGroup {
     pub name: String,
     #[serde(default)]
     pub sensor_ids: Vec<String>,
+    #[serde(default, flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1670,6 +1717,8 @@ pub struct SensorCatalogGroup {
 pub struct SensorCatalog {
     pub sensors: Vec<SensorCatalogItem>,
     pub groups: Vec<SensorCatalogGroup>,
+    #[serde(default, flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 fn default_true() -> bool {
@@ -1716,87 +1765,95 @@ fn sensor_catalog_routes(
     get.or(update)
 }
 
+#[derive(Deserialize)]
+struct SensorCatalogWrite {
+    #[serde(flatten)]
+    catalog: SensorCatalog,
+    expected: Option<SensorCatalog>,
+}
+
+fn validate_sensor_catalog(catalog: &SensorCatalog) -> Result<(), String> {
+    let mut ids = HashSet::new();
+    for sensor in &catalog.sensors {
+        if sensor.id.trim().is_empty() || sensor.id.trim() != sensor.id || !ids.insert(&sensor.id) {
+            return Err(
+                "Sensor IDs must be non-empty, unique and have no surrounding whitespace.".into(),
+            );
+        }
+        if sensor.name.trim().is_empty() || sensor.source.trim().is_empty() {
+            return Err(format!("Sensor '{}' needs a name and source.", sensor.id));
+        }
+    }
+    let mut group_ids = HashSet::new();
+    for group in &catalog.groups {
+        if group.id.trim().is_empty()
+            || group.id.trim() != group.id
+            || !group_ids.insert(&group.id)
+            || group.name.trim().is_empty()
+        {
+            return Err("Sensor groups need unique IDs and non-empty names.".into());
+        }
+        let mut members = HashSet::new();
+        for id in &group.sensor_ids {
+            if !ids.contains(id) || !members.insert(id) {
+                return Err(format!(
+                    "Group '{}' has a missing or duplicate sensor reference: {id}",
+                    group.name
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 async fn update_sensor_catalog(
-    mut catalog: SensorCatalog,
+    request: SensorCatalogWrite,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    if let Err(error) = validate_sensor_catalog(&request.catalog) {
+        return Ok(error_response(&error, StatusCode::BAD_REQUEST));
+    }
     let _write_guard = match config_write_lock(&handle).await {
         Ok(guard) => guard,
         Err(_) => return Ok(actor_unavailable()),
     };
-    let mut seen = HashSet::new();
-    catalog.sensors.retain(|sensor| {
-        let id = sensor.id.trim();
-        !id.is_empty() && !sensor.name.trim().is_empty() && seen.insert(id.to_string())
-    });
-    if catalog.sensors.is_empty() {
-        return Ok(error_response(
-            "At least one sensor is required",
-            StatusCode::BAD_REQUEST,
-        ));
-    }
-    for sensor in &mut catalog.sensors {
-        sensor.id = sensor.id.trim().to_string();
-        sensor.name = sensor.name.trim().to_string();
-        if sensor.source.trim().is_empty() {
-            sensor.source = default_sensor_source();
-        }
-    }
-    let valid_ids = catalog
-        .sensors
-        .iter()
-        .map(|sensor| sensor.id.as_str())
-        .collect::<HashSet<_>>();
-    for group in &mut catalog.groups {
-        group.id = group.id.trim().to_string();
-        group.name = group.name.trim().to_string();
-        group
-            .sensor_ids
-            .retain(|id| valid_ids.contains(id.as_str()));
-        group.sensor_ids.sort();
-        group.sensor_ids.dedup();
-    }
-    catalog
-        .groups
-        .retain(|group| !group.id.is_empty() && !group.name.is_empty());
-    catalog
-        .sensors
-        .sort_by_key(|sensor| sensor.name.to_lowercase());
-    catalog
-        .groups
-        .sort_by_key(|group| group.name.to_lowercase());
-
-    let setting = config_queries::WidgetSettingRow {
-        key: SENSOR_CATALOG_SETTING_KEY.to_string(),
-        config: serde_json::to_value(&catalog).unwrap_or_default(),
-    };
-    let persistence_setting = setting.clone();
     let result = handle
         .mutate(move |state| {
             Box::pin(async move {
+                let current = read_sensor_catalog(&state.runtime_config.widget_settings);
+                if request.expected.as_ref().is_some_and(|expected| {
+                    serde_json::to_value(expected).unwrap()
+                        != serde_json::to_value(&current).unwrap()
+                }) {
+                    return Err(current);
+                }
+                let setting = config_queries::WidgetSettingRow {
+                    key: SENSOR_CATALOG_SETTING_KEY.into(),
+                    config: serde_json::to_value(&request.catalog).unwrap(),
+                };
                 state.upsert_widget_setting(setting.clone());
-                Ok::<_, ()>(
-                    state
-                        .runtime_config
-                        .widget_settings
-                        .iter()
-                        .find(|item| item.key == SENSOR_CATALOG_SETTING_KEY)
-                        .and_then(|item| serde_json::from_value(item.config.clone()).ok())
-                        .unwrap_or(catalog),
-                )
+                Ok((request.catalog, setting))
             })
         })
         .await;
-    let response = match result {
+    let (catalog, setting) = match result {
         Ok(Ok(value)) => value,
-        _ => return Ok(actor_unavailable()),
+        Ok(Err(current)) => {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&serde_json::json!({
+                    "success": false, "error": "Sensor catalog changed elsewhere.", "current": current,
+                })),
+                StatusCode::CONFLICT,
+            ))
+        }
+        Err(_) => return Ok(actor_unavailable()),
     };
-    let database_available = db::is_db_connected();
-    let persistence = config_queries::db_upsert_widget_setting(&persistence_setting).await;
+    let available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_widget_setting(&setting).await;
     Ok(config_write_response(
-        response,
+        catalog,
         persistence,
-        database_available,
+        available,
         StatusCode::OK,
     ))
 }
@@ -2200,12 +2257,26 @@ async fn update_core_config(
     let result = handle
         .mutate(move |state| {
             Box::pin(async move {
-                let (core, widgets) = patch.resolve(&state.runtime_config)?;
+                let current = CoreConfigPayload::from_runtime(&state.runtime_config);
+                if patch
+                    .expected
+                    .as_ref()
+                    .is_some_and(|expected| expected != &current)
+                {
+                    return Err((
+                        StatusCode::CONFLICT,
+                        "System settings changed elsewhere.".to_string(),
+                        Some(current),
+                    ));
+                }
+                let (core, widgets) = patch
+                    .resolve(&state.runtime_config)
+                    .map_err(|error| (StatusCode::BAD_REQUEST, error, None))?;
                 state.update_core_config(core.clone());
                 for setting in &widgets {
                     state.upsert_widget_setting(setting.clone());
                 }
-                Ok::<_, String>((
+                Ok((
                     core,
                     state.runtime_config.widget_settings.clone(),
                     CoreConfigPayload::from_runtime(&state.runtime_config),
@@ -2215,7 +2286,14 @@ async fn update_core_config(
         .await;
     let (core, widgets, response) = match result {
         Ok(Ok(result)) => result,
-        Ok(Err(error)) => return Ok(error_response(&error, StatusCode::BAD_REQUEST)),
+        Ok(Err((status, error, current))) => {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(
+                    &serde_json::json!({"success":false,"error":error,"current":current}),
+                ),
+                status,
+            ))
+        }
         Err(_) => return Ok(actor_unavailable()),
     };
     let database_available = db::is_db_connected();
@@ -2263,11 +2341,26 @@ async fn list_helpers(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Reje
     Ok(ApiResponse::success(snap.helper_statuses.as_ref().clone()))
 }
 
+#[derive(Deserialize)]
+struct HelperUpdate {
+    #[serde(flatten)]
+    definition: HelperDefinition,
+    #[serde(default)]
+    expected: Option<HelperDefinition>,
+    #[serde(default)]
+    create_only: bool,
+}
+
 async fn upsert_helper(
     id: String,
-    definition: HelperDefinition,
+    request: HelperUpdate,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let HelperUpdate {
+        definition,
+        expected,
+        create_only,
+    } = request;
     if definition.id.0 != id {
         return Ok(error_response(
             "Helper id in the path does not match the body.",
@@ -2281,9 +2374,21 @@ async fn upsert_helper(
     let result = handle
         .mutate(move |state| {
             Box::pin(async move {
-                definition.validate()?;
+                let current = state.runtime_config.helpers.iter().find(|row| row.id == definition.id);
+                if create_only && current.is_some() {
+                    return Err((StatusCode::CONFLICT, serde_json::json!({"success": false, "error": "This helper ID is already in use."})));
+                }
+                if let Some(expected) = expected.as_ref() {
+                    match current {
+                        None => return Err((StatusCode::NOT_FOUND, serde_json::json!({"success": false, "error": "This helper was deleted. Your draft has not been saved."}))),
+                        Some(current) if current != expected => return Err((StatusCode::CONFLICT, serde_json::json!({"success": false, "error": "This helper changed elsewhere.", "current": current}))),
+                        _ => {}
+                    }
+                }
+                let invalid = |error: String| (StatusCode::BAD_REQUEST, serde_json::json!({"success": false, "error": error}));
+                definition.validate().map_err(invalid)?;
                 let id = definition.id.clone();
-                state.helpers.upsert_definition(definition.clone())?;
+                state.helpers.upsert_definition(definition.clone()).map_err(invalid)?;
                 if let Some(existing) = state
                     .runtime_config
                     .helpers
@@ -2304,19 +2409,22 @@ async fn upsert_helper(
                     routine_statuses: true,
                     ..SnapshotChanges::none()
                 });
-                Ok::<_, String>(definition)
+                let status = state.helpers.statuses().into_iter().find(|row| row.id == definition.id).expect("just inserted helper");
+                Ok((definition, status))
             })
         })
         .await;
-    let definition = match result {
-        Ok(Ok(definition)) => definition,
-        Ok(Err(error)) => return Ok(error_response(&error, StatusCode::BAD_REQUEST)),
+    let (definition, status) = match result {
+        Ok(Ok(result)) => result,
+        Ok(Err((status, body))) => {
+            return Ok(warp::reply::with_status(warp::reply::json(&body), status))
+        }
         Err(_) => return Ok(actor_unavailable()),
     };
     let database_available = db::is_db_connected();
     let persistence = config_queries::db_upsert_helper(&definition).await;
     Ok(config_write_response(
-        serde_json::json!({ "id": definition.id.0 }),
+        status,
         persistence,
         database_available,
         StatusCode::OK,
@@ -3237,7 +3345,14 @@ async fn delete_device_sensor_config(
 mod integrations;
 use integrations::{integration_schema_routes, integrations_routes};
 
+mod backups;
+pub(crate) mod dashboard;
+mod device_settings;
+mod floorplan_editor;
 mod groups;
+mod migration_review;
+mod preferences;
+mod widget_sources;
 use groups::groups_routes;
 
 mod scenes;
@@ -3280,7 +3395,10 @@ fn floorplans_routes(
         .and(with_handle(handle))
         .and_then(delete_floorplan);
 
-    list.or(create).or(update).or(delete)
+    list.or(create)
+        .or(update)
+        .or(delete)
+        .or(floorplan_editor::routes(snapshot, handle))
 }
 
 async fn list_floorplans(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
@@ -3294,11 +3412,18 @@ async fn create_floorplan(
     floorplan: FloorplanMetadataRow,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
     let fp_for_state = floorplan.clone();
-    let created = handle
+    let created = match handle
         .mutate(move |state| Box::pin(async move { state.create_floorplan_metadata(fp_for_state) }))
         .await
-        .unwrap_or(false);
+    {
+        Ok(value) => value,
+        Err(_) => return Ok(actor_unavailable()),
+    };
 
     if !created {
         return Ok(error_response(
@@ -3307,11 +3432,14 @@ async fn create_floorplan(
         ));
     }
 
-    if let Err(e) = config_queries::db_create_floorplan(&floorplan).await {
-        warn!("Failed to persist floorplan creation: {e}");
-    }
-
-    Ok(ApiResponse::created(floorplan))
+    let available = db::is_db_connected();
+    let persistence = config_queries::db_create_floorplan(&floorplan).await;
+    Ok(config_write_response(
+        floorplan,
+        persistence,
+        available,
+        StatusCode::CREATED,
+    ))
 }
 
 async fn update_floorplan(
@@ -3319,40 +3447,57 @@ async fn update_floorplan(
     mut floorplan: FloorplanMetadataRow,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
     floorplan.id = id;
 
     let fp_for_state = floorplan.clone();
-    let _ = handle
-        .mutate(move |state| {
-            Box::pin(async move {
-                state.update_floorplan_metadata(fp_for_state);
-            })
-        })
+    let updated = handle
+        .mutate(move |state| Box::pin(async move { state.update_floorplan_metadata(fp_for_state) }))
         .await;
-
-    if let Err(e) = config_queries::db_update_floorplan_metadata(&floorplan).await {
-        warn!("Failed to persist floorplan metadata update: {e}");
+    match updated {
+        Ok(true) => {}
+        Ok(false) => return Ok(not_found("Floorplan")),
+        Err(_) => return Ok(actor_unavailable()),
     }
-
-    Ok(ApiResponse::success(floorplan))
+    let available = db::is_db_connected();
+    let persistence = config_queries::db_update_floorplan_metadata(&floorplan).await;
+    Ok(config_write_response(
+        floorplan,
+        persistence,
+        available,
+        StatusCode::OK,
+    ))
 }
 
 async fn delete_floorplan(id: String, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
     let id_for_state = id.clone();
-    let deleted = handle
+    let deleted = match handle
         .mutate(move |state| Box::pin(async move { state.delete_floorplan(&id_for_state) }))
         .await
-        .unwrap_or(false);
+    {
+        Ok(value) => value,
+        Err(_) => return Ok(actor_unavailable()),
+    };
 
     if !deleted {
         return Ok(not_found("Floorplan"));
     }
 
-    if let Err(e) = config_queries::db_delete_floorplan(&id).await {
-        warn!("Failed to persist floorplan deletion: {e}");
-    }
-
-    Ok(ApiResponse::success(()))
+    let available = db::is_db_connected();
+    let persistence = config_queries::db_delete_floorplan(&id).await.map(|_| ());
+    Ok(config_write_response(
+        (),
+        persistence,
+        available,
+        StatusCode::OK,
+    ))
 }
 
 fn floorplan_id_query() -> impl Filter<Extract = (String,), Error = std::convert::Infallible> + Clone
@@ -3486,6 +3631,10 @@ async fn upload_floorplan(
     floorplan_id: String,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
     // TODO: Get width/height from image metadata
     let floorplan = FloorplanRow {
         image_data: Some(body.to_vec()),
@@ -3496,19 +3645,26 @@ async fn upload_floorplan(
 
     let id_for_state = floorplan_id.clone();
     let fp_for_state = floorplan.clone();
-    let _ = handle
+    if handle
         .mutate(move |state| {
             Box::pin(async move {
                 state.upsert_floorplan_content(&id_for_state, fp_for_state);
             })
         })
-        .await;
-
-    if let Err(e) = config_queries::db_upsert_floorplan_by_id(&floorplan_id, &floorplan).await {
-        warn!("Failed to persist floorplan upload: {e}");
+        .await
+        .is_err()
+    {
+        return Ok(actor_unavailable());
     }
 
-    Ok(ApiResponse::success(()))
+    let available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_floorplan_by_id(&floorplan_id, &floorplan).await;
+    Ok(config_write_response(
+        (),
+        persistence,
+        available,
+        StatusCode::OK,
+    ))
 }
 
 async fn get_group_positions(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
@@ -3583,23 +3739,33 @@ async fn save_floorplan_grid(
     floorplan_id: String,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
     let id_for_state = floorplan_id.clone();
     let grid_for_state = request.grid.clone();
-    let _ = handle
+    if handle
         .mutate(move |state| {
             Box::pin(async move {
                 state.set_floorplan_grid(&id_for_state, grid_for_state);
             })
         })
-        .await;
-
-    if let Err(e) =
-        config_queries::db_upsert_floorplan_grid_by_id(&floorplan_id, &request.grid).await
+        .await
+        .is_err()
     {
-        warn!("Failed to persist floorplan grid: {e}");
+        return Ok(actor_unavailable());
     }
 
-    Ok(ApiResponse::success(()))
+    let available = db::is_db_connected();
+    let persistence =
+        config_queries::db_upsert_floorplan_grid_by_id(&floorplan_id, &request.grid).await;
+    Ok(config_write_response(
+        (),
+        persistence,
+        available,
+        StatusCode::OK,
+    ))
 }
 
 async fn get_floorplan_image(
@@ -3631,6 +3797,10 @@ async fn upload_floorplan_image(
     floorplan_id: String,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
     use futures::TryStreamExt;
 
     let mut image_data: Option<Vec<u8>> = None;
@@ -3660,19 +3830,27 @@ async fn upload_floorplan_image(
 
         let id_for_state = floorplan_id.clone();
         let fp_for_state = floorplan.clone();
-        let _ = handle
+        if handle
             .mutate(move |state| {
                 Box::pin(async move {
                     state.upsert_floorplan_content(&id_for_state, fp_for_state);
                 })
             })
-            .await;
-
-        if let Err(e) = config_queries::db_upsert_floorplan_by_id(&floorplan_id, &floorplan).await {
-            warn!("Failed to persist floorplan image upload: {e}");
+            .await
+            .is_err()
+        {
+            return Ok(actor_unavailable());
         }
 
-        Ok(ApiResponse::success(()))
+        let available = db::is_db_connected();
+        let persistence =
+            config_queries::db_upsert_floorplan_by_id(&floorplan_id, &floorplan).await;
+        Ok(config_write_response(
+            (),
+            persistence,
+            available,
+            StatusCode::OK,
+        ))
     } else {
         Ok(error_response(
             "No image data found",
@@ -3709,188 +3887,38 @@ async fn delete_floorplan_image(
     floorplan_id: String,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
     let id_for_state = floorplan_id.clone();
-    let deleted = handle
+    let deleted = match handle
         .mutate(move |state| Box::pin(async move { state.clear_floorplan_image(&id_for_state) }))
         .await
-        .unwrap_or(false);
+    {
+        Ok(value) => value,
+        Err(_) => return Ok(actor_unavailable()),
+    };
 
     if !deleted {
         return Ok(not_found("Floorplan image"));
     }
 
-    if let Err(e) = config_queries::db_clear_floorplan_image(&floorplan_id).await {
-        warn!("Failed to persist floorplan image deletion: {e}");
-    }
-
-    Ok(ApiResponse::success(()))
+    let available = db::is_db_connected();
+    let persistence = config_queries::db_clear_floorplan_image(&floorplan_id)
+        .await
+        .map(|_| ());
+    Ok(config_write_response(
+        (),
+        persistence,
+        available,
+        StatusCode::OK,
+    ))
 }
 
 // ============================================================================
 // Dashboard
 // ============================================================================
-
-fn dashboard_routes(
-    snapshot: &SnapshotHandle,
-    handle: &StateHandle,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    let get_layouts = warp::path!("dashboard" / "layouts")
-        .and(warp::get())
-        .and(with_snapshot(snapshot))
-        .and_then(get_dashboard_layouts);
-
-    let upsert_layout = warp::path!("dashboard" / "layouts")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_handle(handle))
-        .and_then(upsert_dashboard_layout);
-
-    let delete_layout = warp::path!("dashboard" / "layouts" / i32)
-        .and(warp::delete())
-        .and(with_handle(handle))
-        .and_then(delete_dashboard_layout);
-
-    let get_widgets = warp::path!("dashboard" / "layouts" / i32 / "widgets")
-        .and(warp::get())
-        .and(with_snapshot(snapshot))
-        .and_then(get_dashboard_widgets);
-
-    let upsert_widget = warp::path!("dashboard" / "widgets")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_handle(handle))
-        .and_then(upsert_dashboard_widget);
-
-    let upsert_widget_legacy = warp::path!("dashboard")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_handle(handle))
-        .and_then(upsert_dashboard_widget);
-
-    let delete_widget = warp::path!("dashboard" / "widgets" / i32)
-        .and(warp::delete())
-        .and(with_handle(handle))
-        .and_then(delete_dashboard_widget);
-
-    get_layouts
-        .or(upsert_layout)
-        .or(delete_layout)
-        .or(get_widgets)
-        .or(upsert_widget)
-        .or(upsert_widget_legacy)
-        .or(delete_widget)
-}
-
-async fn get_dashboard_layouts(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
-    let snap = snapshot.load();
-    Ok(ApiResponse::success(
-        snap.runtime_config.dashboard_layouts.clone(),
-    ))
-}
-
-async fn upsert_dashboard_layout(
-    layout: DashboardLayoutRow,
-    handle: StateHandle,
-) -> Result<impl Reply, warp::Rejection> {
-    let layout_for_state = layout.clone();
-    let local_layout = handle
-        .mutate(move |state| {
-            Box::pin(async move { state.upsert_dashboard_layout(layout_for_state) })
-        })
-        .await
-        .unwrap_or_else(|_| layout.clone());
-
-    match config_queries::db_upsert_dashboard_layout(&layout).await {
-        Ok(id) => Ok(ApiResponse::success(DashboardLayoutRow {
-            id,
-            name: local_layout.name,
-            is_default: local_layout.is_default,
-        })),
-        Err(e) => {
-            warn!("Failed to persist dashboard layout: {e}");
-            Ok(ApiResponse::success(local_layout))
-        }
-    }
-}
-
-async fn delete_dashboard_layout(
-    id: i32,
-    handle: StateHandle,
-) -> Result<impl Reply, warp::Rejection> {
-    let deleted = handle
-        .mutate(move |state| Box::pin(async move { state.delete_dashboard_layout(id) }))
-        .await
-        .unwrap_or(false);
-
-    if !deleted {
-        return Ok(not_found("Dashboard layout"));
-    }
-
-    if let Err(e) = config_queries::db_delete_dashboard_layout(id).await {
-        warn!("Failed to persist dashboard layout deletion: {e}");
-    }
-
-    Ok(ApiResponse::success(()))
-}
-
-async fn get_dashboard_widgets(
-    layout_id: i32,
-    snapshot: SnapshotHandle,
-) -> Result<impl Reply, warp::Rejection> {
-    let snap = snapshot.load();
-    Ok(ApiResponse::success(
-        snap.runtime_config
-            .dashboard_widgets
-            .iter()
-            .filter(|widget| widget.layout_id == layout_id)
-            .cloned()
-            .collect::<Vec<_>>(),
-    ))
-}
-
-async fn upsert_dashboard_widget(
-    widget: DashboardWidgetRow,
-    handle: StateHandle,
-) -> Result<impl Reply, warp::Rejection> {
-    let widget_for_state = widget.clone();
-    let local_widget = handle
-        .mutate(move |state| {
-            Box::pin(async move { state.upsert_dashboard_widget(widget_for_state) })
-        })
-        .await
-        .unwrap_or_else(|_| widget.clone());
-
-    match config_queries::db_upsert_dashboard_widget(&widget).await {
-        Ok(id) => Ok(ApiResponse::success(DashboardWidgetRow {
-            id,
-            ..local_widget
-        })),
-        Err(e) => {
-            warn!("Failed to persist dashboard widget: {e}");
-            Ok(ApiResponse::success(local_widget))
-        }
-    }
-}
-
-async fn delete_dashboard_widget(
-    id: i32,
-    handle: StateHandle,
-) -> Result<impl Reply, warp::Rejection> {
-    let deleted = handle
-        .mutate(move |state| Box::pin(async move { state.delete_dashboard_widget(id) }))
-        .await
-        .unwrap_or(false);
-
-    if !deleted {
-        return Ok(not_found("Dashboard widget"));
-    }
-
-    if let Err(e) = config_queries::db_delete_dashboard_widget(id).await {
-        warn!("Failed to persist dashboard widget deletion: {e}");
-    }
-
-    Ok(ApiResponse::success(()))
-}
 
 // ============================================================================
 // Export / Import
@@ -3900,6 +3928,8 @@ async fn delete_dashboard_widget(
 struct ImportQuery {
     #[serde(default)]
     save_version: bool,
+    #[serde(default)]
+    expected: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -3923,6 +3953,14 @@ fn secret_widget_field(setting_key: &str) -> Option<&'static str> {
 
 /// Drop secret widget fields from an export (unless requested explicitly).
 fn redact_widget_secrets(config: &mut ConfigExport) {
+    for widget in &mut config.dashboard_widgets {
+        dashboard::redact(widget);
+    }
+    for row in &mut config.integrations {
+        let mut value = serde_json::to_value(&*row).unwrap();
+        assistant::redact_integration_secrets(&mut value, &row.plugin);
+        *row = serde_json::from_value(value).unwrap();
+    }
     for setting in &mut config.widget_settings {
         let Some(field) = secret_widget_field(&setting.key) else {
             continue;
@@ -3939,6 +3977,28 @@ fn redact_widget_secrets(config: &mut ConfigExport) {
 /// the stored tokens. An explicit value (including an empty string) is kept
 /// as given; `?include_secrets=true` exports carry the real values.
 fn preserve_omitted_widget_secrets(config: &mut ConfigExport, current: &ConfigExport) {
+    for widget in &mut config.dashboard_widgets {
+        if let Some(stored) = current
+            .dashboard_widgets
+            .iter()
+            .find(|row| row.id == widget.id && row.layout_id == widget.layout_id)
+        {
+            dashboard::preserve_omitted_secrets(widget, stored);
+        }
+    }
+    for row in &mut config.integrations {
+        if let Some(stored) = current
+            .integrations
+            .iter()
+            .find(|stored| stored.id == row.id && stored.plugin == row.plugin)
+        {
+            assistant::restore_omitted_integration_secrets(
+                &mut row.config,
+                &stored.config,
+                &row.plugin,
+            );
+        }
+    }
     for setting in &mut config.widget_settings {
         let Some(field) = secret_widget_field(&setting.key) else {
             continue;
@@ -3977,11 +4037,18 @@ fn export_import_routes(
         .and(warp::path::end())
         .and(warp::post())
         .and(warp::query::<ImportQuery>())
+        .and(warp::body::content_length_limit(32 * 1024 * 1024))
         .and(warp::body::json())
         .and(with_handle(handle))
         .and_then(import_config);
 
-    export.or(import)
+    let preview = warp::path!("import" / "preview")
+        .and(warp::post())
+        .and(warp::body::content_length_limit(32 * 1024 * 1024))
+        .and(warp::body::json())
+        .and(with_snapshot(snapshot))
+        .and_then(backups::preview);
+    export.or(import).or(preview)
 }
 
 fn scenario_suite_routes(
@@ -4063,26 +4130,13 @@ async fn export_config(
 
 async fn import_config(
     query: ImportQuery,
-    mut config: ConfigExport,
+    raw: serde_json::Value,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    if let Some(suite) = &config.scenario_suite {
-        let parsed: ScenarioSuite = match serde_json::from_value(suite.clone()) {
-            Ok(parsed) => parsed,
-            Err(error) => {
-                return Ok(error_response(
-                    &format!("Invalid scenario suite: {error}"),
-                    StatusCode::BAD_REQUEST,
-                ))
-            }
-        };
-        if parsed.version != 1 || parsed.scenarios.is_empty() {
-            return Ok(error_response(
-                "Scenario suite must use version 1 and contain at least one scenario",
-                StatusCode::BAD_REQUEST,
-            ));
-        }
-    }
+    let mut config = match backups::parse(raw) {
+        Ok(config) => config,
+        Err(error) => return Ok(error_response(&error, StatusCode::BAD_REQUEST)),
+    };
     let write_guard = match config_write_lock(&handle).await {
         Ok(guard) => guard,
         Err(_) => return Ok(actor_unavailable()),
@@ -4099,9 +4153,17 @@ async fn import_config(
         Err(_) => return Ok(actor_unavailable()),
     };
     preserve_omitted_widget_secrets(&mut config, &current);
+    if query
+        .expected
+        .as_ref()
+        .is_some_and(|expected| *expected != backups::review_token(&current, &config))
+    {
+        return Ok(error_response("Configuration changed since this backup was reviewed. Review it again before restoring.", StatusCode::CONFLICT));
+    }
     // Optionally save version before import
     if query.save_version {
-        if let Err(e) = config_queries::db_save_config_version(&config, Some("Before import")).await
+        if let Err(e) =
+            config_queries::db_save_config_version(&current, Some("Before import")).await
         {
             warn!("Failed to save config version before import: {e}");
         }
@@ -4333,7 +4395,9 @@ fn migrate_routes(
         .and(with_handle(handle))
         .and_then(migrate_apply);
 
-    preview.or(apply)
+    migration_review::routes(snapshot, handle)
+        .or(preview)
+        .or(apply)
 }
 
 fn select_migration_preview(
@@ -4732,7 +4796,10 @@ fn canonicalize_migration_preview(
     for scene in &mut preview.scenes {
         let mut canonical_device_states = HashMap::new();
 
-        for (device_key, mut config_value) in std::mem::take(&mut scene.device_states) {
+        for (device_key, mut config_value) in std::mem::take(&mut scene.device_states)
+            .into_iter()
+            .collect::<BTreeMap<_, _>>()
+        {
             if !canonicalize_named_device_refs(
                 &mut config_value,
                 &lookup,
@@ -4786,7 +4853,10 @@ fn canonicalize_migration_preview(
 
         let mut canonical_group_states = HashMap::new();
 
-        for (group_id, mut config_value) in std::mem::take(&mut scene.group_states) {
+        for (group_id, mut config_value) in std::mem::take(&mut scene.group_states)
+            .into_iter()
+            .collect::<BTreeMap<_, _>>()
+        {
             if canonicalize_named_device_refs(
                 &mut config_value,
                 &lookup,
@@ -4801,6 +4871,7 @@ fn canonicalize_migration_preview(
     }
 
     for routine in &mut preview.routines {
+        let errors_before = errors.len();
         if !canonicalize_named_device_refs(
             &mut routine.rules,
             &lookup,
@@ -4817,6 +4888,10 @@ fn canonicalize_migration_preview(
             &mut errors,
         ) {
             routine.actions = serde_json::Value::Array(vec![]);
+        }
+        if errors.len() > errors_before {
+            routine.enabled = false;
+            push_unique_error(&mut errors, format!("routine '{}' was disabled because unresolved references were skipped; convert and review it before enabling", routine.id));
         }
     }
 
@@ -5036,6 +5111,224 @@ mod tests {
     use super::*;
     use crate::types::device::DeviceId;
     use ordered_float::OrderedFloat;
+
+    #[tokio::test]
+    async fn core_settings_compare_saved_values_and_distinguish_null_from_omission() {
+        use crate::core::state::actor::spawn_state_actor;
+        let (mut state, _events) = crate::core::event::tests::test_state();
+        state.runtime_config.core.default_transition_ms = Some(1200);
+        state.runtime_config.core.scene_transition_ms = Some(2400);
+        state.publish_snapshot(crate::core::snapshot::SnapshotChanges::all());
+        let original =
+            serde_json::to_value(CoreConfigPayload::from_runtime(&state.runtime_config)).unwrap();
+        let snapshot = state.snapshot.clone();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = spawn_state_actor(state, snapshot.clone(), tx);
+        let routes = core_routes(&snapshot, &handle);
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/core")
+            .json(&serde_json::json!({"default_transition_ms":null,"expected":original}))
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK, "{:?}", response.body());
+        assert_eq!(
+            snapshot.load().runtime_config.core.default_transition_ms,
+            None
+        );
+        assert_eq!(
+            snapshot.load().runtime_config.core.scene_transition_ms,
+            Some(2400),
+            "omission preserves the other transition"
+        );
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/core")
+            .json(&serde_json::json!({"warmup_time_seconds":10,"expected":original}))
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let response: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        assert_eq!(
+            response["current"]["default_transition_ms"],
+            serde_json::Value::Null
+        );
+        assert_eq!(response["current"]["scene_transition_ms"], 2400);
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/core")
+            .json(&serde_json::json!({"default_transition_ms":0,"scene_transition_ms":null}))
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            snapshot.load().runtime_config.core.default_transition_ms,
+            Some(0),
+            "zero is an immediate transition, not inheritance"
+        );
+        assert_eq!(
+            snapshot.load().runtime_config.core.scene_transition_ms,
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn sensor_catalog_preserves_collections_and_extensions_and_rejects_stale_or_invalid_saves(
+    ) {
+        use crate::core::state::actor::spawn_state_actor;
+        let (state, _events) = crate::core::event::tests::test_state();
+        let snapshot = state.snapshot.clone();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = spawn_state_actor(state, snapshot.clone(), tx);
+        let routes = sensor_catalog_routes(&snapshot, &handle);
+        let empty = serde_json::json!({"sensors":[],"groups":[]});
+        let mut value = serde_json::json!({
+            "sensors":[{"id":"b","name":"Bedroom","source":"influxdb","enabled":false,"future":{"keep":[1,2]}},{"id":"a","name":"Hall","source":"influxdb","enabled":true}],
+            "groups":[{"id":"indoor","name":"Inside","sensorIds":["b","a"],"future":true},{"id":"upstairs","name":"Upstairs","sensorIds":["b"]}],
+            "future_catalog":{"preserved":true}
+        });
+        value["expected"] = empty.clone();
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/sensors/catalog")
+            .json(&value)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK, "{:?}", response.body());
+        value.as_object_mut().unwrap().remove("expected");
+        let saved: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        assert_eq!(
+            saved["data"], value,
+            "preserve order and every unknown nested field"
+        );
+        assert!(
+            saved["data"].get("expected").is_none(),
+            "write baseline is not stored as an extension"
+        );
+        let mut stale = value.clone();
+        stale["expected"] = empty.clone();
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/sensors/catalog")
+            .json(&stale)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        for bad in [
+            serde_json::json!({"sensors":[{"id":"a","name":"A"},{"id":"a","name":"Again"}],"groups":[]}),
+            serde_json::json!({"sensors":[{"id":"a","name":""}],"groups":[]}),
+            serde_json::json!({"sensors":[],"groups":[{"id":"g","name":"Group","sensorIds":["missing"]}]}),
+        ] {
+            let response = warp::test::request()
+                .method("PUT")
+                .path("/sensors/catalog")
+                .json(&bad)
+                .reply(&routes)
+                .await;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            assert_eq!(
+                serde_json::to_value(read_sensor_catalog(
+                    &snapshot.load().runtime_config.widget_settings
+                ))
+                .unwrap(),
+                value
+            );
+        }
+        let mut clear = empty;
+        clear["expected"] = value;
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/sensors/catalog")
+            .json(&clear)
+            .reply(&routes)
+            .await;
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "clearing the final sensor must be possible"
+        );
+        assert!(
+            read_sensor_catalog(&snapshot.load().runtime_config.widget_settings)
+                .sensors
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn helper_definition_writes_reject_stale_and_duplicate_but_allow_live_value_changes() {
+        use crate::core::state::actor::spawn_state_actor;
+        use crate::types::automation_value::HelperKind;
+        let (state, _events) = crate::core::event::tests::test_state();
+        let snapshot = state.snapshot.clone();
+        let (deferred_tx, _deferred_rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = spawn_state_actor(state, snapshot.clone(), deferred_tx);
+        let routes = helpers_routes(&snapshot, &handle);
+        let definition = HelperDefinition::new("test_helper", "Test helper", HelperKind::Boolean);
+        let body = serde_json::to_value(&definition).unwrap();
+        let mut create = body.clone();
+        create["create_only"] = serde_json::json!(true);
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/helpers/test_helper")
+            .json(&create)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK, "{:?}", response.body());
+        let saved: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        assert_eq!(saved["data"]["name"], "Test helper");
+        assert_eq!(saved["data"]["value"], false);
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/helpers/test_helper")
+            .json(&create)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        // Runtime writes must not make a definition-only editing baseline stale.
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/helpers/test_helper/value")
+            .json(&serde_json::json!({"value": true}))
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let mut update = body.clone();
+        update["expected"] = body.clone();
+        update["name"] = serde_json::json!("Changed name");
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/helpers/test_helper")
+            .json(&update)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK, "{:?}", response.body());
+        let saved: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        assert_eq!(saved["data"]["value"], true);
+        update["name"] = serde_json::json!("Stale name");
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/helpers/test_helper")
+            .json(&update)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let conflict: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        assert_eq!(conflict["current"]["name"], "Changed name");
+        assert!(conflict["current"].get("value").is_none());
+        let missing = warp::test::request()
+            .method("DELETE")
+            .path("/helpers/test_helper")
+            .reply(&routes)
+            .await;
+        assert_eq!(missing.status(), StatusCode::OK);
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/helpers/test_helper")
+            .json(&update)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
 
     #[tokio::test]
     async fn what_if_preview_changes_only_its_isolated_device_copy() {
@@ -5550,7 +5843,7 @@ devices = [
 
         let preview = canonicalize_migration_preview(preview, &migration_test_devices(Vec::new()));
 
-        assert_eq!(preview.validation_errors.len(), 3);
+        assert_eq!(preview.validation_errors.len(), 4);
         assert!(preview
             .validation_errors
             .iter()
@@ -5562,6 +5855,10 @@ devices = [
         assert!(preview.groups[0].devices.is_empty());
         assert!(preview.scenes[0].device_states.is_empty());
         assert_eq!(preview.routines[0].rules, serde_json::Value::Array(vec![]));
+        assert!(
+            !preview.routines[0].enabled,
+            "A dropped condition must not enable an unguarded routine"
+        );
     }
 
     #[test]

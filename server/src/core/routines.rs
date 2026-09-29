@@ -873,6 +873,7 @@ impl Routines {
                 ),
                 kind: "execution_policy".to_string(),
                 targets: Vec::new(),
+                references: None,
                 disposition: crate::types::automation_trace::StepDisposition::Suppressed,
                 reason: Some(reason),
             }],

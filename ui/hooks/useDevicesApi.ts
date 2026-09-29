@@ -3,7 +3,10 @@ import { Device } from '@/bindings/Device';
 import { DevicesState } from '@/bindings/DevicesState';
 import { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { useGroups } from '@/hooks/useConfig';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+
+const EMPTY_DEVICES: Device[] = [];
 
 /**
  * Fetches the current device list from the REST API.
@@ -11,26 +14,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
  */
 export function useDevicesApi() {
   const { apiEndpoint } = useAppConfig();
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const refetch = useCallback(async () => {
-    try {
-      const res = await fetch(`${apiEndpoint}/api/v1/devices`);
-      const data = await res.json();
-      if (Array.isArray(data.devices)) {
-        setDevices(data.devices);
-      }
-    } catch {
-      // Server not reachable
-    } finally {
-      setLoading(false);
-    }
-  }, [apiEndpoint]);
-
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
+  const query = useQuery({
+    queryKey: ['devices', apiEndpoint],
+    queryFn: async ({ signal }): Promise<Device[]> => {
+      const response = await fetch(`${apiEndpoint}/api/v1/devices`, { signal });
+      if (!response.ok) throw new Error('Could not load devices');
+      const data = await response.json();
+      if (!Array.isArray(data.devices))
+        throw new Error('The device catalog response was invalid');
+      return data.devices;
+    },
+    refetchInterval: 10000,
+  });
+  const devices = query.data ?? EMPTY_DEVICES;
 
   const devicesState: DevicesState = useMemo(() => {
     const state: DevicesState = {};
@@ -40,7 +36,13 @@ export function useDevicesApi() {
     return state;
   }, [devices]);
 
-  return { devices, devicesState, loading, refetch };
+  return {
+    devices,
+    devicesState,
+    loading: query.isPending,
+    error: query.error,
+    refetch: query.refetch,
+  };
 }
 
 /**

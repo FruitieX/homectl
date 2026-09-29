@@ -11,10 +11,7 @@ import {
 
 export type DashboardGridSnap = 0.25 | 0.5 | 1;
 export type DashboardScreenSimulation =
-  | 'device'
-  | 'phone'
-  | 'tablet'
-  | 'desktop';
+  'device' | 'phone' | 'tablet' | 'desktop';
 
 export interface DashboardEditingSettings {
   gridSnap: DashboardGridSnap;
@@ -63,6 +60,8 @@ const dashboardEditingSettingsAtom = atomWithStorage<DashboardEditingSettings>(
     gridSnap: 0.25,
     screenSimulation: 'device',
   },
+  undefined,
+  { getOnInit: true },
 );
 
 export const useDashboardEditingSettings = () =>

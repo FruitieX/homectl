@@ -155,3 +155,30 @@ test('suggestId slugifies a name and avoids collisions', () => {
   assert.equal(suggestId('   ', []), 'room');
   assert.equal(suggestId('3rd floor', ['3rd_floor']), '3rd_floor_2');
 });
+
+test('v2 group targets and comparison sources are included in usage', () => {
+  const usage = describeGroupUsage(
+    {
+      scenes: [],
+      routines: [
+        {
+          id: 'v2',
+          name: 'V2',
+          definition_v2: {
+            program: { steps: [{ targets: { groups: ['hall'] } }] },
+          },
+        },
+        {
+          id: 'condition',
+          name: 'Condition',
+          definition_v2: { condition: { group_id: 'hall' } },
+        },
+      ],
+    },
+    'hall',
+  );
+  assert.deepEqual(
+    usage.routines.map((row) => row.id),
+    ['v2', 'condition'],
+  );
+});

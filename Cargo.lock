@@ -2311,6 +2311,7 @@ version = "0.9.5"
 dependencies = [
  "arc-swap",
  "async-trait",
+ "base64 0.22.1",
  "boa_engine",
  "byteorder",
  "bytes",

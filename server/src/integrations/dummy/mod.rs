@@ -73,6 +73,7 @@ impl Integration for Dummy {
                 None,
             );
             self.event_tx.send(Event::ExternalStateUpdate {
+                report_retained: false,
                 device,
                 integration_epoch: None,
             });

@@ -1,21 +1,17 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
+import '@/styles/settings.css';
+import { useDashboardArrangement } from '@/hooks/useDashboardArrangement';
+import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
+import { RetainedDrafts } from '@/ui/settings/SettingsDrafts';
 import {
   useDashboardSpacing,
   useDashboardSpacingSettings,
   dashboardSpacingStyles,
 } from '@/hooks/dashboardSpacing';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 
-import {
-  useDashboardLayouts,
-  useDashboardWidgets,
-  type DashboardWidget,
-} from '@/hooks/useDashboard';
-import {
-  useDashboardEditingSettings,
-  type DashboardGridSnap,
-  type DashboardScreenSimulation,
-} from '@/hooks/dashboardEditing';
+import { useDashboardLayouts, useDashboardWidgets } from '@/hooks/useDashboard';
+import { useDashboardEditingSettings } from '@/hooks/dashboardEditing';
 import { cn } from '@/lib/cn';
 import { useDashboardScroll } from '@/hooks/dashboardScroll';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
@@ -27,8 +23,6 @@ import { EmptyState } from '@/ui/primitives/empty-state';
 import { Skeleton } from '@/ui/primitives/skeleton';
 import { DashboardWidgetCard } from '@/ui/DashboardWidgetCard';
 import { DashboardGridEditor } from '@/ui/DashboardGridEditor';
-import { DashboardSettingsOverlay } from '@/ui/DashboardSettingsOverlay';
-import { WidgetOverlay } from '@/ui/DashboardWidgetSettingsOverlay';
 
 function DashboardLoadingGrid() {
   return (
@@ -42,28 +36,23 @@ function DashboardLoadingGrid() {
 }
 
 export default function Page() {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const isEditing = searchParams.get('edit') === '1';
   const [storedSpacing] = useDashboardSpacing();
   const [spacingSettings] = useDashboardSpacingSettings();
   const [dashboardScrollEnabled] = useDashboardScroll();
-  const [editingSettings, setEditingSettings] = useDashboardEditingSettings();
+  const [editingSettings] = useDashboardEditingSettings();
   const spacing =
     storedSpacing in dashboardSpacingStyles ? storedSpacing : 'balanced';
   const [isFullscreen] = useIsFullscreen();
-  const [selectedLayoutId, setSelectedLayoutId] = useState<string | null>(null);
-  const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(
-    null,
-  );
+  const navigate = useNavigate();
   const {
     layouts,
     loading: layoutsLoading,
     error: layoutsError,
-    createLayout,
-    deleteLayout,
   } = useDashboardLayouts();
   const activeLayout =
-    layouts.find((layout) => layout.id === selectedLayoutId) ??
+    layouts.find((layout) => layout.id === searchParams.get('layout')) ??
     layouts.find((layout) => layout.is_default) ??
     layouts[0] ??
     null;
@@ -71,11 +60,22 @@ export default function Page() {
     widgets,
     loading: widgetsLoading,
     error: widgetsError,
-    addWidget,
-    removeWidget,
-    updateWidget,
-    reorderWidgets,
+    refetch: refetchWidgets,
   } = useDashboardWidgets(activeLayout?.id ?? null);
+  const arrangement = useDashboardArrangement(
+    activeLayout?.id,
+    widgets,
+    !widgetsLoading && !layoutsLoading && !widgetsError,
+    refetchWidgets,
+  );
+  const draftHeader = (
+    <RetainedDrafts activeKey={isEditing ? arrangement.draft.key : undefined} />
+  );
+  const draftFooter = isEditing ? (
+    <div className="shrink-0">
+      <EntitySaveBar inline draft={arrangement.draft} />
+    </div>
+  ) : null;
   const hasConfiguredLayout = activeLayout !== null;
   const dashboardLoading =
     layoutsLoading || (hasConfiguredLayout && widgetsLoading);
@@ -83,64 +83,46 @@ export default function Page() {
   const showSettings = isEditing && searchParams.get('settings') === '1';
   const showAddWidget = isEditing && searchParams.get('add-widget') === '1';
 
-  const renderedWidgets = [...(hasConfiguredLayout ? widgets : [])].sort(
-    (left, right) => left.position - right.position,
+  const renderedWidgets = useMemo(
+    () =>
+      [
+        ...(hasConfiguredLayout
+          ? isEditing
+            ? arrangement.widgets
+            : widgets
+          : []),
+      ].sort((left, right) => left.position - right.position),
+    [hasConfiguredLayout, isEditing, arrangement.widgets, widgets],
   );
 
-  const closeSettings = () => {
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('settings');
-    setSearchParams(nextParams, { replace: true });
-  };
+  const dashboardSettingsOverlay =
+    showSettings && !layoutsLoading ? (
+      <Navigate
+        replace
+        to={
+          activeLayout
+            ? '/config/dashboard/' + activeLayout.id
+            : '/config/dashboard'
+        }
+      />
+    ) : null;
 
-  const closeAddWidget = () => {
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('add-widget');
-    setSearchParams(nextParams, { replace: true });
-  };
-
-  const dashboardSettingsOverlay = showSettings ? (
-    <DashboardSettingsOverlay
-      open
-      onClose={closeSettings}
-      layouts={layouts}
-      layoutsLoading={layoutsLoading}
-      layoutsError={layoutsError}
-      activeLayout={activeLayout}
-      selectedLayoutId={selectedLayoutId}
-      onSelectLayout={setSelectedLayoutId}
-      onCreateLayout={(name) => createLayout({ name })}
-      onDeleteLayout={async (layoutId) => {
-        await deleteLayout(layoutId);
-        setSelectedLayoutId((current) =>
-          current === layoutId ? null : current,
-        );
-      }}
-      gridSnap={editingSettings.gridSnap}
-      screenSimulation={editingSettings.screenSimulation}
-      onGridSnapChange={(gridSnap: DashboardGridSnap) =>
-        setEditingSettings((current) => ({ ...current, gridSnap }))
-      }
-      onScreenSimulationChange={(screenSimulation: DashboardScreenSimulation) =>
-        setEditingSettings((current) => ({ ...current, screenSimulation }))
-      }
-    />
-  ) : null;
-
-  const dashboardAddWidgetOverlay = showAddWidget ? (
-    <WidgetOverlay
-      mode="add"
-      onClose={closeAddWidget}
-      onSubmit={async (widget) => {
-        await addWidget(widget);
-        closeAddWidget();
-      }}
-    />
-  ) : null;
+  const dashboardAddWidgetOverlay =
+    showAddWidget && !layoutsLoading ? (
+      <Navigate
+        replace
+        to={
+          activeLayout
+            ? '/config/dashboard/' + activeLayout.id + '/widgets/new'
+            : '/config/dashboard/new'
+        }
+      />
+    ) : null;
 
   if (dashboardLoading) {
     return (
       <>
+        {draftHeader}
         <div
           className={cn(
             'min-h-0 flex-1 px-2.5 py-2.5 sm:px-5 sm:py-3 lg:px-8 lg:py-6',
@@ -153,6 +135,7 @@ export default function Page() {
         </div>
         {dashboardAddWidgetOverlay}
         {dashboardSettingsOverlay}
+        {draftFooter}
       </>
     );
   }
@@ -160,6 +143,7 @@ export default function Page() {
   if (dashboardError) {
     return (
       <>
+        {draftHeader}
         <div
           className={cn(
             'min-h-0 flex-1 px-2.5 py-2.5 sm:px-5 sm:py-3 lg:px-8 lg:py-6',
@@ -175,6 +159,7 @@ export default function Page() {
         </div>
         {dashboardAddWidgetOverlay}
         {dashboardSettingsOverlay}
+        {draftFooter}
       </>
     );
   }
@@ -182,6 +167,7 @@ export default function Page() {
   if (!hasConfiguredLayout || renderedWidgets.length === 0) {
     return (
       <>
+        {draftHeader}
         <div
           className={cn(
             'min-h-0 flex-1 px-3 py-3 sm:px-5 lg:px-8 lg:py-6',
@@ -208,109 +194,110 @@ export default function Page() {
         </div>
         {dashboardAddWidgetOverlay}
         {dashboardSettingsOverlay}
+        {draftFooter}
       </>
     );
   }
 
   return (
-    <div
-      data-dashboard-spacing={spacing}
-      data-dashboard-scroll={dashboardScrollEnabled ? 'enabled' : 'disabled'}
-      style={
-        {
-          ...dashboardSpacingStyles[spacing],
-          '--dashboard-outer': `${spacingSettings.outer}px`,
-          '--dashboard-gap': `${spacingSettings.gap}px`,
-        } as React.CSSProperties
-      }
-      className={cn(
-        'min-h-0 flex-1 overflow-x-hidden px-[var(--dashboard-outer)] py-[var(--dashboard-outer)]',
-        isEditing || dashboardScrollEnabled
-          ? 'overflow-y-auto overscroll-contain'
-          : 'overflow-hidden',
-      )}
-    >
+    <>
+      {draftHeader}
       <div
+        data-dashboard-spacing={spacing}
+        data-dashboard-scroll={dashboardScrollEnabled ? 'enabled' : 'disabled'}
+        style={
+          {
+            ...dashboardSpacingStyles[spacing],
+            '--dashboard-outer': `${spacingSettings.outer}px`,
+            '--dashboard-gap': `${spacingSettings.gap}px`,
+          } as React.CSSProperties
+        }
         className={cn(
-          'mx-auto max-w-[100rem] space-y-8',
-          !dashboardScrollEnabled && 'flex h-full min-h-0 flex-col',
+          'min-h-0 flex-1 overflow-x-hidden px-[var(--dashboard-outer)] py-[var(--dashboard-outer)]',
+          isEditing || dashboardScrollEnabled
+            ? 'overflow-y-auto overscroll-contain'
+            : 'overflow-hidden',
         )}
       >
-        <section
+        <div
           className={cn(
-            !dashboardScrollEnabled && 'flex min-h-0 flex-1 flex-col',
+            'mx-auto max-w-[100rem] space-y-8',
+            !dashboardScrollEnabled && 'flex h-full min-h-0 flex-col',
           )}
         >
-          {isEditing ? (
-            <DashboardGridEditor
-              variant="inline"
-              widgets={renderedWidgets}
-              dashboardScrollEnabled={dashboardScrollEnabled}
-              gridSnap={editingSettings.gridSnap}
-              screenSimulation={editingSettings.screenSimulation}
-              onEdit={setEditingWidget}
-              onRemove={(widget) => {
-                void confirmDialog({
-                  title: `Remove widget "${widget.title}"?`,
-                  description:
-                    'The widget is removed from this dashboard layout. You can add it again later.',
-                  confirmLabel: 'Remove',
-                  destructive: true,
-                }).then((confirmed) => {
-                  if (confirmed) void removeWidget(widget.id);
-                });
-              }}
-              onUpdateWidget={updateWidget}
-              onReorderWidgets={reorderWidgets}
-            />
-          ) : (
-            <div
-              className={cn(
-                'dashboard-layout-grid grid min-w-0 gap-0',
-                dashboardScrollEnabled
-                  ? 'auto-rows-[minmax(calc(var(--dashboard-row)/4),auto)]'
-                  : 'min-h-0 flex-1 overflow-hidden',
-              )}
-              style={{
-                gridAutoRows: dashboardScrollEnabled
-                  ? 'minmax(calc(var(--dashboard-row) / 4), auto)'
-                  : 'minmax(0, 1fr)',
-              }}
-            >
-              {renderedWidgets.map((widget) => (
-                <div
-                  key={widget.id}
-                  className={cn(
-                    'dashboard-layout-item min-h-0 min-w-0 *:h-full',
-                  )}
-                  style={{
-                    ...getDashboardWidgetResponsiveGridStyle(
-                      widget.width,
-                      widget.height,
-                    ),
-                    margin: 'calc(var(--dashboard-gap) / 2)',
-                  }}
-                >
-                  <DashboardWidgetCard widget={widget} />
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+          <section
+            className={cn(
+              !dashboardScrollEnabled && 'flex min-h-0 flex-1 flex-col',
+            )}
+          >
+            {isEditing ? (
+              <DashboardGridEditor
+                variant="inline"
+                widgets={renderedWidgets}
+                dashboardScrollEnabled={dashboardScrollEnabled}
+                gridSnap={editingSettings.gridSnap}
+                screenSimulation={editingSettings.screenSimulation}
+                onEdit={(widget) =>
+                  navigate(
+                    '/config/dashboard/' +
+                      activeLayout.id +
+                      '/widgets/' +
+                      widget.id,
+                  )
+                }
+                onRemove={(widget) => {
+                  void confirmDialog({
+                    title: `Remove widget "${widget.title}"?`,
+                    description:
+                      'This stages removal from the layout. Save the arrangement to apply it, or Discard to restore it.',
+                    confirmLabel: 'Stage removal',
+                    destructive: true,
+                  }).then((confirmed) => {
+                    if (confirmed) arrangement.remove(widget.id);
+                  });
+                }}
+                onUpdateWidget={arrangement.resize}
+                onReorderWidgets={arrangement.reorder}
+              />
+            ) : (
+              <div
+                className={cn(
+                  'dashboard-layout-grid grid min-w-0 gap-0',
+                  dashboardScrollEnabled
+                    ? 'auto-rows-[minmax(calc(var(--dashboard-row)/4),auto)]'
+                    : 'min-h-0 flex-1 overflow-hidden',
+                )}
+                style={{
+                  gridAutoRows: dashboardScrollEnabled
+                    ? 'minmax(calc(var(--dashboard-row) / 4), auto)'
+                    : 'minmax(0, 1fr)',
+                }}
+              >
+                {renderedWidgets.map((widget) => (
+                  <div
+                    key={widget.id}
+                    className={cn(
+                      'dashboard-layout-item min-h-0 min-w-0 *:h-full',
+                    )}
+                    style={{
+                      ...getDashboardWidgetResponsiveGridStyle(
+                        widget.width,
+                        widget.height,
+                      ),
+                      margin: 'calc(var(--dashboard-gap) / 2)',
+                    }}
+                  >
+                    <DashboardWidgetCard widget={widget} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+        {dashboardAddWidgetOverlay}
+        {dashboardSettingsOverlay}
       </div>
-      {dashboardAddWidgetOverlay}
-      {editingWidget ? (
-        <WidgetOverlay
-          mode="edit"
-          widget={editingWidget}
-          onClose={() => setEditingWidget(null)}
-          onSubmit={async (updated) => {
-            await updateWidget(editingWidget.id, updated);
-            setEditingWidget(null);
-          }}
-        />
-      ) : null}
-      {dashboardSettingsOverlay}
-    </div>
+      {draftFooter}
+    </>
   );
 }

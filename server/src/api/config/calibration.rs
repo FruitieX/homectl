@@ -3,6 +3,82 @@ use crate::core::{
     calibration_session::{BrightnessPreview, CalibrationPreview},
     color_calibration::ColorCalibrationProfile,
 };
+use std::hash::{BuildHasher, Hash, Hasher};
+
+#[derive(Clone, Serialize)]
+struct EditorView {
+    profiles: Vec<ColorCalibrationProfile>,
+    assignments: Vec<crate::core::color_calibration::ColorCalibrationAssignment>,
+    legacy: Vec<crate::core::color_calibration::DeviceColorCalibration>,
+    revision_token: String,
+}
+
+fn editor_view(config: &config_queries::ConfigExport) -> EditorView {
+    static HASHER: once_cell::sync::Lazy<std::collections::hash_map::RandomState> =
+        once_cell::sync::Lazy::new(std::collections::hash_map::RandomState::new);
+    let mut view = EditorView {
+        profiles: config.color_calibration_profiles.clone(),
+        assignments: config.color_calibration_assignments.clone(),
+        legacy: config.device_color_calibrations.clone(),
+        revision_token: String::new(),
+    };
+    view.profiles.sort_by(|a, b| a.id.cmp(&b.id));
+    view.assignments
+        .sort_by(|a, b| a.device_key.cmp(&b.device_key));
+    view.legacy.sort_by(|a, b| a.device_key.cmp(&b.device_key));
+    let mut hasher = HASHER.build_hasher();
+    serde_json::to_string(&view).unwrap().hash(&mut hasher);
+    view.revision_token = format!("{:016x}", hasher.finish());
+    view
+}
+
+#[derive(Deserialize)]
+struct EditorWrite {
+    expected: String,
+    profile: Option<ColorCalibrationProfile>,
+    device_keys: Vec<String>,
+    profile_id: Option<String>,
+}
+
+#[derive(Serialize)]
+struct EditorConflict {
+    success: bool,
+    error: String,
+    current: Option<EditorView>,
+}
+
+async fn save_editor(
+    request: EditorWrite,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    let _guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    let result = handle.mutate(move |state| Box::pin(async move {
+        let current = editor_view(&state.runtime_config);
+        if request.expected != current.revision_token {
+            return Err((StatusCode::CONFLICT, "Calibration changed elsewhere. Review the saved profiles and assignments before saving.".to_string(), Some(current)));
+        }
+        state.save_calibration_edit(request.profile, request.device_keys, request.profile_id)
+            .await.map_err(|error| (StatusCode::BAD_REQUEST, error, None))?;
+        Ok(editor_view(&state.runtime_config))
+    })).await;
+    Ok(match result {
+        Err(_) => actor_unavailable(),
+        Ok(Err((status, error, current))) => warp::reply::with_status(
+            warp::reply::json(&EditorConflict {
+                success: false,
+                error,
+                current,
+            }),
+            status,
+        ),
+        Ok(Ok(view)) => {
+            config_write_response(view, Ok::<(), color_eyre::Report>(()), true, StatusCode::OK)
+        }
+    })
+}
 
 #[derive(Deserialize)]
 struct AssignRequest {
@@ -14,6 +90,18 @@ pub(super) fn routes(
     snapshot: &SnapshotHandle,
     handle: &StateHandle,
 ) -> impl Filter<Extract = (impl Reply,), Error = warp::Rejection> + Clone {
+    let editor = warp::path!("calibration-editor")
+        .and(warp::get())
+        .and(with_snapshot(snapshot))
+        .map(|snapshot: SnapshotHandle| {
+            ApiResponse::success(editor_view(&snapshot.load().runtime_config))
+        });
+    let edit = warp::path!("calibration-editor")
+        .and(warp::put())
+        .and(warp::body::content_length_limit(128 * 1024))
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(save_editor);
     let profiles = warp::path!("calibration-profiles")
         .and(warp::get())
         .and(with_snapshot(snapshot))
@@ -88,7 +176,9 @@ pub(super) fn routes(
         .and(warp::post())
         .and(with_handle(handle))
         .and_then(keep_session);
-    profiles
+    editor
+        .or(edit)
+        .or(profiles)
         .or(save)
         .or(update)
         .or(assignments)
@@ -293,4 +383,84 @@ fn session_response() -> warp::reply::WithStatus<warp::reply::Json> {
         warp::reply::json(&serde_json::json!({"success":true,"data":null})),
         StatusCode::OK,
     )
+}
+
+#[cfg(test)]
+mod editor_tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    #[tokio::test]
+    async fn calibration_editor_rejects_stale_or_invalid_writes_without_mutation() {
+        let (mut state, _events) = crate::core::event::tests::test_state();
+        let profile = json!({"id":"test", "name":"Test", "brightness_points":[
+            {"logical":0.1,"output":0.2}, {"logical":1,"output":1}
+        ]});
+        state.runtime_config.color_calibration_profiles =
+            serde_json::from_value(json!([profile])).unwrap();
+        let snapshot = state.snapshot.clone();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = crate::core::state::actor::spawn_state_actor(state, snapshot.clone(), tx);
+        handle.mutate(|_| Box::pin(async {})).await.unwrap();
+        let routes = routes(&snapshot, &handle);
+        let response = warp::test::request()
+            .path("/calibration-editor")
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let view: Value = serde_json::from_slice(response.body()).unwrap();
+        let expected = view["data"]["revision_token"].clone();
+        let before = serde_json::to_value(&*snapshot.load().runtime_config).unwrap();
+        let write = json!({"expected":"stale", "profile": profile, "profile_id":"test", "device_keys":["dummy/a"]});
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/calibration-editor")
+            .json(&write)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let conflict: Value = serde_json::from_slice(response.body()).unwrap();
+        assert_eq!(conflict["current"], view["data"]);
+        let mut write = write;
+        write["expected"] = expected;
+        write["profile_id"] = json!("different");
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/calibration-editor")
+            .json(&write)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(String::from_utf8_lossy(response.body()).contains("must match"));
+        write["profile_id"] = json!("test");
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/calibration-editor")
+            .json(&write)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(String::from_utf8_lossy(response.body()).contains("no longer available"));
+        assert_eq!(
+            serde_json::to_value(&*snapshot.load().runtime_config).unwrap(),
+            before
+        );
+
+        handle
+            .mutate(|state| {
+                Box::pin(async move {
+                    state.runtime_config.color_calibration_profiles[0].name =
+                        "Changed elsewhere".into();
+                })
+            })
+            .await
+            .unwrap();
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/calibration-editor")
+            .json(&write)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
 }

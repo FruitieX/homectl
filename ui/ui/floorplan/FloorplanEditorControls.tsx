@@ -29,27 +29,34 @@ export function FloorplanModeBar({
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex w-fit rounded-2xl bg-muted p-1">
+      <div
+        className="flex max-w-full flex-wrap rounded-lg bg-muted p-1"
+        role="group"
+        aria-label="Floorplan tools"
+      >
         <Button
           variant={mode === 'tiles' ? 'default' : 'ghost'}
           size="sm"
           onClick={() => onModeChange('tiles')}
+          aria-pressed={mode === 'tiles'}
         >
-          Draw Walls
+          Draw
         </Button>
         <Button
           variant={mode === 'devices' ? 'default' : 'ghost'}
           size="sm"
           onClick={() => onModeChange('devices')}
+          aria-pressed={mode === 'devices'}
         >
-          Place Devices
+          Devices
         </Button>
         <Button
           variant={mode === 'groups' ? 'default' : 'ghost'}
           size="sm"
           onClick={() => onModeChange('groups')}
+          aria-pressed={mode === 'groups'}
         >
-          Paint Groups
+          Rooms & groups
         </Button>
       </div>
 
@@ -70,7 +77,7 @@ export function FloorplanModeBar({
           disabled={!canAutoCrop}
           onClick={onAutoCrop}
         >
-          Auto Crop
+          Auto crop
         </Button>
       </div>
     </div>
@@ -95,6 +102,7 @@ export function FloorplanDeviceScaleControl({
       <span className="text-sm font-medium">Device scale</span>
       <input
         type="range"
+        aria-label="Device marker scale"
         className={cn(rangeClassName, 'w-40')}
         min={min}
         max={max}
@@ -104,6 +112,7 @@ export function FloorplanDeviceScaleControl({
       />
       <Input
         type="number"
+        aria-label="Device marker scale multiplier"
         className="h-9 w-20"
         min={min}
         max={max}

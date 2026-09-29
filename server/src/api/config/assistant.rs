@@ -204,10 +204,13 @@ impl AssistantConfig {
 /// Browser-safe view of the effective assistant settings. The API key is never
 /// included, only whether one is set.
 fn assistant_settings_view(settings: &[config_queries::WidgetSettingRow]) -> Value {
+    use std::hash::{BuildHasher, Hash, Hasher};
+    static HASHER: once_cell::sync::Lazy<std::collections::hash_map::RandomState> =
+        once_cell::sync::Lazy::new(std::collections::hash_map::RandomState::new);
     let source = setting_source(settings);
     let base_url = source.string("base_url", "HOMECTL_ASSISTANT_BASE_URL");
     let model = source.string("model", "HOMECTL_ASSISTANT_MODEL");
-    json!({
+    let mut view = json!({
         "enabled": base_url.is_some() && model.is_some(),
         "baseUrl": base_url,
         "model": model,
@@ -232,7 +235,20 @@ fn assistant_settings_view(settings: &[config_queries::WidgetSettingRow]) -> Val
             .filter(|value| *value >= MIN_CONTEXT_WINDOW)
             .unwrap_or(DEFAULT_CONTEXT_WINDOW),
         "timezone": source.string("timezone", "HOMECTL_ASSISTANT_TIMEZONE"),
-    })
+    });
+    // Process-keyed and secret-sensitive, without an exposed password digest.
+    let mut hasher = HASHER.build_hasher();
+    view.to_string().hash(&mut hasher);
+    source
+        .string("api_key", "HOMECTL_ASSISTANT_API_KEY")
+        .hash(&mut hasher);
+    settings
+        .iter()
+        .find(|row| row.key == ASSISTANT_SETTING_KEY)
+        .map(|row| row.config.to_string())
+        .hash(&mut hasher);
+    view["revisionToken"] = json!(format!("{:016x}", hasher.finish()));
+    view
 }
 
 /// Settings update from the settings form. An absent field keeps its stored
@@ -240,6 +256,7 @@ fn assistant_settings_view(settings: &[config_queries::WidgetSettingRow]) -> Val
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AssistantSettingsPatch {
+    expected: Option<Value>,
     #[serde(default)]
     base_url: Option<String>,
     #[serde(default)]
@@ -558,7 +575,7 @@ async fn get_assistant_settings(snapshot: SnapshotHandle) -> Result<impl Reply, 
 
 async fn update_assistant_settings(
     patch: AssistantSettingsPatch,
-    snapshot: SnapshotHandle,
+    _snapshot: SnapshotHandle,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     let _write_guard = match config_write_lock(&handle).await {
@@ -566,34 +583,70 @@ async fn update_assistant_settings(
         Err(_) => return Ok(actor_unavailable()),
     };
 
-    let stored = snapshot
-        .load()
-        .runtime_config
-        .widget_settings
-        .iter()
-        .find(|row| row.key == ASSISTANT_SETTING_KEY)
-        .and_then(|row| row.config.as_object().cloned())
-        .unwrap_or_default();
-    let updated = match apply_assistant_settings_patch(stored, patch) {
-        Ok(updated) => updated,
-        Err(error) => return Ok(error_response(&error, StatusCode::BAD_REQUEST)),
-    };
-    let setting = config_queries::WidgetSettingRow {
-        key: ASSISTANT_SETTING_KEY.to_string(),
-        config: Value::Object(updated),
-    };
-    let persistence_setting = setting.clone();
-
     let result = handle
         .mutate(move |state| {
             Box::pin(async move {
-                state.upsert_widget_setting(setting);
-                assistant_settings_view(&state.runtime_config.widget_settings)
+                let settings = &state.runtime_config.widget_settings;
+                let current = assistant_settings_view(settings);
+                if patch.expected.as_ref().is_some_and(|expected| {
+                    expected.get("revisionToken") != current.get("revisionToken")
+                }) {
+                    return Err((
+                        StatusCode::CONFLICT,
+                        "Assistant settings changed elsewhere.".to_string(),
+                        Some(current),
+                    ));
+                }
+                let stored = settings
+                    .iter()
+                    .find(|row| row.key == ASSISTANT_SETTING_KEY)
+                    .and_then(|row| row.config.as_object().cloned())
+                    .unwrap_or_else(|| {
+                        // The first database save takes ownership of all effective
+                        // values, including an omitted deployment-provided key.
+                        let mut stored = serde_json::Map::new();
+                        for (stored_key, view_key) in [
+                            ("base_url", "baseUrl"),
+                            ("model", "model"),
+                            ("reasoning_effort", "reasoningEffort"),
+                            ("timezone", "timezone"),
+                            ("max_tokens", "maxTokens"),
+                            ("timeout_ms", "timeoutMs"),
+                            ("context_window", "contextWindow"),
+                        ] {
+                            if !current[view_key].is_null() {
+                                stored.insert(stored_key.into(), current[view_key].clone());
+                            }
+                        }
+                        if let Some(key) =
+                            setting_source(settings).string("api_key", "HOMECTL_ASSISTANT_API_KEY")
+                        {
+                            stored.insert("api_key".into(), json!(key));
+                        }
+                        stored
+                    });
+                let updated = apply_assistant_settings_patch(stored, patch)
+                    .map_err(|error| (StatusCode::BAD_REQUEST, error, None))?;
+                let setting = config_queries::WidgetSettingRow {
+                    key: ASSISTANT_SETTING_KEY.into(),
+                    config: Value::Object(updated),
+                };
+                state.upsert_widget_setting(setting.clone());
+                Ok((
+                    assistant_settings_view(&state.runtime_config.widget_settings),
+                    setting,
+                ))
             })
         })
         .await;
-    let response = match result {
-        Ok(response) => response,
+    let (response, persistence_setting) = match result {
+        Ok(Ok(response)) => response,
+        Ok(Err((status, error, current))) => {
+            return Ok(warp::reply::with_status(
+                warp::reply::json(&json!({"success":false,"error":error,"current":current})),
+                status,
+            ))
+        }
         Err(_) => return Ok(actor_unavailable()),
     };
 
@@ -3778,7 +3831,11 @@ async fn delete_source_state(handle: &StateHandle, id: String) -> Result<bool, S
 }
 
 /// Keep stored integration secrets for paths the reviewed body omitted.
-fn restore_omitted_integration_secrets(config: &mut Value, stored: &Value, plugin: &str) {
+pub(super) fn restore_omitted_integration_secrets(
+    config: &mut Value,
+    stored: &Value,
+    plugin: &str,
+) {
     for key in integration_secret_keys(plugin) {
         insert_missing_json_path(config, stored, &key);
     }
@@ -4097,7 +4154,7 @@ fn entity_snapshot(
 /// schema keys. Integrations are schema-driven, so the schema is the source of
 /// truth for which fields are secrets (the widget-settings equivalent lives in
 /// `secret_widget_field`).
-fn integration_secret_keys(plugin: &str) -> Vec<String> {
+pub(super) fn integration_secret_keys(plugin: &str) -> Vec<String> {
     integration_config_schemas()
         .into_iter()
         .find(|schema| schema.plugin == plugin)
@@ -4157,7 +4214,7 @@ fn insert_missing_json_path(target: &mut Value, source: &Value, key: &str) {
 }
 
 /// Drop every secret field from an integration row snapshot.
-fn redact_integration_secrets(value: &mut Value, plugin: &str) {
+pub(super) fn redact_integration_secrets(value: &mut Value, plugin: &str) {
     let Some(config) = value.get_mut("config") else {
         return;
     };
@@ -5304,6 +5361,7 @@ mod tests {
             None,
         );
         let snapshot = RuntimeSnapshot {
+            device_health: Default::default(),
             runtime_config: std::sync::Arc::new(export),
             devices: std::sync::Arc::new(DevicesState(
                 [(dummy_key(), device)].into_iter().collect(),
@@ -5417,6 +5475,7 @@ mod tests {
             None,
         );
         RuntimeSnapshot {
+            device_health: Default::default(),
             runtime_config: std::sync::Arc::new(export),
             devices: std::sync::Arc::new(DevicesState(
                 [(lamp.get_device_key(), lamp)].into_iter().collect(),
@@ -5496,6 +5555,92 @@ mod tests {
         }))]
     }
 
+    #[tokio::test]
+    async fn assistant_settings_save_preserves_omitted_secrets_and_rejects_stale_secret_changes() {
+        use crate::core::state::actor::spawn_state_actor;
+        let (mut state, _events) = crate::core::event::tests::test_state();
+        state.runtime_config.widget_settings = stored_settings();
+        state.runtime_config.widget_settings[0].config["future"] = json!({"keep":true});
+        state.publish_snapshot(crate::core::snapshot::SnapshotChanges::all());
+        let original = assistant_settings_view(&state.runtime_config.widget_settings);
+        let snapshot = state.snapshot.clone();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = spawn_state_actor(state, snapshot.clone(), tx);
+        let response = update_assistant_settings(
+            AssistantSettingsPatch {
+                api_key: Some("replacement-secret".into()),
+                expected: Some(original.clone()),
+                ..Default::default()
+            },
+            snapshot.clone(),
+            handle.clone(),
+        )
+        .await
+        .unwrap()
+        .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = warp::hyper::body::to_bytes(response.into_body())
+            .await
+            .unwrap();
+        let text = String::from_utf8(body.to_vec()).unwrap();
+        assert!(!text.contains("replacement-secret"));
+        let changed = assistant_settings_view(&snapshot.load().runtime_config.widget_settings);
+        assert_ne!(original["revisionToken"], changed["revisionToken"]);
+        let response = update_assistant_settings(
+            AssistantSettingsPatch {
+                model: Some("stale".into()),
+                expected: Some(original),
+                ..Default::default()
+            },
+            snapshot.clone(),
+            handle.clone(),
+        )
+        .await
+        .unwrap()
+        .into_response();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = warp::hyper::body::to_bytes(response.into_body())
+            .await
+            .unwrap();
+        assert!(!String::from_utf8(body.to_vec())
+            .unwrap()
+            .contains("replacement-secret"));
+        let response = update_assistant_settings(
+            AssistantSettingsPatch {
+                context_window: Some(64000),
+                expected: Some(changed),
+                ..Default::default()
+            },
+            snapshot.clone(),
+            handle.clone(),
+        )
+        .await
+        .unwrap()
+        .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let settings = snapshot.load().runtime_config.widget_settings.clone();
+        assert_eq!(settings[0].config["api_key"], "replacement-secret");
+        assert_eq!(settings[0].config["future"], json!({"keep":true}));
+        assert_eq!(assistant_settings_view(&settings)["contextWindow"], 64000);
+        let response = update_assistant_settings(
+            AssistantSettingsPatch {
+                api_key: Some("".into()),
+                expected: Some(assistant_settings_view(&settings)),
+                ..Default::default()
+            },
+            snapshot.clone(),
+            handle,
+        )
+        .await
+        .unwrap()
+        .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            assistant_settings_view(&snapshot.load().runtime_config.widget_settings)["apiKeySet"],
+            false
+        );
+    }
+
     #[test]
     fn settings_view_masks_api_key() {
         let view = assistant_settings_view(&stored_settings());
@@ -5540,6 +5685,7 @@ mod tests {
             serde_json::Map::new(),
             AssistantSettingsPatch {
                 base_url: Some("https://api.openai.com/v1/".to_string()),
+                expected: None,
                 model: Some("gpt-test".to_string()),
                 api_key: Some("sk-new".to_string()),
                 reasoning_effort: Some("HIGH".to_string()),
@@ -5622,6 +5768,7 @@ mod tests {
         devices: Vec<Device>,
     ) -> RuntimeSnapshot {
         RuntimeSnapshot {
+            device_health: Default::default(),
             runtime_config: Arc::new(export),
             devices: Arc::new(DevicesState(
                 devices
@@ -6403,12 +6550,16 @@ mod tests {
                 level: LogLevel::Error,
                 target: "homectl_server::tests".to_string(),
                 message: "x".repeat(MAX_LIVE_LOG_CHARS + 50),
+                references: Vec::new(),
+                details: None,
             })
             .chain((0..3).map(|index| UiLogEntry {
                 timestamp: format!("2026-01-01T00:01:{index:02}Z"),
                 level: LogLevel::Debug,
                 target: "homectl_server::tests".to_string(),
                 message: "debug detail".to_string(),
+                references: Vec::new(),
+                details: None,
             }))
             .collect();
 

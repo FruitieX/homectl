@@ -50,6 +50,7 @@ impl Integration for Timer {
         let device = mk_timer_device(&self.id, &self.config, false, None, None);
 
         self.event_tx.send(Event::ExternalStateUpdate {
+            report_retained: false,
             device,
             integration_epoch: None,
         });
@@ -72,6 +73,7 @@ impl Integration for Timer {
         );
 
         self.event_tx.send(Event::ExternalStateUpdate {
+            report_retained: false,
             device,
             integration_epoch: None,
         });
@@ -85,6 +87,7 @@ impl Integration for Timer {
 
             let device = mk_timer_device(&id, &config, false, Some(started_at), Some(timeout_ms));
             sender.send(Event::ExternalStateUpdate {
+                report_retained: false,
                 device,
                 integration_epoch: None,
             });

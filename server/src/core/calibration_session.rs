@@ -137,6 +137,7 @@ mod tests {
         handle_event(
             &mut state,
             &Event::ExternalStateUpdate {
+                report_retained: false,
                 device: physical,
                 integration_epoch: None,
             },

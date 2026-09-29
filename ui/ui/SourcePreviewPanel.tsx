@@ -6,7 +6,8 @@ import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
 import { ConfigHelpPanel } from '@/ui/config-form';
 import { Skeleton } from '@/ui/primitives/skeleton';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { StatePreview } from '@/ui/settings/StatePreview';
 
 const SAMPLES_OPTIONS = [24, 48, 96];
 
@@ -162,28 +163,26 @@ export function SourcePreviewPanel({
 }) {
   const { preview, data, loading, error } = useSourcePreview();
   const [samples, setSamples] = useState(48);
+  const [requested, setRequested] = useState('');
+  const current = JSON.stringify({ timezone, compute, samples });
+  const stale = requested !== current;
 
   const runPreview = (sampleCount: number) => {
+    setRequested(JSON.stringify({ timezone, compute, samples: sampleCount }));
     void preview({ timezone, compute, samples: sampleCount });
   };
-
-  useEffect(() => {
-    runPreview(samples);
-    // Preview runs on tab open and on demand; the draft is passed explicitly.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div className="space-y-4 pt-4">
       <ConfigHelpPanel>
         <p>
-          Previews are computed server-side through the same pure evaluation
-          path the runtime uses, and nothing is saved. Custom script bodies run
-          in the worker and cannot be previewed synchronously.
+          Preview one day using this draft’s timezone and profile. Custom
+          scripts report when this preview is unavailable.
         </p>
       </ConfigHelpPanel>
       <div className="flex flex-wrap items-center gap-2">
         <select
+          aria-label="Preview sample count"
           className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           value={samples}
           onChange={(event) => setSamples(Number(event.target.value))}
@@ -201,7 +200,11 @@ export function SourcePreviewPanel({
           disabled={loading}
           onClick={() => runPreview(samples)}
         >
-          {loading ? 'Previewing…' : 'Refresh preview'}
+          {loading
+            ? 'Previewing…'
+            : requested
+              ? 'Refresh preview'
+              : 'Preview draft'}
         </Button>
         {data ? (
           <span className="text-xs text-muted-foreground">
@@ -215,6 +218,12 @@ export function SourcePreviewPanel({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
+      {data && stale && (
+        <p role="status" className="text-sm text-amber-700">
+          Draft changed. These results are from the previous inputs; refresh the
+          preview.
+        </p>
+      )}
       {loading && !data ? <Skeleton className="h-56 w-full" /> : null}
       {data?.unsupported_reason ? (
         <Alert>
@@ -222,7 +231,34 @@ export function SourcePreviewPanel({
         </Alert>
       ) : null}
       {data && !data.unsupported_reason && data.samples.length > 0 ? (
-        <SourcePreviewChart samples={data.samples} />
+        <div className={stale ? 'opacity-60' : undefined}>
+          <SourcePreviewChart samples={data.samples} />
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {data.samples
+              .filter(
+                (_, index) =>
+                  index % Math.max(1, Math.ceil(data.samples.length / 8)) === 0,
+              )
+              .map((sample) => (
+                <div
+                  key={String(sample.time_ms)}
+                  className="flex items-center gap-2 text-xs"
+                >
+                  <StatePreview
+                    color={sample.profile.color}
+                    brightness={sample.profile.brightness}
+                  />
+                  <span>
+                    {sample.local_time}
+                    <br />
+                    {sample.profile.brightness == null
+                      ? 'Brightness unspecified'
+                      : `${Math.round(sample.profile.brightness * 100)}%`}
+                  </span>
+                </div>
+              ))}
+          </div>
+        </div>
       ) : null}
     </div>
   );

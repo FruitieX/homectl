@@ -1,3 +1,13 @@
+import {
+  FlowBlock,
+  AddFlowBlock,
+  UnknownFlowValue,
+  useRoutineAuthoring,
+} from '@/ui/settings/FlowBlock';
+import { createUuid } from '@/lib/uuid';
+import { moveSibling, duplicateRoutineNode } from '@/lib/routineDraft';
+import { entityDraftStore } from '@/lib/entityDraft';
+import { confirmDialog } from '@/ui/primitives/confirm-dialog';
 import type { ChooseBranch } from '@/bindings/ChooseBranch';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
@@ -12,8 +22,7 @@ import type { SceneSelection } from '@/bindings/SceneSelection';
 import type { TargetSpec } from '@/bindings/TargetSpec';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
 import { DurationInput, selectClassName } from '@/ui/builder-fields';
-import { Copy } from 'lucide-react';
-import { ConditionEditor, describeCondition } from '@/ui/ConditionBuilder';
+import { ConditionEditor } from '@/ui/ConditionBuilder';
 import {
   DeviceMultiSelect,
   DeviceSelect,
@@ -23,14 +32,12 @@ import {
   SceneSelect,
   splitDeviceKey,
 } from '@/ui/config-selectors';
-import { Advanced } from '@/ui/primitives/advanced';
 import { ConfigField } from '@/ui/config-form';
 import { Button } from '@/ui/primitives/button';
-import { Card, CardContent } from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
 import { SearchablePicker } from '@/ui/SearchablePicker';
 import RoutineScriptEditor from '@/ui/RoutineScriptEditor';
-import { useCallback, useRef, useState } from 'react';
+import { useState } from 'react';
 
 type StepKind = NativeAction['action'];
 
@@ -45,33 +52,8 @@ const stepKindOptions: Array<{ value: StepKind; label: string }> = [
   { value: 'cancel_timer', label: 'Cancel named timer' },
   { value: 'set_helper', label: 'Set helper value' },
   { value: 'invoke_routine', label: 'Invoke another routine' },
-  { value: 'choose', label: 'Choose branch (advanced)' },
+  { value: 'choose', label: 'Choose a branch' },
 ];
-
-const stepKindLabels: Record<StepKind, string> = {
-  activate_scene: 'Activate scene',
-  cycle_scenes: 'Cycle scenes',
-  set_power: 'Set power',
-  dim: 'Dim',
-  randomize_color: 'Randomize colors',
-  schedule_timer: 'Start timer',
-  replace_timer: 'Restart timer',
-  cancel_timer: 'Cancel timer',
-  set_helper: 'Set helper',
-  invoke_routine: 'Invoke routine',
-  choose: 'Choose branch',
-};
-
-function nextNodeId(prefix: string, existingIds: Iterable<string>) {
-  const taken = new Set(existingIds);
-  let index = 1;
-  let id = `${prefix}_${index}`;
-  while (taken.has(id)) {
-    index += 1;
-    id = `${prefix}_${index}`;
-  }
-  return id;
-}
 
 function defaultStep(kind: StepKind, id: string): NativeAction {
   switch (kind) {
@@ -135,10 +117,11 @@ function defaultStep(kind: StepKind, id: string): NativeAction {
 function collectStepIds(steps: NativeAction[]): string[] {
   const ids: string[] = [];
   const visit = (step: NativeAction) => {
+    if (!step || typeof step !== 'object') return;
     ids.push(step.id);
-    if (step.action === 'choose') {
+    if (step.action === 'choose' && Array.isArray(step.branches)) {
       for (const branch of step.branches) {
-        for (const nested of branch.steps) {
+        for (const nested of Array.isArray(branch?.steps) ? branch.steps : []) {
           visit(nested);
         }
       }
@@ -157,40 +140,8 @@ function keyToDeviceRef(key: string) {
   return split ?? { integration_id: '', device_id: key };
 }
 
-function summarizeStep(step: NativeAction): string {
-  switch (step.action) {
-    case 'activate_scene':
-      return step.select
-        ? step.select.kind === 'helper_enum'
-          ? `scene by helper ${step.select.helper}`
-          : `scene mirroring group ${step.select.group_id}`
-        : step.scene_id
-          ? `scene ${step.scene_id}`
-          : 'no scene selected';
-    case 'cycle_scenes':
-      return `${step.scenes.length} scene(s)${step.nowrap ? ', stop at last' : ''}`;
-    case 'set_power':
-      return `${step.power ? 'turn on' : 'turn off'} ${step.device.device_id || 'device'}`;
-    case 'dim':
-      return `step ${step.step}`;
-    case 'randomize_color':
-      return 'random hue and saturation';
-    case 'schedule_timer':
-    case 'replace_timer':
-      return `timer ${step.timer || '?'}`;
-    case 'cancel_timer':
-      return `timer ${step.timer || '?'}`;
-    case 'set_helper':
-      return `helper ${step.helper || '?'}`;
-    case 'invoke_routine':
-      return `routine ${step.routine_id || '?'}`;
-    case 'choose':
-      return `${step.branches.length} branch(es)`;
-  }
-}
-
 function TargetSpecEditor({
-  targets,
+  targets = {},
   devices,
   groups,
   onChange,
@@ -217,7 +168,6 @@ function TargetSpecEditor({
             onChange({
               ...targets,
               devices: keys.map(keyToDeviceRef),
-              groups: groupIds,
             })
           }
         />
@@ -346,78 +296,37 @@ function ChooseStepEditor({
   helpers: HelperRuntimeStatus[];
   existingIds: string[];
 }) {
-  const [newBranchStepKind, setNewBranchStepKind] =
-    useState<StepKind>('activate_scene');
-
-  const updateBranch = (index: number, branch: ChooseBranch) => {
+  const updateBranch = (index: number, branch: ChooseBranch) =>
     onChange({
       ...step,
-      branches: step.branches.map((candidate, candidateIndex) =>
-        candidateIndex === index ? branch : candidate,
-      ),
+      branches: step.branches.map((entry, i) => (i === index ? branch : entry)),
     });
-  };
-
-  const addBranch = () => {
-    onChange({
-      ...step,
-      branches: [
-        ...step.branches,
-        {
-          id: nextNodeId('branch', [
-            ...step.branches.map((branch) => branch.id),
-            ...existingIds,
-          ]),
-          condition: { kind: 'literal', value: true },
-          steps: [],
-        },
-      ],
-    });
-  };
-
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Branches run first-match in order; unknown or erroring conditions block
+    <div className="flow-branches">
+      <p className="text-xs text-muted-foreground">
+        Check branches in order; run the first match. Unknown conditions block
         later branches.
       </p>
-      {step.branches.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-3 text-center text-sm text-muted-foreground">
-          No branches configured. A choose step with no branches runs nothing.
-        </div>
-      ) : null}
       {step.branches.map((branch, index) => (
-        <div
-          key={`${branch.id}:${index}`}
-          className="space-y-3 rounded-2xl border border-border/60 bg-background/40 p-3"
+        <FlowBlock
+          key={branch.id}
+          id={branch.id}
+          title={index === 0 ? 'If' : 'Otherwise, if'}
+          index={index}
+          total={step.branches.length}
+          onMove={(offset) =>
+            onChange({
+              ...step,
+              branches: moveSibling(step.branches, index, offset),
+            })
+          }
+          onRemove={() =>
+            onChange({
+              ...step,
+              branches: step.branches.filter((_, i) => i !== index),
+            })
+          }
         >
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <ConfigField label="Branch ID" className="max-w-md">
-              <Input
-                className="font-mono"
-                value={branch.id}
-                onChange={(event) =>
-                  updateBranch(index, { ...branch, id: event.target.value })
-                }
-              />
-            </ConfigField>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={() =>
-                onChange({
-                  ...step,
-                  branches: step.branches.filter(
-                    (_, candidateIndex) => candidateIndex !== index,
-                  ),
-                })
-              }
-            >
-              Remove branch
-            </Button>
-          </div>
           <ConditionEditor
             condition={branch.condition}
             onChange={(condition) =>
@@ -428,80 +337,82 @@ function ChooseStepEditor({
             scenes={scenes}
             helpers={helpers}
           />
-          {branch.steps.map((nested, nestedIndex) => (
-            <StepEditor
-              key={`${nested.id}:${nestedIndex}`}
-              step={nested}
-              index={nestedIndex}
-              total={branch.steps.length}
-              devices={devices}
-              groups={groups}
-              scenes={scenes}
-              routines={routines}
-              helpers={helpers}
-              existingIds={existingIds}
-              onChange={(next) =>
-                updateBranch(index, {
-                  ...branch,
-                  steps: branch.steps.map((candidate, candidateIndex) =>
-                    candidateIndex === nestedIndex ? next : candidate,
-                  ),
-                })
-              }
-              onRemove={() =>
-                updateBranch(index, {
-                  ...branch,
-                  steps: branch.steps.filter(
-                    (_, candidateIndex) => candidateIndex !== nestedIndex,
-                  ),
-                })
-              }
-              onMove={(offset) => {
-                const target = nestedIndex + offset;
-                if (target < 0 || target >= branch.steps.length) {
-                  return;
-                }
-                const steps = [...branch.steps];
-                const [moved] = steps.splice(nestedIndex, 1);
-                steps.splice(target, 0, moved);
-                updateBranch(index, { ...branch, steps });
-              }}
-            />
-          ))}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="min-w-56">
-              <SearchablePicker
-                options={stepKindOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                }))}
-                value={newBranchStepKind}
-                onChange={(kind) => setNewBranchStepKind(kind as StepKind)}
-              />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                updateBranch(index, {
-                  ...branch,
-                  steps: [
-                    ...branch.steps,
-                    defaultStep(
-                      newBranchStepKind,
-                      nextNodeId(newBranchStepKind, existingIds),
+          <div className="flow-branch-actions">
+            <p className="mb-2 text-xs font-medium">Then</p>
+            {branch.steps.map((nested, nestedIndex) => (
+              <StepEditor
+                key={nested.id}
+                step={nested}
+                index={nestedIndex}
+                total={branch.steps.length}
+                devices={devices}
+                groups={groups}
+                scenes={scenes}
+                routines={routines}
+                helpers={helpers}
+                existingIds={existingIds}
+                onChange={(next) =>
+                  updateBranch(index, {
+                    ...branch,
+                    steps: branch.steps.map((entry, i) =>
+                      i === nestedIndex ? next : entry,
                     ),
-                  ],
+                  })
+                }
+                onRemove={() =>
+                  updateBranch(index, {
+                    ...branch,
+                    steps: branch.steps.filter((_, i) => i !== nestedIndex),
+                  })
+                }
+                onMove={(offset) =>
+                  updateBranch(index, {
+                    ...branch,
+                    steps: moveSibling(branch.steps, nestedIndex, offset),
+                  })
+                }
+                onDuplicate={() =>
+                  updateBranch(index, {
+                    ...branch,
+                    steps: [
+                      ...branch.steps.slice(0, nestedIndex + 1),
+                      duplicateRoutineNode(nested),
+                      ...branch.steps.slice(nestedIndex + 1),
+                    ],
+                  })
+                }
+              />
+            ))}
+            <AddFlowBlock
+              label="Add branch action"
+              options={stepKindOptions}
+              onAdd={(kind) =>
+                updateBranch(index, {
+                  ...branch,
+                  steps: [...branch.steps, defaultStep(kind, createUuid())],
                 })
               }
-            >
-              Add branch step
-            </Button>
+            />
           </div>
-        </div>
+        </FlowBlock>
       ))}
-      <Button type="button" variant="outline" size="sm" onClick={addBranch}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() =>
+          onChange({
+            ...step,
+            branches: [
+              ...step.branches,
+              {
+                id: createUuid(),
+                condition: { kind: 'literal', value: true },
+                steps: [],
+              },
+            ],
+          })
+        }
+      >
         Add branch
       </Button>
     </div>
@@ -648,14 +559,24 @@ function SceneSelectionEditor({
   const selectedHelper = enumHelpers.find(
     (item) => selection.kind === 'helper_enum' && item.id === selection.helper,
   );
-  const optionList =
+  const helperOptions =
     selectedHelper && selectedHelper.kind.kind === 'enum'
       ? selectedHelper.kind.options
       : [];
+  const optionList = [
+    ...new Set([
+      ...helperOptions,
+      ...Object.keys(selection.kind === 'helper_enum' ? selection.mapping : {}),
+    ]),
+  ];
 
   const switchKind = (kind: SceneSelection['kind']) => {
     if (kind === selection.kind) return;
-    onChange(defaultSceneSelection(helpers, groups));
+    onChange(
+      kind === 'helper_enum'
+        ? { kind, helper: enumHelpers[0]?.id ?? '', mapping: {} }
+        : { kind, group_id: Object.keys(groups)[0] ?? '' },
+    );
   };
 
   return (
@@ -783,6 +704,13 @@ function StepFields({
   helpers: HelperRuntimeStatus[];
   existingIds: string[];
 }) {
+  const { returnHref } = useRoutineAuthoring();
+  const sceneReturn = returnHref
+    ? returnHref +
+      (returnHref.includes('?') ? '&' : '?') +
+      'sceneNode=' +
+      encodeURIComponent(step.id)
+    : undefined;
   switch (step.action) {
     case 'activate_scene':
       return (
@@ -807,6 +735,7 @@ function StepFields({
                 <SceneSelect
                   scenes={scenes}
                   value={step.scene_id ?? ''}
+                  createReturnTo={sceneReturn}
                   onChange={(scene_id) => onChange({ ...step, scene_id })}
                 />
                 <Button
@@ -841,7 +770,7 @@ function StepFields({
             >
               <select
                 className={selectClassName}
-                value={step.use_scene_transition ? 'scene' : 'none'}
+                value={step.use_scene_transition !== false ? 'scene' : 'none'}
                 onChange={(event) =>
                   onChange({
                     ...step,
@@ -978,7 +907,9 @@ function StepFields({
                   >
                     <select
                       className={selectClassName}
-                      value={entry.use_scene_transition ? 'scene' : 'none'}
+                      value={
+                        entry.use_scene_transition !== false ? 'scene' : 'none'
+                      }
                       onChange={(event) =>
                         onChange({
                           ...step,
@@ -1429,8 +1360,6 @@ function StepEditor({
   routines,
   helpers,
   existingIds,
-  open = true,
-  onToggleOpen,
   onChange,
   onRemove,
   onMove,
@@ -1445,150 +1374,67 @@ function StepEditor({
   routines: Array<{ id: string; name: string }>;
   helpers: HelperRuntimeStatus[];
   existingIds: string[];
-  /**
-   * Only one step's fields are open at a time; the row stays a sentence. Left
-   * undefined the fields stay open, which is what nested branch steps do.
-   */
-  open?: boolean;
-  onToggleOpen?: () => void;
   onChange: (step: NativeAction) => void;
   onRemove: () => void;
   onMove: (offset: number) => void;
   onDuplicate?: () => void;
 }) {
+  const { draftKey } = useRoutineAuthoring();
+  if (!step || typeof step !== 'object')
+    return <UnknownFlowValue value={step} />;
+  const known =
+    stepKindOptions.some((option) => option.value === step.action) &&
+    (step.action !== 'set_power' || Boolean(step.device)) &&
+    (step.action !== 'cycle_scenes' || Array.isArray(step.scenes)) &&
+    (step.action !== 'choose' ||
+      (Array.isArray(step.branches) &&
+        step.branches.every(
+          (branch) => branch && Array.isArray(branch.steps) && branch.condition,
+        )));
   return (
-    <Card className="rounded-2xl">
-      <CardContent className="space-y-4 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1 space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                {index + 1}. {stepKindLabels[step.action]}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {summarizeStep(step)}
-              </span>
-            </div>
-            {open ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <ConfigField
-                  label="Step type"
-                  description="Changing the type replaces this step's settings."
-                >
-                  <SearchablePicker
-                    options={stepKindOptions.map((option) => ({
-                      value: option.value,
-                      label: option.label,
-                    }))}
-                    value={step.action}
-                    onChange={(kind) =>
-                      onChange(
-                        defaultStep(
-                          kind as StepKind,
-                          nextNodeId(
-                            kind,
-                            existingIds.filter((id) => id !== step.id),
-                          ),
-                        ),
-                      )
-                    }
-                  />
-                </ConfigField>
-                <ConfigField
-                  label="Step ID"
-                  description="Stable node id used in logs."
-                >
-                  <Input
-                    className="font-mono"
-                    value={step.id}
-                    onChange={(event) =>
-                      onChange({
-                        ...step,
-                        id: event.target.value,
-                      } as NativeAction)
-                    }
-                  />
-                </ConfigField>
-                <ConfigField
-                  label="Step ID"
-                  description="Stable node id used in logs."
-                >
-                  <Input
-                    className="font-mono"
-                    value={step.id}
-                    onChange={(event) =>
-                      onChange({
-                        ...step,
-                        id: event.target.value,
-                      } as NativeAction)
-                    }
-                  />
-                </ConfigField>
-              </div>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-1">
-            {onToggleOpen ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-expanded={open}
-                onClick={onToggleOpen}
-              >
-                {open ? 'Close' : 'Edit'}
-              </Button>
-            ) : null}
-            {/* Reordering and removal belong to the step being edited: a row at
-                rest shows what it does, not a row of buttons. */}
-            {!onToggleOpen || open ? (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  aria-label="Move earlier"
-                  disabled={index === 0}
-                  onClick={() => onMove(-1)}
-                >
-                  ↑
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  aria-label="Move later"
-                  disabled={index === total - 1}
-                  onClick={() => onMove(1)}
-                >
-                  ↓
-                </Button>
-                {onDuplicate ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Duplicate step ${index + 1}`}
-                    onClick={onDuplicate}
-                  >
-                    <Copy aria-hidden />
-                  </Button>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                  onClick={onRemove}
-                >
-                  Remove
-                </Button>
-              </>
-            ) : null}
-          </div>
-        </div>
-
-        {open ? (
+    <FlowBlock
+      id={step.id}
+      title={
+        known ? (
+          <select
+            className="settings-select w-full"
+            aria-label="Step type"
+            value={step.action}
+            onChange={(event) => {
+              const kind = event.target.value as StepKind,
+                fallback = defaultStep(kind, step.id);
+              onChange(
+                draftKey
+                  ? entityDraftStore.switchVariant(
+                      draftKey,
+                      'step/' + step.id,
+                      step.action,
+                      step,
+                      kind,
+                      fallback,
+                    )
+                  : fallback,
+              );
+            }}
+          >
+            {stepKindOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          'Unrecognized step'
+        )
+      }
+      index={index}
+      total={total}
+      onMove={onMove}
+      onRemove={onRemove}
+      onDuplicate={onDuplicate}
+    >
+      {known ? (
+        <>
           <StepFields
             step={step}
             onChange={onChange}
@@ -1599,9 +1445,11 @@ function StepEditor({
             helpers={helpers}
             existingIds={existingIds}
           />
-        ) : null}
-      </CardContent>
-    </Card>
+        </>
+      ) : (
+        <UnknownFlowValue value={step} />
+      )}
+    </FlowBlock>
   );
 }
 
@@ -1850,223 +1698,130 @@ export function ProgramBuilder({
   routines: Array<{ id: string; name: string }>;
   helpers: HelperRuntimeStatus[];
 }) {
-  const [newStepKind, setNewStepKind] = useState<StepKind>('activate_scene');
-  // One step's fields open at a time: the row stays a sentence until opened.
-  const [openStepId, setOpenStepId] = useState<string | null>(null);
-
-  const handleStepChange = useCallback(
-    (index: number, next: NativeAction) => {
-      if (program?.kind !== 'native') {
-        return;
-      }
-      onChange({
-        kind: 'native',
-        steps: program.steps.map((step, stepIndex) =>
-          stepIndex === index ? next : step,
-        ),
-      });
-    },
-    [program, onChange],
-  );
-
-  const handleMove = useCallback(
-    (index: number, offset: number) => {
-      if (program?.kind !== 'native') {
-        return;
-      }
-      const target = index + offset;
-      if (target < 0 || target >= program.steps.length) {
-        return;
-      }
-      const steps = [...program.steps];
-      const [moved] = steps.splice(index, 1);
-      steps.splice(target, 0, moved);
-      onChange({ kind: 'native', steps });
-    },
-    [program, onChange],
-  );
-
-  const changeProgramKind = (kind: Program['kind']) => {
-    if (kind === 'native') {
-      onChange({ kind: 'native', steps: [] });
-      return;
-    }
-    onChange({
-      kind: 'script',
-      spec: {
-        api_version: 1,
-        source_body: '',
-        declarations: [],
-        limits_profile: 'default',
-      },
-    });
-  };
-
-  const steps = program?.kind === 'native' ? program.steps : [];
+  const { draftKey } = useRoutineAuthoring();
+  const steps =
+    program?.kind === 'native' && Array.isArray(program.steps)
+      ? program.steps
+      : [];
   const existingIds = collectStepIds(steps);
-  const duplicateIds = new Set(
-    existingIds.filter((id, index) => existingIds.indexOf(id) !== index),
-  );
-
-  const addStep = (kind: StepKind) => {
-    const step = defaultStep(
-      kind,
-      nextNodeId(kind, [...existingIds, ...duplicateIds]),
-    );
-    onChange({ kind: 'native', steps: [...steps, step] });
-    setOpenStepId(step.id);
-  };
-
-  const duplicateStep = (index: number) => {
-    const source = steps[index];
-    if (!source) {
+  if (
+    program &&
+    (typeof program !== 'object' ||
+      (program.kind === 'native' && !Array.isArray(program.steps)) ||
+      (program.kind === 'script' &&
+        (!program.spec ||
+          typeof program.spec.source_body !== 'string' ||
+          !Array.isArray(program.spec.declarations))))
+  )
+    return <UnknownFlowValue value={program} />;
+  const update = (steps: NativeAction[]) =>
+    onChange({ ...program, kind: 'native', steps });
+  async function switchProgram(kind: Program['kind']) {
+    if (
+      program &&
+      !(await confirmDialog({
+        title: 'Change the program type?',
+        description:
+          'This replaces the active program in your draft. You can switch back before saving to recover its settings.',
+        confirmLabel: 'Change type',
+      }))
+    )
       return;
-    }
-    const id = nextNodeId(source.action, [...existingIds, ...duplicateIds]);
-    const copy = { ...JSON.parse(JSON.stringify(source)), id } as NativeAction;
-    onChange({
-      kind: 'native',
-      steps: [...steps.slice(0, index + 1), copy, ...steps.slice(index + 1)],
-    });
-    setOpenStepId(id);
-  };
-
+    const fallback: Program =
+      kind === 'native'
+        ? { kind: 'native', steps: [] }
+        : {
+            kind: 'script',
+            spec: {
+              api_version: 1,
+              source_body: '',
+              declarations: [],
+              limits_profile: 'default',
+            },
+          };
+    onChange(
+      draftKey && program
+        ? entityDraftStore.switchVariant(
+            draftKey,
+            'program',
+            program.kind,
+            program,
+            kind,
+            fallback,
+          )
+        : fallback,
+    );
+  }
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h4 className="font-medium">Actions</h4>
-          <p className="text-sm text-muted-foreground">
-            These steps run in order once a trigger fires and the conditions
-            hold. Each row is one step: open it to change it.
-          </p>
-        </div>
-        <Advanced summary="Program type">
-          <ConfigField label="Program type" className="min-w-56">
-            <select
-              className={selectClassName}
-              value={program?.kind ?? ''}
-              onChange={(event) =>
-                changeProgramKind(event.target.value as Program['kind'])
-              }
-            >
-              {program === undefined ? (
-                <option value="">Select type...</option>
-              ) : null}
-              <option value="native">Steps in order</option>
-              <option value="script">Sandboxed script</option>
-            </select>
-          </ConfigField>
-        </Advanced>
-      </div>
-
-      {program === undefined ? (
-        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            This routine has no actions yet. Most routines just switch things on
-            or off.
-          </p>
-          <div className="mt-3 flex flex-wrap justify-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => changeProgramKind('native')}
-            >
-              Add steps
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => changeProgramKind('script')}
-            >
-              Write a script
-            </Button>
-          </div>
-        </div>
-      ) : program.kind === 'script' ? (
+    <div className="flow-sequence">
+      <label className="grid gap-1 text-xs text-muted-foreground">
+        Program
+        <select
+          className="settings-select"
+          value={program?.kind ?? 'native'}
+          onChange={(event) =>
+            void switchProgram(event.target.value as Program['kind'])
+          }
+        >
+          <option value="native">Steps in order</option>
+          <option value="script">Sandboxed script</option>
+          {program && !['native', 'script'].includes(program.kind) && (
+            <option value={program.kind}>Unrecognized program</option>
+          )}
+        </select>
+      </label>
+      {program?.kind === 'script' ? (
         <ScriptProgramEditor
           spec={program.spec}
-          onChange={(spec) => onChange({ kind: 'script', spec })}
+          onChange={(spec) => onChange({ ...program, spec })}
           devices={devices}
           groups={groups}
         />
+      ) : program && program.kind !== 'native' ? (
+        <UnknownFlowValue value={program} />
       ) : (
         <>
-          <div className="flex flex-wrap items-end gap-3">
-            <ConfigField label="Add step" className="min-w-64">
-              <SearchablePicker
-                options={stepKindOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                }))}
-                value={newStepKind}
-                onChange={(kind) => setNewStepKind(kind as StepKind)}
-              />
-            </ConfigField>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => addStep(newStepKind)}
-            >
-              Add step
-            </Button>
-          </div>
-
-          {steps.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-              No steps yet. An enabled routine needs at least one, otherwise
-              there is nothing to run.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {steps.map((step, index) => (
-                <StepEditor
-                  key={`${step.id}:${index}`}
-                  step={step}
-                  index={index}
-                  total={steps.length}
-                  open={openStepId === step.id}
-                  onToggleOpen={() =>
-                    setOpenStepId(openStepId === step.id ? null : step.id)
-                  }
-                  onDuplicate={() => duplicateStep(index)}
-                  devices={devices}
-                  groups={groups}
-                  scenes={scenes}
-                  routines={routines}
-                  helpers={helpers}
-                  existingIds={existingIds}
-                  onChange={(next) => handleStepChange(index, next)}
-                  onRemove={() => {
-                    if (openStepId === step.id) {
-                      setOpenStepId(null);
-                    }
-                    onChange({
-                      kind: 'native',
-                      steps: steps.filter(
-                        (_, stepIndex) => stepIndex !== index,
-                      ),
-                    });
-                  }}
-                  onMove={(offset) => handleMove(index, offset)}
-                />
-              ))}
-            </div>
-          )}
-
-          {duplicateIds.size > 0 ? (
-            <p className="text-xs text-destructive">
-              Step IDs must be unique across the program, including choose
-              branch steps.
+          {steps.map((step, index) => (
+            <StepEditor
+              key={step?.id || index}
+              step={step}
+              index={index}
+              total={steps.length}
+              devices={devices}
+              groups={groups}
+              scenes={scenes}
+              routines={routines}
+              helpers={helpers}
+              existingIds={existingIds}
+              onChange={(next) =>
+                update(steps.map((entry, i) => (i === index ? next : entry)))
+              }
+              onRemove={() => update(steps.filter((_, i) => i !== index))}
+              onMove={(offset) => update(moveSibling(steps, index, offset))}
+              onDuplicate={() =>
+                update([
+                  ...steps.slice(0, index + 1),
+                  duplicateRoutineNode(step),
+                  ...steps.slice(index + 1),
+                ])
+              }
+            />
+          ))}
+          {!steps.length && (
+            <p className="text-xs text-muted-foreground">
+              Add the actions to run, in order.
             </p>
-          ) : null}
+          )}
+          <AddFlowBlock
+            label="Add action"
+            options={stepKindOptions}
+            onAdd={(kind) =>
+              update([...steps, defaultStep(kind, createUuid())])
+            }
+          />
         </>
       )}
     </div>
   );
 }
-
 export default ProgramBuilder;

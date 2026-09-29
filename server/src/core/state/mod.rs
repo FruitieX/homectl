@@ -118,6 +118,7 @@ impl From<SnapshotChanges> for PendingWsUpdate {
 }
 
 pub struct AppState {
+    pub device_health: crate::core::device_health::HealthMonitor,
     pub calibration_sessions: HashMap<String, super::calibration_session::CalibrationSession>,
     pub warming_up: bool,
     pub runtime_config: ConfigExport,
@@ -226,6 +227,11 @@ impl AppState {
         }
 
         let snapshot = RuntimeSnapshot {
+            device_health: if changes.device_health {
+                Arc::new(self.device_health.snapshot.clone())
+            } else {
+                Arc::clone(&previous.device_health)
+            },
             runtime_config: if changes.runtime_config {
                 Arc::new(self.runtime_config.clone())
             } else {
@@ -525,6 +531,13 @@ impl AppState {
         self.runtime_config.floorplans[index].grid_data = Some(grid);
     }
 
+    /// Commit name, image and grid as one user editing scope.
+    pub fn set_floorplan_editor_config(&mut self, row: FloorplanExportRow) -> usize {
+        let index = self.ensure_floorplan_index(&row.id);
+        self.runtime_config.floorplans[index] = row;
+        index
+    }
+
     pub fn clear_floorplan_image(&mut self, floorplan_id: &str) -> bool {
         self.promote_legacy_default_floorplan();
         if let Some(existing) = self
@@ -767,6 +780,27 @@ impl AppState {
         // Only replace the integration domain: unrelated actor writes may have
         // happened while lifecycle work ran outside this task.
         self.runtime_config.integrations = runtime_config.integrations;
+        // Reporting defaults belong to the integration editing scope. Commit
+        // them with the configuration after lifecycle work succeeds, while
+        // preserving unrelated widget/device settings changed by the actor.
+        self.runtime_config
+            .widget_settings
+            .retain(|row| !row.key.starts_with("reporting/integration/"));
+        self.runtime_config.widget_settings.extend(
+            runtime_config.widget_settings.into_iter().filter(|row| {
+                row.key
+                    .strip_prefix("reporting/integration/")
+                    .is_some_and(|id| {
+                        self.runtime_config
+                            .integrations
+                            .iter()
+                            .any(|integration| integration.id == id)
+                    })
+            }),
+        );
+        self.runtime_config
+            .widget_settings
+            .sort_by(|a, b| a.key.cmp(&b.key));
         self.integrations = integrations;
         let removed_device_keys = self.remove_devices_for_integrations(&removed_ids);
         // Device policy projections (e.g. disabled) must reach already-open UIs.

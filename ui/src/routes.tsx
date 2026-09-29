@@ -48,6 +48,20 @@ const ConfigRoutineDetailPage = lazy(
 );
 const ConfigScenesPage = lazy(() => import('../app/config/scenes/page'));
 const ConfigSettingsPage = lazy(() => import('../app/config/settings/page'));
+const ConfigDashboardsPage = lazy(() => import('../app/config/dashboard/page'));
+const ConfigDashboardLayoutPage = lazy(
+  () => import('../app/config/dashboard/layout'),
+);
+const ConfigWidgetPage = lazy(() => import('../app/config/dashboard/widget'));
+const ConfigWidgetSourcesPage = lazy(
+  () => import('../app/config/widget-sources/page'),
+);
+const ConfigWidgetSourceDetailPage = lazy(
+  () => import('../app/config/widget-sources/detail'),
+);
+const ConfigSensorCatalogPage = lazy(
+  () => import('../app/config/sensors/page'),
+);
 const ConfigSourcesPage = lazy(() => import('../app/config/sources/page'));
 const ConfigSourceDetailPage = lazy(
   () => import('../app/config/sources/detail'),
@@ -131,6 +145,30 @@ export const router = createBrowserRouter([
           {
             path: 'devices',
             element: withSuspense(<ConfigDevicesPage />),
+          },
+          {
+            path: 'sensors',
+            element: withSuspense(<ConfigSensorCatalogPage />),
+          },
+          {
+            path: 'dashboard',
+            element: withSuspense(<ConfigDashboardsPage />),
+          },
+          {
+            path: 'dashboard/:layoutId',
+            element: withSuspense(<ConfigDashboardLayoutPage />),
+          },
+          {
+            path: 'dashboard/:layoutId/widgets/:widgetId',
+            element: withSuspense(<ConfigWidgetPage />),
+          },
+          {
+            path: 'widget-sources',
+            element: withSuspense(<ConfigWidgetSourcesPage />),
+          },
+          {
+            path: 'widget-sources/:id',
+            element: withSuspense(<ConfigWidgetSourceDetailPage />),
           },
           {
             path: 'devices/detail/*',

@@ -1,3 +1,6 @@
+import { useSettingsPageContext } from '@/hooks/useSettingsPageContext';
+import '@/styles/settings.css';
+import { RetainedDrafts } from '@/ui/settings/SettingsDrafts';
 import { useConfigWriteWarnings } from '@/hooks/configWriteStatus';
 import { useRuntimeStatus } from '@/hooks/useConfig';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
@@ -11,12 +14,13 @@ export default function ConfigLayout({
   children: React.ReactNode;
 }) {
   const pathname = useLocation().pathname;
+  const contentRef = useSettingsPageContext();
   const writeWarnings = useConfigWriteWarnings();
   const { data: runtimeStatus } = useRuntimeStatus(5000);
   const reduceMotion = useReducedMotion();
 
   return (
-    <div className="flex h-full flex-col bg-background">
+    <div className="settings-workspace flex h-full flex-col bg-background">
       {runtimeStatus?.memory_only_mode && (
         <Alert variant="warning" className="mx-4 mt-4 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -55,16 +59,19 @@ export default function ConfigLayout({
             </AlertDescription>
           </Alert>
         )}
+      <RetainedDrafts />
       {/* Content area */}
       <motion.div
+        ref={contentRef}
         key={pathname}
         animate={{ opacity: 1, y: 0 }}
-        className="flex-1 overflow-auto p-4 pb-[calc(env(safe-area-inset-bottom)+5rem)] sm:p-6 lg:p-8"
+        className="min-h-0 flex-1 overflow-auto p-4 sm:p-6"
         initial={reduceMotion ? false : { opacity: 0, y: 8 }}
         transition={{ duration: 0.18, ease: 'easeOut' }}
       >
         {children}
       </motion.div>
+      <div id="settings-save-slot" className="shrink-0" />
     </div>
   );
 }

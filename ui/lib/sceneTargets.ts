@@ -64,8 +64,8 @@ export type DeviceLinkResolution =
  * A saved device link can keep working after the integration id changes: the
  * server still serves an old `circadian/color` reference from the device that
  * is now published as `computed/circadian`. So a literal key miss is not proof
- * that the device is gone — when the device id exists under exactly one other
- * integration, that is the device the reference resolves to. Callers pass the
+ * that the device is gone — only an explicitly declared alias can resolve it
+ * through another integration; matching a device ID alone is insufficient. Callers pass the
  * catalog only once it has loaded; while it is loading the answer is
  * 'unknown', never 'missing'.
  */
@@ -74,22 +74,11 @@ export function resolveDeviceLink(
   deviceKeys?: string[],
   aliases?: Record<string, string>,
 ): DeviceLinkResolution {
-  // A computed source keeps the legacy keys it replaced (for example the
-  // `circadian` source still answers to `circadian/color`), and the server
-  // publishes that mapping as `aliases`. The UI asks the same question with the
-  // same answer instead of guessing from the runtime catalog alone.
-  if (aliases && targetKey in aliases) {
-    return { state: 'aliased', resolvedKey: aliases[targetKey] };
-  }
   if (!deviceKeys) return { state: 'unknown' };
   if (deviceKeys.includes(targetKey)) return { state: 'known' };
-  const id = targetKey.split('/').slice(1).join('/');
-  if (id === '') return { state: 'missing' };
-  const matches = deviceKeys.filter(
-    (key) => key.split('/').slice(1).join('/') === id,
-  );
-  return matches.length === 1
-    ? { state: 'aliased', resolvedKey: matches[0] }
+  const canonical = aliases?.[targetKey];
+  return canonical && deviceKeys.includes(canonical)
+    ? { state: 'aliased', resolvedKey: canonical }
     : { state: 'missing' };
 }
 
@@ -216,21 +205,24 @@ export function describeSceneTarget(
     key,
     kind,
     mode,
-    summary: parts.join(' · ') || 'No state set',
-    unresolvedReason: parts.length === 0 ? 'Has no state set yet' : null,
+    summary:
+      parts.join(' · ') || 'On · default brightness · color not specified',
+    unresolvedReason: null,
   };
 }
 
 /**
- * Saved order first, then anything the order does not mention, in insertion
+ * Saved order first, then anything the order does not mention, in alphabetical
  * order — the same precedence the engine applies when it walks room targets.
  */
 export function orderedSceneTargets<T extends object>(
   items: Record<string, T>,
   order?: readonly string[],
 ): [string, T][] {
-  const ordered = (order ?? []).filter((key) => key in items);
-  const rest = Object.keys(items).filter((key) => !ordered.includes(key));
+  const ordered = [...new Set((order ?? []).filter((key) => key in items))];
+  const rest = Object.keys(items)
+    .filter((key) => !ordered.includes(key))
+    .sort();
   return [...ordered, ...rest].map((key) => [key, items[key]] as [string, T]);
 }
 

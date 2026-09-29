@@ -27,6 +27,7 @@ pub fn route(snapshot: SnapshotHandle, http: reqwest::Client) -> BoxedFilter<(Re
 struct TempSensorsQuery {
     url: Option<String>,
     token: Option<String>,
+    widget_id: Option<i32>,
     device_ids: Option<String>,
     range: Option<String>,
     window: Option<String>,
@@ -64,10 +65,24 @@ fn parse_device_ids(value: Option<String>) -> Vec<String> {
 }
 
 async fn handle(
-    query: TempSensorsQuery,
+    mut query: TempSensorsQuery,
     snapshot: SnapshotHandle,
     http: reqwest::Client,
 ) -> Response {
+    if let Some(id) = query.widget_id {
+        if query.url.is_some() || query.token.is_some() {
+            return error(
+                StatusCode::BAD_REQUEST,
+                "A widget request cannot override its saved connection",
+            );
+        }
+        let options = match super::saved_widget_options(&snapshot, id, "sensors") {
+            Ok(value) => value,
+            Err(message) => return error(StatusCode::NOT_FOUND, message),
+        };
+        query.url = super::option_string(&options, "influxUrl");
+        query.token = super::option_string(&options, "influxToken");
+    }
     let (url, token) = match (
         non_empty(query.url).or_else(|| {
             widget_setting_string_or_env(

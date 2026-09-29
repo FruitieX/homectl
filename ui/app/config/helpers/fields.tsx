@@ -10,13 +10,7 @@ import {
   ValueControl,
   defaultKind,
   defaultValueForKind,
-} from './page';
-
-/**
- * The helper's editable field groups, one component per section, so a detail
- * page can put each behind its own Change action instead of showing one long
- * form. The list page's inline editor uses the same components.
- */
+} from './shared';
 
 export function HelperNameFields({
   draft,
@@ -29,20 +23,24 @@ export function HelperNameFields({
 }) {
   return (
     <ConfigFormGrid>
-      <ConfigField
-        label="Id"
-        description="The stable reference routines and scripts use; fixed once the helper exists."
-      >
-        <Input
-          disabled={!isNew}
-          placeholder="staircase_mode"
-          type="text"
-          value={draft.id}
-          onChange={(event) => setDraft({ ...draft, id: event.target.value })}
-        />
-      </ConfigField>
+      {isNew && (
+        <ConfigField
+          label="Id"
+          description="The stable reference routines and scripts use; fixed once the helper exists."
+        >
+          <Input
+            data-field="id"
+            disabled={!isNew}
+            placeholder="staircase_mode"
+            type="text"
+            value={draft.id}
+            onChange={(event) => setDraft({ ...draft, id: event.target.value })}
+          />
+        </ConfigField>
+      )}
       <ConfigField label="Name">
         <Input
+          data-field="name"
           placeholder="Staircase mode"
           type="text"
           value={draft.name}
@@ -56,14 +54,25 @@ export function HelperNameFields({
 export function HelperKindFields({
   draft,
   setDraft,
+  onKindChange,
 }: {
   draft: HelperDefinition;
   setDraft: (draft: HelperDefinition) => void;
+  onKindChange?: (
+    next: Pick<HelperDefinition, 'kind' | 'initial_value'>,
+  ) => void;
 }) {
   const kind = draft.kind;
 
   const changeKind = (next: HelperKind['kind']) => {
     const nextKind = defaultKind(next);
+    if (onKindChange) {
+      onKindChange({
+        kind: nextKind,
+        initial_value: defaultValueForKind(nextKind),
+      });
+      return;
+    }
     setDraft({
       ...draft,
       kind: nextKind,
@@ -73,16 +82,10 @@ export function HelperKindFields({
 
   const updateEnumOptions = (options: string[]) => {
     const nextKind: HelperKind =
-      kind.kind === 'enum' ? { kind: 'enum', options } : kind;
+      kind.kind === 'enum' ? { ...kind, options } : kind;
     setDraft({
       ...draft,
       kind: nextKind,
-      initial_value:
-        kind.kind === 'enum' && typeof draft.initial_value === 'string'
-          ? options.includes(draft.initial_value)
-            ? draft.initial_value
-            : (options[0] ?? '')
-          : draft.initial_value,
     });
   };
 
@@ -93,6 +96,7 @@ export function HelperKindFields({
         description="The declared type constrains every write; the server rejects values outside it."
       >
         <select
+          data-field="kind"
           className={selectClassName}
           value={kind.kind}
           onChange={(event) =>
@@ -110,12 +114,13 @@ export function HelperKindFields({
       {kind.kind === 'enum' ? (
         <ConfigField
           label="Options"
-          description="Ordered options; the first is the default value."
+          description="Ordered choices. Choose the initial value below."
         >
           <div className="space-y-2">
             {kind.options.map((option, index) => (
               <div key={index} className="flex items-center gap-2">
                 <Input
+                  aria-label={`Option ${index + 1}`}
                   type="text"
                   value={option}
                   onChange={(event) => {
@@ -124,6 +129,23 @@ export function HelperKindFields({
                     updateEnumOptions(options);
                   }}
                 />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={index === 0}
+                  aria-label={`Move option ${index + 1} up`}
+                  onClick={() => {
+                    const options = [...kind.options];
+                    [options[index - 1], options[index]] = [
+                      options[index],
+                      options[index - 1],
+                    ];
+                    updateEnumOptions(options);
+                  }}
+                >
+                  ↑
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"
@@ -169,7 +191,7 @@ export function HelperKindFields({
                 setDraft({
                   ...draft,
                   kind: {
-                    kind: 'number',
+                    ...kind,
                     min: Number.isFinite(parsed) ? parsed : undefined,
                     max: kind.max,
                   },
@@ -190,7 +212,7 @@ export function HelperKindFields({
                 setDraft({
                   ...draft,
                   kind: {
-                    kind: 'number',
+                    ...kind,
                     min: kind.min,
                     max: Number.isFinite(parsed) ? parsed : undefined,
                   },
@@ -214,13 +236,15 @@ export function HelperInitialValueField({
   return (
     <ConfigField
       label="Initial value"
-      description="Used at initialization and after a restart. The current value is what routines read while the app runs."
+      description="Used when there is no stored value, or after a restart for session helpers."
     >
-      <ValueControl
-        kind={draft.kind}
-        value={draft.initial_value}
-        onChange={(initial_value) => setDraft({ ...draft, initial_value })}
-      />
+      <div data-field="initial_value" tabIndex={-1}>
+        <ValueControl
+          kind={draft.kind}
+          value={draft.initial_value}
+          onChange={(initial_value) => setDraft({ ...draft, initial_value })}
+        />
+      </div>
     </ConfigField>
   );
 }

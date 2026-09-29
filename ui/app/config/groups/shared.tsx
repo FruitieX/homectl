@@ -1,5 +1,9 @@
+import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
+import { StatePreview } from '@/ui/settings/StatePreview';
+import { configItemHref } from '@/lib/configItemHref';
+import { Link } from 'react-router-dom';
 import { useCallback, useMemo, useState } from 'react';
-import { AlertTriangle, Plus, Search, X } from 'lucide-react';
+import { AlertTriangle, Plus, Search, Trash2 } from 'lucide-react';
 
 import { type Device } from '@/bindings/Device';
 import { type Group, useDeviceDisplayNames } from '@/hooks/useConfig';
@@ -9,11 +13,7 @@ import {
   getDeviceDisplayLabel,
   getDeviceDisplayLabelFromKey,
 } from '@/lib/deviceLabel';
-import {
-  findExistingPath,
-  findNestedCycle,
-  groupDeviceKey,
-} from '@/lib/groupGraph';
+import { groupDeviceKey } from '@/lib/groupGraph';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
@@ -22,7 +22,7 @@ export type GroupDeviceRef = { integration_id: string; device_id: string };
 
 /** Device labels and keys, resolved once per page. */
 export function useDeviceLookups() {
-  const { devices: allDevices } = useDevicesApi();
+  const { devices: allDevices, loading, error, refetch } = useDevicesApi();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
 
   const deviceDisplayNameMap = useMemo(
@@ -77,6 +77,9 @@ export function useDeviceLookups() {
 
   return {
     allDevices,
+    loading,
+    error,
+    refetch,
     devicesByKey,
     deviceDisplayNameMap,
     labelFor,
@@ -91,6 +94,8 @@ export function useDeviceLookups() {
  */
 export function SelectedDeviceRows({
   devices,
+  devicesByKey,
+  catalogReady = true,
   onChange,
   labelFor,
   presentKeys,
@@ -99,6 +104,8 @@ export function SelectedDeviceRows({
   onCancelReplace,
 }: {
   devices: readonly GroupDeviceRef[];
+  devicesByKey: Record<string, Device>;
+  catalogReady?: boolean;
   onChange: (devices: GroupDeviceRef[]) => void;
   labelFor: (ref: GroupDeviceRef | string) => string;
   presentKeys: ReadonlySet<string>;
@@ -106,29 +113,39 @@ export function SelectedDeviceRows({
   onStartReplace?: (key: string) => void;
   onCancelReplace?: () => void;
 }) {
+  const { advanced } = useSettingsPreferences();
   if (devices.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        No devices in this room yet.
-      </p>
+      <p className="text-sm text-muted-foreground">No direct devices yet.</p>
     );
   }
 
   return (
-    <ul className="divide-y divide-border/60 rounded-2xl border border-border/70">
+    <ul className="divide-y divide-border/60 rounded-lg border border-border/70">
       {devices.map((device) => {
         const key = groupDeviceKey(device);
-        const missing = !presentKeys.has(key);
+        const missing = catalogReady && !presentKeys.has(key);
         const replacing = replaceTarget === key;
+        const data = devicesByKey[key]?.data;
+        const state =
+          data && 'Controllable' in data ? data.Controllable.state : undefined;
         return (
           <li
             key={key}
             data-target-key={key}
             className="flex items-center gap-3 px-3 py-2"
           >
+            {state && <StatePreview {...state} source="Requested" />}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm">{labelFor(device)}</p>
-              <p className="truncate text-xs text-muted-foreground">{key}</p>
+              <Link
+                className="block truncate text-sm hover:underline"
+                to={configItemHref('device', key)}
+              >
+                {labelFor(device)}
+              </Link>
+              {(advanced || missing) && (
+                <p className="truncate text-xs text-muted-foreground">{key}</p>
+              )}
             </div>
             {missing ? (
               <Badge variant="warning" className="shrink-0 gap-1">
@@ -153,16 +170,16 @@ export function SelectedDeviceRows({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              aria-label={`Remove ${labelFor(device)} from this room`}
+              size="icon"
+              className="text-muted-foreground hover:text-destructive"
+              aria-label={`Remove ${labelFor(device)} from this group`}
               onClick={() =>
                 onChange(
                   devices.filter((entry) => groupDeviceKey(entry) !== key),
                 )
               }
             >
-              Remove
+              <Trash2 aria-hidden className="size-4" />
             </Button>
           </li>
         );
@@ -204,7 +221,7 @@ export function DeviceAdder({
 
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-2 rounded-xl border border-input bg-background px-3">
+      <label className="flex items-center gap-2 rounded-md border border-input bg-background px-3">
         <Search aria-hidden className="size-4 shrink-0 text-muted-foreground" />
         <Input
           value={query}
@@ -223,7 +240,7 @@ export function DeviceAdder({
           No devices match “{query}”.
         </p>
       ) : (
-        <ul className="divide-y divide-border/60 rounded-2xl border border-border/70">
+        <ul className="divide-y divide-border/60 rounded-lg border border-border/70">
           {matches.map(({ key, label, device }) => {
             const selected = selectedKeys.has(key);
             return (
@@ -265,15 +282,14 @@ export function SelectedRoomRows({
   groups: readonly Group[];
   onChange: (ids: string[]) => void;
 }) {
+  const { advanced } = useSettingsPreferences();
   if (ids.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        No linked rooms. Devices from linked rooms become part of this room.
-      </p>
+      <p className="text-sm text-muted-foreground">No linked groups yet.</p>
     );
   }
   return (
-    <ul className="divide-y divide-border/60 rounded-2xl border border-border/70">
+    <ul className="divide-y divide-border/60 rounded-lg border border-border/70">
       {ids.map((id) => {
         const group = groups.find((entry) => entry.id === id);
         return (
@@ -283,123 +299,31 @@ export function SelectedRoomRows({
             className="flex items-center gap-3 px-3 py-2"
           >
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm">{group?.name ?? id}</p>
-              <p className="truncate text-xs text-muted-foreground">{id}</p>
+              <Link
+                className="block truncate text-sm hover:underline"
+                to={`/config/groups/${encodeURIComponent(id)}`}
+              >
+                {group?.name ?? id}
+              </Link>
+              {(advanced || !group) && (
+                <p className="truncate text-xs text-muted-foreground">
+                  {id}
+                  {!group && ' · Missing group'}
+                </p>
+              )}
             </div>
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              aria-label={`Remove linked room ${group?.name ?? id}`}
+              aria-label={`Remove linked group ${group?.name ?? id}`}
               onClick={() => onChange(ids.filter((entry) => entry !== id))}
             >
-              <X aria-hidden />
+              <Trash2 aria-hidden />
             </Button>
           </li>
         );
       })}
     </ul>
-  );
-}
-
-/**
- * Search-first linked-room adder with nesting validation beside the choice:
- * rooms that would create a loop are offered with the reason and disabled,
- * rooms already reachable through another link are marked as redundant.
- */
-export function RoomAdder({
-  groups,
-  groupId,
-  selectedIds,
-  onAdd,
-}: {
-  groups: readonly Group[];
-  groupId: string | undefined;
-  selectedIds: readonly string[];
-  onAdd: (id: string) => void;
-}) {
-  const [query, setQuery] = useState('');
-  const trimmed = query.trim().toLowerCase();
-
-  const candidates = useMemo(() => {
-    return groups
-      .filter(
-        (group) => group.id !== groupId && !selectedIds.includes(group.id),
-      )
-      .map((group) => {
-        const cycle = groupId
-          ? findNestedCycle(groups, groupId, group.id)
-          : null;
-        const existing = groupId
-          ? findExistingPath(groups, groupId, group.id)
-          : null;
-        return { group, cycle, existing };
-      })
-      .filter(({ group }) =>
-        trimmed === ''
-          ? true
-          : `${group.name} ${group.id}`.toLowerCase().includes(trimmed),
-      );
-  }, [groupId, groups, selectedIds, trimmed]);
-
-  const shown =
-    trimmed === '' ? candidates.slice(0, 8) : candidates.slice(0, 20);
-
-  return (
-    <div className="space-y-2">
-      <label className="flex items-center gap-2 rounded-xl border border-input bg-background px-3">
-        <Search aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search rooms"
-          aria-label="Search rooms to link"
-          className="h-10 border-0 bg-transparent px-0 focus-visible:ring-0"
-        />
-      </label>
-      {candidates.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          No other rooms available to link.
-        </p>
-      ) : (
-        <ul className="divide-y divide-border/60 rounded-2xl border border-border/70">
-          {shown.map(({ group, cycle, existing }) => (
-            <li key={group.id} className="flex items-center gap-3 px-3 py-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm">{group.name}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {cycle
-                    ? `Would create a loop: ${cycle.join(' → ')}`
-                    : existing
-                      ? `Already included through ${existing.slice(0, -1).join(' → ')}`
-                      : group.id}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={Boolean(cycle)}
-                aria-describedby={cycle ? `link-cycle-${group.id}` : undefined}
-                onClick={() => onAdd(group.id)}
-              >
-                <Plus aria-hidden />
-                {existing ? 'Link anyway' : 'Link'}
-              </Button>
-              {cycle ? (
-                <span id={`link-cycle-${group.id}`} className="sr-only">
-                  {`Linking ${group.name} would create a nesting loop through ${cycle.join(', ')}`}
-                </span>
-              ) : null}
-            </li>
-          ))}
-          {trimmed === '' && candidates.length > shown.length ? (
-            <li className="px-3 py-2 text-xs text-muted-foreground">
-              {candidates.length - shown.length} more rooms — type to search.
-            </li>
-          ) : null}
-        </ul>
-      )}
-    </div>
   );
 }

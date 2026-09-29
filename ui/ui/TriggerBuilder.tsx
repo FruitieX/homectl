@@ -1,3 +1,12 @@
+import {
+  FlowBlock,
+  AddFlowBlock,
+  UnknownFlowValue,
+  useRoutineAuthoring,
+} from '@/ui/settings/FlowBlock';
+import { createUuid } from '@/lib/uuid';
+import { moveSibling } from '@/lib/routineDraft';
+import { entityDraftStore } from '@/lib/entityDraft';
 import type { BacklogPolicy } from '@/bindings/BacklogPolicy';
 import type { ConditionExpr } from '@/bindings/ConditionExpr';
 import type { DevicesState } from '@/bindings/DevicesState';
@@ -9,20 +18,14 @@ import type { TriggerSpec } from '@/bindings/TriggerSpec';
 import { useSchedulePreview } from '@/hooks/useConfig';
 import { DurationInput, selectClassName } from '@/ui/builder-fields';
 import { ConditionEditor } from '@/ui/ConditionBuilder';
-import { SearchablePicker } from '@/ui/SearchablePicker';
 import { DeviceSelect, splitDeviceKey } from '@/ui/config-selectors';
 import { ConfigField } from '@/ui/config-form';
-import { Button } from '@/ui/primitives/button';
-import { Card, CardContent } from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
-import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import {
   StatusBadge,
   triggerBadge,
-  triggerLabel,
   triggerStateSentence,
 } from '@/ui/routine-runtime';
-import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useInterval } from 'usehooks-ts';
 
@@ -38,17 +41,6 @@ const triggerKindOptions: Array<{ value: TriggerKind; label: string }> = [
   { value: 'startup', label: 'On startup' },
   { value: 'manual', label: 'Manual only' },
 ];
-
-const triggerKindLabels: Record<TriggerKind, string> = {
-  schedule: 'Schedule',
-  state_change: 'State change',
-  report: 'Report',
-  predicate_for: 'Predicate held',
-  predicate_transition: 'Predicate becomes true',
-  timer_fired: 'Timer fires',
-  startup: 'Startup',
-  manual: 'Manual',
-};
 
 const timezoneSuggestions = [
   'UTC',
@@ -495,16 +487,6 @@ function TriggerFields({
 }
 
 /** Unique default id for a new trigger of the given kind. */
-function nextTriggerId(kind: TriggerKind, triggers: TriggerSpec[]): string {
-  let index = triggers.length + 1;
-  let id = `${kind}_${index}`;
-  while (triggers.some((trigger) => trigger.id === id)) {
-    index += 1;
-    id = `${kind}_${index}`;
-  }
-  return id;
-}
-
 export function TriggerBuilder({
   triggers,
   onChange,
@@ -513,283 +495,129 @@ export function TriggerBuilder({
   scenes,
   helpers,
   runtimeStatus,
-  deviceDisplayNameMap,
 }: {
   triggers: TriggerSpec[];
   onChange: (triggers: TriggerSpec[]) => void;
-  deviceDisplayNameMap?: Record<string, string>;
   devices: DevicesState;
   groups: FlattenedGroupsConfig;
   scenes: Array<{ id: string; name: string }>;
   helpers: HelperRuntimeStatus[];
   runtimeStatus?: RoutineRuntimeStatus;
+  deviceDisplayNameMap?: Record<string, string>;
 }) {
-  const [draft, setDraft] = useState<TriggerSpec | null>(null);
-  // Only one trigger's fields are open at a time; the row shows a sentence with
-  // its live state until it is opened for editing.
-  const [openTriggerId, setOpenTriggerId] = useState<string | null>(null);
+  const { draftKey } = useRoutineAuthoring();
   const [now, setNow] = useState(() => Date.now());
   const liveTriggers = runtimeStatus?.v2?.triggers ?? [];
-  const hasArmed = liveTriggers.some(
-    (trigger) => trigger.armed && trigger.due_wall_ms !== undefined,
+  useInterval(
+    () => setNow(Date.now()),
+    liveTriggers.some((trigger) => trigger.armed) ? 15000 : null,
   );
-  useInterval(() => setNow(Date.now()), hasArmed ? 15000 : null);
-
-  const startAdd = () => {
-    setDraft(defaultTrigger('schedule', nextTriggerId('schedule', triggers)));
-  };
-
-  const changeDraftKind = (kind: TriggerKind) => {
-    setDraft(defaultTrigger(kind, nextTriggerId(kind, triggers)));
-  };
-
-  const draftIdTaken =
-    draft !== null && triggers.some((trigger) => trigger.id === draft.id);
-
-  const confirmAdd = () => {
-    if (!draft || !draft.id.trim() || draftIdTaken) {
-      return;
-    }
-    onChange([...triggers, draft]);
-    setOpenTriggerId(draft.id);
-    setDraft(null);
-  };
-
+  if (!Array.isArray(triggers)) return <UnknownFlowValue value={triggers} />;
   return (
-    <div className="space-y-4">
+    <div className="flow-sequence">
       <datalist id="v2-timezones">
         {timezoneSuggestions.map((zone) => (
           <option key={zone} value={zone} />
         ))}
       </datalist>
-
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full sm:w-auto"
-        onClick={startAdd}
-      >
-        <Plus />
-        Add trigger
-      </Button>
-
-      <ResponsiveOverlay
-        open={draft !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDraft(null);
-          }
-        }}
-        title="Add trigger"
-        description="Pick the event that starts this routine, configure it, then add it to the routine."
-        presentation="page"
-        className="max-w-2xl"
-      >
-        {draft ? (
-          <div className="flex min-h-full flex-col gap-4 px-5 pb-5 md:px-0 md:pb-0">
-            <ConfigField
-              label="Trigger type"
-              description="What kind of event should start this routine?"
-            >
-              <SearchablePicker
-                options={triggerKindOptions.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                }))}
-                value={draft.kind}
-                onChange={(kind) => changeDraftKind(kind as TriggerKind)}
-                clearable={false}
-              />
-            </ConfigField>
-
-            <ConfigField
-              label="Trigger ID"
-              description="Used by logs and runtime status; keep it short and unique."
-            >
-              <Input
-                className="font-mono"
-                value={draft.id}
-                onChange={(event) =>
-                  setDraft({ ...draft, id: event.target.value } as TriggerSpec)
-                }
-              />
-            </ConfigField>
-            {draftIdTaken ? (
-              <p className="text-xs text-destructive">
-                Trigger IDs must be unique within the routine.
-              </p>
-            ) : null}
-
-            <TriggerFields
-              trigger={draft}
-              onChange={setDraft}
-              devices={devices}
-              groups={groups}
-              scenes={scenes}
-              helpers={helpers}
-            />
-
-            <div className="mt-auto flex justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setDraft(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                disabled={!draft.id.trim() || draftIdTaken}
-                onClick={confirmAdd}
-              >
-                Add trigger
-              </Button>
-            </div>
-          </div>
-        ) : null}
-      </ResponsiveOverlay>
-
-      {triggers.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-          No triggers yet. Add one above; the routine only runs when a trigger
-          fires and its condition holds.
-        </div>
-      ) : (
-        triggers.map((trigger, index) => {
-          const live = liveTriggers.find(
-            (status) => status.trigger_id === trigger.id,
-          );
-          const badge = live ? triggerBadge(live) : null;
-          const duplicateId =
-            triggers.filter((other) => other.id === trigger.id).length > 1;
-          const open = openTriggerId === trigger.id;
-
-          return (
-            <Card key={`${trigger.id}:${index}`} className="rounded-2xl">
-              <CardContent className="space-y-3 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge kind={trigger.kind} />
-                      <span className="text-sm font-medium">
-                        {triggerLabel(
-                          trigger,
-                          devices,
-                          deviceDisplayNameMap ?? {},
-                        ) ?? `${triggerKindLabels[trigger.kind]} trigger`}
-                      </span>
-                      {badge ? (
-                        <StatusBadge label={badge.label} tone={badge.tone} />
-                      ) : null}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {triggerStateSentence(live, now)}
+      {triggers.map((trigger, index) => {
+        if (!trigger || typeof trigger !== 'object')
+          return <UnknownFlowValue key={index} value={trigger} />;
+        const live = liveTriggers.find(
+          (status) => status.trigger_id === trigger.id,
+        );
+        const badge = live ? triggerBadge(live) : null;
+        const known =
+          triggerKindOptions.some((option) => option.value === trigger.kind) &&
+          (trigger.kind !== 'schedule' || Boolean(trigger.schedule)) &&
+          (!['state_change', 'report'].includes(trigger.kind) ||
+            Boolean((trigger as { device?: unknown }).device));
+        const update = (next: TriggerSpec) =>
+          onChange(triggers.map((entry, i) => (i === index ? next : entry)));
+        return (
+          <FlowBlock
+            key={trigger.id || index}
+            id={trigger.id}
+            title={
+              known ? (
+                <select
+                  className="settings-select w-full"
+                  aria-label="Trigger type"
+                  value={trigger.kind}
+                  onChange={(event) => {
+                    const kind = event.target.value as TriggerKind,
+                      fallback = defaultTrigger(kind, trigger.id);
+                    update(
+                      draftKey
+                        ? entityDraftStore.switchVariant(
+                            draftKey,
+                            'trigger/' + trigger.id,
+                            trigger.kind,
+                            trigger,
+                            kind,
+                            fallback,
+                          )
+                        : fallback,
+                    );
+                  }}
+                >
+                  {triggerKindOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                'Unrecognized trigger'
+              )
+            }
+            index={index}
+            total={triggers.length}
+            onMove={(offset) => onChange(moveSibling(triggers, index, offset))}
+            onRemove={() => onChange(triggers.filter((_, i) => i !== index))}
+          >
+            {known ? (
+              <>
+                <TriggerFields
+                  trigger={trigger}
+                  onChange={update}
+                  devices={devices}
+                  groups={groups}
+                  scenes={scenes}
+                  helpers={helpers}
+                />
+                {live && (
+                  <div className="flow-live text-xs text-muted-foreground">
+                    {badge && (
+                      <StatusBadge label={badge.label} tone={badge.tone} />
+                    )}
+                    <p className="mt-1">
+                      Saved routine: {triggerStateSentence(live, now)}
                     </p>
-                    {open ? null : (
-                      <details className="text-xs text-muted-foreground">
-                        <summary className="cursor-pointer">
-                          Technical details
-                        </summary>
-                        <p className="mt-1 font-mono">{trigger.id}</p>
-                      </details>
+                    {live.error && (
+                      <p className="text-destructive">{live.error}</p>
                     )}
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      aria-expanded={open}
-                      onClick={() => setOpenTriggerId(open ? null : trigger.id)}
-                    >
-                      {open ? 'Close' : 'Edit'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => {
-                        if (openTriggerId === trigger.id) {
-                          setOpenTriggerId(null);
-                        }
-                        onChange(
-                          triggers.filter(
-                            (_, candidateIndex) => candidateIndex !== index,
-                          ),
-                        );
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-
-                {duplicateId ? (
-                  <p className="text-xs text-destructive">
-                    Trigger IDs must be unique within the routine.
-                  </p>
-                ) : null}
-
-                {open ? (
-                  <div className="space-y-4 border-t border-border pt-3">
-                    <ConfigField label="Trigger ID" className="max-w-md">
-                      <Input
-                        className="font-mono"
-                        value={trigger.id}
-                        onChange={(event) =>
-                          onChange(
-                            triggers.map((candidate, candidateIndex) =>
-                              candidateIndex === index
-                                ? ({
-                                    ...candidate,
-                                    id: event.target.value,
-                                  } as TriggerSpec)
-                                : candidate,
-                            ),
-                          )
-                        }
-                      />
-                    </ConfigField>
-
-                    <TriggerFields
-                      trigger={trigger}
-                      onChange={(next) =>
-                        onChange(
-                          triggers.map((candidate, candidateIndex) =>
-                            candidateIndex === index ? next : candidate,
-                          ),
-                        )
-                      }
-                      devices={devices}
-                      groups={groups}
-                      scenes={scenes}
-                      helpers={helpers}
-                    />
-
-                    {live?.error ? (
-                      <p className="text-sm text-destructive">{live.error}</p>
-                    ) : null}
-                    {live?.unknown_reason ? (
-                      <p className="text-sm text-muted-foreground">
-                        {triggerStateSentence(live, now)}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
-          );
-        })
+                )}
+              </>
+            ) : (
+              <UnknownFlowValue value={trigger} />
+            )}
+          </FlowBlock>
+        );
+      })}
+      {!triggers.length && (
+        <p className="text-xs text-muted-foreground">
+          Choose what starts this routine. Multiple starts are alternatives.
+        </p>
       )}
+      <AddFlowBlock
+        label="Add start"
+        options={triggerKindOptions}
+        onAdd={(kind) =>
+          onChange([...triggers, defaultTrigger(kind, createUuid())])
+        }
+      />
     </div>
-  );
-}
-
-function Badge({ kind }: { kind: TriggerKind }) {
-  return (
-    <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-      {triggerKindLabels[kind]}
-    </span>
   );
 }

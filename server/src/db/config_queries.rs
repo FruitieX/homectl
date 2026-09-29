@@ -812,6 +812,61 @@ pub async fn db_delete_device_sensor_config(device_ref: &str) -> Result<bool> {
     .await
 }
 
+/// Persist a device editing scope atomically. A failure cannot save its label
+/// while leaving the sensor interaction configuration from the previous draft.
+pub async fn db_save_device_settings(
+    device_key: &str,
+    display_name: Option<&str>,
+    sensor: Option<&DeviceSensorConfigRow>,
+    reporting: Option<&WidgetSettingRow>,
+) -> Result<()> {
+    let db = get_db_connection()?;
+    save_device_settings_on(db, device_key, display_name, sensor, reporting).await
+}
+async fn save_device_settings_on(
+    db: &sea_orm::DatabaseConnection,
+    device_key: &str,
+    display_name: Option<&str>,
+    sensor: Option<&DeviceSensorConfigRow>,
+    reporting: Option<&WidgetSettingRow>,
+) -> Result<()> {
+    let txn = db.begin().await?;
+    if let Some(reporting) = reporting {
+        upsert_widget_setting_on(&txn, reporting).await?;
+    }
+    if let Some(name) = display_name {
+        upsert_device_display_override_on(
+            &txn,
+            &DeviceDisplayNameRow {
+                device_key: device_key.into(),
+                display_name: name.into(),
+            },
+        )
+        .await?;
+    } else {
+        delete_by_string_key(
+            &txn,
+            DeviceDisplayOverrides::Table,
+            DeviceDisplayOverrides::DeviceKey,
+            device_key,
+        )
+        .await?;
+    }
+    if let Some(sensor) = sensor {
+        upsert_device_sensor_config_on(&txn, sensor).await?;
+    } else {
+        delete_by_string_key(
+            &txn,
+            DeviceSensorConfigs::Table,
+            DeviceSensorConfigs::DeviceRef,
+            device_key,
+        )
+        .await?;
+    }
+    txn.commit().await?;
+    Ok(())
+}
+
 // ============================================================================
 // Integrations
 // ============================================================================
@@ -861,6 +916,26 @@ pub async fn db_upsert_integration(integration: &IntegrationRow) -> Result<()> {
     upsert_integration_on(db, integration).await
 }
 
+pub async fn db_save_integration_settings(
+    integration: &IntegrationRow,
+    reporting: &WidgetSettingRow,
+) -> Result<()> {
+    let db = get_db_connection()?;
+    save_integration_settings_on(db, integration, reporting).await
+}
+
+async fn save_integration_settings_on(
+    db: &sea_orm::DatabaseConnection,
+    integration: &IntegrationRow,
+    reporting: &WidgetSettingRow,
+) -> Result<()> {
+    let txn = db.begin().await?;
+    upsert_integration_on(&txn, integration).await?;
+    upsert_widget_setting_on(&txn, reporting).await?;
+    txn.commit().await?;
+    Ok(())
+}
+
 async fn upsert_integration_on<C: ConnectionTrait>(
     db: &C,
     integration: &IntegrationRow,
@@ -901,7 +976,17 @@ async fn upsert_integration_on<C: ConnectionTrait>(
 
 pub async fn db_delete_integration(id: &str) -> Result<bool> {
     let db = get_db_connection()?;
-    delete_by_string_key(db, Integrations::Table, Integrations::Id, id).await
+    let txn = db.begin().await?;
+    let deleted = delete_by_string_key(&txn, Integrations::Table, Integrations::Id, id).await?;
+    delete_by_string_key(
+        &txn,
+        WidgetSettings::Table,
+        WidgetSettings::Key,
+        &crate::core::device_health::policy_key("integration", id),
+    )
+    .await?;
+    txn.commit().await?;
+    Ok(deleted)
 }
 
 // ============================================================================
@@ -1872,8 +1957,13 @@ pub async fn db_get_group_positions() -> Result<Vec<GroupPositionRow>> {
 }
 
 pub async fn db_upsert_group_position(pos: &GroupPositionRow) -> Result<()> {
-    let db = get_db_connection()?;
+    upsert_group_position_on(get_db_connection()?, pos).await
+}
 
+async fn upsert_group_position_on<C: ConnectionTrait>(
+    db: &C,
+    pos: &GroupPositionRow,
+) -> Result<()> {
     execute(
         db,
         Query::insert()
@@ -1942,6 +2032,13 @@ pub async fn db_get_dashboard_layouts() -> Result<Vec<DashboardLayoutRow>> {
 
 pub async fn db_upsert_dashboard_layout(layout: &DashboardLayoutRow) -> Result<i32> {
     let db = get_db_connection()?;
+    upsert_dashboard_layout_on(db, layout).await
+}
+
+async fn upsert_dashboard_layout_on<C: ConnectionTrait + TransactionTrait>(
+    db: &C,
+    layout: &DashboardLayoutRow,
+) -> Result<i32> {
     let txn = db.begin().await?;
 
     if layout.is_default {
@@ -1957,39 +2054,33 @@ pub async fn db_upsert_dashboard_layout(layout: &DashboardLayoutRow) -> Result<i
     }
 
     let id = if layout.id > 0 {
-        execute(
-            &txn,
-            Query::update()
-                .table(DashboardLayouts::Table)
-                .value(DashboardLayouts::Name, Expr::value(layout.name.clone()))
-                .value(DashboardLayouts::IsDefault, Expr::value(layout.is_default))
-                .value(DashboardLayouts::UpdatedAt, Expr::current_timestamp())
-                .and_where(Expr::col(DashboardLayouts::Id).eq(layout.id))
-                .to_owned(),
-        )
-        .await?;
         layout.id
     } else {
-        let id = next_i32_id(&txn, DashboardLayouts::Table, DashboardLayouts::Id).await?;
-        execute(
-            &txn,
-            Query::insert()
-                .into_table(DashboardLayouts::Table)
-                .columns([
-                    DashboardLayouts::Id,
-                    DashboardLayouts::Name,
-                    DashboardLayouts::IsDefault,
-                ])
-                .values_panic([
-                    Expr::value(id),
-                    Expr::value(layout.name.clone()),
-                    Expr::value(layout.is_default),
-                ])
-                .to_owned(),
-        )
-        .await?;
-        id
+        next_i32_id(&txn, DashboardLayouts::Table, DashboardLayouts::Id).await?
     };
+    execute(
+        &txn,
+        Query::insert()
+            .into_table(DashboardLayouts::Table)
+            .columns([
+                DashboardLayouts::Id,
+                DashboardLayouts::Name,
+                DashboardLayouts::IsDefault,
+            ])
+            .values_panic([
+                Expr::value(id),
+                Expr::value(layout.name.clone()),
+                Expr::value(layout.is_default),
+            ])
+            .on_conflict(
+                OnConflict::column(DashboardLayouts::Id)
+                    .update_columns([DashboardLayouts::Name, DashboardLayouts::IsDefault])
+                    .value(DashboardLayouts::UpdatedAt, Expr::current_timestamp())
+                    .to_owned(),
+            )
+            .to_owned(),
+    )
+    .await?;
 
     txn.commit().await?;
     Ok(id)
@@ -2014,66 +2105,112 @@ pub async fn db_upsert_dashboard_widget(widget: &DashboardWidgetRow) -> Result<i
     upsert_dashboard_widget_on(db, widget).await
 }
 
-async fn upsert_dashboard_widget_on<C: ConnectionTrait>(
-    db: &C,
-    widget: &DashboardWidgetRow,
-) -> Result<i32> {
-    let config = serde_json::to_string(&widget.config)?;
-
-    if widget.id > 0 {
+pub async fn db_save_dashboard_arrangement(
+    layout_id: i32,
+    widgets: &[DashboardWidgetRow],
+    removed_ids: &[i32],
+) -> Result<()> {
+    save_dashboard_arrangement_on(get_db_connection()?, layout_id, widgets, removed_ids).await
+}
+async fn save_dashboard_arrangement_on(
+    db: &sea_orm::DatabaseConnection,
+    layout_id: i32,
+    widgets: &[DashboardWidgetRow],
+    removed_ids: &[i32],
+) -> Result<()> {
+    let txn = db.begin().await?;
+    for id in removed_ids {
         execute(
-            db,
+            &txn,
+            Query::delete()
+                .from_table(DashboardWidgets::Table)
+                .and_where(Expr::col(DashboardWidgets::Id).eq(*id))
+                .and_where(Expr::col(DashboardWidgets::LayoutId).eq(layout_id))
+                .to_owned(),
+        )
+        .await?;
+    }
+    for widget in widgets {
+        let changed = execute(
+            &txn,
             Query::update()
                 .table(DashboardWidgets::Table)
-                .value(DashboardWidgets::LayoutId, Expr::value(widget.layout_id))
-                .value(
-                    DashboardWidgets::WidgetType,
-                    Expr::value(widget.widget_type.clone()),
-                )
-                .value(DashboardWidgets::Config, Expr::value(config))
                 .value(DashboardWidgets::GridX, Expr::value(widget.grid_x))
                 .value(DashboardWidgets::GridY, Expr::value(widget.grid_y))
                 .value(DashboardWidgets::GridWValue, Expr::value(widget.grid_w))
                 .value(DashboardWidgets::GridHValue, Expr::value(widget.grid_h))
                 .value(DashboardWidgets::SortOrder, Expr::value(widget.sort_order))
                 .and_where(Expr::col(DashboardWidgets::Id).eq(widget.id))
+                .and_where(Expr::col(DashboardWidgets::LayoutId).eq(layout_id))
                 .to_owned(),
         )
         .await?;
-        Ok(widget.id)
-    } else {
-        let id = next_i32_id(db, DashboardWidgets::Table, DashboardWidgets::Id).await?;
-        execute(
-            db,
-            Query::insert()
-                .into_table(DashboardWidgets::Table)
-                .columns([
-                    DashboardWidgets::Id,
-                    DashboardWidgets::LayoutId,
-                    DashboardWidgets::WidgetType,
-                    DashboardWidgets::Config,
-                    DashboardWidgets::GridX,
-                    DashboardWidgets::GridY,
-                    DashboardWidgets::GridWValue,
-                    DashboardWidgets::GridHValue,
-                    DashboardWidgets::SortOrder,
-                ])
-                .values_panic([
-                    Expr::value(id),
-                    Expr::value(widget.layout_id),
-                    Expr::value(widget.widget_type.clone()),
-                    Expr::value(config),
-                    Expr::value(widget.grid_x),
-                    Expr::value(widget.grid_y),
-                    Expr::value(widget.grid_w),
-                    Expr::value(widget.grid_h),
-                    Expr::value(widget.sort_order),
-                ])
-                .to_owned(),
-        )
-        .await?;
-        Ok(id)
+        if changed != 1 {
+            return Err(color_eyre::eyre::eyre!(
+                "Widget {} is missing from the stored layout",
+                widget.id
+            ));
+        }
     }
+    txn.commit().await?;
+    Ok(())
+}
+
+async fn upsert_dashboard_widget_on<C: ConnectionTrait>(
+    db: &C,
+    widget: &DashboardWidgetRow,
+) -> Result<i32> {
+    let config = serde_json::to_string(&widget.config)?;
+
+    let id = if widget.id > 0 {
+        widget.id
+    } else {
+        next_i32_id(db, DashboardWidgets::Table, DashboardWidgets::Id).await?
+    };
+    execute(
+        db,
+        Query::insert()
+            .into_table(DashboardWidgets::Table)
+            .columns([
+                DashboardWidgets::Id,
+                DashboardWidgets::LayoutId,
+                DashboardWidgets::WidgetType,
+                DashboardWidgets::Config,
+                DashboardWidgets::GridX,
+                DashboardWidgets::GridY,
+                DashboardWidgets::GridWValue,
+                DashboardWidgets::GridHValue,
+                DashboardWidgets::SortOrder,
+            ])
+            .values_panic([
+                Expr::value(id),
+                Expr::value(widget.layout_id),
+                Expr::value(widget.widget_type.clone()),
+                Expr::value(config),
+                Expr::value(widget.grid_x),
+                Expr::value(widget.grid_y),
+                Expr::value(widget.grid_w),
+                Expr::value(widget.grid_h),
+                Expr::value(widget.sort_order),
+            ])
+            .on_conflict(
+                OnConflict::column(DashboardWidgets::Id)
+                    .update_columns([
+                        DashboardWidgets::LayoutId,
+                        DashboardWidgets::WidgetType,
+                        DashboardWidgets::Config,
+                        DashboardWidgets::GridX,
+                        DashboardWidgets::GridY,
+                        DashboardWidgets::GridWValue,
+                        DashboardWidgets::GridHValue,
+                        DashboardWidgets::SortOrder,
+                    ])
+                    .to_owned(),
+            )
+            .to_owned(),
+    )
+    .await?;
+    Ok(id)
 }
 
 pub async fn db_delete_dashboard_widget(id: i32) -> Result<bool> {
@@ -2425,121 +2562,147 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
     })
 }
 
+/// Restore a complete snapshot. Rows absent from it must not reappear on restart.
 pub async fn db_import_config(config: &ConfigExport) -> Result<()> {
+    validate_import_config(config)?;
+    import_config_on(get_db_connection()?, config).await
+}
+
+fn validate_import_config(config: &ConfigExport) -> Result<()> {
+    for setting in &config.widget_settings {
+        crate::types::device_health::ReportingPolicy::validate_setting(
+            &setting.key,
+            &setting.config,
+        )
+        .map_err(|error| eyre::eyre!(error))?;
+    }
     config
         .validate_calibration_profiles()
         .map_err(|error| eyre!(error))?;
     for row in &config.device_color_calibrations {
         row.validate().map_err(|error| eyre!(error))?;
     }
-    calibration::import(get_db_connection()?, config).await?;
-    db_update_core_config(&config.core).await?;
-    db_replace_widget_settings(&config.widget_settings).await?;
-    db_set_scenario_suite(config.scenario_suite.as_ref()).await?;
+    Ok(())
+}
 
+async fn import_config_on<C: ConnectionTrait + TransactionTrait>(
+    db: &C,
+    config: &ConfigExport,
+) -> Result<()> {
+    validate_import_config(config)?;
+    let txn = db.begin().await?;
+    // Children first. Operational history and last-known device observations are
+    // not configuration and are deliberately outside the replacement scope.
+    macro_rules! clear {
+        ($($table:expr),+ $(,)?) => { $(execute(&txn, Query::delete().from_table($table).to_owned()).await?;)+ };
+    }
+    clear!(
+        DashboardWidgets::Table,
+        DashboardLayouts::Table,
+        GroupLinks::Table,
+        GroupDevices::Table,
+        GroupPositions::Table,
+        SceneDeviceStates::Table,
+        SceneGroupStates::Table,
+        Scenes::Table,
+        Groups::Table,
+        Integrations::Table,
+        Routines::Table,
+        AutomationValueState::Table,
+        AutomationValues::Table,
+        AutomationSources::Table,
+        Floorplans::Table,
+        DeviceDisplayOverrides::Table,
+        DeviceSensorConfigs::Table,
+        WidgetSettings::Table
+    );
+    calibration::import(&txn, config).await?;
+    update_core_config_on(&txn, &config.core).await?;
+    set_scenario_suite_on(&txn, config.scenario_suite.as_ref()).await?;
+    for setting in &config.widget_settings {
+        insert_widget_setting_on(&txn, setting).await?;
+    }
     for integration in &config.integrations {
-        db_upsert_integration(integration).await?;
+        upsert_integration_on(&txn, integration).await?;
     }
-
-    let valid_group_ids: HashSet<&str> = config.groups.iter().map(|g| g.id.as_str()).collect();
-
+    // All group IDs exist before inserting links, including forward references.
     for group in &config.groups {
-        let group_without_links = GroupRow {
-            linked_groups: Vec::new(),
-            ..group.clone()
-        };
-        db_upsert_group(&group_without_links).await?;
-    }
-
-    for group in &config.groups {
-        if group.linked_groups.is_empty() {
-            continue;
-        }
-
-        let valid_links: Vec<String> = group
-            .linked_groups
-            .iter()
-            .filter(|id| {
-                if valid_group_ids.contains(id.as_str()) {
-                    true
-                } else {
-                    warn!(
-                        "Group '{}' links to non-existent group '{}', skipping",
-                        group.id, id
-                    );
-                    false
-                }
-            })
-            .cloned()
-            .collect();
-
-        if !valid_links.is_empty() {
-            let filtered_group = GroupRow {
-                linked_groups: valid_links,
+        upsert_group_on(
+            &txn,
+            &GroupRow {
+                linked_groups: Vec::new(),
                 ..group.clone()
-            };
-            db_upsert_group(&filtered_group).await?;
+            },
+        )
+        .await?;
+    }
+    for group in &config.groups {
+        if !group.linked_groups.is_empty() {
+            upsert_group_on(&txn, group).await?;
         }
     }
-
     for scene in &config.scenes {
-        db_upsert_config_scene(scene).await?;
+        upsert_scene_on(&txn, scene).await?;
     }
     for routine in &config.routines {
-        db_upsert_routine(routine).await?;
+        upsert_routine_on(&txn, routine).await?;
     }
     for helper in &config.helpers {
-        db_upsert_helper(helper).await?;
+        upsert_helper_on(&txn, helper).await?;
     }
     for source in &config.sources {
-        db_upsert_source(source).await?;
+        upsert_source_on(&txn, source).await?;
     }
-    let durable_helper_ids: HashSet<&str> = config
+    let durable: HashSet<&str> = config
         .helpers
         .iter()
-        .filter(|helper| helper.persistence == HelperPersistence::Durable)
-        .map(|helper| helper.id.as_str())
+        .filter(|h| h.persistence == HelperPersistence::Durable)
+        .map(|h| h.id.as_str())
         .collect();
     for state in &config.helper_values {
-        if !durable_helper_ids.contains(state.id.as_str()) {
-            warn!(
-                "Skipping value for non-durable or undefined helper '{}'",
-                state.id
-            );
-            continue;
+        if durable.contains(state.id.as_str()) {
+            upsert_helper_state_on(&txn, &state.id, &state.value, state.revision).await?;
         }
-        db_upsert_helper_state(&state.id, &state.value, state.revision).await?;
     }
     if !config.floorplans.is_empty() {
-        for (sort_order, floorplan) in config.floorplans.iter().enumerate() {
-            db_upsert_floorplan_export(floorplan, sort_order as i32).await?;
+        for (order, row) in config.floorplans.iter().enumerate() {
+            upsert_floorplan_export_on(&txn, row, order as i32).await?;
         }
-    } else if let Some(floorplan) = &config.floorplan {
-        db_upsert_floorplan(floorplan).await?;
-    }
-    for pos in &config.group_positions {
-        db_upsert_group_position(pos).await?;
-    }
-    for device_display_override in &config.device_display_overrides {
-        db_upsert_device_display_override(device_display_override).await?;
-    }
-    replace_device_color_calibrations_on(get_db_connection()?, &config.device_color_calibrations)
+    } else if let Some(row) = &config.floorplan {
+        upsert_floorplan_export_on(
+            &txn,
+            &FloorplanExportRow {
+                id: "default".into(),
+                name: default_floorplan_name("default").into(),
+                image_data: row.image_data.clone(),
+                image_mime_type: row.image_mime_type.clone(),
+                width: row.width,
+                height: row.height,
+                grid_data: None,
+            },
+            0,
+        )
         .await?;
-    for device_sensor_config in &config.device_sensor_configs {
-        db_upsert_device_sensor_config(device_sensor_config).await?;
     }
-    for layout in &config.dashboard_layouts {
-        db_upsert_dashboard_layout(layout).await?;
+    for row in &config.group_positions {
+        upsert_group_position_on(&txn, row).await?;
     }
-    for widget in &config.dashboard_widgets {
-        db_upsert_dashboard_widget(widget).await?;
+    for row in &config.device_display_overrides {
+        upsert_device_display_override_on(&txn, row).await?;
     }
-
-    // P10: an import replaces the runtime configuration, so previously
-    // acknowledged named timers must never resume after a restart. Timer jobs
-    // are deliberately not part of the export format.
-    clear_timer_jobs_on(get_db_connection()?).await?;
-
+    replace_device_color_calibrations_on(&txn, &config.device_color_calibrations).await?;
+    for row in &config.device_sensor_configs {
+        upsert_device_sensor_config_on(&txn, row).await?;
+    }
+    for row in &config.dashboard_layouts {
+        upsert_dashboard_layout_on(&txn, row).await?;
+    }
+    for row in &config.dashboard_widgets {
+        upsert_dashboard_widget_on(&txn, row).await?;
+    }
+    // Named timer jobs are captured runtime intent, never backup configuration.
+    clear_timer_jobs_on(&txn).await?;
+    txn.commit().await?;
     Ok(())
 }
 
@@ -3217,6 +3380,8 @@ async fn upsert_widget_setting_on<C: ConnectionTrait>(
     db: &C,
     setting: &WidgetSettingRow,
 ) -> Result<()> {
+    crate::types::device_health::ReportingPolicy::validate_setting(&setting.key, &setting.config)
+        .map_err(|error| eyre::eyre!(error))?;
     let config = serde_json::to_string(&setting.config)?;
 
     execute(
@@ -3974,6 +4139,214 @@ mod consistency_tests {
     }
 
     #[tokio::test]
+    async fn backup_restore_replaces_absent_rows_and_rolls_back_the_entire_snapshot() {
+        let db = database().await;
+        let mut original = db_export_config_from_connection(&db).await.unwrap();
+        original.groups = serde_json::from_value(json!([
+            {"id":"parent","name":"Parent","hidden":false,"devices":[],"linked_groups":["child"]},
+            {"id":"child","name":"Child","hidden":false,"devices":[],"linked_groups":[]}
+        ]))
+        .unwrap();
+        original.integrations = serde_json::from_value(json!([
+            {"id":"old","plugin":"dummy","enabled":false,"config":{"future":true}}
+        ]))
+        .unwrap();
+        original.scenes = serde_json::from_value(json!([
+            {"id":"old","name":"Old scene","hidden":false,"device_states":{},"group_states":{}}
+        ]))
+        .unwrap();
+        original.routines = vec![RoutineRow {
+            id: "old".into(),
+            name: "Old routine".into(),
+            ..Default::default()
+        }];
+        original.device_display_overrides = vec![DeviceDisplayNameRow {
+            device_key: "old/lamp".into(),
+            display_name: "Old lamp".into(),
+        }];
+        original.device_sensor_configs = vec![DeviceSensorConfigRow {
+            device_ref: "old/sensor".into(),
+            interaction_kind: "toggle".into(),
+            config: json!({"future":true}),
+        }];
+        original.widget_settings = vec![WidgetSettingRow {
+            key: "calendar".into(),
+            config: json!({"ics_url":"private-old-value"}),
+        }];
+        original.dashboard_layouts = vec![DashboardLayoutRow {
+            id: 37,
+            name: "Old layout".into(),
+            is_default: true,
+        }];
+        original.dashboard_widgets = vec![DashboardWidgetRow {
+            id: 42,
+            layout_id: 37,
+            widget_type: "text".into(),
+            config: json!({"title":"Keep until commit"}),
+            grid_x: 0,
+            grid_y: 0,
+            grid_w: 2.5,
+            grid_h: 1.0,
+            sort_order: 0,
+        }];
+        import_config_on(&db, &original).await.unwrap();
+        let before =
+            serde_json::to_value(db_export_config_from_connection(&db).await.unwrap()).unwrap();
+        let empty_db = database().await;
+        let mut replacement = db_export_config_from_connection(&empty_db).await.unwrap();
+        replacement.core.warmup_time_seconds = 17;
+        replacement.widget_settings = vec![WidgetSettingRow {
+            key: "restore-test".into(),
+            config: json!({"future":["b","a"]}),
+        }];
+        db.execute_raw(Statement::from_string(DbBackend::Sqlite,
+            "CREATE TRIGGER fail_restore BEFORE INSERT ON widget_settings WHEN NEW.key = 'restore-test' BEGIN SELECT RAISE(FAIL, 'injected restore failure'); END".to_string())).await.unwrap();
+        assert!(import_config_on(&db, &replacement).await.is_err());
+        assert_eq!(
+            serde_json::to_value(db_export_config_from_connection(&db).await.unwrap()).unwrap(),
+            before,
+            "Even rows removed early and fields written before the failure must roll back"
+        );
+        db.execute_raw(Statement::from_string(
+            DbBackend::Sqlite,
+            "DROP TRIGGER fail_restore".to_string(),
+        ))
+        .await
+        .unwrap();
+        import_config_on(&db, &replacement).await.unwrap();
+        let restored = db_export_config_from_connection(&db).await.unwrap();
+        assert_eq!(
+            serde_json::to_value(&restored).unwrap(),
+            serde_json::to_value(&replacement).unwrap(),
+            "Absent configuration must stay absent when loaded again from the database"
+        );
+        import_config_on(&db, &original).await.unwrap();
+        assert_eq!(
+            serde_json::to_value(db_export_config_from_connection(&db).await.unwrap()).unwrap(),
+            before,
+            "Restoring an earlier snapshot retains IDs, secrets, and forward group links"
+        );
+    }
+
+    #[tokio::test]
+    async fn dashboard_assigned_ids_and_widget_selections_round_trip() {
+        let db = database().await;
+        let layout = DashboardLayoutRow {
+            id: 37,
+            name: "Tablet".into(),
+            is_default: true,
+        };
+        assert_eq!(upsert_dashboard_layout_on(&db, &layout).await.unwrap(), 37);
+        let mut widget = DashboardWidgetRow {
+            id: 42,
+            layout_id: 37,
+            widget_type: "sensors".into(),
+            config: json!({"title":"Indoor","options":{"sensorSelection":"selected","sensorIds":[],"influxToken":"stored-token","future":["b","a"]}}),
+            grid_x: 0,
+            grid_y: 0,
+            grid_w: 2.25,
+            grid_h: 1.5,
+            sort_order: 0,
+        };
+        assert_eq!(upsert_dashboard_widget_on(&db, &widget).await.unwrap(), 42);
+        let exported = db_export_config_from_connection(&db).await.unwrap();
+        assert_eq!(exported.dashboard_widgets[0].id, 42);
+        assert_eq!(exported.dashboard_widgets[0].config, widget.config);
+        assert_eq!(exported.dashboard_widgets[0].grid_w, 2.25);
+        widget.config["title"] = json!("Updated");
+        upsert_dashboard_widget_on(&db, &widget).await.unwrap();
+        let source = db_export_config_from_connection(&db).await.unwrap();
+        let restored = database().await;
+        for layout in &source.dashboard_layouts {
+            upsert_dashboard_layout_on(&restored, layout).await.unwrap();
+        }
+        for row in &source.dashboard_widgets {
+            upsert_dashboard_widget_on(&restored, row).await.unwrap();
+        }
+        let result = db_export_config_from_connection(&restored).await.unwrap();
+        assert_eq!(result.dashboard_widgets.len(), 1);
+        assert_eq!(result.dashboard_widgets[0].config, widget.config);
+        upsert_dashboard_layout_on(
+            &restored,
+            &DashboardLayoutRow {
+                id: 38,
+                name: "Phone".into(),
+                is_default: true,
+            },
+        )
+        .await
+        .unwrap();
+        let result = db_export_config_from_connection(&restored).await.unwrap();
+        assert_eq!(
+            result
+                .dashboard_layouts
+                .iter()
+                .filter(|row| row.is_default)
+                .map(|row| row.id)
+                .collect::<Vec<_>>(),
+            vec![38]
+        );
+    }
+
+    #[tokio::test]
+    async fn dashboard_arrangement_transaction_rolls_back_sizes_order_and_removals() {
+        let db = database().await;
+        upsert_dashboard_layout_on(
+            &db,
+            &DashboardLayoutRow {
+                id: 1,
+                name: "Home".into(),
+                is_default: true,
+            },
+        )
+        .await
+        .unwrap();
+        let mut widgets = vec![];
+        for id in 1..=3 {
+            let row = DashboardWidgetRow {
+                id,
+                layout_id: 1,
+                widget_type: "sensors".into(),
+                config: json!({"options":{"influxToken":"untouched","future":42}}),
+                grid_x: 0,
+                grid_y: 0,
+                grid_w: 2.0,
+                grid_h: 2.0,
+                sort_order: id,
+            };
+            upsert_dashboard_widget_on(&db, &row).await.unwrap();
+            widgets.push(row);
+        }
+        widgets[0].grid_w = 3.25;
+        widgets[1].sort_order = 0;
+        db.execute_raw(Statement::from_string(DbBackend::Sqlite,"CREATE TRIGGER reject_arrangement BEFORE UPDATE ON dashboard_widgets WHEN NEW.id = 2 BEGIN SELECT RAISE(ABORT, 'injected arrangement failure'); END")).await.unwrap();
+        assert!(save_dashboard_arrangement_on(&db, 1, &widgets[..2], &[3])
+            .await
+            .is_err());
+        let rows = dashboard_widgets_for_layout(&db, 1).await.unwrap();
+        assert_eq!(rows.len(), 3);
+        assert!(rows
+            .iter()
+            .all(|row| row.grid_w == 2.0 && row.sort_order == row.id));
+        db.execute_raw(Statement::from_string(
+            DbBackend::Sqlite,
+            "DROP TRIGGER reject_arrangement",
+        ))
+        .await
+        .unwrap();
+        save_dashboard_arrangement_on(&db, 1, &widgets[..2], &[3])
+            .await
+            .unwrap();
+        let rows = dashboard_widgets_for_layout(&db, 1).await.unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].id, 2);
+        assert_eq!(rows[1].grid_w, 3.25);
+        assert!(rows
+            .iter()
+            .all(|row| row.config["options"]["influxToken"] == "untouched"));
+    }
+
+    #[tokio::test]
     async fn routine_history_round_trips_and_prunes_to_newest_entries() {
         use crate::types::routine_history::{RoutineHistoryEntry, RoutineHistoryTriggerKind};
         use crate::types::rule::RoutineId;
@@ -4083,6 +4456,162 @@ mod consistency_tests {
             .widget_settings
             .iter()
             .any(|entry| entry.key == row.key));
+    }
+
+    #[tokio::test]
+    async fn device_settings_save_is_atomic_and_preserves_sensor_payload() {
+        let db = database().await;
+        use crate::{
+            core::device_health::{policy_row, read_policy},
+            types::device_health::ReportingPolicy,
+        };
+        let initial_policy = policy_row("device", "test/button", &ReportingPolicy::Ignore);
+        let sensor = DeviceSensorConfigRow {
+            device_ref: "test/button".into(),
+            interaction_kind: "hue_dimmer".into(),
+            config: json!({ "on_value": "press", "future": [null, { "id": "untouched" }] }),
+        };
+        save_device_settings_on(
+            &db,
+            "test/button",
+            Some("Button"),
+            Some(&sensor),
+            Some(&initial_policy),
+        )
+        .await
+        .unwrap();
+        let before = db_export_config_from_connection(&db).await.unwrap();
+        assert_eq!(before.device_sensor_configs[0].config, sensor.config);
+        db.execute_raw(Statement::from_string(DbBackend::Sqlite, "CREATE TRIGGER reject_sensor_update BEFORE UPDATE ON device_sensor_configs BEGIN SELECT RAISE(ABORT, 'test failure'); END")).await.unwrap();
+        assert!(save_device_settings_on(
+            &db,
+            "test/button",
+            Some("Not saved"),
+            Some(&sensor),
+            Some(&policy_row(
+                "device",
+                "test/button",
+                &ReportingPolicy::Custom {
+                    expected_interval_seconds: 60
+                }
+            ))
+        )
+        .await
+        .is_err());
+        let after = db_export_config_from_connection(&db).await.unwrap();
+        assert_eq!(after.device_display_overrides[0].display_name, "Button");
+        assert_eq!(after.device_sensor_configs[0].config, sensor.config);
+        assert_eq!(
+            read_policy(&after, "device", "test/button"),
+            ReportingPolicy::Ignore,
+            "failed sensor write must also roll back the earlier reporting-policy write"
+        );
+        save_device_settings_on(&db, "test/button", None, None, None)
+            .await
+            .unwrap();
+        let cleared = db_export_config_from_connection(&db).await.unwrap();
+        assert!(cleared.device_display_overrides.is_empty());
+        assert!(cleared.device_sensor_configs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn reporting_policy_database_export_import_round_trip_and_validation() {
+        use crate::{
+            core::device_health::{policy_row, read_policy},
+            types::device_health::ReportingPolicy,
+        };
+        let source = database().await;
+        for row in [
+            policy_row(
+                "integration",
+                "mqtt",
+                &ReportingPolicy::Custom {
+                    expected_interval_seconds: 3600,
+                },
+            ),
+            policy_row("device", "mqtt/button", &ReportingPolicy::Ignore),
+            policy_row("device", "mqtt/lamp", &ReportingPolicy::Inherit),
+        ] {
+            upsert_widget_setting_on(&source, &row).await.unwrap();
+        }
+        let exported = db_export_config_from_connection(&source).await.unwrap();
+        let decoded: ConfigExport =
+            serde_json::from_slice(&serde_json::to_vec(&exported).unwrap()).unwrap();
+        let target = database().await;
+        for row in &decoded.widget_settings {
+            upsert_widget_setting_on(&target, row).await.unwrap();
+        }
+        let restored = db_export_config_from_connection(&target).await.unwrap();
+        for (scope, id) in [
+            ("integration", "mqtt"),
+            ("device", "mqtt/button"),
+            ("device", "mqtt/lamp"),
+        ] {
+            assert_eq!(
+                read_policy(&restored, scope, id),
+                read_policy(&exported, scope, id)
+            );
+        }
+        let mut legacy = serde_json::to_value(exported).unwrap();
+        legacy.as_object_mut().unwrap().remove("widget_settings");
+        let legacy: ConfigExport = serde_json::from_value(legacy).unwrap();
+        assert_eq!(
+            read_policy(&legacy, "device", "mqtt/lamp"),
+            ReportingPolicy::Inherit
+        );
+        for invalid in [
+            json!({"mode":"custom","expected_interval_seconds":0}),
+            json!({"mode":"custom","expected_interval_seconds":31536001}),
+            json!({"mode":"unknown"}),
+        ] {
+            let row = WidgetSettingRow {
+                key: "reporting/device/mqtt/lamp".into(),
+                config: invalid,
+            };
+            assert!(upsert_widget_setting_on(&target, &row).await.is_err());
+            let mut rejected = decoded.clone();
+            rejected.widget_settings.push(row);
+            // Validation occurs before any database access or runtime change.
+            assert!(db_import_config(&rejected)
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid reporting policy"));
+        }
+    }
+
+    #[tokio::test]
+    async fn integration_reporting_policy_failure_rolls_back_connection_settings() {
+        use crate::{
+            core::device_health::{policy_row, read_policy},
+            types::device_health::ReportingPolicy,
+        };
+        let db = database().await;
+        let mut row = IntegrationRow {
+            id: "mqtt".into(),
+            plugin: "mqtt".into(),
+            enabled: false,
+            config: json!({"host":"original"}),
+        };
+        let policy = policy_row("integration", "mqtt", &ReportingPolicy::Ignore);
+        save_integration_settings_on(&db, &row, &policy)
+            .await
+            .unwrap();
+        sql(&db, "CREATE TRIGGER reject_policy BEFORE UPDATE ON widget_settings BEGIN SELECT RAISE(ABORT, 'fixture failure'); END").await;
+        row.config = json!({"host":"not-saved"});
+        assert!(save_integration_settings_on(
+            &db,
+            &row,
+            &policy_row("integration", "mqtt", &ReportingPolicy::Inherit)
+        )
+        .await
+        .is_err());
+        let stored = db_export_config_from_connection(&db).await.unwrap();
+        assert_eq!(stored.integrations[0].config["host"], "original");
+        assert_eq!(
+            read_policy(&stored, "integration", "mqtt"),
+            ReportingPolicy::Ignore
+        );
     }
 
     #[tokio::test]

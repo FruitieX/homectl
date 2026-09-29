@@ -88,17 +88,44 @@ pub async fn assign<C: ConnectionTrait + TransactionTrait>(
     profile_id: Option<&str>,
 ) -> Result<()> {
     let txn = db.begin().await?;
+    assign_in_transaction(&txn, keys, profile_id).await?;
+    txn.commit().await?;
+    Ok(())
+}
+
+/// Profile creation/update and its assignments are one persistence operation.
+/// A failed assignment must not leave a newly created or changed profile behind.
+pub async fn save_and_assign<C: ConnectionTrait + TransactionTrait>(
+    db: &C,
+    profile: Option<&ColorCalibrationProfile>,
+    keys: &[String],
+    profile_id: Option<&str>,
+) -> Result<()> {
+    let txn = db.begin().await?;
+    if let Some(profile) = profile {
+        save_profile(&txn, profile).await?;
+    }
+    assign_in_transaction(&txn, keys, profile_id).await?;
+    txn.commit().await?;
+    Ok(())
+}
+
+async fn assign_in_transaction<C: ConnectionTrait>(
+    db: &C,
+    keys: &[String],
+    profile_id: Option<&str>,
+) -> Result<()> {
     for key in keys {
         // A profile assignment supersedes any older per-device calibration.
         delete_by_string_key(
-            &txn,
+            db,
             DeviceColorCalibrations::Table,
             DeviceColorCalibrations::DeviceKey,
             key,
         )
         .await?;
         delete_by_string_key(
-            &txn,
+            db,
             CalibrationAssignments::Table,
             CalibrationAssignments::DeviceKey,
             key,
@@ -106,7 +133,7 @@ pub async fn assign<C: ConnectionTrait + TransactionTrait>(
         .await?;
         if let Some(id) = profile_id {
             execute(
-                &txn,
+                db,
                 Query::insert()
                     .into_table(CalibrationAssignments::Table)
                     .columns([
@@ -119,7 +146,6 @@ pub async fn assign<C: ConnectionTrait + TransactionTrait>(
             .await?;
         }
     }
-    txn.commit().await?;
     Ok(())
 }
 
@@ -210,6 +236,70 @@ mod tests {
             .await
             .unwrap();
         db
+    }
+
+    #[tokio::test]
+    async fn calibration_editor_profile_and_assignment_commit_or_roll_back_together() {
+        let db = database().await;
+        let mut profile: ColorCalibrationProfile = serde_json::from_value(json!({
+            "id": "combined", "name": "Combined", "brightness": 0.5,
+            "points": [{"reference":{"u":0.20,"v":0.47},"output":{"u":0.21,"v":0.48}}],
+            "brightness_points": [{"logical":0.1,"output":0.2},{"logical":1,"output":0.9}]
+        }))
+        .unwrap();
+        let keys = vec!["dummy/a".to_string(), "dummy/b".to_string()];
+        save_and_assign(&db, Some(&profile), &keys, Some(&profile.id))
+            .await
+            .unwrap();
+        let before =
+            serde_json::to_value(db_export_config_from_connection(&db).await.unwrap()).unwrap();
+        assert_eq!(
+            before["color_calibration_profiles"][0]["brightness_points"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            before["color_calibration_assignments"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+
+        // Fail after the profile update and the first assignment write, proving
+        // rollback includes both collections rather than only validation.
+        db.execute_unprepared("CREATE TRIGGER reject_second_assignment BEFORE INSERT ON calibration_assignments WHEN NEW.device_key = 'dummy/b' BEGIN SELECT RAISE(ABORT, 'injected assignment failure'); END").await.unwrap();
+        profile.name = "Must not stick".into();
+        assert!(
+            save_and_assign(&db, Some(&profile), &keys, Some(&profile.id))
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            serde_json::to_value(db_export_config_from_connection(&db).await.unwrap()).unwrap(),
+            before
+        );
+        profile.id = "new-profile".into();
+        assert!(
+            save_and_assign(&db, Some(&profile), &keys, Some(&profile.id))
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            profiles(&db).await.unwrap().len(),
+            1,
+            "no orphan profile after failure"
+        );
+        db.execute_unprepared("DROP TRIGGER reject_second_assignment")
+            .await
+            .unwrap();
+        save_and_assign(&db, None, &keys[..1], None).await.unwrap();
+        assert_eq!(profiles(&db).await.unwrap().len(), 1);
+        let remaining = assignments(&db).await.unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].device_key, "dummy/b");
     }
 
     #[tokio::test]

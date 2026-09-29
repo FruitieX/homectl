@@ -275,6 +275,10 @@ pub struct PlannedStepStatus {
     /// Fully resolved targets as stable strings (device keys, group/scene IDs,
     /// or helper IDs). Frozen at plan time.
     pub targets: Vec<String>,
+    /// Typed, resolved references recorded at plan time. Older history may omit these.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub references: Option<Vec<super::logs::LogEntityReference>>,
     pub disposition: StepDisposition,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]

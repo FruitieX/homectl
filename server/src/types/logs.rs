@@ -19,4 +19,16 @@ pub struct UiLogEntry {
     pub level: LogLevel,
     pub target: String,
     pub message: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub references: Vec<LogEntityReference>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub details: Option<serde_json::Value>,
+}
+
+#[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[ts(export)]
+pub struct LogEntityReference {
+    pub entity: String,
+    pub entity_id: String,
 }

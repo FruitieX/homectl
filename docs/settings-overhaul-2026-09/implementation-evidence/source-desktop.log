@@ -1,0 +1,16 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "Temperature editor reads the backend Kelvin value directly",
+   "Color preview describes Kelvin without unit conversion",
+   "Editing inputs marks the previous preview stale",
+   "Computation switching retains the previous parameters",
+   "Create preserves every alias, Kelvin and brightness",
+   "Navigation retains the source draft",
+   "Conflict review keeps remote timing and the server revision",
+   "Source controls fit the viewport"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/sources/new","viewport":{"width":1440,"height":1100},"problems":["log: Failed to load resource: the server responded with a status of 404 (Not Found)","log: Failed to load resource: the server responded with a status of 404 (Not Found)","log: Failed to load resource: the server responded with a status of 409 (Conflict)"]}

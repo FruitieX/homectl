@@ -17,9 +17,19 @@ import {
 const hs = { h: 260, s: 0.8 };
 const rgb = { r: 255, g: 128, b: 0 };
 const xy = { x: 0.46, y: 0.41 };
-const ct = { ct: 270 };
+const ct = { ct: 4000 };
 
 describe('device colour wire format', () => {
+  it('edits and previews Kelvin directly, matching the backend DeviceColor contract', () => {
+    assert.equal(colorParts({ ct: 2700 })[0].display, 2700);
+    assert.equal(colorParts({ ct: 2700 })[0].unit, ' K');
+    assert.deepEqual(withColorPart({ ct: 2700 }, 'ct', 6500), { ct: 6500 });
+    assert.equal(formatColorExact({ ct: 2700 }), '2700 K');
+    assert.equal(describeColorName({ ct: 2700 }), 'warm white');
+    assert.equal(describeColorName({ ct: 6500 }), 'cool white');
+    assert.ok(colorToRgb({ ct: 2700 }).b < colorToRgb({ ct: 6500 }).b);
+    assert.deepEqual(defaultColorFor('ct'), { ct: 2700 });
+  });
   it('recognises every untagged variant', () => {
     assert.equal(getColorMode(hs), 'hs');
     assert.equal(getColorMode(rgb), 'rgb');
@@ -90,5 +100,11 @@ describe('device colour wire format', () => {
     const dim = colorToCss(hs, 0.5);
     assert.notEqual(dim, colorToCss(hs));
     assert.deepEqual(colorToRgb(hs), full);
+  });
+
+  it('uses full-value HSV so zero saturation is white and hue stays vivid', () => {
+    assert.deepEqual(colorToRgb({ h: 0, s: 0 }), { r: 255, g: 255, b: 255 });
+    assert.deepEqual(colorToRgb({ h: 0, s: 1 }), { r: 255, g: 0, b: 0 });
+    assert.deepEqual(colorToRgb({ h: 120, s: 1 }), { r: 0, g: 255, b: 0 });
   });
 });

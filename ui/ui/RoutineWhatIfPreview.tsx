@@ -2,8 +2,11 @@ import type { DevicesState } from '@/bindings/DevicesState';
 import type { TriggerSpec } from '@/bindings/TriggerSpec';
 import type { RoutineDefinitionV2Body } from '@/hooks/useConfig';
 import type { RoutinePreviewResponse } from '@/bindings/RoutinePreviewResponse';
+import type { RoutinePreviewOverride } from '@/bindings/RoutinePreviewOverride';
+import { Plus, X } from 'lucide-react';
 import type { RoutinePreviewRequest } from '@/bindings/RoutinePreviewRequest';
 import type { ConditionTraceNode } from '@/bindings/ConditionTraceNode';
+import { stringifyConfig } from '@/lib/routineDraft';
 import { useAppConfig } from '@/hooks/appConfig';
 import { triggerLabel } from '@/ui/routine-runtime';
 import { DeviceSelect } from '@/ui/config-selectors';
@@ -54,18 +57,31 @@ export function RoutineWhatIfPreview({
   const { apiEndpoint } = useAppConfig();
   const triggers = (definition.triggers ?? []) as TriggerSpec[];
   const [triggerId, setTriggerId] = useState('');
-  const assumedTrigger = triggers.find((spec) => spec.id === triggerId);
+  const assumedTrigger = triggers.find(
+    (spec) => spec.id === (triggerId || triggers[0]?.id),
+  );
   const assumedTriggerLabel = assumedTrigger
     ? (triggerLabel(assumedTrigger, devices, {}) ??
       `${assumedTrigger.kind.replaceAll('_', ' ')} trigger`)
     : 'selected trigger';
-  const [deviceKey, setDeviceKey] = useState('');
-  const [path, setPath] = useState('/value');
-  const [valueType, setValueType] = useState<'boolean' | 'number' | 'text'>(
-    'boolean',
-  );
-  const [valueText, setValueText] = useState('true');
+  const [assumptions, setAssumptions] = useState<
+    Array<{
+      id: string;
+      deviceKey: string;
+      path: string;
+      type: 'boolean' | 'number' | 'text' | 'json';
+      text: string;
+    }>
+  >([]);
+  const patchAssumption = (
+    id: string,
+    patch: Partial<(typeof assumptions)[number]>,
+  ) =>
+    setAssumptions((rows) =>
+      rows.map((row) => (row.id === id ? { ...row, ...patch } : row)),
+    );
   const [preview, setPreview] = useState<RoutinePreviewResponse | null>(null);
+  const [evaluatedAt, setEvaluatedAt] = useState<string>();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const requestRef = useRef<AbortController | null>(null);
@@ -74,7 +90,7 @@ export function RoutineWhatIfPreview({
     setPreview(null);
     setPending(false);
     return () => requestRef.current?.abort();
-  }, [definition]);
+  }, [definition, assumptions, triggerId]);
 
   const run = async () => {
     requestRef.current?.abort();
@@ -83,37 +99,56 @@ export function RoutineWhatIfPreview({
     setPending(true);
     setError('');
     setPreview(null);
-    const value =
-      valueType === 'boolean'
-        ? valueText === 'true'
-        : valueType === 'number'
-          ? Number(valueText)
-          : valueText;
-    if (deviceKey && valueType === 'number' && !Number.isFinite(value)) {
-      setPending(false);
-      setError('Enter a valid number.');
-      return;
-    }
     try {
+      const overrides: RoutinePreviewOverride[] = assumptions.map(
+        (row, index) => {
+          if (!row.deviceKey)
+            throw new Error(`Choose a device for assumption ${index + 1}.`);
+          if (row.path !== '' && !row.path.startsWith('/'))
+            throw new Error(
+              `Assumption ${index + 1}: use a JSON pointer beginning with /.`,
+            );
+          const value =
+            row.type === 'boolean'
+              ? row.text === 'true'
+              : row.type === 'number'
+                ? Number(row.text)
+                : row.type === 'json'
+                  ? JSON.parse(row.text)
+                  : row.text;
+          if (
+            row.type === 'number' &&
+            (!row.text.trim() || !Number.isFinite(value))
+          )
+            throw new Error(
+              `Enter a valid number for assumption ${index + 1}.`,
+            );
+          return { device_key: row.deviceKey, path: row.path, value };
+        },
+      );
       const response = await fetch(
         `${apiEndpoint}/api/v1/config/routines/preview`,
         {
           method: 'POST',
-          signal: controller.signal,
+          signal: AbortSignal.any([
+            controller.signal,
+            AbortSignal.timeout(15000),
+          ]),
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          body: stringifyConfig({
             definition,
             trigger_id: triggerId || triggers[0]?.id,
-            overrides: deviceKey
-              ? [{ device_key: deviceKey, path, value }]
-              : [],
+            overrides,
           } as RoutinePreviewRequest),
         },
       );
       const body = await response.json();
       if (!response.ok || !body.success)
         throw new Error(body.error || 'Preview unavailable.');
-      if (!controller.signal.aborted) setPreview(body.data);
+      if (!controller.signal.aborted) {
+        setPreview(body.data);
+        setEvaluatedAt(new Date().toLocaleTimeString());
+      }
     } catch (cause) {
       if (!controller.signal.aborted)
         setError(
@@ -125,13 +160,10 @@ export function RoutineWhatIfPreview({
   };
 
   return (
-    <details className="rounded-2xl border border-border bg-muted/20 p-4">
-      <summary className="cursor-pointer font-semibold">
-        Try a what-if preview
-      </summary>
+    <div>
       <p className="mt-2 text-sm text-muted-foreground">
-        Choose a trigger and optionally change one device value. This checks the
-        unsaved draft without running actions.
+        Choose a starting event and optionally assume different device values.
+        This checks the unsaved draft without running actions.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="space-y-1 text-sm">
@@ -147,66 +179,141 @@ export function RoutineWhatIfPreview({
             placeholder="Choose trigger…"
           />
         </label>
-        <label className="space-y-1 text-sm">
-          <span>Change a device value (optional)</span>
-          <DeviceSelect
-            devices={devices}
-            value={deviceKey}
-            onChange={setDeviceKey}
-          />
-        </label>
-        {deviceKey && (
-          <>
-            <div className="space-y-1 text-sm">
-              <span>Field</span>
-              <ValuePathPicker
-                devices={devices}
-                deviceKey={deviceKey}
-                path={path}
-                onChange={setPath}
-                onChooseValue={(value) => {
-                  setValueType(
-                    typeof value === 'boolean'
-                      ? 'boolean'
-                      : typeof value === 'number'
-                        ? 'number'
-                        : 'text',
-                  );
-                  setValueText(String(value));
-                }}
-              />
-            </div>
-            <label className="space-y-1 text-sm">
-              <span>Suppose its value is</span>
-              <select
-                className="h-11 w-full rounded-xl border border-input bg-background px-3"
-                value={valueType}
-                onChange={(event) =>
-                  setValueType(event.target.value as typeof valueType)
+      </div>
+      <div className="mt-4 space-y-3">
+        {assumptions.map((row, index) => (
+          <section
+            key={row.id}
+            className="rounded-md border border-border p-3"
+            aria-label={`Assumption ${index + 1}`}
+          >
+            <header className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="text-xs font-medium">Assumption {index + 1}</h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`Remove assumption ${index + 1}`}
+                onClick={() =>
+                  setAssumptions((rows) =>
+                    rows.filter((entry) => entry.id !== row.id),
+                  )
                 }
               >
-                <option value="boolean">On / off</option>
-                <option value="number">Number</option>
-                <option value="text">Text</option>
-              </select>
-              {valueType === 'boolean' ? (
-                <select
-                  className="h-11 w-full rounded-xl border border-input bg-background px-3"
-                  value={valueText}
-                  onChange={(event) => setValueText(event.target.value)}
-                >
-                  <option value="true">True</option>
-                  <option value="false">False</option>
-                </select>
-              ) : (
-                <Input
-                  value={valueText}
-                  type={valueType === 'number' ? 'number' : 'text'}
-                  onChange={(event) => setValueText(event.target.value)}
+                <X className="size-4" />
+              </Button>
+            </header>
+            <div className="grid min-w-0 gap-3 sm:grid-cols-3">
+              <div className="min-w-0 space-y-2 text-xs">
+                <span>Device</span>
+                <DeviceSelect
+                  devices={devices}
+                  value={row.deviceKey}
+                  onChange={(deviceKey) =>
+                    patchAssumption(row.id, { deviceKey })
+                  }
                 />
-              )}
-            </label>
-          </>
+              </div>
+              <div className="min-w-0 space-y-2 text-xs">
+                <span>Field</span>
+                <ValuePathPicker
+                  devices={devices}
+                  deviceKey={row.deviceKey}
+                  path={row.path}
+                  onChange={(path) => patchAssumption(row.id, { path })}
+                  onChooseValue={(value) =>
+                    patchAssumption(row.id, {
+                      type:
+                        typeof value === 'boolean'
+                          ? 'boolean'
+                          : typeof value === 'number'
+                            ? 'number'
+                            : typeof value === 'string'
+                              ? 'text'
+                              : 'json',
+                      text:
+                        typeof value === 'object'
+                          ? JSON.stringify(value)
+                          : String(value),
+                    })
+                  }
+                />
+              </div>
+              <div className="min-w-0 space-y-2 text-xs">
+                <label className="grid gap-2">
+                  Value type
+                  <select
+                    className="settings-select"
+                    value={row.type}
+                    onChange={(event) =>
+                      patchAssumption(row.id, {
+                        type: event.target.value as typeof row.type,
+                        text:
+                          event.target.value === 'boolean'
+                            ? 'true'
+                            : event.target.value === 'number'
+                              ? '0'
+                              : event.target.value === 'json'
+                                ? 'null'
+                                : '',
+                      })
+                    }
+                  >
+                    <option value="boolean">On / off</option>
+                    <option value="number">Number</option>
+                    <option value="text">Text</option>
+                    <option value="json">JSON</option>
+                  </select>
+                </label>
+                <label className="grid gap-2">
+                  Assumed value
+                  {row.type === 'boolean' ? (
+                    <select
+                      className="settings-select"
+                      value={row.text}
+                      onChange={(event) =>
+                        patchAssumption(row.id, { text: event.target.value })
+                      }
+                    >
+                      <option value="true">True</option>
+                      <option value="false">False</option>
+                    </select>
+                  ) : (
+                    <Input
+                      value={row.text}
+                      type={row.type === 'number' ? 'number' : 'text'}
+                      onChange={(event) =>
+                        patchAssumption(row.id, { text: event.target.value })
+                      }
+                    />
+                  )}
+                </label>
+              </div>
+            </div>
+          </section>
+        ))}
+        <Button
+          variant="outline"
+          disabled={assumptions.length >= 12}
+          onClick={() =>
+            setAssumptions((rows) => [
+              ...rows,
+              {
+                id: crypto.randomUUID(),
+                deviceKey: '',
+                path: '/value',
+                type: 'boolean',
+                text: 'true',
+              },
+            ])
+          }
+        >
+          <Plus className="size-4" />
+          Add assumed value
+        </Button>
+        {assumptions.length >= 12 && (
+          <p className="text-xs text-muted-foreground">
+            Up to 12 assumed values can be previewed together.
+          </p>
         )}
       </div>
       <Button
@@ -220,6 +327,9 @@ export function RoutineWhatIfPreview({
       {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
       {preview && (
         <div className="mt-4 space-y-2 rounded-xl border border-border bg-background p-4 text-sm">
+          <p className="text-xs text-muted-foreground">
+            Evaluated {evaluatedAt} against the server state at that time.
+          </p>
           {preview.error && <p className="text-destructive">{preview.error}</p>}
           {preview.validation_errors?.map((issue, index) => (
             <p key={index} className="text-destructive">
@@ -279,6 +389,6 @@ export function RoutineWhatIfPreview({
           </p>
         </div>
       )}
-    </details>
+    </div>
   );
 }

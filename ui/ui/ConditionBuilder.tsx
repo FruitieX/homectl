@@ -1,3 +1,10 @@
+import { JsonValueControl } from '@/ui/settings/JsonValueControl';
+import {
+  FlowBlock,
+  AddFlowBlock,
+  UnknownFlowValue,
+} from '@/ui/settings/FlowBlock';
+import { moveSibling } from '@/lib/routineDraft';
 import type { ConditionExpr } from '@/bindings/ConditionExpr';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
@@ -24,7 +31,6 @@ import { Input } from '@/ui/primitives/input';
 import { ValuePathPicker } from '@/ui/ValuePathPicker';
 import { SearchablePicker } from '@/ui/SearchablePicker';
 import { useValueHistory } from '@/hooks/useValueHistory';
-import { useState } from 'react';
 
 export type ConditionKind = ConditionExpr['kind'];
 
@@ -195,11 +201,13 @@ function ComparisonValueEditor({
   }
 
   const valueType =
-    typeof value === 'number'
-      ? 'number'
-      : typeof value === 'boolean'
-        ? 'boolean'
-        : 'text';
+    value !== undefined && typeof value === 'object'
+      ? 'json'
+      : typeof value === 'number'
+        ? 'number'
+        : typeof value === 'boolean'
+          ? 'boolean'
+          : 'text';
 
   return (
     <>
@@ -209,16 +217,27 @@ function ComparisonValueEditor({
           value={valueType}
           onChange={(event) => {
             const next = event.target.value;
-            onChange(next === 'number' ? 0 : next === 'boolean' ? true : '');
+            onChange(
+              next === 'json'
+                ? []
+                : next === 'number'
+                  ? 0
+                  : next === 'boolean'
+                    ? true
+                    : '',
+            );
           }}
         >
+          <option value="json">JSON array / object / null</option>
           <option value="text">Text</option>
           <option value="number">Number</option>
           <option value="boolean">Boolean</option>
         </select>
       </ConfigField>
       <ConfigField label="Value">
-        {valueType === 'boolean' ? (
+        {valueType === 'json' ? (
+          <JsonValueControl value={value} onChange={onChange} />
+        ) : valueType === 'boolean' ? (
           <select
             className={selectClassName}
             value={value === true ? 'true' : 'false'}
@@ -314,7 +333,7 @@ function ValueSourceEditor({
             <ValuePathPicker
               devices={devices}
               deviceKey={`${source.device.integration_id}/${source.device.device_id}`}
-              path={source.path}
+              path={source.path ?? '/'}
               onChange={(path) => onChange({ ...source, path })}
               onChooseValue={onChooseValue}
             />
@@ -449,6 +468,7 @@ export function ConditionEditor({
   scenes,
   helpers,
   depth = 0,
+  hideKind = false,
 }: {
   condition: ConditionExpr;
   onChange: (condition: ConditionExpr) => void;
@@ -457,19 +477,17 @@ export function ConditionEditor({
   scenes: Array<{ id: string; name: string }>;
   helpers: HelperRuntimeStatus[];
   depth?: number;
+  hideKind?: boolean;
 }) {
-  const [newChildKind, setNewChildKind] = useState<ConditionKind>('comparison');
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
-  // One nested clause is open for editing at a time; the others stay sentences.
-  const [openChildIndex, setOpenChildIndex] = useState<number | null>(null);
-  const resolveDeviceLabel = (ref: {
-    integration_id: string;
-    device_id: string;
-  }) => {
-    const key = `${ref.integration_id}/${ref.device_id}`;
-    return getDeviceDisplayLabelFromKey(key, devices[key]?.name ?? key, {});
-  };
-
+  if (
+    !condition ||
+    typeof condition !== 'object' ||
+    ((condition.kind === 'all' || condition.kind === 'any') &&
+      !Array.isArray(condition.conditions)) ||
+    (condition.kind === 'comparison' &&
+      (!condition.source || typeof condition.source !== 'object'))
+  )
+    return <UnknownFlowValue value={condition} />;
   const kindSelect = (
     <select
       className={selectClassName}
@@ -490,125 +508,73 @@ export function ConditionEditor({
     children: ConditionExpr[],
     update: (next: ConditionExpr[]) => void,
   ) => (
-    <div className="space-y-3">
-      {children.map((child, index) => {
-        const open = openChildIndex === index;
-        return (
-          <div
+    <div className="flow-conditions">
+      {children.map((child, index) =>
+        !child || typeof child !== 'object' ? (
+          <UnknownFlowValue key={index} value={child} />
+        ) : (
+          <FlowBlock
             key={index}
-            className="flex items-start gap-2 rounded-xl border border-border/70 p-2"
-          >
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <span className="min-w-0 flex-1 text-sm">
-                  {describeCondition(child, resolveDeviceLabel)}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-expanded={open}
-                    onClick={() => setOpenChildIndex(open ? null : index)}
-                  >
-                    {open ? 'Close' : 'Edit'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
-                    aria-label="Remove condition"
-                    onClick={() => {
-                      if (openChildIndex === index) {
-                        setOpenChildIndex(null);
-                      }
-                      update(
-                        children.filter(
-                          (_, candidateIndex) => candidateIndex !== index,
-                        ),
-                      );
-                    }}
-                  >
-                    ✕
-                  </Button>
-                </span>
-              </div>
-              {open ? (
-                <div className="border-t border-border pt-2">
-                  <ConditionEditor
-                    condition={child}
-                    onChange={(next) =>
-                      update(
-                        children.map((candidate, candidateIndex) =>
-                          candidateIndex === index ? next : candidate,
-                        ),
-                      )
-                    }
-                    devices={devices}
-                    groups={groups}
-                    scenes={scenes}
-                    helpers={helpers}
-                    depth={depth + 1}
-                  />
-                </div>
-              ) : null}
-            </div>
-          </div>
-        );
-      })}
-      {children.length === 0 ? (
-        <p className="text-xs text-destructive">
-          Add at least one condition; the server rejects an empty group.
-        </p>
-      ) : null}
-      {/* One chooser instead of a type select plus an Add button: pick the kind
-          you want and it lands already open for editing. */}
-      <div className="flex flex-wrap items-center gap-1">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          aria-expanded={addMenuOpen}
-          aria-haspopup="menu"
-          onClick={() => setAddMenuOpen((open) => !open)}
-        >
-          Add condition…
-        </Button>
-        {addMenuOpen
-          ? conditionKindOptions.map((option) => (
-              <Button
-                key={option.value}
-                type="button"
-                role="menuitem"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setNewChildKind(option.value);
-                  setOpenChildIndex(children.length);
-                  update([...children, defaultCondition(option.value)]);
-                  setAddMenuOpen(false);
-                }}
+            title={
+              <select
+                className="settings-select w-full"
+                aria-label="Condition type"
+                value={child.kind}
+                onChange={(event) =>
+                  update(
+                    children.map((entry, i) =>
+                      i === index
+                        ? defaultCondition(event.target.value as ConditionKind)
+                        : entry,
+                    ),
+                  )
+                }
               >
-                {option.label}
-              </Button>
-            ))
-          : null}
-      </div>
+                {conditionKindOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            }
+            index={index}
+            total={children.length}
+            onMove={(offset) => update(moveSibling(children, index, offset))}
+            onRemove={() => update(children.filter((_, i) => i !== index))}
+          >
+            <ConditionEditor
+              condition={child}
+              onChange={(next) =>
+                update(children.map((entry, i) => (i === index ? next : entry)))
+              }
+              devices={devices}
+              groups={groups}
+              scenes={scenes}
+              helpers={helpers}
+              depth={depth + 1}
+              hideKind
+            />
+          </FlowBlock>
+        ),
+      )}
+      {!children.length && (
+        <p className="text-xs text-destructive">
+          Add a condition or remove this empty group.
+        </p>
+      )}
+      <AddFlowBlock
+        label="Add condition"
+        options={conditionKindOptions}
+        onAdd={(kind) => update([...children, defaultCondition(kind)])}
+      />
     </div>
   );
+  if (!conditionKindOptions.some((option) => option.value === condition.kind))
+    return <UnknownFlowValue value={condition} />;
 
   return (
-    <div
-      className={
-        depth === 0
-          ? 'space-y-3'
-          : 'space-y-3 rounded-xl border border-border/60 bg-muted/20 p-3'
-      }
-    >
-      <ConfigField label={depth === 0 ? 'Condition type' : 'Type'}>
-        {kindSelect}
-      </ConfigField>
+    <div className={'flow-condition space-y-3'}>
+      {!hideKind && <ConfigField label="Match">{kindSelect}</ConfigField>}
 
       {condition.kind === 'literal' ? (
         <ConfigField label="Result">
@@ -617,6 +583,7 @@ export function ConditionEditor({
             value={condition.value ? 'true' : 'false'}
             onChange={(event) =>
               onChange({
+                ...condition,
                 kind: 'literal',
                 value: event.target.value === 'true',
               })

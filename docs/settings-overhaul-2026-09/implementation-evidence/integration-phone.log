@@ -1,0 +1,20 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "API omits the stored password and reports its presence",
+   "Stored credentials are not put into an input",
+   "Sensor mappings accept multiple entries",
+   "Integration devices link directly to their settings",
+   "Integration draft survives related navigation",
+   "Related navigation does not reload or save an integration",
+   "One save preserves the entire sensor mapping collection",
+   "An unrelated save keeps the stored password without returning it",
+   "Conflict review identifies the edited nested field",
+   "Reviewed save keeps a remotely changed sibling field",
+   "Password replacement is removed from the saved browser draft",
+   "Integration controls fit the viewport"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/integrations/zigbee2mqtt","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 404 (Not Found)","log: Failed to load resource: the server responded with a status of 404 (Not Found)","log: Failed to load resource: the server responded with a status of 409 (Conflict)"]}

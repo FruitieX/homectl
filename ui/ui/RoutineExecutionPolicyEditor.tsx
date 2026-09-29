@@ -41,7 +41,7 @@ export function RoutineExecutionPolicyEditor({
   policy: ExecutionPolicy | undefined;
   onChange: (policy: ExecutionPolicy) => void;
 }) {
-  const current = policy ?? defaultExecutionPolicy;
+  const current = { ...defaultExecutionPolicy, ...policy };
   const mode =
     modeOptions.find((option) => option.value === current.mode) ??
     modeOptions[0];
@@ -51,7 +51,7 @@ export function RoutineExecutionPolicyEditor({
       : Number(current.min_interval_ms);
 
   const update = (patch: Partial<ExecutionPolicy>) => {
-    onChange({ ...current, ...patch });
+    onChange({ ...policy, ...patch } as ExecutionPolicy);
   };
 
   return (

@@ -1,414 +1,648 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-
-import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
-import type { SourceConfig } from '@/hooks/useConfig';
+import { useMemo } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
+import type { DeviceColor } from '@/bindings/DeviceColor';
 import {
   useSources,
   useSourcePresets,
-  readApiResponse,
+  useScenes,
+  type SourceConfig,
+  type SourceComputeConfig,
 } from '@/hooks/useConfig';
 import { useDevicesState } from '@/hooks/websocket';
 import { useAppConfig } from '@/hooks/appConfig';
-import type { SourcePreview } from '@/bindings/SourcePreview';
-import { describeColorName } from '@/lib/deviceColor';
+import { useEntityDraft } from '@/hooks/useEntityDraft';
+import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
+import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
+import { entityDraftStore } from '@/lib/entityDraft';
+import { configItemHref } from '@/lib/configItemHref';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
-import { Section } from '@/ui/config/Section';
-import { useSectionEditor } from '@/ui/config/useSectionEditor';
-import { useSectionParams } from '@/ui/config/useSectionParams';
-import { Alert, AlertDescription } from '@/ui/primitives/alert';
-import { Badge } from '@/ui/primitives/badge';
+import { SettingsSection } from '@/ui/settings/SettingsSection';
+import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
+import { StatePreview } from '@/ui/settings/StatePreview';
+import { SceneColorControl } from '@/ui/settings/SceneColorControl';
+import { JsonValueEditor } from '@/ui/settings/JsonValueEditor';
+import { SourcePreviewPanel } from '@/ui/SourcePreviewPanel';
+import SourceScriptEditor, {
+  SOURCE_SCRIPT_STARTER,
+} from '@/ui/SourceScriptEditor';
 import { Button } from '@/ui/primitives/button';
-import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
-import { EmptyState } from '@/ui/primitives/empty-state';
-import { Skeleton } from '@/ui/primitives/skeleton';
-import { toast } from 'sonner';
-
-import { SourceEditor, liveValue, validationError } from './page';
-
-/** A few points of a previewed day, enough to see the shape of the curve. */
-function PreviewSamples({ preview }: { preview: SourcePreview }) {
-  const samples = Array.isArray(preview.samples) ? preview.samples : [];
-  if (samples.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No samples were returned for this definition.
-      </p>
-    );
-  }
-  const step = Math.max(1, Math.ceil(samples.length / 6));
-  const shown = samples.filter((_sample, index) => index % step === 0);
-  return (
-    <div className="space-y-2">
-      <ul className="divide-y divide-border/60">
-        {shown.map((sample) => (
-          <li
-            key={String(sample.time_ms)}
-            className="flex items-center justify-between gap-3 py-1.5 text-sm"
-          >
-            <span className="tabular-nums text-muted-foreground">
-              {sample.local_time}
-            </span>
-            <span className="text-foreground">
-              {sample.profile?.brightness
-                ? `${Math.round(sample.profile.brightness * 100)}%${
-                    sample.profile.color
-                      ? ` · ${describeColorName(sample.profile.color)}`
-                      : ''
-                  }`
-                : 'Off'}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <p className="text-xs text-muted-foreground">
-        {samples.length} samples across {preview.timezone}, every{' '}
-        {Math.round(Number(preview.step_ms) / 60000)} min.
-      </p>
-    </div>
-  );
-}
+import { Input } from '@/ui/primitives/input';
+import { confirmDialog } from '@/ui/primitives/confirm-dialog';
+import { computationKey, sourceDefaults, validateSourceDraft } from './shared';
 
 export default function SourceDetailPage() {
-  const { id: routeId } = useParams();
-  const navigate = useNavigate();
-  const { apiEndpoint } = useAppConfig();
-  const { data: sources, loading, error, update, remove } = useSources();
-  const { data: presets } = useSourcePresets();
-  const liveDevices = useDevicesState();
-  const { activeSection, openSection } = useSectionParams();
-  const headingRefs = useRef<Record<string, HTMLElement | null>>({});
-
-  const source = useMemo(
-    () => (sources ?? []).find((entry) => entry.id === routeId),
-    [sources, routeId],
-  );
-  const live = routeId ? liveValue(liveDevices?.[`computed/${routeId}`]) : null;
-
-  const [preview, setPreview] = useState<SourcePreview | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [previewing, setPreviewing] = useState(false);
-
-  useAssistantPageContext({
-    kind: 'computed_source',
-    id: source?.id,
-    label: source?.name,
-  });
-
-  useEffect(() => {
-    if (!activeSection) return;
-    const node = headingRefs.current[activeSection];
-    if (node) {
-      node.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    }
-  }, [activeSection]);
-
-  const runPreview = useCallback(async () => {
-    if (!source) return;
-    setPreviewing(true);
-    setPreviewError(null);
-    try {
-      const response = await fetch(
-        `${apiEndpoint}/api/v1/config/source-preview`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            timezone: source.timezone,
-            compute: source.compute,
-            samples: 24,
-          }),
-        },
-      );
-      const result = await readApiResponse<SourcePreview>(
-        response,
-        'Failed to preview this source',
-      );
-      setPreview(result.data ?? null);
-    } catch (previewFailure) {
-      setPreviewError(
-        previewFailure instanceof Error
-          ? previewFailure.message
-          : 'Failed to preview this source',
-      );
-    } finally {
-      setPreviewing(false);
-    }
-  }, [apiEndpoint, source]);
-
-  const configEditor = useSectionEditor<SourceConfig>({
-    item: source,
-    fields: [
-      'id',
-      'name',
-      'enabled',
-      'timezone',
-      'refresh_interval_ms',
-      'compute',
-    ],
-    validate: (values) => {
-      const message = validationError({
-        ...source,
-        ...values,
-      } as SourceConfig);
-      return message ? [{ field: 'compute', message }] : [];
+  const { id } = useParams(),
+    creating = id === 'new',
+    navigate = useNavigate();
+  const api = useSources(),
+    presets = useSourcePresets(),
+    scenes = useScenes(),
+    devices = useDevicesState();
+  const { apiEndpoint } = useAppConfig(),
+    { advanced } = useSettingsPreferences();
+  const saved = api.data.find((row) => row.id === id),
+    empty = useMemo(() => sourceDefaults(), []);
+  const key = `${apiEndpoint}/sources/${creating ? '$new' : id}`;
+  const draft = useEntityDraft({
+    key,
+    item: creating ? empty : saved,
+    label: saved?.name ?? 'New computed source',
+    href: creating ? '/config/sources/new' : configItemHref('source', id!),
+    validate(value) {
+      const errors = validateSourceDraft(value);
+      if (creating && api.data.some((row) => row.id === value.id))
+        errors.push({
+          field: 'id',
+          message: 'This source ID is already in use.',
+        });
+      return errors;
     },
-    save: async (values) => {
-      if (!source) return;
-      await update(source.id, { ...source, ...values });
-    },
-  });
-
-  const crumbs = [
-    { label: 'Settings', to: '/config' },
-    { label: 'Computed sources', to: '/config/sources' },
-    { label: routeId ?? 'Source' },
-  ];
-
-  if (loading) {
-    return (
-      <DetailPageShell
-        crumbs={crumbs}
-        backTo="/config/sources"
-        backLabel="Back to sources"
-        title={routeId ?? 'Source'}
-      >
-        <Skeleton className="h-32 w-full rounded-2xl" />
-      </DetailPageShell>
-    );
-  }
-
-  if (!source) {
-    return (
-      <DetailPageShell
-        crumbs={crumbs}
-        backTo="/config/sources"
-        backLabel="Back to sources"
-        title={routeId ?? 'Source'}
-      >
-        <EmptyState
-          title="This source is not in the current configuration"
-          description={`${routeId ?? 'It'} may have been deleted or renamed. Open Computed sources to pick another.`}
-        />
-      </DetailPageShell>
-    );
-  }
-
-  const deleteSource = () => {
-    void (async () => {
-      const confirmed = await confirmDestructive(
-        `Delete source "${source.name}"?`,
-        'It stops publishing values; routines that read it lose their input.',
+    async save(value, expected) {
+      const request: SourceConfig & { create_only?: boolean } = {
+        ...value,
+        ...(creating ? { create_only: true } : {}),
+      };
+      const result = await api.update(
+        value.id,
+        request,
+        creating ? undefined : expected,
       );
-      if (!confirmed) return;
-      try {
-        await remove(source.id);
-        toast.success(`Deleted ${source.name}`);
-        void navigate('/config/sources', { replace: true });
-      } catch (nextError) {
-        toast.error(
-          nextError instanceof Error ? nextError.message : 'Failed to delete',
-        );
+      if (result && creating) {
+        draft.forget();
+        navigate(configItemHref('source', result.id), { replace: true });
       }
-    })();
+      return result;
+    },
+  });
+  const value = draft.value,
+    compute = value?.compute,
+    selection = compute ? computationKey(compute) : '';
+  const preset =
+    compute?.kind === 'script' && compute.preset
+      ? presets.data.find(
+          (row) =>
+            row.id === compute.preset!.id &&
+            row.version === compute.preset!.version,
+        )
+      : undefined;
+  const rawParams = compute?.params,
+    params =
+      rawParams && typeof rawParams === 'object' && !Array.isArray(rawParams)
+        ? (rawParams as Record<string, unknown>)
+        : {};
+  const circadian =
+    compute?.kind === 'circadian_compat' ||
+    (compute?.kind === 'script' && compute.preset?.id === 'circadian');
+  const knownParams = [
+    'day_fade_start',
+    'day_fade_duration_hours',
+    'day_color',
+    'day_brightness',
+    'night_fade_start',
+    'night_fade_duration_hours',
+    'night_color',
+    'night_brightness',
+  ];
+  const extraParams = Object.fromEntries(
+    Object.entries(params).filter(([field]) => !knownParams.includes(field)),
+  );
+  const data = devices?.[`computed/${id}`]?.data,
+    live =
+      data && 'Sensor' in data && 'color' in data.Sensor ? data.Sensor : null;
+  useAssistantPageContext(
+    saved
+      ? { kind: 'computed_source', id: saved.id, label: saved.name }
+      : { kind: 'computed_source' },
+  );
+  const patchCompute = (next: SourceComputeConfig) =>
+    draft.patch({ compute: next });
+  const patchParam = (field: string, next: unknown) => {
+    if (!compute) return;
+    const nextParams = { ...params };
+    if (next === undefined) delete nextParams[field];
+    else nextParams[field] = next;
+    patchCompute({ ...compute, params: nextParams });
   };
-
-  const computeKind =
-    source.compute.kind === 'script'
-      ? source.compute.preset
-        ? `Script from preset ${source.compute.preset.id} v${source.compute.preset.version}`
-        : 'Custom script'
-      : 'Built-in circadian preset';
-
+  function switchComputation(nextKey: string) {
+    if (!compute) return;
+    const match = presets.data.find(
+      (row) => `${row.id}@${row.version}` === nextKey,
+    );
+    const fallback: SourceComputeConfig =
+      nextKey === 'circadian_compat'
+        ? sourceDefaults().compute
+        : match
+          ? {
+              kind: 'script',
+              preset: { id: match.id, version: match.version },
+              params: match.default_params,
+            }
+          : {
+              kind: 'script',
+              source_body: preset?.source_body ?? SOURCE_SCRIPT_STARTER,
+              params: compute.params,
+            };
+    patchCompute(
+      entityDraftStore.switchVariant(
+        key,
+        'source-compute',
+        selection,
+        compute,
+        nextKey,
+        fallback,
+      ),
+    );
+  }
+  async function remove() {
+    if (
+      !saved ||
+      !(await confirmDialog({
+        title: `Delete ${saved.name}?`,
+        description:
+          'Scenes and routines following this source will lose their input.',
+        confirmLabel: 'Delete source',
+        destructive: true,
+      }))
+    )
+      return;
+    try {
+      await api.remove(saved.id);
+      draft.forget();
+      navigate('/config/sources');
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  }
+  const aliases = value?.aliases ?? [],
+    keys = new Set([`computed/${id}`, ...(saved?.aliases ?? [])]);
+  const usedBy = scenes.data.filter((scene) =>
+    Object.values({ ...scene.group_states, ...scene.device_states }).some(
+      (target) =>
+        'integration_id' in target &&
+        keys.has(`${target.integration_id}/${target.device_id}`),
+    ),
+  );
   return (
     <DetailPageShell
-      crumbs={crumbs}
+      crumbs={[]}
       backTo="/config/sources"
-      backLabel="Back to sources"
-      title={source.name || source.id}
+      backLabel="Computed sources"
+      title={
+        creating ? 'New computed source' : (saved?.name ?? 'Computed source')
+      }
       status={
-        <>
-          <span className="flex flex-wrap items-center gap-1.5">
-            <Badge variant={source.enabled ? 'outline' : 'muted'}>
-              {source.enabled ? 'Enabled' : 'Disabled'}
-            </Badge>
-            <span className="text-sm text-muted-foreground">
-              computed/{source.id}
-            </span>
-          </span>
-          <span className="block text-muted-foreground">
-            {source.enabled
-              ? `Publishes every ${Math.round(source.refresh_interval_ms / 1000)}s in ${source.timezone}.`
-              : 'Disabled: it never computes or publishes.'}
-          </span>
-        </>
+        advanced && saved
+          ? `computed/${saved.id} · Revision ${saved.revision}`
+          : undefined
+      }
+      loading={api.loading}
+      error={api.error}
+      onRetry={() => void api.refetch()}
+      notFound={!creating && !saved && !draft.dirty}
+      menu={
+        !creating
+          ? [
+              {
+                label: 'Delete source',
+                onSelect: () => void remove(),
+                destructive: true,
+              },
+            ]
+          : undefined
       }
     >
-      <div className="space-y-4">
-        {error ? (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        {/* Output and freshness lead the page. */}
-        <div className="space-y-2">
-          <p className="text-2xl font-semibold text-foreground">
-            {live ?? 'No output received yet'}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            {live
-              ? 'What this source publishes right now.'
-              : source.enabled
-                ? 'The source has not published a value in this session.'
-                : 'A disabled source never computes or publishes.'}
-          </p>
-        </div>
-
-        <Section<SourceConfig>
-          id="preview"
-          title="Preview"
-          summary="What it would publish across a local day"
-          open={activeSection === 'preview'}
-          onOpenChange={(open) => openSection(open ? 'preview' : null)}
-          headingRef={(node) => {
-            headingRefs.current.preview = node;
-          }}
-          api={configEditor}
-          editable={false}
-          readView={
-            <div className="space-y-3">
-              {/* Say which values the preview uses before the reader trusts it. */}
-              <p className="text-sm text-muted-foreground">
-                Preview evaluates the <strong>saved</strong> definition — not
-                unsaved edits in the configuration section below. It is a
-                computed profile, not a device reading.
+      {value && compute && (
+        <>
+          {!creating && (
+            <SettingsSection
+              id="current"
+              title="Current output"
+              description="The running source’s last published output. Draft changes do not affect it until saved."
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                <StatePreview
+                  color={live?.color}
+                  brightness={live?.brightness}
+                  power={live?.power}
+                  certainty={live ? 'known' : 'unresolved'}
+                  size={38}
+                />
+                <span className="text-sm">
+                  {saved?.enabled
+                    ? live
+                      ? live.brightness == null
+                        ? 'Brightness not specified'
+                        : `${Math.round(live.brightness * 100)}% brightness`
+                      : 'No output received yet'
+                    : 'Disabled'}
+                  {live?.color && 'ct' in live.color
+                    ? ` · ${live.color.ct} K`
+                    : ''}
+                </span>
+                {data && (
+                  <Link
+                    className="text-sm text-primary underline"
+                    to={configItemHref('device', `computed/${id}`)}
+                  >
+                    Output device
+                  </Link>
+                )}
+              </div>
+            </SettingsSection>
+          )}
+          <SettingsSection id="details" title="Details">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-2 text-xs">
+                Name
+                <Input
+                  data-field="name"
+                  value={value.name}
+                  onChange={(event) =>
+                    draft.patch({ name: event.target.value })
+                  }
+                />
+              </label>
+              {creating && (
+                <label className="grid gap-2 text-xs">
+                  Source ID
+                  <Input
+                    data-field="id"
+                    value={value.id}
+                    onChange={(event) =>
+                      draft.patch({ id: event.target.value })
+                    }
+                  />
+                </label>
+              )}
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={value.enabled}
+                  onChange={(event) =>
+                    draft.patch({ enabled: event.target.checked })
+                  }
+                />
+                Enabled
+              </label>
+            </div>
+          </SettingsSection>
+          <SettingsSection id="schedule" title="Schedule">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-2 text-xs">
+                Timezone
+                <Input
+                  data-field="timezone"
+                  value={value.timezone}
+                  onChange={(event) =>
+                    draft.patch({ timezone: event.target.value })
+                  }
+                />
+              </label>
+              <label className="grid gap-2 text-xs">
+                Refresh interval (seconds)
+                <Input
+                  data-field="refresh_interval_ms"
+                  type="number"
+                  min={1}
+                  max={86400}
+                  step={0.001}
+                  value={value.refresh_interval_ms / 1000}
+                  onChange={(event) =>
+                    draft.patch({
+                      refresh_interval_ms: Number(event.target.value) * 1000,
+                    })
+                  }
+                />
+              </label>
+            </div>
+          </SettingsSection>
+          <SettingsSection id="compute" title="Computation">
+            <label className="grid gap-2 text-xs">
+              Type
+              <select
+                data-field="compute"
+                className="settings-select"
+                value={selection}
+                onChange={(event) => switchComputation(event.target.value)}
+              >
+                <option value="circadian_compat">Built-in circadian</option>
+                {presets.data.map((row) => (
+                  <option
+                    key={`${row.id}@${row.version}`}
+                    value={`${row.id}@${row.version}`}
+                  >
+                    {row.name} · v{row.version}
+                  </option>
+                ))}
+                <option value="custom">Custom JavaScript</option>
+                {compute.kind === 'script' && compute.preset && !preset && (
+                  <option value={selection}>
+                    Unavailable preset: {compute.preset.id} · v
+                    {compute.preset.version}
+                  </option>
+                )}
+              </select>
+            </label>
+            {presets.error && (
+              <p role="alert" className="mt-2 text-xs">
+                Could not load presets.{' '}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void presets.refetch()}
+                >
+                  Retry
+                </Button>
               </p>
+            )}
+            {preset && (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <p className="flex-1 text-sm text-muted-foreground">
+                  {preset.description}
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    entityDraftStore.switchVariant(
+                      key,
+                      'source-compute',
+                      selection,
+                      compute,
+                      'custom',
+                      {
+                        kind: 'script',
+                        source_body: preset.source_body,
+                        params: compute.params,
+                      },
+                    );
+                    patchCompute({
+                      kind: 'script',
+                      source_body: preset.source_body,
+                      params: compute.params,
+                    });
+                  }}
+                >
+                  Copy to custom script
+                </Button>
+              </div>
+            )}
+          </SettingsSection>
+          {circadian && (
+            <SettingsSection
+              id="profile"
+              title="Day & night profile"
+              description="Set the start and duration of each fade. Brightness can be left unspecified."
+            >
+              <div className="grid gap-4 lg:grid-cols-2">
+                {(['day', 'night'] as const).map((period) => {
+                  const color = params[`${period}_color`] as
+                      DeviceColor | undefined,
+                    brightness = params[`${period}_brightness`] as
+                      number | null | undefined;
+                  return (
+                    <div
+                      key={period}
+                      className="min-w-0 space-y-3 rounded-md border border-border p-3"
+                    >
+                      <h3 className="flex items-center gap-2 text-sm font-medium">
+                        <StatePreview color={color} brightness={brightness} />
+                        {period === 'day' ? 'Day' : 'Night'}
+                      </h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="grid gap-2 text-xs">
+                          Fade starts
+                          <Input
+                            aria-label={`${period} fade starts`}
+                            type="time"
+                            value={
+                              typeof params[`${period}_fade_start`] === 'string'
+                                ? (params[`${period}_fade_start`] as string)
+                                : ''
+                            }
+                            onChange={(event) =>
+                              patchParam(
+                                `${period}_fade_start`,
+                                event.target.value,
+                              )
+                            }
+                          />
+                        </label>
+                        <label className="grid gap-2 text-xs">
+                          Duration (hours)
+                          <Input
+                            aria-label={`${period} fade duration`}
+                            type="number"
+                            min={1}
+                            max={24}
+                            step={1}
+                            value={
+                              typeof params[`${period}_fade_duration_hours`] ===
+                              'number'
+                                ? (params[
+                                    `${period}_fade_duration_hours`
+                                  ] as number)
+                                : ''
+                            }
+                            onChange={(event) =>
+                              patchParam(
+                                `${period}_fade_duration_hours`,
+                                Number(event.target.value),
+                              )
+                            }
+                          />
+                        </label>
+                      </div>
+                      <label className="grid gap-2 text-xs">
+                        Color
+                        <SceneColorControl
+                          field={`compute.params.${period}_color`}
+                          color={color}
+                          brightness={brightness}
+                          capabilities={[
+                            {
+                              brightness: true,
+                              ct: { start: 1000, end: 10000 },
+                              hs: true,
+                              rgb: false,
+                              xy: false,
+                            },
+                          ]}
+                          onChange={(next) =>
+                            patchParam(`${period}_color`, next)
+                          }
+                        />
+                      </label>
+                      <label className="grid gap-2 text-xs">
+                        Brightness (%)
+                        <Input
+                          aria-label={`${period} brightness`}
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={0.1}
+                          placeholder="Not specified"
+                          value={
+                            brightness == null
+                              ? ''
+                              : Math.round(brightness * 1000) / 10
+                          }
+                          onChange={(event) =>
+                            patchParam(
+                              `${period}_brightness`,
+                              event.target.value === ''
+                                ? undefined
+                                : Number(event.target.value) / 100,
+                            )
+                          }
+                        />
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+            </SettingsSection>
+          )}
+          {(!circadian || Object.keys(extraParams).length > 0) && (
+            <SettingsSection
+              id="parameters"
+              title={circadian ? 'Additional parameters' : 'Parameters'}
+              description="Values passed to the computation."
+            >
+              <JsonValueEditor
+                fixedType={circadian ? 'object' : undefined}
+                value={circadian ? extraParams : compute.params}
+                onChange={(next) => {
+                  const nextParams = circadian
+                    ? {
+                        ...Object.fromEntries(
+                          Object.entries(params).filter(([field]) =>
+                            knownParams.includes(field),
+                          ),
+                        ),
+                        ...(next as Record<string, unknown>),
+                      }
+                    : next;
+                  patchCompute(
+                    compute.kind === 'circadian_compat'
+                      ? {
+                          ...compute,
+                          params: nextParams as Record<string, unknown>,
+                        }
+                      : { ...compute, params: nextParams },
+                  );
+                }}
+                draftKey={key}
+                path="compute.params"
+                label="Parameters"
+              />
+            </SettingsSection>
+          )}
+          {compute.kind === 'script' && !compute.preset && (
+            <SettingsSection id="script" title="Script">
+              <SourceScriptEditor
+                value={compute.source_body ?? ''}
+                onChange={(source_body) =>
+                  patchCompute({ ...compute, source_body })
+                }
+              />
+            </SettingsSection>
+          )}
+          <SettingsSection
+            id="preview"
+            title="Draft preview"
+            description="Preview the current draft without saving or changing devices."
+          >
+            <SourcePreviewPanel timezone={value.timezone} compute={compute} />
+          </SettingsSection>
+          <SettingsSection
+            id="aliases"
+            title="Aliases"
+            description="Other device keys that resolve to this source. Existing scene links can keep using them."
+          >
+            <div data-field="aliases" tabIndex={-1} className="space-y-2">
+              {aliases.map((alias, index) => (
+                <div className="flex items-center gap-2" key={index}>
+                  <Input
+                    aria-label={`Alias ${index + 1}`}
+                    value={alias}
+                    placeholder="integration/device"
+                    onChange={(event) =>
+                      draft.patch({
+                        aliases: aliases.map((item, i) =>
+                          i === index ? event.target.value : item,
+                        ),
+                      })
+                    }
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Remove alias ${index + 1}`}
+                    onClick={() =>
+                      draft.patch({
+                        aliases: aliases.filter((_, i) => i !== index),
+                      })
+                    }
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
               <Button
-                type="button"
                 size="sm"
                 variant="outline"
-                disabled={previewing}
-                onClick={() => void runPreview()}
+                onClick={() => draft.patch({ aliases: [...aliases, ''] })}
               >
-                {previewing ? 'Computing…' : "Preview today's output"}
+                Add alias
               </Button>
-              {previewError ? (
-                <p role="alert" className="text-sm text-destructive">
-                  {previewError}
+            </div>
+          </SettingsSection>
+          {!creating && (
+            <SettingsSection
+              id="usage"
+              title="Used by"
+              description="Scenes with direct references to this source or its aliases. Scripts and routines may also reference its output device."
+            >
+              {scenes.error ? (
+                <p role="alert">
+                  Could not load references.{' '}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void scenes.refetch()}
+                  >
+                    Retry
+                  </Button>
                 </p>
-              ) : null}
-              {preview ? (
-                preview.unsupported_reason ? (
-                  <Alert>
-                    <AlertDescription>
-                      {preview.unsupported_reason}
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <PreviewSamples preview={preview} />
-                )
-              ) : null}
-            </div>
-          }
-          renderEditor={() => null}
-        />
-
-        <Section<SourceConfig>
-          id="configuration"
-          title="Configuration"
-          summary={`${computeKind} · ${source.timezone}`}
-          open={activeSection === 'configuration'}
-          onOpenChange={(open) => openSection(open ? 'configuration' : null)}
-          headingRef={(node) => {
-            headingRefs.current.configuration = node;
-          }}
-          api={configEditor}
-          readView={
-            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Name
-                </dt>
-                <dd className="text-sm text-foreground">{source.name}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Id
-                </dt>
-                <dd className="truncate text-sm text-foreground">
-                  {source.id}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Timezone
-                </dt>
-                <dd className="text-sm text-foreground">{source.timezone}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Refresh interval
-                </dt>
-                <dd className="text-sm text-foreground">
-                  {Math.round(source.refresh_interval_ms / 1000)}s
-                </dd>
-              </div>
-              <div className="sm:col-span-2">
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Compute
-                </dt>
-                <dd className="text-sm text-foreground">{computeKind}</dd>
-              </div>
-            </dl>
-          }
-          renderEditor={(api) => (
-            <SourceEditor
-              draft={{ ...source, ...(api.draft ?? {}) }}
-              presets={presets ?? []}
-              onChange={(next) => api.patch(next)}
-              onSave={() => undefined}
-              onCancel={() => undefined}
-              saving={false}
-              error={null}
-              isNew={false}
-              hideCurrentOutput
-              hideActions
-            />
+              ) : scenes.loading ? (
+                <p>Loading references…</p>
+              ) : usedBy.length ? (
+                <div className="flex flex-wrap gap-3">
+                  {usedBy.map((scene) => (
+                    <Link
+                      key={scene.id}
+                      className="text-sm text-primary underline"
+                      to={configItemHref('scene', scene.id)}
+                    >
+                      {scene.name}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No direct scene references.
+                </p>
+              )}
+            </SettingsSection>
           )}
-        />
-
-        <Section<SourceConfig>
-          id="danger"
-          title="Delete this source"
-          summary="Routines that read it lose their input"
-          open={activeSection === 'danger'}
-          onOpenChange={(open) => openSection(open ? 'danger' : null)}
-          headingRef={(node) => {
-            headingRefs.current.danger = node;
-          }}
-          api={configEditor}
-          editable={false}
-          danger
-          readView={
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Deleting this source stops the values it publishes; routines
-                that read it lose their input.
-              </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={deleteSource}
-              >
-                Delete this source
-              </Button>
-            </div>
-          }
-          renderEditor={() => null}
-        />
-      </div>
+          <EntitySaveBar
+            draft={draft}
+            createLabel={creating ? 'Create source' : undefined}
+          />
+        </>
+      )}
     </DetailPageShell>
   );
 }

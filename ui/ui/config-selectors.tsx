@@ -1,3 +1,37 @@
+import { useScenesState } from '@/hooks/websocket';
+import { StatePreview } from '@/ui/settings/StatePreview';
+import { Link } from 'react-router-dom';
+import { ExternalLink, Plus } from 'lucide-react';
+import { configItemHref } from '@/lib/configItemHref';
+import { Button } from '@/ui/primitives/button';
+import type { ReactNode } from 'react';
+export function ReferenceField({
+  kind,
+  value,
+  children,
+}: {
+  kind: 'device' | 'group' | 'scene' | 'routine' | 'helper' | 'source';
+  value: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <div className="min-w-0 flex-1">{children}</div>
+      {value && (
+        <Button
+          asChild
+          variant="ghost"
+          size="icon"
+          aria-label={`Open ${kind} details`}
+        >
+          <Link to={configItemHref(kind, value)}>
+            <ExternalLink className="size-3.5" />
+          </Link>
+        </Button>
+      )}
+    </div>
+  );
+}
 import { type Device } from '@/bindings/Device';
 import { type DevicesState } from '@/bindings/DevicesState';
 import { type FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
@@ -61,12 +95,14 @@ export function DeviceSelect({
   className?: string;
 }) {
   return (
-    <SearchablePicker
-      options={useDeviceOptions(devices)}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-    />
+    <ReferenceField kind="device" value={value}>
+      <SearchablePicker
+        options={useDeviceOptions(devices)}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+      />
+    </ReferenceField>
   );
 }
 
@@ -82,6 +118,7 @@ export function DeviceMultiSelect({
   return (
     <SearchableMultiPicker
       options={useDeviceOptions(devices)}
+      hrefFor={(key) => configItemHref('device', key)}
       value={value}
       onChange={onChange}
       placeholder="Add devices…"
@@ -102,12 +139,14 @@ export function GroupSelect({
   className?: string;
 }) {
   return (
-    <SearchablePicker
-      options={groupOptions(groups)}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-    />
+    <ReferenceField kind="group" value={value}>
+      <SearchablePicker
+        options={groupOptions(groups)}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+      />
+    </ReferenceField>
   );
 }
 
@@ -123,6 +162,7 @@ export function GroupMultiSelect({
   return (
     <SearchableMultiPicker
       options={groupOptions(groups)}
+      hrefFor={(key) => configItemHref('group', key)}
       value={value}
       onChange={onChange}
       placeholder="Add groups…"
@@ -135,23 +175,58 @@ export function SceneSelect({
   value,
   onChange,
   placeholder = 'Select scene...',
+  createReturnTo,
 }: {
   scenes: IdNameOption[];
   value: string;
   onChange: (sceneId: string) => void;
   placeholder?: string;
+  createReturnTo?: string;
 }) {
+  const state = useScenesState()?.[value];
+  const resolved = Object.values(state?.devices ?? {});
+  const first = resolved[0];
+  const mixed = resolved.some(
+    (item) => JSON.stringify(item) !== JSON.stringify(first),
+  );
   return (
-    <SearchablePicker
-      options={scenes.map((scene) => ({
-        value: scene.id,
-        label: scene.name,
-        detail: scene.id,
-      }))}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-    />
+    <div className="space-y-2">
+      <ReferenceField kind="scene" value={value}>
+        <div className="flex min-w-0 items-center gap-2">
+          {value && (
+            <StatePreview
+              {...first}
+              certainty={!first ? 'unresolved' : mixed ? 'mixed' : 'known'}
+              samples={resolved.flatMap((item) =>
+                item.color ? [item.color] : [],
+              )}
+              source="Saved scene"
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <SearchablePicker
+              options={scenes.map((scene) => ({
+                value: scene.id,
+                label: scene.name,
+                detail: scene.id,
+              }))}
+              value={value}
+              onChange={onChange}
+              placeholder={placeholder}
+            />
+          </div>
+        </div>
+      </ReferenceField>
+      {createReturnTo && (
+        <Link
+          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+          to={`/config/scenes/new?returnTo=${encodeURIComponent(createReturnTo)}`}
+        >
+          <Plus className="size-3" />
+          Create a scene
+        </Link>
+      )}
+    </div>
   );
 }
 
@@ -167,15 +242,17 @@ export function RoutineSelect({
   placeholder?: string;
 }) {
   return (
-    <SearchablePicker
-      options={routines.map((routine) => ({
-        value: routine.id,
-        label: routine.name,
-        detail: routine.id,
-      }))}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-    />
+    <ReferenceField kind="routine" value={value}>
+      <SearchablePicker
+        options={routines.map((routine) => ({
+          value: routine.id,
+          label: routine.name,
+          detail: routine.id,
+        }))}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+      />
+    </ReferenceField>
   );
 }

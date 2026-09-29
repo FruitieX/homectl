@@ -1,0 +1,18 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "Turning off preserves brightness",
+   "Cancel color leaves the draft unchanged",
+   "Target edits survive related-page navigation",
+   "Opening a reference does not save or activate",
+   "Save keeps off-state brightness and edited color",
+   "Untouched explicit, device-link, scene-link and missing targets survive the round trip",
+   "Group precedence is editable and persisted",
+   "Server preview displays resolved states with rings",
+   "Multiple targets can be added to one draft",
+   "No horizontal overflow"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/scenes/normal","viewport":{"width":1440,"height":1000},"problems":["log: Failed to load resource: the server responded with a status of 404 (Not Found)","log: Failed to load resource: the server responded with a status of 404 (Not Found)"]}

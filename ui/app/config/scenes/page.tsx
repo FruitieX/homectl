@@ -1,268 +1,201 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-
+import {
+  AlertTriangle,
+  ChevronRight,
+  Copy,
+  MoreHorizontal,
+  Plus,
+} from 'lucide-react';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
-import { type Scene, useScenes, useSources } from '@/hooks/useConfig';
-import { useDevicesApi } from '@/hooks/useDevicesApi';
-import { sourceAliasKeys } from '@/lib/sceneTargets';
+import { useScenes, useSources } from '@/hooks/useConfig';
+import { useScenesState } from '@/hooks/websocket';
 import { useCreateDeepLink } from '@/hooks/useDeepLink';
+import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
+import { sceneTargetsSummary, sourceAliasKeys } from '@/lib/sceneTargets';
 import { matchesConfigSearch } from '@/lib/configSearch';
-import { sceneTargetsSummary } from '@/lib/sceneTargets';
+import { configItemHref } from '@/lib/configItemHref';
+import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
-import { ConfigPageHeader } from '../page-header';
-import {
-  ResolvedColorDot,
-  resolveSceneColor,
-} from '@/ui/SceneResolvedColorPreview';
-import { Alert, AlertDescription } from '@/ui/primitives/alert';
-import { Badge } from '@/ui/primitives/badge';
+import { StatePreview } from '@/ui/settings/StatePreview';
 import { Button } from '@/ui/primitives/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/ui/primitives/card';
-import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { EmptyState } from '@/ui/primitives/empty-state';
-import { Input } from '@/ui/primitives/input';
-import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Skeleton } from '@/ui/primitives/skeleton';
+import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import {
-  ConfigField,
-  ConfigFormActions,
-  ConfigFormSection,
-  ConfigToggleRow,
-} from '@/ui/config-form';
-import { checkboxClassName } from '@/ui/form-styles';
-
-const getSceneSearchValues = (scene: Scene) => [
-  scene.id,
-  scene.name,
-  scene.hidden ? 'hidden' : 'visible',
-  scene.script ?? '',
-  Object.keys(scene.device_states ?? {}),
-  Object.keys(scene.group_states ?? {}),
-];
-
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/ui/primitives/dropdown-menu';
+import { ConfigPageHeader } from '../page-header';
 export default function ScenesPage() {
-  const { data: scenes, loading, error, refetch, create, remove } = useScenes();
-  const { devicesState: devices, loading: devicesLoading } = useDevicesApi();
-  const { data: sources } = useSources();
-  const [searchParams] = useSearchParams();
-  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  const api = useScenes();
+  const sources = useSources();
+  const catalog = useDevicesApi();
+  const runtime = useScenesState();
+  const { advanced } = useSettingsPreferences();
+  const [params, setParams] = useSearchParams();
+  const [search, setSearch] = useState(params.get('q') ?? '');
   const navigate = useNavigate();
   useCreateDeepLink(
     useCallback(() => navigate('/config/scenes/new'), [navigate]),
   );
   useAssistantPageContext({ kind: 'scene' });
-
-  // Legacy `?scene=<id>` links open the new detail route instead of expanding a
-  // card in place; `?device=` becomes a target focus.
-  const requestedSceneId = searchParams.get('scene');
-  const requestedDeviceKey = searchParams.get('device');
   useEffect(() => {
-    if (!requestedSceneId || loading) return;
-    const query = requestedDeviceKey
-      ? `?target=${encodeURIComponent(requestedDeviceKey)}`
-      : '';
-    navigate(`/config/scenes/${encodeURIComponent(requestedSceneId)}${query}`, {
-      replace: true,
-    });
-  }, [loading, navigate, requestedDeviceKey, requestedSceneId]);
-
-  const deviceKeys = useMemo(
-    () => Object.keys(devices).filter((key) => devices[key] !== undefined),
-    [devices],
+    const scene = params.get('scene');
+    if (scene)
+      navigate(
+        `${configItemHref('scene', scene)}${params.get('device') ? '?section=devices&target=' + encodeURIComponent(params.get('device')!) : ''}`,
+        { replace: true },
+      );
+  }, [params, navigate]);
+  const visible = api.data.filter((scene) =>
+    matchesConfigSearch(
+      search,
+      scene.id,
+      scene.name,
+      scene.hidden ? 'hidden' : 'visible',
+      ...Object.keys(scene.device_states),
+      ...Object.keys(scene.group_states),
+    ),
   );
-
-  const visibleScenes = scenes.filter((scene) =>
-    matchesConfigSearch(search, ...getSceneSearchValues(scene)),
-  );
-
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Skeleton className="size-12 rounded-full" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <Alert variant="destructive">
-        <AlertDescription className="space-y-3">
-          <p>Could not load scenes: {error}</p>
-          <Button variant="outline" size="sm" onClick={() => void refetch()}>
-            Try again
-          </Button>
-        </AlertDescription>
-      </Alert>
-    );
-  }
-
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-[1600px] space-y-4">
       <ConfigPageHeader
         title="Scenes"
-        description="Save a state you can recall by hand or from an automation."
+        description="Saved states and links for your devices and groups."
         actions={
           <Button asChild>
-            <Link to="/config/scenes/new">Add scene</Link>
+            <Link to="/config/scenes/new">
+              <Plus className="size-4" />
+              Add scene
+            </Link>
           </Button>
         }
       />
-
       <ConfigListSearchBar
-        filteredCount={visibleScenes.length}
-        onChange={setSearch}
-        placeholder="Search scenes"
-        totalCount={scenes.length}
+        filteredCount={visible.length}
+        totalCount={api.data.length}
         value={search}
+        onChange={(value) => {
+          setSearch(value);
+          const next = new URLSearchParams(params);
+          if (value) next.set('q', value);
+          else next.delete('q');
+          setParams(next, { replace: true });
+        }}
+        placeholder="Search scenes or targets"
       />
-
-      {visibleScenes.length === 0 ? (
+      {api.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {api.error}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void api.refetch()}
+            >
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : api.loading ? (
+        <Skeleton className="h-48 rounded-lg" />
+      ) : !visible.length ? (
         <EmptyState
-          title={
-            scenes.length === 0
-              ? 'No scenes yet'
-              : 'No scenes match the current search'
-          }
-          description={
-            scenes.length === 0
-              ? 'Save a useful light or device state to recall it later.'
-              : 'Try another name, id, or target.'
-          }
-          action={
-            scenes.length === 0 ? (
-              <Button size="sm" asChild>
-                <Link to="/config/scenes/new">Create your first scene</Link>
-              </Button>
-            ) : (
-              <Button variant="outline" size="sm" onClick={() => setSearch('')}>
-                Clear search
-              </Button>
-            )
-          }
+          title={api.data.length ? 'No matching scenes' : 'No scenes yet'}
+          description="Use Add scene to configure group and device states."
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {visibleScenes.map((scene) => {
+        <div className="divide-y divide-border rounded-lg border border-border bg-card">
+          {visible.map((scene) => {
             const summary = sceneTargetsSummary(scene, {
-              deviceKeys,
-              sceneIds: scenes.map((entry) => entry.id),
+              sceneIds: api.data.map((row) => row.id),
+              deviceKeys:
+                !catalog.loading && !catalog.error
+                  ? Object.keys(catalog.devicesState)
+                  : undefined,
+              aliases: sourceAliasKeys(sources.data),
             });
-            const resolved = [
-              ...Object.entries(scene.device_states ?? {}).map(
-                ([key, config]) => ({
-                  key: `device:${key}`,
-                  resolved: resolveSceneColor(
-                    config,
-                    'device',
-                    key,
-                    scenes,
-                    devices,
-                  ),
-                }),
-              ),
-              ...Object.entries(scene.group_states ?? {}).map(
-                ([key, config]) => ({
-                  key: `group:${key}`,
-                  resolved: resolveSceneColor(
-                    config,
-                    'group',
-                    key,
-                    scenes,
-                    devices,
-                  ),
-                }),
-              ),
-            ].filter(
-              (
-                entry,
-              ): entry is {
-                key: string;
-                resolved: NonNullable<typeof entry.resolved>;
-              } => entry.resolved !== null,
-            );
-
+            const resolved = runtime?.[scene.id];
+            const samples = Object.entries(resolved?.devices ?? {})
+              .sort(([a], [b]) => a.localeCompare(b))
+              .slice(0, 4);
             return (
-              <Card
+              <div
                 key={scene.id}
-                className="rounded-2xl border-border/70 shadow-sm transition hover:border-primary/40 hover:bg-accent/30 hover:shadow-md"
+                className="flex items-center gap-2 pr-2 hover:bg-muted/40"
               >
                 <Link
-                  to={`/config/scenes/${encodeURIComponent(scene.id)}`}
-                  className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  to={configItemHref('scene', scene.id)}
+                  className="flex min-h-[76px] min-w-0 flex-1 items-center gap-3 px-4 py-3"
                 >
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <CardTitle>{scene.name}</CardTitle>
-                        <CardDescription>
-                          {summary.deviceCount}{' '}
-                          {summary.deviceCount === 1 ? 'device' : 'devices'} ·{' '}
-                          {summary.groupCount}{' '}
-                          {summary.groupCount === 1 ? 'room' : 'rooms'}
-                        </CardDescription>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        {scene.hidden && <Badge variant="muted">Hidden</Badge>}
-                        {summary.unresolvedCount > 0 ? (
-                          <Badge variant="warning" className="font-medium">
-                            {summary.unresolvedCount} unresolved
-                          </Badge>
-                        ) : null}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {summary.total === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        {summary.scripted
-                          ? 'Script-only scene.'
-                          : 'No targets — activating this would change nothing.'}
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {resolved
-                          .slice(0, 8)
-                          .map(({ key, resolved: colors }) => (
-                            <ResolvedColorDot
-                              key={key}
-                              className="inline-flex h-3.5 w-3.5 rounded-full border border-foreground/15 shadow-inner"
-                              color={colors.color}
-                              isPowered={colors.isPowered}
-                            />
-                          ))}
-                        {summary.scripted ? (
-                          <Badge variant="secondary">Script</Badge>
-                        ) : null}
-                      </div>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">
+                      {scene.name}
+                      {scene.hidden && (
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          Hidden
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {summary.groupCount} groups · {summary.deviceCount} device
+                      targets{summary.scripted && ' · Script'}
+                      {resolved?.active_overrides.length
+                        ? ` · ${resolved.active_overrides.length} saved overrides`
+                        : ''}
+                      {advanced && (
+                        <span className="ml-2 font-mono">{scene.id}</span>
+                      )}
+                    </span>
+                    {summary.unresolvedCount > 0 && (
+                      <span className="mt-1 flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300">
+                        <AlertTriangle className="size-3" />
+                        {summary.unresolvedCount} unresolved links
+                      </span>
                     )}
-                  </CardContent>
+                  </span>
+                  <span className="hidden items-center gap-1 sm:flex">
+                    {samples.map(([key, state]) => (
+                      <StatePreview
+                        key={key}
+                        {...state}
+                        brightness={
+                          state.brightness ?? (state.power ? 1 : null)
+                        }
+                        source="Saved scene resolution"
+                        size={26}
+                      />
+                    ))}
+                  </span>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                 </Link>
-                <div className="flex justify-end px-4 pb-3">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
-                    onClick={async () => {
-                      if (
-                        await confirmDestructive(
-                          `Delete scene "${scene.name}"?`,
-                          'Routines and scene links that reference this scene will stop resolving.',
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Actions for ${scene.name}`}
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onSelect={() =>
+                        navigate(
+                          `/config/scenes/new?copyFrom=${encodeURIComponent(scene.id)}`,
                         )
-                      ) {
-                        await remove(scene.id);
                       }
-                    }}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </Card>
+                    >
+                      <Copy className="size-4" />
+                      Duplicate scene
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             );
           })}
         </div>

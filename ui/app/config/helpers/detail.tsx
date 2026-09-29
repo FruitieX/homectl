@@ -1,436 +1,343 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-
-import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import type { HelperDefinition } from '@/bindings/HelperDefinition';
 import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
-import { useHelpers, useSetHelperValue } from '@/hooks/useConfig';
+import {
+  useHelpers,
+  useHelperDefinitions,
+  useSetHelperValue,
+  useRoutines,
+} from '@/hooks/useConfig';
+import { useAppConfig } from '@/hooks/appConfig';
+import { useEntityDraft } from '@/hooks/useEntityDraft';
+import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
+import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
+import { entityDraftStore } from '@/lib/entityDraft';
+import { configItemHref } from '@/lib/configItemHref';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
-import { Section } from '@/ui/config/Section';
-import { StatusRegion } from '@/ui/config/StatusRegion';
-import { useSectionEditor } from '@/ui/config/useSectionEditor';
-import { useSectionParams } from '@/ui/config/useSectionParams';
-import { Alert, AlertDescription } from '@/ui/primitives/alert';
-import { Badge } from '@/ui/primitives/badge';
+import { SettingsSection } from '@/ui/settings/SettingsSection';
+import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { Button } from '@/ui/primitives/button';
-import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
-import { EmptyState } from '@/ui/primitives/empty-state';
-import { Skeleton } from '@/ui/primitives/skeleton';
-import { toast } from 'sonner';
-
+import { confirmDialog } from '@/ui/primitives/confirm-dialog';
 import {
   HelperInitialValueField,
   HelperKindFields,
   HelperNameFields,
   HelperPersistenceFields,
 } from './fields';
-import { ValueControl, formatValue, kindLabel, validateDraft } from './page';
+import {
+  ValueControl,
+  formatValue,
+  helperDefinition,
+  invalidHelperValue,
+  newHelperDraft,
+  validateDraft,
+} from './shared';
 
-/** The current value, leading the page, with the write that changes it. */
-function CurrentValuePanel({
-  status,
-  draft,
-}: {
-  status?: HelperRuntimeStatus;
-  draft: HelperDefinition;
-}) {
-  const setHelperValue = useSetHelperValue();
-  const [valueDraft, setValueDraft] = useState<JsonValue>(
-    status?.value ?? draft.initial_value,
-  );
-  const [valueError, setValueError] = useState<string | null>(null);
-  const [valueSaved, setValueSaved] = useState(false);
-
+function CurrentValue({ status }: { status: HelperRuntimeStatus }) {
+  const command = useSetHelperValue(),
+    { advanced } = useSettingsPreferences();
+  const [value, setValue] = useState<JsonValue>(status.value),
+    [dirty, setDirty] = useState(false),
+    [message, setMessage] = useState('');
   useEffect(() => {
-    if (status?.value !== undefined) {
-      setValueDraft(status.value);
-    }
-  }, [status?.value]);
-
-  const saveValue = async () => {
-    setValueError(null);
+    if (!dirty) setValue(status.value);
+  }, [status.value, dirty]);
+  const invalid = invalidHelperValue(status.kind, value);
+  async function apply() {
+    if (invalid) return;
+    setMessage('');
     try {
-      await setHelperValue.mutateAsync({ id: draft.id, value: valueDraft });
-      setValueSaved(true);
-    } catch (setFailure) {
-      setValueError(
-        setFailure instanceof Error
-          ? setFailure.message
-          : 'Failed to set helper value',
+      await command.mutateAsync({ id: status.id, value });
+      setDirty(false);
+      setMessage('Current value updated.');
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : 'Could not change the value.',
       );
     }
-  };
-
-  const kind = draft.kind;
-  const outOfRange =
-    kind.kind === 'enum' &&
-    typeof status?.value === 'string' &&
-    !kind.options.includes(status.value);
-
+  }
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-2xl font-semibold text-foreground">
-          {formatValue(status?.value ?? draft.initial_value)}
-        </span>
-        <Badge variant="outline">{kindLabel(kind)}</Badge>
-        <Badge
-          variant="outline"
-          title={
-            draft.persistence === 'durable'
-              ? 'Keeps its value across restarts'
-              : 'Resets to its initial value when homectl restarts'
-          }
-        >
-          {draft.persistence === 'durable'
-            ? 'Survives restart'
-            : 'Resets on restart'}
-        </Badge>
+    <SettingsSection
+      id="current"
+      title="Current value"
+      description="Routines read this value now. Setting it is an immediate command and can trigger routines."
+    >
+      <div className="mb-3 flex flex-wrap items-baseline gap-3">
+        <strong className="break-all text-xl">
+          {formatValue(status.value)}
+        </strong>
+        {advanced && (
+          <span className="text-xs text-muted-foreground">
+            Revision {String(status.revision)}
+          </span>
+        )}
       </div>
-      <p className="text-sm text-muted-foreground">
-        {status
-          ? `What routines read right now, at revision ${String(status.revision)}.`
-          : 'No runtime status received yet; showing the initial value.'}
-      </p>
-      {outOfRange ? (
-        <Alert>
-          <AlertDescription>
-            The options below no longer include the current value “
-            {String(status?.value)}”, so writes of that value would be rejected.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {/* An immediate command, not a section edit: writing the value does not
-          change the definition and needs no Save. */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-0 flex-1">
           <ValueControl
-            kind={kind}
-            value={valueDraft}
-            onChange={(value) => {
-              setValueSaved(false);
-              setValueDraft(value);
+            kind={status.kind}
+            value={value}
+            onChange={(next) => {
+              setValue(next);
+              setDirty(true);
+              setMessage('');
             }}
           />
         </div>
         <Button
-          type="button"
-          size="sm"
-          disabled={setHelperValue.isPending}
-          onClick={() => void saveValue()}
+          variant="outline"
+          disabled={command.isPending || !!invalid}
+          onClick={() => void apply()}
         >
-          {setHelperValue.isPending ? 'Setting…' : 'Set current value'}
+          {command.isPending ? 'Setting…' : 'Set current value'}
         </Button>
       </div>
-      <StatusRegion message={valueSaved ? 'Current value written.' : null} />
-      {valueError ? (
-        <p role="alert" className="text-xs text-destructive">
-          {valueError}
+      {invalid && (
+        <p role="alert" className="mt-2 text-xs text-destructive">
+          {invalid}
         </p>
-      ) : null}
-    </div>
+      )}
+      {message && (
+        <p role="status" className="mt-2 text-xs">
+          {message}
+        </p>
+      )}
+    </SettingsSection>
   );
 }
 
+/** Native helper references only; script source text is not a reliable dependency index. */
+function usesHelper(value: unknown, id: string): boolean {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some((item) => usesHelper(item, id));
+  const row = value as Record<string, unknown>;
+  if (
+    (row.kind === 'helper' ||
+      row.action === 'set_helper' ||
+      row.action === 'activate_scene_from_helper') &&
+    (row.helper === id || row.helper_id === id)
+  )
+    return true;
+  return Object.values(row).some((item) => usesHelper(item, id));
+}
 export default function HelperDetailPage() {
-  const { id: routeId } = useParams();
-  const navigate = useNavigate();
-  const { data: statuses, loading, error, update, remove } = useHelpers();
-  const { activeSection, openSection } = useSectionParams();
-  const headingRefs = useRef<Record<string, HTMLElement | null>>({});
-
-  const status = useMemo(
-    () => (statuses ?? []).find((entry) => entry.id === routeId),
-    [statuses, routeId],
+  const { id } = useParams(),
+    creating = id === 'new',
+    navigate = useNavigate();
+  const api = useHelpers(),
+    definitions = useHelperDefinitions(),
+    routines = useRoutines();
+  const { apiEndpoint } = useAppConfig(),
+    { advanced } = useSettingsPreferences();
+  const status = api.data.find((row) => row.id === id);
+  const saved = useMemo(
+    () => (status ? helperDefinition(status) : undefined),
+    [status],
   );
-
-  const draft: HelperDefinition | undefined = useMemo(() => {
-    if (!status) return undefined;
-    return {
-      id: status.id,
-      name: status.name,
-      kind: status.kind,
-      initial_value: status.initial_value,
-      persistence: status.persistence,
-      hidden: status.hidden,
-    };
-  }, [status]);
-
-  useAssistantPageContext({
-    kind: 'helper',
-    id: status?.id,
-    label: status?.name,
-  });
-
-  useEffect(() => {
-    if (!activeSection) return;
-    const node = headingRefs.current[activeSection];
-    if (node) {
-      node.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    }
-  }, [activeSection]);
-
-  const saveFields = useCallback(
-    async (patch: Partial<HelperDefinition>) => {
-      if (!draft) return;
-      const next: HelperDefinition = { ...draft, ...patch };
-      const invalid = validateDraft(next);
-      if (invalid) {
-        throw new Error(invalid);
-      }
-      await update(next.id, next);
+  const empty = useMemo(() => newHelperDraft(), []);
+  const key = `${apiEndpoint}/helpers/${creating ? '$new' : id}`;
+  const draft = useEntityDraft({
+    key,
+    item: creating ? empty : saved,
+    label: saved?.name ?? 'New helper',
+    href: creating ? '/config/helpers/new' : configItemHref('helper', id!),
+    validate(value) {
+      const message = validateDraft(value),
+        errors = message
+          ? [
+              {
+                field: !value.id.trim()
+                  ? 'id'
+                  : !value.name.trim()
+                    ? 'name'
+                    : 'kind',
+                message,
+              },
+            ]
+          : [];
+      const invalid = invalidHelperValue(value.kind, value.initial_value);
+      if (invalid)
+        errors.push({
+          field: 'initial_value',
+          message: `Initial value: ${invalid}`,
+        });
+      if (creating && api.data.some((row) => row.id === value.id))
+        errors.push({
+          field: 'id',
+          message: 'This helper ID is already in use.',
+        });
+      return errors;
     },
-    [draft, update],
-  );
-
-  const nameEditor = useSectionEditor<HelperDefinition>({
-    item: draft,
-    fields: ['id', 'name'],
-    save: (values) => saveFields(values),
-  });
-  const kindEditor = useSectionEditor<HelperDefinition>({
-    item: draft,
-    fields: ['kind', 'initial_value'],
-    save: (values) => saveFields(values),
-  });
-  const initialEditor = useSectionEditor<HelperDefinition>({
-    item: draft,
-    fields: ['initial_value'],
-    save: (values) => saveFields(values),
-  });
-  const persistenceEditor = useSectionEditor<HelperDefinition>({
-    item: draft,
-    fields: ['persistence', 'hidden'],
-    save: (values) => saveFields(values),
-  });
-
-  const crumbs = [
-    { label: 'Settings', to: '/config' },
-    { label: 'Helpers', to: '/config/helpers' },
-    { label: routeId ?? 'Helper' },
-  ];
-
-  if (loading) {
-    return (
-      <DetailPageShell
-        crumbs={crumbs}
-        backTo="/config/helpers"
-        backLabel="Back to helpers"
-        title={routeId ?? 'Helper'}
-      >
-        <Skeleton className="h-32 w-full rounded-2xl" />
-      </DetailPageShell>
-    );
-  }
-
-  if (!status || !draft) {
-    return (
-      <DetailPageShell
-        crumbs={crumbs}
-        backTo="/config/helpers"
-        backLabel="Back to helpers"
-        title={routeId ?? 'Helper'}
-      >
-        <EmptyState
-          title="This helper is not in the current configuration"
-          description={`${routeId ?? 'It'} may have been deleted or renamed. Open Helpers to pick another.`}
-        />
-      </DetailPageShell>
-    );
-  }
-
-  const deleteHelper = () => {
-    void (async () => {
-      const confirmed = await confirmDestructive(
-        `Delete helper "${draft.name}"?`,
-        'Routines and scripts that read it lose their value source until you point them somewhere else.',
+    async save(value, expected) {
+      if (
+        status &&
+        invalidHelperValue(value.kind, status.value) &&
+        !(await confirmDialog({
+          title: 'Reset the current value?',
+          description: `The current value “${formatValue(status.value)}” does not fit the new type or options. Saving resets it to the initial value “${formatValue(value.initial_value)}”.`,
+          confirmLabel: 'Save and reset value',
+        }))
+      )
+        throw new Error('Save cancelled. Your draft is still here.');
+      const result = await definitions.update(
+        value.id,
+        { ...value, ...(creating ? { create_only: true } : {}) },
+        creating ? undefined : expected,
       );
-      if (!confirmed) return;
-      try {
-        await remove(draft.id);
-        toast.success(`Deleted ${draft.name}`);
-        void navigate('/config/helpers', { replace: true });
-      } catch (nextError) {
-        toast.error(
-          nextError instanceof Error ? nextError.message : 'Failed to delete',
-        );
+      if (result && creating) {
+        draft.forget();
+        navigate(configItemHref('helper', result.id), { replace: true });
       }
-    })();
-  };
-
+      return result ? helperDefinition(result) : value;
+    },
+  });
+  const value = draft.value;
+  useAssistantPageContext(
+    saved
+      ? { kind: 'helper', id: saved.id, label: saved.name }
+      : { kind: 'helper' },
+  );
+  async function remove() {
+    if (
+      !saved ||
+      !(await confirmDialog({
+        title: `Delete ${saved.name}?`,
+        description:
+          'Routines that reference this helper will lose their value source.',
+        confirmLabel: 'Delete helper',
+        destructive: true,
+      }))
+    )
+      return;
+    try {
+      await api.remove(saved.id);
+      draft.forget();
+      navigate('/config/helpers');
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  }
+  const related = routines.data.filter((row) =>
+    usesHelper(row.definition_v2, id ?? ''),
+  );
   return (
     <DetailPageShell
-      crumbs={crumbs}
+      crumbs={[]}
       backTo="/config/helpers"
-      backLabel="Back to helpers"
-      title={draft.name || draft.id}
+      backLabel="Helpers"
+      title={creating ? 'New helper' : (saved?.name ?? 'Helper')}
       status={
-        <span className="block text-muted-foreground">
-          {draft.persistence === 'durable'
-            ? 'Durable: its value is stored and survives a restart.'
-            : 'Session: its value resets to the initial value when homectl restarts.'}
-        </span>
+        creating
+          ? 'Define a value for your routines.'
+          : advanced
+            ? saved?.id
+            : undefined
+      }
+      loading={api.loading}
+      error={api.error}
+      onRetry={() => void api.refetch()}
+      notFound={!creating && !saved && !draft.dirty}
+      menu={
+        !creating
+          ? [
+              {
+                label: 'Delete helper',
+                onSelect: () => void remove(),
+                destructive: true,
+              },
+            ]
+          : undefined
       }
     >
-      <div className="space-y-4">
-        {error ? (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        <CurrentValuePanel status={status} draft={draft} />
-
-        <Section<HelperDefinition>
-          id="name"
-          title="Name and visibility"
-          summary={draft.name || draft.id}
-          open={activeSection === 'name'}
-          onOpenChange={(open) => openSection(open ? 'name' : null)}
-          headingRef={(node) => {
-            headingRefs.current.name = node;
-          }}
-          api={nameEditor}
-          readView={
-            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Name
-                </dt>
-                <dd className="text-sm text-foreground">{draft.name}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Id
-                </dt>
-                <dd className="truncate text-sm text-foreground">{draft.id}</dd>
-              </div>
-            </dl>
-          }
-          renderEditor={(api) => (
+      {value && (
+        <>
+          {!creating && status && (
+            <CurrentValue key={status.id} status={status} />
+          )}
+          <SettingsSection id="details" title="Details">
             <HelperNameFields
-              draft={{ ...draft, ...(api.draft ?? {}) }}
-              setDraft={(next) => api.patch(next)}
-              isNew={false}
+              draft={value}
+              setDraft={draft.change}
+              isNew={creating}
             />
-          )}
-        />
-
-        <Section<HelperDefinition>
-          id="type"
-          title="Type rules"
-          summary={kindLabel(draft.kind)}
-          open={activeSection === 'type'}
-          onOpenChange={(open) => openSection(open ? 'type' : null)}
-          headingRef={(node) => {
-            headingRefs.current.type = node;
-          }}
-          api={kindEditor}
-          readView={
-            <p className="text-sm text-muted-foreground">
-              {kindLabel(draft.kind)}
-              {draft.kind.kind === 'enum'
-                ? ` · options: ${draft.kind.options.join(', ')}`
-                : ''}
-              {draft.kind.kind === 'number'
-                ? ` · ${draft.kind.min ?? '−∞'} to ${draft.kind.max ?? '∞'}`
-                : ''}
-            </p>
-          }
-          renderEditor={(api) => (
-            <HelperKindFields
-              draft={{ ...draft, ...(api.draft ?? {}) }}
-              setDraft={(next) => api.patch(next)}
-            />
-          )}
-        />
-
-        <Section<HelperDefinition>
-          id="initial"
-          title="Initial value"
-          summary={formatValue(draft.initial_value)}
-          open={activeSection === 'initial'}
-          onOpenChange={(open) => openSection(open ? 'initial' : null)}
-          headingRef={(node) => {
-            headingRefs.current.initial = node;
-          }}
-          api={initialEditor}
-          readView={
-            <p className="text-sm text-muted-foreground">
-              {formatValue(draft.initial_value)} — used at initialization and
-              after a restart.
-            </p>
-          }
-          renderEditor={(api) => (
-            <HelperInitialValueField
-              draft={{ ...draft, ...(api.draft ?? {}) }}
-              setDraft={(next) => api.patch(next)}
-            />
-          )}
-        />
-
-        <Section<HelperDefinition>
-          id="persistence"
-          title="Persistence"
-          summary={
-            draft.persistence === 'durable'
-              ? 'Durable — survives restart'
-              : 'Session — resets on restart'
-          }
-          open={activeSection === 'persistence'}
-          onOpenChange={(open) => openSection(open ? 'persistence' : null)}
-          headingRef={(node) => {
-            headingRefs.current.persistence = node;
-          }}
-          api={persistenceEditor}
-          readView={
-            <p className="text-sm text-muted-foreground">
-              {draft.persistence === 'durable'
-                ? 'Stored in the database and survives restarts.'
-                : 'Resets to the initial value when homectl restarts.'}
-              {draft.hidden ? ' Hidden from widget pickers.' : ''}
-            </p>
-          }
-          renderEditor={(api) => (
-            <HelperPersistenceFields
-              draft={{ ...draft, ...(api.draft ?? {}) }}
-              setDraft={(next) => api.patch(next)}
-            />
-          )}
-        />
-
-        <Section<HelperDefinition>
-          id="danger"
-          title="Delete this helper"
-          summary="Reads that depend on it lose their value source"
-          open={activeSection === 'danger'}
-          onOpenChange={(open) => openSection(open ? 'danger' : null)}
-          headingRef={(node) => {
-            headingRefs.current.danger = node;
-          }}
-          api={nameEditor}
-          editable={false}
-          danger
-          readView={
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Routines and scripts that read it lose their value source until
-                you point them somewhere else.
-              </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={deleteHelper}
-              >
-                Delete this helper
-              </Button>
+          </SettingsSection>
+          <SettingsSection
+            id="type"
+            title="Type & initial value"
+            description="Definition changes apply when you save. The current-value command above uses the saved definition."
+          >
+            <div className="space-y-4">
+              <HelperKindFields
+                draft={value}
+                setDraft={draft.change}
+                onKindChange={(kind) => {
+                  const next = entityDraftStore.switchVariant<{
+                    kind: HelperDefinition['kind'];
+                    initial_value: JsonValue;
+                  }>(
+                    key,
+                    'helper-kind',
+                    value.kind.kind,
+                    { kind: value.kind, initial_value: value.initial_value },
+                    kind.kind.kind,
+                    kind,
+                  );
+                  draft.patch(next);
+                }}
+              />
+              <HelperInitialValueField draft={value} setDraft={draft.change} />
             </div>
-          }
-          renderEditor={() => null}
-        />
-      </div>
+          </SettingsSection>
+          <SettingsSection id="persistence" title="Restart & visibility">
+            <HelperPersistenceFields draft={value} setDraft={draft.change} />
+          </SettingsSection>
+          {!creating && (
+            <SettingsSection
+              id="usage"
+              title="Used by"
+              description="Native routine references. Scripts may also read this helper."
+            >
+              {routines.error ? (
+                <p role="alert">
+                  Could not load routine references.{' '}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void routines.refetch()}
+                  >
+                    Retry
+                  </Button>
+                </p>
+              ) : routines.loading ? (
+                <p className="text-xs">Loading references…</p>
+              ) : related.length ? (
+                <div className="flex flex-wrap gap-3">
+                  {related.map((row) => (
+                    <Link
+                      className="text-sm text-primary underline"
+                      key={row.id}
+                      to={configItemHref('routine', row.id)}
+                    >
+                      {row.name}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No native routine references.
+                </p>
+              )}
+            </SettingsSection>
+          )}
+          <EntitySaveBar
+            draft={draft}
+            createLabel={creating ? 'Create helper' : undefined}
+          />
+        </>
+      )}
     </DetailPageShell>
   );
 }

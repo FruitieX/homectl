@@ -423,6 +423,7 @@ async fn run_scenario(
                     &mut state,
                     &mut event_rx,
                     vec![Event::ExternalStateUpdate {
+                        report_retained: false,
                         device: current,
                         integration_epoch: None,
                     }],
@@ -812,6 +813,7 @@ async fn build_runtime(
     rules.seed_transitions(&devices, &groups, Some(&helpers));
     let ui = Ui::new();
     let snapshot = new_snapshot_handle(RuntimeSnapshot {
+        device_health: Default::default(),
         runtime_config: Arc::new(config.clone()),
         devices: Arc::new(devices.get_state().clone()),
         flattened_groups: Arc::new(groups.get_flattened_groups().clone()),
@@ -823,6 +825,7 @@ async fn build_runtime(
         warming_up: false,
     });
     let mut state = AppState {
+        device_health: Default::default(),
         calibration_sessions: Default::default(),
         warming_up: false,
         runtime_config: config.clone(),

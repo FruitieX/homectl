@@ -1,46 +1,39 @@
 import type { Device } from '@/bindings/Device';
+import type { DeviceHealth } from '@/bindings/DeviceHealth';
 
 export type DeviceReachability =
-  | 'online'
-  | 'offline'
-  | 'stale'
-  | 'unknown'
-  | 'cached'
-  | 'disabled';
-const RECENT_MS = 10 * 60 * 1000;
+  'online' | 'offline' | 'stale' | 'unknown' | 'cached' | 'disabled';
 
+/** Map the shared evaluator to floorplan presentation. A quiet device does
+ * not become stale according to a second, browser-only timeout. */
 export function deviceReachability(
   device: Device,
-  now = Date.now(),
+  health?: DeviceHealth,
 ): DeviceReachability {
-  if (!('Controllable' in device.data)) return 'unknown';
-  const data = device.data.Controllable;
-  if (data.disabled) return 'disabled';
-  const reportTime =
-    data.last_report && !data.last_report.retained
-      ? data.last_report.received_at_ms
-      : 0;
-  const availability = data.availability;
-  if (
-    availability &&
-    !availability.online &&
-    availability.observed_at_ms >= reportTime
-  )
-    return 'offline';
-  // An MQTT availability/birth topic is a liveness signal, not a periodic
-  // state report. Keep the device online until its last-will offline message
-  // (or another explicit availability update) says otherwise.
-  if (availability?.online) return 'online';
-  const lastHeard = reportTime;
-  if (lastHeard > 0 && now - lastHeard <= RECENT_MS) return 'online';
-  return lastHeard > 0 ? 'stale' : data.last_report ? 'cached' : 'unknown';
+  if ('Controllable' in device.data && device.data.Controllable.disabled)
+    return 'disabled';
+  switch (health?.status) {
+    case 'healthy':
+      return 'online';
+    case 'offline':
+      return 'offline';
+    case 'late':
+    case 'error':
+      return 'stale';
+    case 'cached':
+      return 'cached';
+    case 'disabled':
+      return 'disabled';
+    default:
+      return 'unknown';
+  }
 }
 
 export const reachabilityLabels: Record<DeviceReachability, string> = {
-  online: 'Online via MQTT status',
-  offline: 'Bridge reports offline',
-  stale: 'Last response over 10m ago',
-  unknown: 'Waiting for first report',
+  online: 'No reporting issues',
+  offline: 'Reported offline',
+  stale: 'Reporting needs attention',
+  unknown: 'Health not confirmed',
   cached: 'Last known state only',
   disabled: 'Disabled',
 };

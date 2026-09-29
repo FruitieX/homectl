@@ -1,0 +1,59 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+   Compiling homectl-server v0.9.5 (/home/rasse/homectl/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.53s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/homectl_server-2faefe477329fe83)
+
+running 48 tests
+test api::config::assistant::tests::apply_order_runs_creates_then_updates_then_reversed_deletes ... ok
+test api::config::assistant::tests::chat_envelope_infers_kind_from_content ... ok
+test api::config::assistant::tests::catalog_contains_entities_and_inferred_timezone ... ok
+test api::config::assistant::tests::chat_outcome_accepts_answers_and_truncates_them ... ok
+test api::config::assistant::tests::control_catalog_lists_controllable_devices_and_groups ... ok
+test api::config::assistant::tests::accepts_valid_draft_and_rejects_unknown_entities ... ok
+test api::config::assistant::tests::chat_system_prompt_routes_actions_plans_and_answers ... ok
+test api::config::assistant::tests::control_catalog_scope_limits_devices ... ok
+test api::config::assistant::tests::device_ref_serializes_with_integration_and_device_ids ... ok
+test api::config::assistant::tests::config_prefers_stored_settings ... ok
+test api::config::assistant::tests::extracts_json_from_fenced_and_prose_wrapped_output ... ok
+test api::config::assistant::tests::flags_script_programs ... ok
+test api::config::assistant::tests::history_keeps_newest_turns_and_truncates_long_messages ... ok
+test api::config::assistant::tests::assistant_settings_save_preserves_omitted_secrets_and_rejects_stale_secret_changes ... ok
+test api::config::assistant::tests::parse_apply_envelope_validates_the_contract ... ok
+test api::config::assistant::tests::plan_store_evicts_the_oldest_plan ... ok
+test api::config::assistant::tests::plan_system_prompt_documents_contract_and_context ... ok
+test api::config::assistant::tests::integration_updates_keep_omitted_secrets ... ok
+test api::config::assistant::tests::plan_validation_accepts_device_and_helper_writes ... ok
+test api::config::assistant::tests::plan_validation_builds_operations_and_merges_updates ... ok
+test api::config::assistant::tests::live_state_lists_devices_and_bounds_recent_logs ... ok
+test api::config::assistant::tests::plan_validation_accepts_group_and_scene_creates ... ok
+test api::config::assistant::tests::plan_validation_accepts_floorplan_and_computed_source_writes ... ok
+test api::config::assistant::tests::plan_validation_compiles_routine_definitions ... ok
+test api::config::assistant::tests::plan_validation_rejects_unknown_targets ... ok
+test api::config::assistant::tests::plan_validation_masks_integration_secrets ... ok
+test api::config::assistant::tests::plan_validation_rejects_unknown_integration_plugins ... ok
+test api::config::assistant::tests::plan_validation_rejects_device_creates_and_malformed_shapes ... ok
+test api::config::assistant::tests::plan_validation_stages_created_entities_for_later_operations ... ok
+test api::config::assistant::tests::plan_validation_rejects_group_with_unknown_device ... ok
+test api::config::assistant::tests::search_ranks_exact_above_prefix_and_substring ... ok
+test api::config::assistant::tests::settings_patch_rejects_invalid_values ... ok
+test api::config::assistant::tests::settings_patch_sets_and_clears_fields ... ok
+test api::config::assistant::tests::plan_validation_validates_scene_references ... ok
+test api::config::assistant::tests::prompt_search_merges_tokens_across_kinds ... ok
+test api::config::assistant::tests::plan_validation_rejects_recreating_an_id_in_one_plan ... ok
+test api::config::assistant::tests::plan_validation_stages_created_groups_for_later_references ... ok
+test api::config::assistant::tests::settings_view_masks_api_key ... ok
+test api::config::assistant::tests::sse_frames_split_deltas_usage_and_done ... ok
+test api::config::assistant::tests::stored_settings_disable_assistant_when_cleared ... ok
+test api::config::assistant::tests::system_prompt_documents_the_schema_and_catalog ... ok
+test api::config::assistant::tests::usage_falls_back_to_a_character_estimate ... ok
+test api::config::assistant::tests::usage_prefers_provider_counts ... ok
+test api::config::assistant::tests::plan_validation_warns_about_referenced_deletes ... ok
+test api::config::assistant::tests::search_ignores_entities_without_a_match ... ok
+test api::config::assistant::tests::request_body_includes_reasoning_effort_and_limits ... ok
+test api::config::assistant::tests::search_caps_results ... ok
+test api::config::assistant::tests::plan_store_keeps_plans_without_a_timer ... ok
+
+test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 722 filtered out; finished in 0.01s

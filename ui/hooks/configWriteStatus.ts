@@ -13,7 +13,8 @@ export function useRecordConfigWrite() {
         const next = { ...current };
         if (status.persistence === 'persisted') {
           delete next[key];
-          if (persistedPrefix)
+          // An empty prefix is the complete configuration scope (restore).
+          if (persistedPrefix !== undefined)
             for (const existing of Object.keys(next)) {
               if (existing.startsWith(persistedPrefix)) delete next[existing];
             }

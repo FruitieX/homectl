@@ -1,0 +1,20 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "Draft return link appears on a related page",
+   "Draft survives related-page navigation",
+   "Navigation did not save the draft",
+   "Explicit Save persists the full entity",
+   "Discard restores the saved entity",
+   "Concurrent write leaves my draft intact",
+   "Conflict review exposes the competing saved value",
+   "Reviewed save preserves unrelated remote changes",
+   "Multiple device selections update one entity draft",
+   "Validation focuses the invalid field",
+   "Validation explains how to repair the value",
+   "No horizontal overflow"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/groups/living_room","viewport":{"width":1440,"height":1000},"problems":["log: Failed to load resource: the server responded with a status of 404 (Not Found)","log: Failed to load resource: the server responded with a status of 404 (Not Found)","log: Failed to load resource: the server responded with a status of 409 (Conflict)"]}

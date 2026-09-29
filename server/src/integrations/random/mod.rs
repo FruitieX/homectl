@@ -73,6 +73,7 @@ impl Integration for Random {
         let device = mk_random_device(self);
 
         self.event_tx.send(Event::ExternalStateUpdate {
+            report_retained: false,
             device,
             integration_epoch: None,
         });
@@ -139,6 +140,7 @@ async fn poll_sensor(random: Random) {
         let device = mk_random_device(&random);
 
         event_tx.send(Event::ExternalStateUpdate {
+            report_retained: false,
             device,
             integration_epoch: None,
         });

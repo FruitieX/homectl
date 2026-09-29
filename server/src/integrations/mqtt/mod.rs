@@ -316,6 +316,10 @@ impl Integration for Mqtt {
                     match notification? {
                         rumqttc::Event::Incoming(rumqttc::Packet::ConnAck(_)) => {
                             connected = true;
+                            event_tx.send(Event::IntegrationConnected {
+                                integration_id: id.clone(),
+                                integration_epoch: None,
+                            });
                             if let Some(base) = &config.zigbee2mqtt_base_topic {
                                 if config.mode() == MqttMode::Zigbee2Mqtt {
                                     client
@@ -477,6 +481,17 @@ impl Integration for Mqtt {
                                     });
                                 }
                             }
+                            // Discovery can replay an earlier state even when the discovery
+                            // publish itself is not retained. This applies to sensors too.
+                            let report_retained = msg.retain
+                                || (config.mode() == MqttMode::Zigbee2Mqtt
+                                    && config.zigbee2mqtt_base_topic.as_ref().is_some_and(
+                                        |base| msg.topic == format!("{base}/bridge/devices"),
+                                    ))
+                                || (config.mode() == MqttMode::EspHome
+                                    && config.esphome_discovery_prefix.as_ref().is_some_and(
+                                        |prefix| msg.topic.starts_with(&format!("{prefix}/light/")),
+                                    ));
                             for mut device in devices {
                                 if let crate::types::device::DeviceData::Controllable(data) =
                                     &mut device.data
@@ -485,20 +500,12 @@ impl Integration for Mqtt {
                                         Some(Box::new(crate::types::device::DeviceReport {
                                             state: data.state.clone(),
                                             received_at_ms: chrono::Utc::now().timestamp_millis(),
-                                            // Buffered discovery replay has unknown original freshness.
-                                            retained: msg.retain
-                                                || (config.mode() == MqttMode::Zigbee2Mqtt
-                                                    && config
-                                                        .zigbee2mqtt_base_topic
-                                                        .as_ref()
-                                                        .is_some_and(|base| {
-                                                            msg.topic
-                                                                == format!("{base}/bridge/devices")
-                                                        })),
+                                            retained: report_retained,
                                             matches_requested: false,
                                         }));
                                 }
                                 let event = Event::ExternalStateUpdate {
+                                    report_retained,
                                     device,
                                     integration_epoch: None,
                                 };

@@ -1,0 +1,19 @@
+{
+ "evaluated": {
+  "passed": true,
+  "results": [
+   "Ordinary settings are editable without an Edit action",
+   "Integration details are linked from the device",
+   "Device draft survives related navigation",
+   "Navigation does not save settings",
+   "Sensor mapping values are directly editable",
+   "One save updates the name and sensor mapping",
+   "Unknown sensor configuration survives unrelated edits",
+   "Discard restores the saved device settings",
+   "Concurrent saves retain the pending draft",
+   "Discard after a conflict uses the latest saved version",
+   "Device settings controls fit the viewport"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/devices/detail/zigbee2mqtt/bedroom_switch","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 404 (Not Found)","log: Failed to load resource: the server responded with a status of 404 (Not Found)","log: Failed to load resource: the server responded with a status of 409 (Conflict)"]}

@@ -1,4 +1,5 @@
 import { deviceReachability } from '@/lib/deviceReachability';
+import type { DeviceHealth } from '@/bindings/DeviceHealth';
 import { type Device } from '@/bindings/Device';
 import { type FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { getResolvedDeviceColorState } from '@/lib/colors';
@@ -67,6 +68,7 @@ export interface FloorplanScene {
 }
 
 interface BuildFloorplanSceneInput {
+  healthByDevice?: Record<string, DeviceHealth>;
   grid: FloorplanGrid | null;
   image?: HTMLImageElement;
   devices: Device[];
@@ -469,6 +471,7 @@ function getCachedVisibilityPolygon(
 }
 
 export function buildFloorplanScene({
+  healthByDevice,
   grid,
   image,
   devices,
@@ -501,12 +504,15 @@ export function buildFloorplanScene({
       const radius = (100 + 200 * brightness) * deviceScale;
       lights.push({
         label: displayNames?.[deviceKey] ?? device.name,
-        health: deviceReachability(device),
+        health: deviceReachability(device, healthByDevice?.[deviceKey]),
         deviceKey,
         x: position.x,
         y: position.y,
         radius,
-        intensity: deviceReachability(device) === 'disabled' ? 0 : brightness,
+        intensity:
+          deviceReachability(device, healthByDevice?.[deviceKey]) === 'disabled'
+            ? 0
+            : brightness,
         power: override?.power ?? resolved?.power ?? false,
         color: colorToRgbTuple(device, override),
         visibilityPolygon: getCachedVisibilityPolygon(

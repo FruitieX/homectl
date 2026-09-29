@@ -1,3 +1,4 @@
+import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { useMemo, useState } from 'react';
 
 import type { AssistantActionChange } from '@/bindings/AssistantActionChange';
@@ -31,6 +32,10 @@ export function ActionFloorplanPreview({
   changes: AssistantActionChange[];
   className?: string;
 }) {
+  const healthQuery = useDeviceHealth();
+  const healthByDevice = healthQuery.isError
+    ? undefined
+    : healthQuery.data?.devices;
   const { floorplans } = useAllFloorplans();
   const groups = useGroupsState();
   const { data: displayNames } = useDeviceDisplayNames();
@@ -75,7 +80,9 @@ export function ActionFloorplanPreview({
         ...(change.brightness === undefined
           ? {}
           : { brightness: change.brightness }),
-        ...(change.color === undefined ? {} : { color: hsToRgbBytes(change.color) }),
+        ...(change.color === undefined
+          ? {}
+          : { color: hsToRgbBytes(change.color) }),
       };
     }
     return map;
@@ -83,6 +90,7 @@ export function ActionFloorplanPreview({
   const scene = useMemo(
     () =>
       buildFloorplanScene({
+        healthByDevice,
         grid: selectedFloorplan?.grid ?? null,
         image,
         devices,
@@ -92,6 +100,7 @@ export function ActionFloorplanPreview({
         deviceKeys: placedKeys,
       }),
     [
+      healthByDevice,
       selectedFloorplan,
       image,
       devices,

@@ -38,6 +38,7 @@ interface SensorData {
 interface SensorDataOptions {
   endpointPath?: string;
   sensorIds?: string[];
+  selectionMode?: 'all' | 'selected';
 }
 
 const EMPTY_SENSOR_IDS: string[] = [];
@@ -150,7 +151,10 @@ export const useSensorData = (
       ? { endpointPath: optionsOrEndpoint }
       : optionsOrEndpoint;
   const endpointPath = options.endpointPath ?? '/api/influxdb/temp-sensors';
-  const selectedSensorIds = options.sensorIds ?? EMPTY_SENSOR_IDS;
+  const selectedSensorIds =
+    options.selectionMode === 'all'
+      ? EMPTY_SENSOR_IDS
+      : (options.sensorIds ?? EMPTY_SENSOR_IDS);
   const rawSensorData = useTempSensorsQuery(endpointPath);
   const catalogQuery = useSensorCatalog();
 
@@ -178,7 +182,9 @@ export const useSensorData = (
     );
     const catalog = catalogQuery.catalog;
     const configuredDeviceIds =
-      selectedSensorIds.length > 0 ? selectedSensorIds : discoveredDeviceIds;
+      options.selectionMode === 'selected' || selectedSensorIds.length > 0
+        ? selectedSensorIds
+        : discoveredDeviceIds;
     const catalogItems = catalog?.sensors ?? [];
     const catalogNames = new Map(
       catalogItems.map((sensor) => [sensor.id, sensor.name]),
@@ -194,8 +200,14 @@ export const useSensorData = (
     );
 
     knownDeviceIds.forEach((deviceId, index) => {
+      const configured = catalogItems.find((sensor) => sensor.id === deviceId);
       if (
-        selectedSensorIds.length > 0 &&
+        configured &&
+        (!configured.enabled || configured.source !== 'influxdb')
+      )
+        return;
+      if (
+        (options.selectionMode === 'selected' || selectedSensorIds.length > 0) &&
         !selectedSensorIds.includes(deviceId)
       ) {
         return;
@@ -247,7 +259,12 @@ export const useSensorData = (
     return Array.from(deviceMap.values()).sort((a, b) => {
       return a.device_name.localeCompare(b.device_name);
     });
-  }, [catalogQuery.catalog, rawSensorData, selectedSensorIds]);
+  }, [
+    catalogQuery.catalog,
+    rawSensorData,
+    selectedSensorIds,
+    options.selectionMode,
+  ]);
 
   return sensorData;
 };

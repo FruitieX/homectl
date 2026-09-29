@@ -433,6 +433,20 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
     }
 
     match event {
+        Event::IntegrationConnected {
+            integration_id,
+            integration_epoch,
+        } => {
+            if state
+                .integrations
+                .accepts_integration_epoch(integration_id, *integration_epoch)
+            {
+                state.device_health.connection_established(
+                    &integration_id.to_string(),
+                    state.clock.monotonic_ms(),
+                );
+            }
+        }
         Event::DeviceAvailability {
             device_key,
             online,
@@ -448,6 +462,12 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 );
                 return Ok(outcome);
             }
+            state.device_health.availability(
+                &device_key.to_string(),
+                *online,
+                *observed_at_ms,
+                state.clock.monotonic_ms(),
+            );
             if let Some(mut device) = state.devices.get_device(device_key).cloned() {
                 if let crate::types::device::DeviceData::Controllable(data) = &mut device.data {
                     if *observed_at_ms == 0
@@ -471,6 +491,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
         }
         Event::ExternalStateUpdate {
             device,
+            report_retained,
             integration_epoch,
         } => {
             if !state
@@ -497,6 +518,13 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
             if source_is_disabled {
                 return Ok(outcome);
             }
+
+            state.device_health.observe(
+                &device.get_device_key().to_string(),
+                *report_retained,
+                state.clock.wall_ms(),
+                state.clock.monotonic_ms(),
+            );
 
             if state
                 .calibration_preview_device(&device.get_device_key().to_string())
@@ -658,6 +686,16 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     device.get_device_key()
                 );
                 return Ok(outcome);
+            }
+            // Only stamped integration publications are report evidence;
+            // ordinary internal/requested-state commands are not receipts.
+            if integration_epoch.is_some() {
+                state.device_health.observe(
+                    &device.get_device_key().to_string(),
+                    false,
+                    state.clock.wall_ms(),
+                    state.clock.monotonic_ms(),
+                );
             }
             outcome.include(apply_internal_state(
                 state,
@@ -2506,6 +2544,7 @@ pub(crate) mod tests {
         let runtime_config = empty_runtime_config();
         let devices = Devices::new(event_tx.clone(), &cli);
         let snapshot = new_snapshot_handle(RuntimeSnapshot {
+            device_health: Default::default(),
             runtime_config: Arc::new(runtime_config.clone()),
             devices: Arc::new(devices.get_state().clone()),
             flattened_groups: Arc::new(Default::default()),
@@ -2517,6 +2556,7 @@ pub(crate) mod tests {
             warming_up: false,
         });
         let state = AppState {
+            device_health: Default::default(),
             calibration_sessions: Default::default(),
             warming_up: false,
             runtime_config,
@@ -2752,6 +2792,7 @@ pub(crate) mod tests {
         handle_event(
             &mut state,
             &Event::ExternalStateUpdate {
+                report_retained: false,
                 device: reported,
                 integration_epoch: None,
             },
@@ -2960,6 +3001,7 @@ pub(crate) mod tests {
         handle_event(
             &mut state,
             &Event::ExternalStateUpdate {
+                report_retained: false,
                 device: raised,
                 integration_epoch: None,
             },
@@ -3080,6 +3122,7 @@ pub(crate) mod tests {
         handle_event(
             &mut state,
             &Event::ExternalStateUpdate {
+                report_retained: false,
                 device: repeat,
                 integration_epoch: None,
             },
@@ -3097,6 +3140,7 @@ pub(crate) mod tests {
         handle_event(
             &mut state,
             &Event::ExternalStateUpdate {
+                report_retained: false,
                 device: cleared,
                 integration_epoch: None,
             },
@@ -3111,6 +3155,7 @@ pub(crate) mod tests {
         handle_event(
             &mut state,
             &Event::ExternalStateUpdate {
+                report_retained: false,
                 device: raised,
                 integration_epoch: None,
             },
@@ -3185,6 +3230,7 @@ pub(crate) mod tests {
         handle_event(
             &mut state,
             &Event::ExternalStateUpdate {
+                report_retained: false,
                 device: stale.clone(),
                 integration_epoch: Some(first_epoch),
             },
@@ -3204,6 +3250,7 @@ pub(crate) mod tests {
         handle_event(
             &mut state,
             &Event::ExternalStateUpdate {
+                report_retained: false,
                 device: stale,
                 integration_epoch: Some(second_epoch),
             },
@@ -3256,6 +3303,7 @@ pub(crate) mod tests {
         let mut raised = motion.clone();
         set_sensor(&mut raised, true);
         handle.send_event(Event::ExternalStateUpdate {
+            report_retained: false,
             device: raised,
             integration_epoch: None,
         });

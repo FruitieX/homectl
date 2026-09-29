@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { resolveDraftTarget, targetDeviceKeys } from '../lib/sceneDraft.ts';
+import { orderedSceneTargets } from '../lib/sceneTargets.ts';
 /**
  * Development API server for the Settings UX work.
  *
@@ -13,6 +15,7 @@
 
 import crypto from 'node:crypto';
 import http from 'node:http';
+import { isDeepStrictEqual } from 'node:util';
 import { fixtures } from './fixtures.mjs';
 
 const args = new Map();
@@ -41,7 +44,7 @@ function reload(nextName) {
 
 const writeOk = {
   applied: true,
-  persistence: { kind: 'persisted' },
+  persistence: 'persisted',
   warning: null,
 };
 
@@ -52,6 +55,7 @@ function send(res, status, body, extraHeaders = {}) {
   }
   res.writeHead(status, {
     'content-type': 'application/json',
+    'x-homectl-fixture': 'true',
     'cache-control': 'no-store',
     'access-control-allow-origin': '*',
     'access-control-allow-methods': 'GET,PUT,POST,DELETE,OPTIONS',
@@ -115,6 +119,7 @@ function buildDiagnostics() {
         entity_id: scene.id,
         name: scene.name,
         code: 'missing_scene_device',
+        device_keys: [key],
         severity: 'warning',
         message: `Target device ${key} is not available.`,
         suggestion:
@@ -148,6 +153,7 @@ function buildDiagnostics() {
         entity_id: group.id,
         name: group.name,
         code: 'missing_group_device',
+        device_keys: [key],
         severity: 'warning',
         message: `Device ${key} is not available in the current runtime.`,
         suggestion:
@@ -168,7 +174,113 @@ function buildDiagnostics() {
     }
   }
 
-  return { issues };
+  return {
+    warming_up: false,
+    issues: issues.map((issue, index) => ({
+      device_keys: [],
+      id: `${issue.entity}/${issue.entity_id}/${issue.code}/${index}`,
+      ...issue,
+    })),
+  };
+}
+
+// Synthetic health evidence for browser interaction checks. Real receipt,
+// monotonic deadline and recovery behavior is tested in Rust, not here.
+function buildDeviceHealth() {
+  const now = Date.now();
+  const devices = Object.fromEntries(
+    (db.devices ?? []).map((device) => {
+      const key = `${device.integration_id}/${device.id}`;
+      const own = db.reportingPolicies?.[key] ?? { mode: 'inherit' };
+      const integration = db.config.integrations?.find(
+        (row) => row.id === device.integration_id,
+      );
+      const parent = integration?.reporting_policy ?? { mode: 'inherit' };
+      const source =
+        own.mode !== 'inherit'
+          ? 'device'
+          : parent.mode !== 'inherit'
+            ? 'integration'
+            : 'automatic';
+      const policy = source === 'device' ? own : parent;
+      const evidence = db.healthEvidence?.[key] ?? {};
+      const last = evidence.last_fresh_report_ms ?? now - 1000;
+      const grace =
+        policy.mode === 'custom'
+          ? Math.min(
+              300,
+              Math.max(5, Math.ceil(policy.expected_interval_seconds / 10)),
+            )
+          : 0;
+      const deadline =
+        policy.mode === 'custom'
+          ? last + (policy.expected_interval_seconds + grace) * 1000
+          : null;
+      const label =
+        db.config['device-display-names']?.find((row) => row.device_key === key)
+          ?.display_name ?? device.name;
+      const issues = [];
+      if (deadline !== null && now > deadline)
+        issues.push({
+          code: 'missing_report',
+          message: `${label} has not reported since ${new Date(last).toLocaleTimeString()}.`,
+        });
+      if (evidence.offline)
+        issues.push({
+          code: 'offline',
+          message: `${label} was reported offline by ${device.integration_id}.`,
+        });
+      if (integration?.enabled === false) issues.length = 0;
+      return [
+        key,
+        {
+          device_key: key,
+          integration_id: device.integration_id,
+          name: label,
+          status:
+            integration?.enabled === false
+              ? 'disabled'
+              : evidence.offline
+                ? 'offline'
+                : issues.length
+                  ? 'late'
+                  : policy.mode === 'ignore'
+                    ? 'ignored'
+                    : 'healthy',
+          effective_policy: {
+            source,
+            policy,
+            description:
+              source === 'device'
+                ? 'Device override'
+                : source === 'integration'
+                  ? `Default for ${device.integration_id}`
+                  : 'No periodic reporting guarantee; explicit offline signals are still checked',
+            scheduling_grace_seconds: grace,
+          },
+          last_fresh_report_ms: last,
+          last_cached_report_ms: null,
+          expected_by_ms: deadline,
+          issues,
+        },
+      ];
+    }),
+  );
+  return {
+    evaluated_at_ms: now,
+    warming_up: false,
+    devices,
+    attention_device_keys: [
+      ...new Set([
+        ...Object.values(devices)
+          .filter((row) => row.issues.length)
+          .map((row) => row.device_key),
+        ...buildDiagnostics()
+          .issues.filter((row) => row.severity === 'warning')
+          .flatMap((row) => row.device_keys ?? []),
+      ]),
+    ].sort(),
+  };
 }
 
 /** config endpoint name -> array in db.config (or a special key) */
@@ -269,8 +381,7 @@ function buildIntegrationSchemas() {
           label: 'State topic',
           kind: 'text',
           required: true,
-          description:
-            'Topic to subscribe to for device state messages.',
+          description: 'Topic to subscribe to for device state messages.',
           placeholder: 'home/+/example/{id}',
           section: 'Topics',
           help_text:
@@ -296,22 +407,221 @@ function buildIntegrationSchemas() {
           section: 'Zigbee2MQTT',
           visible_when: { key: 'mode', equals: 'zigbee2mqtt' },
         }),
+        field({
+          key: 'sensor_value_fields',
+          label: 'Sensor value fields',
+          kind: 'json',
+          section: 'Payload mapping',
+          advanced: true,
+          visible_when: { key: 'mode', equals: 'generic' },
+        }),
+        field({
+          key: 'disabled_device_ids',
+          label: 'Disabled devices',
+          kind: 'json',
+          section: 'Advanced settings',
+          advanced: true,
+        }),
+        field({
+          key: 'brightness_range',
+          label: 'Brightness range',
+          kind: 'json',
+          section: 'Payload mapping',
+          advanced: true,
+        }),
+        field({
+          key: 'capabilities_override',
+          label: 'Capabilities override',
+          kind: 'json',
+          section: 'Payload mapping',
+          advanced: true,
+        }),
       ],
+    },
+    {
+      plugin: 'dummy',
+      name: 'Dummy',
+      description: 'Virtual devices for testing.',
+      fields: [
+        field({
+          key: 'devices',
+          label: 'Devices',
+          kind: 'json',
+          required: true,
+        }),
+      ],
+    },
+    {
+      plugin: 'circadian',
+      name: 'Circadian (legacy)',
+      description: 'Legacy circadian integration.',
+      fields: [],
     },
   ];
 }
 
 const SPECIAL_GET = {
+  'device-health': () => buildDeviceHealth(),
   'integration-schemas': () => buildIntegrationSchemas(),
   'runtime-status': () => db.runtimeStatus,
   'routine-history': () => db.routineHistory,
   logs: () => db.logs,
-  diagnostics: () => buildDiagnostics(),
+  diagnostics: () => ({
+    warming_up: false,
+    issues: [
+      ...buildDiagnostics().issues,
+      ...Object.values(buildDeviceHealth().devices).flatMap((device) =>
+        device.issues.map((issue) => ({
+          id: `${device.device_key}/${issue.code}`,
+          entity: 'device',
+          entity_id: device.device_key,
+          name: device.name,
+          severity: 'warning',
+          code: issue.code,
+          message: issue.message,
+          suggestion:
+            'Check the device, its integration and its reporting policy.',
+          device_keys: [device.device_key],
+        })),
+      ),
+    ],
+  }),
   'config-export': () => ({
     version: 1,
     exported_at: new Date().toISOString(),
   }),
 };
+
+// Synthetic restore contract; real validation and transaction semantics are
+// covered by the Rust backup tests.
+const backupSections = [
+  ['integrations', 'Connections', 'id'],
+  ['groups', 'Rooms & groups', 'id'],
+  ['scenes', 'Scenes', 'id'],
+  ['routines', 'Routines', 'id'],
+  ['helpers', 'Helpers', 'id'],
+  ['helper_values', 'Saved helper values', 'id'],
+  ['sources', 'Computed sources', 'id'],
+  ['floorplans', 'Floorplans', 'id'],
+  ['group_positions', 'Room positions', 'group_id'],
+  ['device_display_overrides', 'Device names', 'device_key'],
+  ['device_color_calibrations', 'Device calibrations', 'device_key'],
+  ['color_calibration_profiles', 'Calibration profiles', 'id'],
+  ['color_calibration_assignments', 'Calibration assignments', 'device_key'],
+  ['device_sensor_configs', 'Device controls', 'device_ref'],
+  ['widget_settings', 'Shared settings & widget sources', 'key'],
+  ['dashboard_layouts', 'Dashboards', 'id'],
+  ['dashboard_widgets', 'Dashboard widgets', 'id'],
+];
+const fixtureBackup = () => ({
+  version: 1,
+  core: db.config.core ?? { warmup_time_seconds: 1 },
+  floorplan: null,
+  ...Object.fromEntries(
+    backupSections.map(([key]) => [
+      key,
+      structuredClone(
+        db.config[
+          key === 'dashboard_layouts'
+            ? 'dashboardLayouts'
+            : key === 'dashboard_widgets'
+              ? 'dashboardWidgets'
+              : key
+        ] ?? [],
+      ),
+    ]),
+  ),
+});
+const backupToken = (candidate) =>
+  crypto
+    .createHash('sha256')
+    .update(JSON.stringify([fixtureBackup(), candidate]))
+    .digest('hex');
+function prepareBackup(body) {
+  if (body?.version !== 1 || !body.core || !Array.isArray(body.groups))
+    throw Error('Choose a supported homectl JSON backup.');
+  const next = structuredClone(body),
+    current = fixtureBackup();
+  for (const row of next.integrations ?? []) {
+    const old = current.integrations.find(
+      (i) => i.id === row.id && i.plugin === row.plugin,
+    );
+    if (
+      old?.config.password !== undefined &&
+      !Object.hasOwn(row.config, 'password')
+    )
+      row.config.password = old.config.password;
+  }
+  return next;
+}
+function reviewBackup(candidate) {
+  const current = fixtureBackup();
+  const sections = backupSections.map(([key, label, idKey]) => {
+    const before = current[key] ?? [],
+      after = candidate[key] ?? [],
+      changes = [];
+    let unchanged = 0;
+    for (const row of after) {
+      const old = before.find((r) => r[idKey] === row[idKey]);
+      if (old && isDeepStrictEqual(old, row)) {
+        unchanged++;
+        continue;
+      }
+      changes.push({
+        id: String(row[idKey]),
+        name: row.name ?? String(row[idKey]),
+        action: old ? 'update' : 'add',
+        fields: old
+          ? Object.keys(row).filter((k) => !isDeepStrictEqual(row[k], old[k]))
+          : [],
+      });
+    }
+    for (const row of before)
+      if (!after.some((r) => r[idKey] === row[idKey]))
+        changes.push({
+          id: String(row[idKey]),
+          name: row.name ?? String(row[idKey]),
+          action: 'remove',
+          fields: [],
+        });
+    return {
+      key,
+      label,
+      before: before.length,
+      after: after.length,
+      unchanged,
+      changes,
+    };
+  });
+  if (!isDeepStrictEqual(current.core, candidate.core))
+    sections.push({
+      key: 'core',
+      label: 'System behavior',
+      before: 1,
+      after: 1,
+      unchanged: 0,
+      changes: [
+        {
+          id: 'core',
+          name: 'System behavior',
+          action: 'update',
+          fields: ['value'],
+        },
+      ],
+    });
+  return {
+    revision_token: backupToken(candidate),
+    sections,
+    destructive: sections.some((s) =>
+      s.changes.some((c) => c.action !== 'add'),
+    ),
+    legacy_routines: 0,
+    warnings: [
+      'Restore replaces the saved setup. Pending routine timers are canceled.',
+      'Omitted credentials for matching entries are kept.',
+    ],
+  };
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -321,6 +631,171 @@ const server = http.createServer(async (req, res) => {
   const method = req.method ?? 'GET';
 
   if (method === 'OPTIONS') return send(res, 204);
+
+  if (path === '/api/__fixture/migration' && method === 'POST') {
+    const body = await readBody(req);
+    db.migrationFailure = !!body.fail;
+    db.migrationMemoryOnly = !!body.memoryOnly;
+    return send(res, 200, { success: true });
+  }
+  if (
+    method === 'POST' &&
+    ['/api/v1/config/migrate/review', '/api/v1/config/migrate/import'].includes(
+      path,
+    )
+  ) {
+    const body = await readBody(req);
+    if (
+      !Object.values(body.selection ?? {}).some(Boolean) ||
+      !body.toml?.includes('[')
+    )
+      return send(res, 400, {
+        success: false,
+        error: 'Choose a supported TOML file and at least one section.',
+      });
+    // Deliberately limited fixture parser: Rust tests establish actual TOML semantics.
+    const candidate = fixtureBackup();
+    const headers = [
+      ...body.toml.matchAll(
+        /^\[(groups|integrations|routines)\.([^\]]+)\]\s*$/gm,
+      ),
+    ];
+    const parsed = headers.map((header, index) => [
+      header[0],
+      header[1],
+      header[2],
+      body.toml.slice(
+        header.index + header[0].length,
+        headers[index + 1]?.index ?? body.toml.length,
+      ),
+    ]);
+    const skipped = [];
+    for (const [, section, id, fields] of parsed) {
+      if (!body.selection[section]) continue;
+      const field = (key) =>
+        fields.match(new RegExp(`${key}\\s*=\\s*['"]([^'"]*)['"]`))?.[1];
+      let row;
+      if (section === 'groups')
+        row = {
+          id,
+          name: field('name') ?? id,
+          hidden: false,
+          devices: [],
+          linked_groups: [],
+        };
+      if (section === 'integrations')
+        row = {
+          id,
+          plugin: field('plugin') ?? 'dummy',
+          enabled: true,
+          config: {},
+        };
+      if (section === 'routines') {
+        row = {
+          id,
+          name: field('name') ?? id,
+          enabled: !fields.includes('missing'),
+          semantics_version: 1,
+          rules: [],
+          actions: [],
+        };
+        if (!row.enabled)
+          skipped.push(
+            `routine '${id}' was disabled because unresolved references were skipped`,
+          );
+      }
+      const index = candidate[section].findIndex(
+        (existing) => existing.id === id,
+      );
+      if (index < 0) candidate[section].push(row);
+      else candidate[section][index] = row;
+    }
+    const review = reviewBackup(candidate);
+    review.sections = review.sections.filter(
+      (section) => body.selection[section.key],
+    );
+    review.warnings = [
+      'Matching IDs are replaced; other entries are kept.',
+      'Imported routines are read-only until converted. Routines with skipped references stay disabled.',
+    ];
+    review.revision_token = crypto
+      .createHash('sha256')
+      .update(
+        JSON.stringify([backupToken(candidate), body.toml, body.selection]),
+      )
+      .digest('hex');
+    if (path.endsWith('/review'))
+      return send(res, 200, { success: true, data: { review, skipped } });
+    if (body.expected !== review.revision_token)
+      return send(res, 409, {
+        success: false,
+        error: 'The saved setup changed. Review this import again.',
+      });
+    if (skipped.length && !body.accept_skipped)
+      return send(res, 400, {
+        success: false,
+        error: 'Acknowledge skipped references.',
+      });
+    if (db.migrationFailure)
+      return send(res, 500, {
+        success: false,
+        error: 'Fixture import failed. Review again before retrying.',
+      });
+    for (const section of ['integrations', 'groups', 'routines'])
+      if (body.selection[section]) db.config[section] = candidate[section];
+    return send(res, 200, {
+      success: true,
+      data: {},
+      write: db.migrationMemoryOnly
+        ? {
+            applied: true,
+            persistence: 'memory_only',
+            warning: 'Fixture import applied in memory only.',
+          }
+        : writeOk,
+    });
+  }
+
+  if (path === '/api/__fixture/activity' && method === 'POST') {
+    const body = await readBody(req);
+    if (Array.isArray(body.entries)) db.routineHistory = body.entries;
+    db.activityFailure = !!body.fail;
+    return send(res, 200, { success: true });
+  }
+  if (path === '/api/v1/config/routine-history' && db.activityFailure) {
+    return send(res, 503, {
+      success: false,
+      error: 'Fixture activity unavailable',
+    });
+  }
+
+  if (path === '/api/__fixture/restore-outcome' && method === 'POST') {
+    const body = await readBody(req);
+    db.restoreFailure = !!body.fail;
+    db.restoreMemoryOnly = !!body.memoryOnly;
+    return send(res, 200, { success: true });
+  }
+  if (path === '/__health' && method === 'POST') {
+    const evidence = await readBody(req);
+    db.healthEvidence = { ...db.healthEvidence, ...evidence };
+    const health = buildDeviceHealth();
+    for (const key of Object.keys(evidence)) {
+      for (const issue of health.devices[key]?.issues ?? []) {
+        db.logs.unshift({
+          timestamp: new Date().toISOString(),
+          level: 'WARN',
+          target: 'homectl_server::device_health',
+          message: issue.message,
+          references: [
+            { entity: 'device', entity_id: key },
+            { entity: 'integration', entity_id: key.split('/')[0] },
+          ],
+          details: { code: issue.code, fixture: true },
+        });
+      }
+    }
+    return send(res, 200, { success: true, data: health });
+  }
 
   if (path === '/__fixture') {
     const next = url.searchParams.get('name') ?? (await readBody(req))?.name;
@@ -349,6 +824,93 @@ const server = http.createServer(async (req, res) => {
   console.log(`${method} ${req.url}`);
 
   if (path === '/api/config') return send(res, 200, {});
+  if (path === '/api/__fixture/arrangement-failure' && method === 'POST') {
+    db.arrangementFailure = Boolean((await readBody(req)).fail);
+    return send(res, 200, { success: true });
+  }
+  if (path === '/api/influxdb/temp-sensors')
+    return send(
+      res,
+      200,
+      ['render_living', 'render_bedroom'].flatMap((device_id, index) =>
+        [0, 1].map((sample) => ({
+          device_id,
+          integration_id: 'influxdb',
+          _field: 'tempc',
+          _time: new Date(Date.now() - sample * 600000).toISOString(),
+          _value: 21 + index + sample * 0.2,
+        })),
+      ),
+    );
+  if (path.startsWith('/api/v1/config/helpers')) {
+    const parts = path
+      .slice('/api/v1/config/helpers'.length)
+      .split('/')
+      .filter(Boolean)
+      .map(decodeURIComponent);
+    const rows = (db.config.helpers ??= []);
+    const definition = ({ value: _value, revision: _revision, ...row }) => row;
+    if (method === 'GET' && !parts.length)
+      return send(res, 200, { success: true, data: rows });
+    if (method === 'PUT' && parts.length) {
+      const body = await readBody(req),
+        index = rows.findIndex((row) => row.id === parts[0]),
+        current = rows[index];
+      if (parts[1] === 'value') {
+        if (!current)
+          return send(res, 404, { success: false, error: 'Helper not found.' });
+        current.value = body.value;
+        current.revision += 1;
+        return send(res, 200, { success: true, data: current, write: writeOk });
+      }
+      const { expected, create_only, ...next } = body;
+      if (create_only && current)
+        return send(res, 409, {
+          success: false,
+          error: 'This helper ID is already in use.',
+        });
+      if (expected && !current)
+        return send(res, 404, {
+          success: false,
+          error: 'This helper was deleted.',
+        });
+      if (expected && !isDeepStrictEqual(expected, definition(current)))
+        return send(res, 409, {
+          success: false,
+          error: 'This helper changed elsewhere.',
+          current: definition(current),
+        });
+      const valid =
+        current &&
+        (next.kind.kind === 'boolean'
+          ? typeof current.value === 'boolean'
+          : next.kind.kind === 'string'
+            ? typeof current.value === 'string'
+            : next.kind.kind === 'enum'
+              ? next.kind.options.includes(current.value)
+              : typeof current.value === 'number' &&
+                (next.kind.min === undefined ||
+                  current.value >= next.kind.min) &&
+                (next.kind.max === undefined ||
+                  current.value <= next.kind.max));
+      const saved = {
+        ...next,
+        value: valid ? current.value : next.initial_value,
+        revision: valid ? current.revision : 0,
+      };
+      if (current) rows[index] = saved;
+      else rows.push(saved);
+      return send(res, 200, { success: true, data: saved, write: writeOk });
+    }
+    if (method === 'DELETE') {
+      db.config.helpers = rows.filter((row) => row.id !== parts[0]);
+      return send(res, 200, {
+        success: true,
+        data: { id: parts[0] },
+        write: writeOk,
+      });
+    }
+  }
   if (path === '/health/live' || path === '/health/ready')
     return send(res, 200, { status: 'ok' });
   if (path === '/api/v1/commands/scene') {
@@ -373,6 +935,108 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  const floorplanEditor =
+    /^\/api\/v1\/config\/floorplans\/([^/]+)\/editor$/.exec(path);
+  if (floorplanEditor) {
+    const id = decodeURIComponent(floorplanEditor[1]),
+      rows = (db.config.floorplans ??= []);
+    let row = rows.find((row) => row.id === id);
+    const hash = (value) =>
+      crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+    const publicRow = (row) => ({
+      id: row.id,
+      name: row.name,
+      grid_data: row.grid_data ?? null,
+      image: row._image
+        ? {
+            kind: 'stored',
+            mime_type: row._image.mime_type,
+            bytes: Buffer.from(row._image.data_base64, 'base64').length,
+            revision: hash(row._image),
+          }
+        : { kind: 'none' },
+      revision_token: hash(row),
+    });
+    if (row && !Object.hasOwn(row, 'grid_data')) {
+      row.grid_data = JSON.stringify({
+        width: 12,
+        height: 9,
+        tileSize: 32,
+        deviceScale: 1,
+        labelMode: 'all',
+        tiles: Array.from({ length: 9 }, (_, y) =>
+          Array.from({ length: 12 }, (_, x) =>
+            x === 0 || y === 0 || x === 11 || y === 8 ? 'wall' : 'floor',
+          ),
+        ),
+        devices: [
+          {
+            deviceKey: db.devices[0].integration_id + '/' + db.devices[0].id,
+            deviceName: db.devices[0].name,
+            x: 3,
+            y: 3,
+          },
+        ],
+        groups: {
+          living_room: [
+            { x: 1, y: 1 },
+            { x: 1, y: 2 },
+          ],
+        },
+        future: { keep: [2, 1] },
+      });
+      row._image = {
+        mime_type: 'image/svg+xml',
+        data_base64: Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360"><rect width="480" height="360" fill="#f3f2ee"/></svg>',
+        ).toString('base64'),
+      };
+    }
+    if (method === 'GET')
+      return row
+        ? send(res, 200, { success: true, data: publicRow(row) })
+        : send(res, 404, { success: false, error: 'Floorplan not found.' });
+    const body = await readBody(req);
+    if (body.create_only && row)
+      return send(res, 409, {
+        success: false,
+        error: 'This floorplan ID is already in use.',
+      });
+    if (!body.create_only && !row)
+      return send(res, 404, { success: false, error: 'Floorplan not found.' });
+    if (row && body.expected !== publicRow(row).revision_token)
+      return send(res, 409, {
+        success: false,
+        error: 'This floorplan changed elsewhere.',
+        current: publicRow(row),
+      });
+    if (method === 'DELETE') {
+      db.config.floorplans = rows.filter((r) => r.id !== id);
+      return send(res, 200, { success: true, data: null, write: writeOk });
+    }
+    if (!body.name?.trim())
+      return send(res, 400, {
+        success: false,
+        error: 'Give the floorplan a name.',
+      });
+    if (!row) {
+      row = { id, name: body.name };
+      rows.push(row);
+    }
+    row.name = body.name;
+    row.grid_data = body.grid_data;
+    if (body.image.kind === 'none') delete row._image;
+    if (body.image.kind === 'upload')
+      row._image = {
+        mime_type: body.image.mime_type,
+        data_base64: body.image.data_base64,
+      };
+    return send(res, body.create_only ? 201 : 200, {
+      success: true,
+      data: publicRow(row),
+      write: writeOk,
+    });
+  }
   if (path === '/api/v1/config/floorplan/grid') {
     // A small two-room plan with a wall, a door, and a window so the editor
     // has real content to render.
@@ -423,6 +1087,22 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (path === '/api/v1/config/floorplan/image') {
+    const row = db.config.floorplans?.find(
+      (row) => row.id === (url.searchParams.get('id') ?? 'default'),
+    );
+    if (row && Object.hasOwn(row, 'grid_data')) {
+      if (!row._image)
+        return send(res, 404, {
+          success: false,
+          error: 'Floorplan image not found.',
+        });
+      res.writeHead(200, {
+        'content-type': row._image.mime_type,
+        'x-homectl-fixture': 'true',
+      });
+      res.end(Buffer.from(row._image.data_base64, 'base64'));
+      return;
+    }
     // A one pixel transparent PNG: enough for the background layer to exist.
     const png = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
@@ -437,6 +1117,18 @@ const server = http.createServer(async (req, res) => {
   // (server/src/api/config/sources.rs::preview_source).
   if (path === '/api/v1/config/source-preview' && method === 'POST') {
     const body = await readBody(req);
+    if (body.compute?.kind === 'script' && !body.compute.preset)
+      return send(res, 200, {
+        success: true,
+        data: {
+          timezone: body.timezone,
+          samples: [],
+          step_ms: 0,
+          day_start_ms: 0,
+          unsupported_reason:
+            'Custom script previews are unavailable in this fixture.',
+        },
+      });
     const timezone = body?.timezone ?? 'UTC';
     const count = Math.min(Math.max(Number(body?.samples ?? 24), 1), 96);
     const dayStart = new Date();
@@ -459,7 +1151,13 @@ const server = http.createServer(async (req, res) => {
     });
     return send(res, 200, {
       success: true,
-      data: { timezone, day_start_ms: dayStart.getTime(), step_ms: stepMs, samples },
+      data: {
+        timezone,
+        day_start_ms: dayStart.getTime(),
+        step_ms: stepMs,
+        samples,
+        note: 'Synthetic fixture samples; computation is verified by backend tests.',
+      },
     });
   }
 
@@ -477,6 +1175,566 @@ const server = http.createServer(async (req, res) => {
     }
     if (db.lagMs && method === 'GET') await sleep(db.lagMs);
 
+    if (endpoint === 'export' && method === 'GET') {
+      const config = fixtureBackup();
+      if (url.searchParams.get('include_secrets') !== 'true')
+        for (const row of config.integrations) delete row.config.password;
+      return send(res, 200, { success: true, data: config });
+    }
+    if (endpoint === 'import' && method === 'POST') {
+      let body;
+      try {
+        body = prepareBackup(await readBody(req));
+      } catch (error) {
+        return send(res, 400, { success: false, error: error.message });
+      }
+      if (rest === 'preview')
+        return send(res, 200, { success: true, data: reviewBackup(body) });
+      if (url.searchParams.get('expected') !== backupToken(body))
+        return send(res, 409, {
+          success: false,
+          error: 'Configuration changed since review.',
+        });
+      if (db.restoreFailure)
+        return send(res, 500, {
+          success: false,
+          error: 'Restore failed. The uploaded backup is kept.',
+        });
+      db.config.core = body.core;
+      for (const [key] of backupSections)
+        db.config[
+          key === 'dashboard_layouts'
+            ? 'dashboardLayouts'
+            : key === 'dashboard_widgets'
+              ? 'dashboardWidgets'
+              : key
+        ] = body[key] ?? [];
+      return send(res, 200, {
+        success: true,
+        data: null,
+        write: db.restoreMemoryOnly
+          ? {
+              applied: true,
+              persistence: 'memory_only',
+              warning: 'Fixture restore is applied in memory only.',
+            }
+          : writeOk,
+      });
+    }
+    if (endpoint === 'dashboard') {
+      const layouts = (db.config.dashboardLayouts ??= [
+        { id: 1, name: 'Home', is_default: true },
+      ]);
+      const widgets = (db.config.dashboardWidgets ??= [
+        {
+          id: 1,
+          layout_id: 1,
+          widget_type: 'sensors',
+          config: {
+            title: 'Indoor readings',
+            options: {
+              sensorIds: ['living', 'bedroom'],
+              sensorSelection: 'selected',
+              influxToken: 'fixture-widget-token',
+              future: { keep: [1, 2] },
+            },
+          },
+          grid_x: 0,
+          grid_y: 0,
+          grid_w: 2.25,
+          grid_h: 2,
+          sort_order: 0,
+        },
+      ]);
+      const token = (row) =>
+        crypto.createHash('sha256').update(JSON.stringify(row)).digest('hex');
+      const publicRow = (row) => {
+        const value = structuredClone(row),
+          secret_fields = [];
+        if (row.config) {
+          const options = value.config.options ?? value.config;
+          for (const field of row.widget_type === 'sensors'
+            ? ['influxToken']
+            : row.widget_type === 'clock'
+              ? ['calendarUrl']
+              : []) {
+            if (options[field]) secret_fields.push(field);
+            delete options[field];
+            delete value.config[field];
+          }
+        }
+        return {
+          ...value,
+          revision_token: token(row),
+          ...(row.config ? { secret_fields } : {}),
+        };
+      };
+      const parts = (rest ?? '').split('/');
+      if (parts[0] === 'layouts' && parts[2] === 'arrangement') {
+        const layoutId = Number(parts[1]);
+        const view = () => ({
+          layout_id: layoutId,
+          removed_ids: [],
+          placements: Object.fromEntries(
+            widgets
+              .filter((row) => row.layout_id === layoutId)
+              .map((row) => [
+                String(row.id),
+                {
+                  grid_x: row.grid_x,
+                  grid_y: row.grid_y,
+                  grid_w: row.grid_w,
+                  grid_h: row.grid_h,
+                  sort_order: row.sort_order,
+                  revision_token: token(row),
+                },
+              ]),
+          ),
+        });
+        if (method === 'GET')
+          return send(res, 200, { success: true, data: view() });
+        if (method === 'PUT') {
+          const { value, expected } = await readBody(req);
+          if (!isDeepStrictEqual(view(), expected))
+            return send(res, 409, {
+              success: false,
+              error: 'Widgets in this layout changed.',
+              current: view(),
+            });
+          if (db.arrangementFailure)
+            return send(res, 500, {
+              success: false,
+              error: 'The arrangement transaction failed. Your draft is kept.',
+            });
+          if (
+            value.layout_id !== layoutId ||
+            Object.keys(value.placements).sort().join(',') !==
+              Object.keys(view().placements).sort().join(',')
+          )
+            return send(res, 400, {
+              success: false,
+              error: 'Include every current widget.',
+            });
+          for (const row of widgets.filter(
+            (row) => row.layout_id === layoutId,
+          )) {
+            const { revision_token: _revision, ...placement } =
+              value.placements[row.id];
+            Object.assign(row, placement);
+          }
+          db.config.dashboardWidgets = widgets.filter(
+            (row) =>
+              row.layout_id !== layoutId || !value.removed_ids.includes(row.id),
+          );
+          return send(res, 200, {
+            success: true,
+            data: {
+              ...view(),
+              placements: Object.fromEntries(
+                Object.entries(view().placements).filter(
+                  ([id]) => !value.removed_ids.includes(Number(id)),
+                ),
+              ),
+            },
+            write: writeOk,
+          });
+        }
+      }
+      if (method === 'GET' && rest === 'layouts')
+        return send(res, 200, { success: true, data: layouts.map(publicRow) });
+      if (method === 'GET' && parts[0] === 'layouts' && parts[2] === 'widgets')
+        return send(res, 200, {
+          success: true,
+          data: widgets
+            .filter((row) => row.layout_id === Number(parts[1]))
+            .map(publicRow),
+        });
+      if (method === 'POST' && (rest === 'layouts' || rest === 'widgets')) {
+        const {
+            expected,
+            revision_token: _token,
+            secret_fields: _fields,
+            ...value
+          } = await readBody(req),
+          list = rest === 'layouts' ? layouts : widgets;
+        const current = list.find((row) => row.id === value.id);
+        if (expected && (!current || expected !== token(current)))
+          return send(res, 409, {
+            success: false,
+            error: 'This item changed elsewhere.',
+            current: current ? publicRow(current) : undefined,
+          });
+        if (!value.id) value.id = Math.max(0, ...list.map((row) => row.id)) + 1;
+        if (current?.config && current.widget_type === value.widget_type) {
+          const options = value.config.options ?? value.config;
+          for (const field of value.widget_type === 'sensors'
+            ? ['influxToken']
+            : value.widget_type === 'clock'
+              ? ['calendarUrl']
+              : [])
+            if (
+              !(field in options) &&
+              field in (current.config.options ?? current.config)
+            )
+              options[field] = (current.config.options ?? current.config)[
+                field
+              ];
+        }
+        if (rest === 'layouts' && value.is_default)
+          layouts.forEach((row) => (row.is_default = false));
+        if (current) list[list.indexOf(current)] = value;
+        else list.push(value);
+        return send(res, 200, {
+          success: true,
+          data: publicRow(value),
+          write: writeOk,
+        });
+      }
+      if (method === 'DELETE') {
+        if (parts[0] === 'layouts') {
+          db.config.dashboardLayouts = layouts.filter(
+            (row) => row.id !== Number(parts[1]),
+          );
+          db.config.dashboardWidgets = widgets.filter(
+            (row) => row.layout_id !== Number(parts[1]),
+          );
+        } else
+          db.config.dashboardWidgets = widgets.filter(
+            (row) => row.id !== Number(parts[1]),
+          );
+        return send(res, 200, { success: true, data: null, write: writeOk });
+      }
+    }
+
+    if (
+      endpoint === 'assistant' &&
+      (rest === 'settings' || rest === 'status')
+    ) {
+      const current = db.config.assistantSettings ?? {
+        baseUrl: 'https://provider.example/v1',
+        model: 'fixture-model',
+        apiKey: 'fixture-stored-key',
+        reasoningEffort: null,
+        timezone: 'Europe/Helsinki',
+        timeoutMs: 60000,
+        maxTokens: 2048,
+        contextWindow: 128000,
+      };
+      const view = (row) => {
+        const { apiKey, ...publicFields } = row;
+        return {
+          ...publicFields,
+          enabled: Boolean(row.baseUrl && row.model),
+          apiKeySet: Boolean(apiKey),
+          revisionToken: crypto
+            .createHash('sha256')
+            .update(JSON.stringify(row))
+            .digest('hex'),
+        };
+      };
+      if (method === 'GET')
+        return send(res, 200, {
+          success: true,
+          data:
+            rest === 'status'
+              ? {
+                  enabled: Boolean(current.baseUrl && current.model),
+                  model: current.model,
+                }
+              : view(current),
+        });
+      if (method === 'PUT' && rest === 'settings') {
+        const { expected, ...value } = await readBody(req);
+        if (expected && expected.revisionToken !== view(current).revisionToken)
+          return send(res, 409, {
+            success: false,
+            error: 'Assistant settings changed elsewhere.',
+            current: view(current),
+          });
+        const next = { ...current, ...value };
+        for (const key of ['baseUrl', 'model', 'reasoningEffort', 'timezone'])
+          next[key] ||= null;
+        db.config.assistantSettings = next;
+        return send(res, 200, {
+          success: true,
+          data: view(next),
+          write: writeOk,
+        });
+      }
+    }
+
+    if (endpoint === 'core') {
+      const current = db.config.core ?? {
+        warmup_time_seconds: 1,
+        default_transition_ms: 1200,
+        scene_transition_ms: 2400,
+        weather_api_url: '',
+        train_api_url: '',
+        influx_url: '',
+      };
+      if (method === 'GET')
+        return send(res, 200, { success: true, data: current });
+      if (method === 'PUT') {
+        const { expected, ...value } = await readBody(req);
+        if (expected && !isDeepStrictEqual(expected, current))
+          return send(res, 409, {
+            success: false,
+            error: 'System settings changed elsewhere.',
+            current,
+          });
+        db.config.core = { ...current, ...value };
+        return send(res, 200, {
+          success: true,
+          data: db.config.core,
+          write: writeOk,
+        });
+      }
+    }
+
+    if (endpoint === 'widget-sources') {
+      const sources = (db.config.widgetSources ??= {
+        influxdb: {
+          url: 'http://influx.example',
+          token: 'fixture-source-token',
+          future: { keep: true },
+        },
+        calendar: { icsUrl: 'https://calendar.example/private-fixture-feed' },
+        weather: { apiUrl: '' },
+        train_schedule: { apiUrl: '' },
+      });
+      const view = (key) => {
+        const row = sources[key],
+          secret =
+            key === 'influxdb'
+              ? 'token'
+              : key === 'calendar'
+                ? 'icsUrl'
+                : undefined;
+        const fields =
+          key === 'influxdb'
+            ? ['url', 'token']
+            : key === 'calendar'
+              ? ['icsUrl']
+              : ['apiUrl'];
+        return {
+          key,
+          config: Object.fromEntries(
+            fields
+              .filter((field) => field !== secret)
+              .map((field) => [field, row[field] ?? '']),
+          ),
+          credentials: secret ? { [secret]: Boolean(row[secret]) } : {},
+          origins: Object.fromEntries(
+            fields.map((field) => [field, row[field] ? 'saved' : 'unset']),
+          ),
+          invalidStoredConfig: false,
+          revisionToken: crypto
+            .createHash('sha256')
+            .update(JSON.stringify(row))
+            .digest('hex'),
+        };
+      };
+      if (method === 'GET')
+        return send(res, 200, {
+          success: true,
+          data: Object.keys(sources).map(view),
+        });
+      if (method === 'PUT' && sources[rest]) {
+        const { config, expected } = await readBody(req);
+        if (expected !== view(rest).revisionToken)
+          return send(res, 409, {
+            success: false,
+            error: 'This source changed elsewhere.',
+            current: view(rest),
+          });
+        sources[rest] = { ...sources[rest], ...config };
+        return send(res, 200, {
+          success: true,
+          data: view(rest),
+          write: writeOk,
+        });
+      }
+    }
+
+    if (endpoint === 'sensors' && rest === 'catalog') {
+      const current = db.config.sensorCatalog ?? { sensors: [], groups: [] };
+      if (method === 'GET')
+        return send(res, 200, { success: true, data: current });
+      if (method === 'PUT') {
+        const { expected, ...value } = await readBody(req);
+        if (expected && !isDeepStrictEqual(expected, current))
+          return send(res, 409, {
+            success: false,
+            error: 'Sensor catalog changed elsewhere.',
+            current,
+          });
+        const ids = new Set(value.sensors.map((row) => row.id));
+        if (
+          ids.size !== value.sensors.length ||
+          value.sensors.some((row) => !row.id.trim() || !row.name.trim()) ||
+          value.groups.some(
+            (group) =>
+              !group.name.trim() || group.sensorIds.some((id) => !ids.has(id)),
+          )
+        )
+          return send(res, 400, {
+            success: false,
+            error: 'Invalid sensor catalog.',
+          });
+        db.config.sensorCatalog = value;
+        return send(res, 200, { success: true, data: value, write: writeOk });
+      }
+    }
+
+    if (endpoint === 'integrations') {
+      const list = db.config.integrations ?? [];
+      const publicRow = (row) => {
+        const token = crypto
+          .createHash('sha256')
+          .update(JSON.stringify(row))
+          .digest('hex');
+        const { password, ...config } = row.config;
+        return {
+          ...row,
+          config,
+          revision_token: token,
+          secret_fields: password ? ['password'] : [],
+          reporting_policy: row.reporting_policy ?? { mode: 'inherit' },
+        };
+      };
+      if (method === 'GET') {
+        const item = rest ? list.find((row) => row.id === rest) : null;
+        return rest
+          ? send(res, item ? 200 : 404, {
+              success: Boolean(item),
+              data: item ? publicRow(item) : undefined,
+            })
+          : send(res, 200, { success: true, data: list.map(publicRow) });
+      }
+      if (method === 'PUT' || method === 'POST') {
+        const {
+          expected,
+          revision_token: _token,
+          secret_fields: _fields,
+          ...value
+        } = await readBody(req);
+        const index = list.findIndex((row) => row.id === (rest ?? value.id)),
+          current = list[index];
+        if (
+          (method === 'POST' && current) ||
+          (expected &&
+            (!current ||
+              expected.revision_token !== publicRow(current).revision_token))
+        )
+          return send(res, 409, {
+            success: false,
+            error: 'Integration settings changed elsewhere.',
+            current: current ? publicRow(current) : undefined,
+          });
+        if (method === 'PUT' && !current)
+          return send(res, 404, {
+            success: false,
+            error: 'Integration no longer exists.',
+          });
+        if (
+          current?.plugin === value.plugin &&
+          !Object.hasOwn(value.config, 'password') &&
+          current.config.password !== undefined
+        )
+          value.config.password = current.config.password;
+        if (current) list[index] = value;
+        else list.push(value);
+        db.config.integrations = list;
+        return send(res, 200, {
+          success: true,
+          data: publicRow(value),
+          write: writeOk,
+        });
+      }
+    }
+    if (endpoint === 'sources' && method === 'PUT') {
+      const { expected, create_only, ...source } = await readBody(req),
+        rows = (db.config.sources ??= []),
+        index = rows.findIndex((row) => row.id === rest),
+        current = rows[index];
+      if (create_only && current)
+        return send(res, 409, {
+          success: false,
+          error: 'This source ID is already in use.',
+        });
+      if (expected && !current)
+        return send(res, 404, {
+          success: false,
+          error: 'This source was deleted.',
+        });
+      if (expected && !isDeepStrictEqual(expected, current))
+        return send(res, 409, {
+          success: false,
+          error: 'This source changed elsewhere.',
+          current,
+        });
+      source.revision = (current?.revision ?? 0) + 1;
+      if (current) rows[index] = source;
+      else rows.push(source);
+      db.config.sources = rows;
+      return send(res, 200, { success: true, data: source, write: writeOk });
+    }
+    if (endpoint === 'device-settings') {
+      const body = method === 'PUT' ? await readBody(req) : undefined;
+      const key = body?.device_key ?? url.searchParams.get('device_key');
+      const current = {
+        device_key: key,
+        reporting_policy: db.reportingPolicies?.[key] ?? { mode: 'inherit' },
+        display_name:
+          db.config['device-display-names']?.find(
+            (row) => row.device_key === key,
+          )?.display_name ?? null,
+        sensor:
+          db.config['device-sensor-configs']?.find(
+            (row) => row.device_ref === key,
+          ) ?? null,
+      };
+      if (method === 'GET')
+        return send(res, 200, { success: true, data: current });
+      if (!isDeepStrictEqual(current, body.expected))
+        return send(res, 409, {
+          success: false,
+          error: 'Device settings changed elsewhere.',
+          current,
+        });
+      const { expected: _expected, ...value } = body;
+      (db.reportingPolicies ??= {})[key] = value.reporting_policy ?? {
+        mode: 'inherit',
+      };
+      db.config['device-display-names'] = (
+        db.config['device-display-names'] ?? []
+      ).filter((row) => row.device_key !== key);
+      db.config['device-sensor-configs'] = (
+        db.config['device-sensor-configs'] ?? []
+      ).filter((row) => row.device_ref !== key);
+      if (value.display_name !== null)
+        db.config['device-display-names'].push({
+          device_key: key,
+          display_name: value.display_name,
+        });
+      if (value.sensor !== null)
+        db.config['device-sensor-configs'].push(value.sensor);
+      return send(res, 200, { success: true, data: value, write: writeOk });
+    }
+    if (endpoint === 'preferences') {
+      const current = db.config.preferences ?? { show_advanced_details: true };
+      if (method === 'GET')
+        return send(res, 200, { success: true, data: current });
+      const { expected, ...next } = await readBody(req);
+      if (expected && !isDeepStrictEqual(current, expected))
+        return send(res, 409, {
+          success: false,
+          error: 'Preferences changed elsewhere.',
+          current,
+        });
+      db.config.preferences = next;
+      return send(res, 200, { success: true, data: next, write: writeOk });
+    }
     if (method === 'GET') {
       if (rest) {
         // Single item GETs are used by detail pages; fall back to the list.
@@ -496,17 +1754,67 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { success: true, data: list });
     }
 
+    if (
+      method === 'POST' &&
+      endpoint === 'routines' &&
+      (rest === 'convert' || rest === 'preview')
+    ) {
+      return send(res, 501, {
+        success: false,
+        error:
+          'The development fixture does not evaluate routine previews or conversions. Use the Rust server for these operations.',
+      });
+    }
     if (method === 'POST' && rest === 'preview') {
       const body = await readBody(req);
-      if (endpoint === 'routines') {
+      if (endpoint === 'scenes') {
+        if (body.script)
+          return send(res, 400, {
+            success: false,
+            error:
+              'The development fixture does not execute scripts. Use the Rust server for script previews.',
+          });
+        const context = {
+          scenes: [
+            ...db.config.scenes.filter((scene) => scene.id !== body.id),
+            body,
+          ],
+          groups: db.config.groups,
+          devices: Object.fromEntries(
+            db.devices.map((device) => [
+              device.integration_id + '/' + device.id,
+              device,
+            ]),
+          ),
+        };
+        const devices = {};
+        for (const [kind, targets] of [
+          ['group', body.group_states],
+          ['device', body.device_states],
+        ])
+          for (const [key, config] of kind === 'group'
+            ? orderedSceneTargets(targets ?? {}, body.group_state_order)
+            : Object.entries(targets ?? {}))
+            for (const deviceKey of targetDeviceKeys(kind, key, context)) {
+              if (!context.devices[deviceKey]) continue;
+              const state = resolveDraftTarget(config, deviceKey, context);
+              if (!state.reason)
+                devices[deviceKey] = {
+                  state,
+                  source: {
+                    scope: kind,
+                    kind: 'device_state',
+                    group_id: kind === 'group' ? key : null,
+                  },
+                };
+            }
         return send(res, 200, {
           success: true,
           data: {
-            will_trigger: true,
-            assumed_trigger: body?.trigger_id ?? 't1',
-            first_blocking_reason: null,
-            steps: [],
-            condition: { truth: 'true', trace: { kind: 'all', children: [] } },
+            devices,
+            active_overrides: [],
+            script_evaluated: false,
+            evaluated_at: new Date().toISOString(),
           },
         });
       }
@@ -540,6 +1848,21 @@ const server = http.createServer(async (req, res) => {
       }
       const id = rest ?? body?.id ?? body?.device_key;
       const idx = list.findIndex((i) => i.id === id || i.device_key === id);
+      if (body?.expected !== undefined) {
+        const { device_keys: _derived, ...current } = list[idx] ?? {};
+        if (idx < 0)
+          return send(res, 404, {
+            success: false,
+            error: 'This item was deleted.',
+          });
+        if (!isDeepStrictEqual(body.expected, current))
+          return send(res, 409, {
+            success: false,
+            error: 'This item changed elsewhere.',
+            current,
+          });
+        delete body.expected;
+      }
       const item = {
         ...(idx >= 0 ? list[idx] : {}),
         ...body,
@@ -749,7 +2072,7 @@ server.on('upgrade', (req, socket) => {
         ),
         routine_statuses: buildRoutineStatuses(db),
         timers: [],
-        helper_statuses: [],
+        helper_statuses: db.config.helpers ?? [],
         ui_state: {},
       },
     };

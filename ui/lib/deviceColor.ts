@@ -130,12 +130,12 @@ export function colorParts(color: DeviceColor): ColorPart[] {
         {
           key: 'ct',
           label: 'Colour temperature',
-          min: 153,
-          max: 500,
+          min: 1000,
+          max: 10000,
           step: 1,
           value: numbers.ct,
           display: Math.round(numbers.ct),
-          unit: ' mired',
+          unit: ' K',
         },
       ];
     default:
@@ -170,18 +170,15 @@ export function defaultColorFor(mode: DeviceColorMode): DeviceColor {
     case 'xy':
       return { x: 0.46, y: 0.41 };
     case 'ct':
-      return { ct: 250 };
+      return { ct: 2700 };
   }
 }
 
-function hsToRgb(
-  h: number,
-  s: number,
-  l = 0.5,
-): { r: number; g: number; b: number } {
-  const c = (1 - Math.abs(2 * l - 1)) * s;
+function hsToRgb(h: number, s: number): { r: number; g: number; b: number } {
+  // HS describes a light at full value; brightness has its own channel.
+  const c = Math.min(1, Math.max(0, s));
   const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = l - c / 2;
+  const m = 1 - c;
   let r = 0;
   let g = 0;
   let b = 0;
@@ -245,12 +242,13 @@ export function colorToRgb(color: DeviceColor): {
     case 'xy':
       return xyToRgb(numbers.x, numbers.y);
     case 'ct': {
-      // Mireds to a warm/cool approximation, 153 mired (6500K) .. 500 (2000K).
-      const warmth = Math.min(1, Math.max(0, (numbers.ct - 153) / (500 - 153)));
+      // DeviceColor.ct and capability ranges are Kelvin on the wire.
+      // This warm-to-daylight ramp is an approximate editor swatch.
+      const coolness = Math.min(1, Math.max(0, (numbers.ct - 2000) / 4500));
       return {
-        r: Math.round(255 - warmth * 55),
-        g: Math.round(240 - warmth * 30),
-        b: Math.round(255 - warmth * 195),
+        r: Math.round(255 - coolness * 20),
+        g: Math.round(180 + coolness * 55),
+        b: Math.round(120 + coolness * 135),
       };
     }
     default:
@@ -301,8 +299,8 @@ export function describeColorName(color: DeviceColor): string {
       return 'colour from a colour point';
     case 'ct': {
       const ct = numbers.ct;
-      if (ct <= 200) return 'cool white';
-      if (ct >= 350) return 'warm white';
+      if (ct >= 5000) return 'cool white';
+      if (ct <= 3000) return 'warm white';
       return 'soft white';
     }
     default:
@@ -334,7 +332,7 @@ export function formatColorExact(color: DeviceColor): string {
     case 'xy':
       return `x ${numbers.x.toFixed(3)} · y ${numbers.y.toFixed(3)}`;
     case 'ct':
-      return `${Math.round(numbers.ct)} mired`;
+      return `${Math.round(numbers.ct)} K`;
     default:
       return 'no colour';
   }

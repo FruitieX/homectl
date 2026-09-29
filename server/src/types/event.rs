@@ -31,6 +31,13 @@ pub enum TimerWakeupJob {
 #[derive(TS, Clone, Debug, Deserialize, Serialize)]
 #[ts(export)]
 pub enum Event {
+    /// A transport connection was established. Starts reporting grace without
+    /// manufacturing a fresh device receipt or claiming devices are online.
+    IntegrationConnected {
+        integration_id: super::integration::IntegrationId,
+        #[serde(default)]
+        integration_epoch: Option<IntegrationEpoch>,
+    },
     DeviceAvailability {
         device_key: DeviceKey,
         online: bool,
@@ -45,6 +52,9 @@ pub enum Event {
     /// mismatch, we'll try to correct it.
     ExternalStateUpdate {
         device: Device,
+        /// Cached/discovery replay must never count as fresh heartbeat evidence.
+        #[serde(default)]
+        report_retained: bool,
         /// Integration instance that produced the report.
         #[serde(default)]
         integration_epoch: Option<IntegrationEpoch>,
@@ -281,7 +291,10 @@ impl Event {
     /// Integration instance stamp, if any.
     pub fn integration_epoch(&self) -> Option<IntegrationEpoch> {
         match self {
-            Event::DeviceAvailability {
+            Event::IntegrationConnected {
+                integration_epoch, ..
+            }
+            | Event::DeviceAvailability {
                 integration_epoch, ..
             }
             | Event::ExternalStateUpdate {
@@ -298,7 +311,10 @@ impl Event {
     /// that are not integration data-plane updates are left untouched.
     pub fn stamp_integration_epoch(&mut self, epoch: IntegrationEpoch) {
         match self {
-            Event::DeviceAvailability {
+            Event::IntegrationConnected {
+                integration_epoch, ..
+            }
+            | Event::DeviceAvailability {
                 integration_epoch, ..
             }
             | Event::ExternalStateUpdate {

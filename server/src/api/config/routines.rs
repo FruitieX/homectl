@@ -66,11 +66,6 @@ fn validate_write_shape(routine: &RoutineRow) -> Result<(), String> {
     }
 }
 
-fn catalog_from_snapshot(snapshot: &SnapshotHandle) -> ConfigCatalog {
-    let snap = snapshot.load();
-    ConfigCatalog::new(snap.devices.0.keys().cloned(), &snap.runtime_config)
-}
-
 pub(super) fn routines_routes(
     snapshot: &SnapshotHandle,
     handle: &StateHandle,
@@ -111,11 +106,50 @@ pub(super) fn routines_routes(
         .and(warp::body::json())
         .and_then(preview_schedule);
 
+    let convert = warp::path!("routines" / "convert")
+        .and(warp::post())
+        .and(warp::body::content_length_limit(256 * 1024))
+        .and(warp::body::json())
+        .and(with_snapshot(snapshot))
+        .and_then(preview_conversion);
+
     list.or(get)
         .or(create)
         .or(update)
         .or(delete)
         .or(schedule_preview)
+        .or(convert)
+}
+
+#[derive(Deserialize)]
+struct RoutineConversionRequest {
+    routine: RoutineRow,
+    timezone: Option<String>,
+}
+
+/// Pure conversion proposal. Applying it still requires a normal expected-value
+/// routine write; this endpoint never saves or enables the proposed definition.
+async fn preview_conversion(
+    request: RoutineConversionRequest,
+    snapshot: SnapshotHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
+    let catalog = ConfigCatalog::new(snap.devices.0.keys().cloned(), &snap.runtime_config);
+    let options = automation::convert::ConvertOptions {
+        timer_integrations: snap
+            .runtime_config
+            .integrations
+            .iter()
+            .filter(|row| row.plugin == "timer")
+            .map(|row| row.id.clone())
+            .collect(),
+        cron_timezone: request.timezone,
+    };
+    Ok(ApiResponse::success(automation::convert::convert_routine(
+        &request.routine,
+        &catalog,
+        &options,
+    )))
 }
 
 pub(super) async fn list_routines(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
@@ -140,197 +174,103 @@ pub(super) async fn get_routine(
     }
 }
 
+#[derive(Deserialize)]
+pub(super) struct RoutineUpdate {
+    #[serde(flatten)]
+    routine: RoutineRow,
+    expected: Option<RoutineRow>,
+}
+
 pub(super) async fn create_routine(
-    mut routine: RoutineRow,
-    snapshot: SnapshotHandle,
+    routine: RoutineRow,
+    _snapshot: SnapshotHandle,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let _write_guard = match config_write_lock(&handle).await {
-        Ok(guard) => guard,
-        Err(_) => return Ok(actor_unavailable()),
-    };
-
-    routine.revision = 1;
-
-    if let Err(error) = validate_write_shape(&routine) {
-        return Ok(error_response(&error, StatusCode::BAD_REQUEST));
-    }
-
-    if routine.enabled {
-        let catalog = catalog_from_snapshot(&snapshot);
-        if let Err(error) = validate_enabled_routine(&routine, &catalog) {
-            return Ok(error_response(&error, StatusCode::BAD_REQUEST));
-        }
-    }
-
-    let routine_for_state = routine.clone();
-    if handle
-        .mutate(move |state| {
-            Box::pin(async move {
-                state.upsert_routine(routine_for_state);
-                state.apply_runtime_routines();
-            })
-        })
-        .await
-        .is_err()
-    {
-        return Ok(actor_unavailable());
-    }
-
-    let database_available = db::is_db_connected();
-    let persistence = config_queries::db_upsert_routine(&routine).await;
-    Ok(config_write_response(
-        routine,
-        persistence,
-        database_available,
-        StatusCode::CREATED,
-    ))
+    write_routine(None, routine, None, handle).await
 }
 
 pub(super) async fn update_routine(
     id: String,
-    routine: RoutineRow,
-    snapshot: SnapshotHandle,
+    request: RoutineUpdate,
+    _snapshot: SnapshotHandle,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let _write_guard = match config_write_lock(&handle).await {
+    write_routine(Some(id), request.routine, request.expected, handle).await
+}
+
+async fn write_routine(
+    id: Option<String>,
+    routine: RoutineRow,
+    expected: Option<RoutineRow>,
+    handle: StateHandle,
+) -> Result<warp::reply::WithStatus<warp::reply::Json>, warp::Rejection> {
+    let _guard = match config_write_lock(&handle).await {
         Ok(guard) => guard,
         Err(_) => return Ok(actor_unavailable()),
     };
-
-    let existing = {
-        let snap = snapshot.load();
-        snap.runtime_config
-            .routines
-            .iter()
-            .find(|existing| existing.id == id)
-            .cloned()
-    };
-    let Some(existing) = existing else {
-        return Ok(not_found("Routine"));
-    };
-
-    let requested_id = routine.id.trim().to_string();
-    let next_id = if requested_id.is_empty() {
-        id.clone()
-    } else {
-        requested_id
-    };
-    let renamed = next_id != id;
-
-    let mut routine_for_state = match automation::prepare_write(Some(&existing), routine) {
-        Ok(routine) => routine,
-        Err(error) => return Ok(error_response(&error, StatusCode::BAD_REQUEST)),
-    };
-    // V08: a legacy (v1) write to a v2 row keeps the stored v2 body; the
-    // revision still advances so consumers can detect the write.
-    routine_for_state.id = next_id.clone();
-    routine_for_state.revision = automation::next_revision(Some(&existing));
-
-    if let Err(error) = validate_write_shape(&routine_for_state) {
-        return Ok(error_response(&error, StatusCode::BAD_REQUEST));
+    if routine.name.trim().is_empty() || routine.id.trim().is_empty() {
+        return Ok(error_response(
+            "Give the routine a name and an ID",
+            StatusCode::BAD_REQUEST,
+        ));
     }
-
-    if routine_for_state.enabled {
-        let catalog = catalog_from_snapshot(&snapshot);
-        if let Err(error) = validate_enabled_routine(&routine_for_state, &catalog) {
-            return Ok(error_response(&error, StatusCode::BAD_REQUEST));
+    let creating = id.is_none();
+    // Comparison, validation and application share one actor command. A second
+    // writer cannot slip between the precondition and the revision increment.
+    let outcome = handle.mutate(move |state| Box::pin(async move {
+        let error = |status, message: &str, current: Option<&RoutineRow>| (status, serde_json::json!({ "success": false, "error": message, "current": current }));
+        let old_id = id.as_deref().unwrap_or(&routine.id).to_string();
+        let current = state.runtime_config.routines.iter().find(|row| row.id == old_id).cloned();
+        if creating && current.is_some() { return Err(error(StatusCode::CONFLICT, "This routine ID is already in use.", current.as_ref())); }
+        if !creating && current.is_none() { return Err(error(StatusCode::NOT_FOUND, "This routine was deleted. Your draft has not been saved.", None)); }
+        if let (Some(expected), Some(current)) = (expected.as_ref(), current.as_ref()) {
+            if serde_json::to_value(expected).ok() != serde_json::to_value(current).ok() {
+                return Err(error(StatusCode::CONFLICT, "This routine changed elsewhere.", Some(current)));
+            }
         }
-    }
-
-    enum UpdateOutcome {
-        Updated(Vec<RoutineRow>),
-        NotFound,
-        Conflict,
-    }
-
-    let id_for_state = id.clone();
-    let next_id_for_state = next_id.clone();
-    let routine_for_state_in = routine_for_state.clone();
-
-    let outcome = handle
-        .mutate(move |state| {
-            Box::pin(async move {
-                let Some(existing_index) = state
-                    .runtime_config
-                    .routines
-                    .iter()
-                    .position(|existing| existing.id == id_for_state)
-                else {
-                    return UpdateOutcome::NotFound;
-                };
-
-                if renamed
-                    && state
-                        .runtime_config
-                        .routines
-                        .iter()
-                        .any(|existing| existing.id == next_id_for_state)
-                {
-                    return UpdateOutcome::Conflict;
-                }
-
-                state.runtime_config.routines[existing_index] = routine_for_state_in.clone();
-
-                if renamed {
-                    for existing in &mut state.runtime_config.routines {
-                        if existing.id == next_id_for_state {
-                            continue;
-                        }
-
-                        rewrite_force_trigger_routine_references(
-                            &mut existing.actions,
-                            &id_for_state,
-                            &next_id_for_state,
-                        );
-
-                        if let Some(definition) = &mut existing.definition_v2 {
-                            automation::rewrite_invoked_routine_references(
-                                definition,
-                                &id_for_state,
-                                &next_id_for_state,
-                            );
-                        }
-                    }
-                }
-
-                state
-                    .runtime_config
-                    .routines
-                    .sort_by(|left, right| left.id.cmp(&right.id));
-                state.apply_runtime_routines();
-
-                UpdateOutcome::Updated(state.runtime_config.routines.clone())
-            })
-        })
-        .await;
-
-    let routines_to_persist = match outcome {
-        Ok(UpdateOutcome::Updated(routines)) => routines,
-        Ok(UpdateOutcome::NotFound) => return Ok(not_found("Routine")),
-        Ok(UpdateOutcome::Conflict) => {
-            return Ok(error_response(
-                "Routine ID already exists.",
-                StatusCode::BAD_REQUEST,
-            ));
+        let next_id = routine.id.trim().to_string();
+        let renamed = next_id != old_id;
+        if renamed && state.runtime_config.routines.iter().any(|row| row.id == next_id) {
+            return Err(error(StatusCode::CONFLICT, "Routine ID already exists.", None));
         }
-        Err(_) => {
-            return Ok(error_response(
-                "State actor unavailable",
-                StatusCode::INTERNAL_SERVER_ERROR,
-            ));
+        let mut next = automation::prepare_write(current.as_ref(), routine).map_err(|message| error(StatusCode::BAD_REQUEST, &message, None))?;
+        next.id = next_id.clone();
+        next.revision = automation::next_revision(current.as_ref());
+        validate_write_shape(&next).map_err(|message| error(StatusCode::BAD_REQUEST, &message, None))?;
+        if next.enabled {
+            let catalog = ConfigCatalog::new(state.devices.get_state().0.keys().cloned(), &state.runtime_config);
+            validate_enabled_routine(&next, &catalog).map_err(|message| error(StatusCode::BAD_REQUEST, &message, None))?;
         }
+        state.runtime_config.routines.retain(|row| row.id != old_id);
+        state.upsert_routine(next.clone());
+        if renamed {
+            for row in &mut state.runtime_config.routines {
+                if row.id == next_id { continue; }
+                rewrite_force_trigger_routine_references(&mut row.actions, &old_id, &next_id);
+                if let Some(definition) = &mut row.definition_v2 { automation::rewrite_invoked_routine_references(definition, &old_id, &next_id); }
+            }
+        }
+        state.apply_runtime_routines();
+        Ok((next, state.runtime_config.routines.clone()))
+    })).await;
+    let (saved, rows) = match outcome {
+        Ok(Ok(value)) => value,
+        Ok(Err((status, body))) => {
+            return Ok(warp::reply::with_status(warp::reply::json(&body), status))
+        }
+        Err(_) => return Ok(actor_unavailable()),
     };
-
-    let response_routine = routine_for_state;
-
-    let database_available = db::is_db_connected();
-    let persistence = config_queries::db_replace_routines(&routines_to_persist).await;
+    let available = db::is_db_connected();
+    let persistence = config_queries::db_replace_routines(&rows).await;
     Ok(config_write_response(
-        response_routine,
+        saved,
         persistence,
-        database_available,
-        StatusCode::OK,
+        available,
+        if creating {
+            StatusCode::CREATED
+        } else {
+            StatusCode::OK
+        },
     ))
 }
 
@@ -410,3 +350,139 @@ pub(super) async fn preview_schedule(
 // ============================================================================
 // Floorplan
 // ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::state::actor::spawn_state_actor;
+    fn fixture() -> (RoutineRow, StateHandle) {
+        let (mut state, _events) = crate::core::event::tests::test_state();
+        let row: RoutineRow = serde_json::from_value(serde_json::json!({
+            "id": "draft_test", "name": "Draft test", "enabled": false, "semantics_version": 2,
+            "rules": [], "actions": [], "definition_v2": { "triggers": [{ "kind": "manual", "id": "start_stable" }], "program": { "kind": "native", "steps": [{ "action": "cancel_timer", "id": "step_stable", "timer": "test" }] }, "future_field": { "keep": true } }
+        })).unwrap();
+        state.upsert_routine(row.clone());
+        state.apply_runtime_routines();
+        let snapshot = state.snapshot.clone();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        (row, spawn_state_actor(state, snapshot, tx))
+    }
+    async fn body(reply: impl Reply) -> serde_json::Value {
+        serde_json::from_slice(
+            &warp::hyper::body::to_bytes(reply.into_response().into_body())
+                .await
+                .unwrap(),
+        )
+        .unwrap()
+    }
+    #[tokio::test]
+    async fn conversion_preview_reuses_converter_without_changing_saved_routine() {
+        let (mut state, _events) = crate::core::event::tests::test_state();
+        let legacy: RoutineRow = serde_json::from_value(serde_json::json!({
+            "id": "legacy", "name": "Legacy", "enabled": false,
+            "semantics_version": 1, "rules": [], "actions": []
+        }))
+        .unwrap();
+        state.upsert_routine(legacy.clone());
+        state.apply_runtime_routines();
+        let snapshot = state.snapshot.clone();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let _handle = spawn_state_actor(state, snapshot.clone(), tx);
+        let before = serde_json::to_value(&snapshot.load().runtime_config.routines).unwrap();
+        let snap = snapshot.load();
+        let catalog = ConfigCatalog::new(snap.devices.0.keys().cloned(), &snap.runtime_config);
+        let expected = serde_json::to_value(automation::convert::convert_routine(
+            &legacy,
+            &catalog,
+            &automation::convert::ConvertOptions::default(),
+        ))
+        .unwrap();
+        drop(snap);
+        let result = body(
+            preview_conversion(
+                RoutineConversionRequest {
+                    routine: legacy,
+                    timezone: None,
+                },
+                snapshot.clone(),
+            )
+            .await
+            .unwrap(),
+        )
+        .await;
+        assert_eq!(result["data"], expected);
+        assert_eq!(
+            serde_json::to_value(&snapshot.load().runtime_config.routines).unwrap(),
+            before
+        );
+    }
+    #[tokio::test]
+    async fn stale_routine_write_returns_current_without_losing_raw_definition() {
+        let (expected, handle) = fixture();
+        handle
+            .mutate(|state| {
+                Box::pin(async move {
+                    state.runtime_config.routines[0].name = "Changed elsewhere".into();
+                })
+            })
+            .await
+            .unwrap();
+        let mut draft = expected.clone();
+        draft.name = "My draft".into();
+        let reply = write_routine(
+            Some(expected.id.clone()),
+            draft,
+            Some(expected),
+            handle.clone(),
+        )
+        .await
+        .unwrap()
+        .into_response();
+        assert_eq!(reply.status(), StatusCode::CONFLICT);
+        let data = body(reply).await;
+        assert_eq!(data["current"]["name"], "Changed elsewhere");
+        assert_eq!(
+            data["current"]["definition_v2"]["future_field"]["keep"],
+            true
+        );
+        assert_eq!(
+            data["current"]["definition_v2"]["program"]["steps"][0]["id"],
+            "step_stable"
+        );
+    }
+    #[tokio::test]
+    async fn routine_creation_cannot_overwrite_an_existing_id() {
+        let (row, handle) = fixture();
+        let reply = write_routine(None, row, None, handle)
+            .await
+            .unwrap()
+            .into_response();
+        assert_eq!(reply.status(), StatusCode::CONFLICT);
+    }
+    #[tokio::test]
+    async fn racing_routine_saves_only_accept_one_baseline_and_increment_revision() {
+        let (expected, handle) = fixture();
+        let mut first = expected.clone();
+        first.name = "First".into();
+        let mut second = expected.clone();
+        second.name = "Second".into();
+        let (a, b) = tokio::join!(
+            write_routine(
+                Some(expected.id.clone()),
+                first,
+                Some(expected.clone()),
+                handle.clone()
+            ),
+            write_routine(Some(expected.id.clone()), second, Some(expected), handle)
+        );
+        let a = a.unwrap().into_response();
+        let b = b.unwrap().into_response();
+        assert!(
+            (a.status() == StatusCode::OK && b.status() == StatusCode::CONFLICT)
+                || (b.status() == StatusCode::OK && a.status() == StatusCode::CONFLICT)
+        );
+        let a = body(if a.status() == StatusCode::OK { a } else { b }).await;
+        assert_eq!(a["data"]["revision"], 2);
+        assert_eq!(a["data"]["definition_v2"]["future_field"]["keep"], true);
+    }
+}

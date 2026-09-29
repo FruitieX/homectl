@@ -13,9 +13,16 @@ import {
 export const densityAtom = atomWithStorage<Density>(
   'homectl-density',
   'comfortable',
+  undefined,
+  { getOnInit: true },
 );
 
-export const accentAtom = atomWithStorage<Accent>('homectl-accent', 'emerald');
+export const accentAtom = atomWithStorage<Accent>(
+  'homectl-accent',
+  'emerald',
+  undefined,
+  { getOnInit: true },
+);
 
 export const favoritesAtom = atomWithStorage<string[]>('homectl-favorites', []);
 

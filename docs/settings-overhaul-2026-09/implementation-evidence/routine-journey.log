@@ -1,0 +1,20 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "New routines enable after creation by default",
+   "Scene creation is linked directly from its action",
+   "Creating a scene retains the originating routine draft",
+   "Created scene is selected in the original action",
+   "Returning preserves stable action identity",
+   "Cross-page creation does not save the routine",
+   "Nested routine controls need no Edit buttons",
+   "Creation saves the enabled routine with its selected scene",
+   "Nested branch timer settings survive save",
+   "Reordering saves existing IDs without renumbering",
+   "Reordering preserves the complete branch subtree",
+   "No horizontal overflow"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/routines/new","viewport":{"width":1440,"height":1100},"problems":["log: Failed to load resource: the server responded with a status of 404 (Not Found)","log: Failed to load resource: the server responded with a status of 404 (Not Found)"]}

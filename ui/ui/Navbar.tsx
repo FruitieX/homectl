@@ -1,3 +1,4 @@
+import { SettingsBreadcrumbs } from '@/ui/settings/SettingsNavigation';
 import {
   Check,
   Edit,
@@ -123,12 +124,7 @@ export const Navbar = () => {
       )}
       <div className="flex min-w-0 flex-1 items-center gap-3 px-1">
         {pageOwnsHeading ? (
-          <p className="truncate text-xl font-semibold text-foreground">
-            {title}
-            {sectionSuffix ? (
-              <span className="hidden sm:inline"> · {sectionSuffix}</span>
-            ) : null}
-          </p>
+          <SettingsBreadcrumbs />
         ) : (
           <h1 className="truncate text-xl font-semibold text-foreground">
             {title}

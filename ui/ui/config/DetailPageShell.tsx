@@ -1,8 +1,7 @@
 import { type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
-import { Breadcrumbs, configParentCrumb } from '@/ui/config/Breadcrumbs';
-import { ChevronLeft, MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
 import { SectionEditProvider } from '@/ui/config/sectionEditCoordinator';
@@ -27,9 +26,9 @@ export type DetailMenuItem = {
 };
 
 export type DetailPageShellProps = {
-  /** Breadcrumb trail, outermost first; the current item is last without `to`. */
+  /** Compatibility metadata; parent navigation is rendered by the application header. */
   crumbs: Crumb[];
-  /** Visible Back control; must work after a direct load or refresh. */
+  /** List destination for the missing-item recovery action. */
   backTo: string;
   backLabel?: string;
   title: ReactNode;
@@ -49,13 +48,12 @@ export type DetailPageShellProps = {
 };
 
 /**
- * The compact detail-page shell shared by every config item: breadcrumb and
- * Back, the item name, one status sentence, one primary action, and a labeled
+ * The compact detail-page shell shared by every config item: the item name,
+ * one status sentence, one primary action, and a labeled
  * overflow menu for the rest. Loading, load-error (with retry) and
  * “no longer exists” states render here so every page behaves the same.
  */
 export function DetailPageShell({
-  crumbs,
   backTo,
   backLabel = 'Back to list',
   title,
@@ -71,49 +69,19 @@ export function DetailPageShell({
   children,
   className,
 }: DetailPageShellProps) {
-  // A caller's own parent crumb wins (say, “Rooms” for a nested item); anything
-  // without a target is decoration and is dropped with the section groups.
-  const parentCrumb =
-    crumbs?.find((crumb) => crumb.to && crumb.label !== 'Settings') ??
-    configParentCrumb(backTo);
-
   return (
     <div
-      className={cn('mx-auto flex w-full max-w-3xl flex-col gap-4', className)}
+      className={cn(
+        'mx-auto flex w-full max-w-[1600px] flex-col gap-4',
+        className,
+      )}
     >
       <div className="flex flex-col gap-2">
-        <Button
-          asChild
-          variant="ghost"
-          size="sm"
-          className="-ml-2 w-fit text-muted-foreground"
-        >
-          <Link to={backTo}>
-            <ChevronLeft aria-hidden />
-            {backLabel}
-          </Link>
-        </Button>
-
-        {/* Breadcrumbs are the wide-screen location cue; on phones Back plus the
-            item title is the whole pattern. The parent comes from the caller
-            when it names one, otherwise from the list route this page is under;
-            section groups are never crumbs. */}
-        <Breadcrumbs
-          items={
-            parentCrumb ? [parentCrumb, { label: title }] : [{ label: title }]
-          }
-        />
-
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
-            <h1 className="truncate text-lg font-semibold text-foreground">
+            <h1 className="truncate text-2xl font-semibold text-foreground">
               {title}
             </h1>
-            {status ? (
-              <p className="text-sm leading-5 text-muted-foreground">
-                {status}
-              </p>
-            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {primaryAction}
@@ -147,6 +115,9 @@ export function DetailPageShell({
             ) : null}
           </div>
         </div>
+        {status && (
+          <p className="text-sm leading-5 text-muted-foreground">{status}</p>
+        )}
       </div>
 
       {loading ? (

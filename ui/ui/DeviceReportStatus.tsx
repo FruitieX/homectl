@@ -1,7 +1,5 @@
-import {
-  deviceReachability,
-  reachabilityLabels,
-} from '@/lib/deviceReachability';
+import { useDeviceHealth } from '@/hooks/useDeviceHealth';
+import { healthLabel } from '@/ui/settings/HealthStatus';
 import { DeviceEnabledToggle } from '@/ui/DeviceEnabledToggle';
 import {
   Popover,
@@ -16,11 +14,14 @@ import type { Device } from '@/bindings/Device';
 export function DeviceReportStatus({
   devices,
   detail = false,
+  inline = false,
 }: {
   devices: Device[];
   /** Extra requested-vs-reported evidence for the device page. */
   detail?: boolean;
+  inline?: boolean;
 }) {
+  const healthQuery = useDeviceHealth();
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 5000);
@@ -30,8 +31,16 @@ export function DeviceReportStatus({
     if (!('Controllable' in device.data)) return [];
     const data = device.data.Controllable;
     const report = data.last_report;
-    const health = deviceReachability(device, now);
-    const label = reachabilityLabels[health];
+    const observed = healthQuery.isError
+      ? undefined
+      : healthQuery.data?.devices?.[device.integration_id + '/' + device.id];
+    const health =
+      observed?.status === 'late'
+        ? 'stale'
+        : observed?.status === 'healthy'
+          ? 'online'
+          : (observed?.status ?? 'unknown');
+    const label = healthLabel(observed);
     const lastHeard = Math.max(
       report && !report.retained ? report.received_at_ms : 0,
       data.availability?.observed_at_ms ?? 0,
@@ -48,7 +57,7 @@ export function DeviceReportStatus({
             : `${Math.floor(age / 3600)}h ago`;
     const state = report?.state;
     const value = state
-      ? `${state.power ? 'On' : 'Off'}${state.power && state.brightness !== null ? ` · ${Math.round(state.brightness * 100)}%` : ''}${state.power && state.color && 'ct' in state.color ? ` · ${state.color.ct} K` : ''}`
+      ? `${state.power ? 'On' : 'Off'}${state.power && state.brightness !== null ? ` · ${Math.round(state.brightness * 100)}%` : ''}${state.power && state.color && 'ct' in state.color ? ` · ${Math.round(state.color.ct)} K` : ''}`
       : '';
     const requestedValue = `${data.state.power ? 'On' : 'Off'}${
       data.state.power && data.state.brightness !== null
@@ -105,6 +114,54 @@ export function DeviceReportStatus({
     reports.find((r) => r.health === 'cached') ??
     reports.find((r) => r.health === 'disabled') ??
     reports[0];
+  const content = (
+    <div className="space-y-3">
+      {reports.map((report) => (
+        <div
+          key={report.key}
+          className="space-y-2 border-b border-border/60 pb-3 last:border-0 last:pb-0"
+        >
+          {reports.length > 1 && (
+            <div className="break-words font-medium">{report.name}</div>
+          )}
+          <div className="flex items-center gap-2">
+            <DeviceHealth device={report.device} />
+            <span>{report.label}</span>
+            <span className="ml-auto text-xs text-muted-foreground">
+              {report.ageLabel}
+            </span>
+          </div>
+          {report.value && (
+            <div className="text-xs text-muted-foreground">
+              {report.cached ? 'Saved state' : 'Reported'}: {report.value}
+            </div>
+          )}
+          {detail ? (
+            <>
+              <div className="text-xs text-muted-foreground">
+                Requested by the app: {report.requestedValue}
+              </div>
+              {report.evidence ? (
+                <div className="text-xs text-muted-foreground">
+                  {report.evidence}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+          {report.differs && (
+            <div className="text-xs text-amber-600 dark:text-amber-400">
+              Reported state differs from requested
+              {detail
+                ? '. If it keeps disagreeing, check this integration\u2019s connection settings; the app cannot force the device to comply.'
+                : ''}
+            </div>
+          )}
+          <DeviceEnabledToggle device={report.device} />
+        </div>
+      ))}
+    </div>
+  );
+  if (inline) return content;
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -122,51 +179,7 @@ export function DeviceReportStatus({
         align="end"
         className="max-h-[min(60dvh,28rem)] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto p-3 text-sm font-normal"
       >
-        <div className="space-y-3">
-          {reports.map((report) => (
-            <div
-              key={report.key}
-              className="space-y-2 border-b border-border/60 pb-3 last:border-0 last:pb-0"
-            >
-              {reports.length > 1 && (
-                <div className="break-words font-medium">{report.name}</div>
-              )}
-              <div className="flex items-center gap-2">
-                <DeviceHealth device={report.device} />
-                <span>{report.label}</span>
-                <span className="ml-auto text-xs text-muted-foreground">
-                  {report.ageLabel}
-                </span>
-              </div>
-              {report.value && (
-                <div className="text-xs text-muted-foreground">
-                  {report.cached ? 'Saved state' : 'Reported'}: {report.value}
-                </div>
-              )}
-              {detail ? (
-                <>
-                  <div className="text-xs text-muted-foreground">
-                    Requested by the app: {report.requestedValue}
-                  </div>
-                  {report.evidence ? (
-                    <div className="text-xs text-muted-foreground">
-                      {report.evidence}
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
-              {report.differs && (
-                <div className="text-xs text-amber-600 dark:text-amber-400">
-                  Reported state differs from requested
-                  {detail
-                    ? '. If it keeps disagreeing, check this integration\u2019s connection settings; the app cannot force the device to comply.'
-                    : ''}
-                </div>
-              )}
-              <DeviceEnabledToggle device={report.device} />
-            </div>
-          ))}
-        </div>
+        {content}
       </PopoverContent>
     </Popover>
   );

@@ -393,14 +393,9 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
     'showCalendar',
     true,
   );
-  const calendarUrlOverride = getDashboardWidgetOptionString(
-    widget,
-    'calendarUrl',
-    '',
-  );
-  const calendarPath = calendarUrlOverride
+  const calendarPath = widget?.secret_fields?.includes('calendarUrl')
     ? buildDashboardWidgetProxyPath('/api/calendar', {
-        url: calendarUrlOverride,
+        widget_id: widget.id,
       })
     : getDashboardWidgetOptionString(widget, 'calendarPath', '/api/calendar');
   const calendarUrl = resolveDashboardWidgetUrl(apiEndpoint, calendarPath);

@@ -1,0 +1,12 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   "Native Space changes import scope",
+   "Review moves focus to its heading",
+   "Native confirmation traps focus and Escape cancels without writes",
+   "Review fits at 200% CSS zoom"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/migration","viewport":{"width":1440,"height":1100},"problems":[]}

@@ -200,6 +200,29 @@ fn compute_scene_device_state(
     scene_devices_configs: &ResolvedSceneDevicesConfigs,
     ignore_transition: bool,
 ) -> Option<(ControllableState, DeviceStateSource)> {
+    compute_scene_device_state_inner(
+        scene_id,
+        device,
+        devices,
+        scene_devices_configs,
+        ignore_transition,
+        &mut HashSet::new(),
+    )
+}
+
+fn compute_scene_device_state_inner(
+    scene_id: &SceneId,
+    device: &Device,
+    devices: &Devices,
+    scene_devices_configs: &ResolvedSceneDevicesConfigs,
+    ignore_transition: bool,
+    visited: &mut HashSet<SceneId>,
+) -> Option<(ControllableState, DeviceStateSource)> {
+    // Broken references must be inspectable in the editor and never overflow
+    // the runtime stack. A single device follows one linear chain of scenes.
+    if visited.len() >= 256 || !visited.insert(scene_id.clone()) {
+        return None;
+    }
     let (_scene_config, scene_devices_config) = scene_devices_configs.get(scene_id)?;
     let scene_device_config = scene_devices_config.get(&device.get_device_key())?;
 
@@ -238,12 +261,13 @@ fn compute_scene_device_state(
 
         SceneDeviceConfig::SceneLink(link) => {
             // Use state from another scene
-            let (mut state, _nested_source) = compute_scene_device_state(
+            let (mut state, _nested_source) = compute_scene_device_state_inner(
                 &link.scene_id,
                 device,
                 devices,
                 scene_devices_configs,
                 ignore_transition,
+                visited,
             )?;
 
             if let Some(transition) = link.transition {
@@ -1293,32 +1317,32 @@ impl Scenes {
         groups: &Groups,
         scene_id: &SceneId,
     ) -> HashSet<DeviceKey> {
-        let scene_device_configs = self.scene_devices_configs.get(scene_id).cloned();
-
         let mut invalidated_devices = HashSet::new();
-
-        let Some((scene_config, scene_device_configs)) = &scene_device_configs else {
-            return invalidated_devices;
-        };
-
-        if let Some(script) = scene_config.script.as_deref() {
-            invalidated_devices.extend(get_script_dependency_device_keys(script, devices, groups));
-        }
-
-        for scene_device_config in scene_device_configs.values() {
-            match &scene_device_config.config {
-                SceneDeviceConfig::DeviceLink(d) => {
-                    let device = devices.get_device_by_ref(&d.device_ref);
-                    if let Some(device) = device {
-                        invalidated_devices.insert(device.get_device_key());
-                    }
-                }
-                SceneDeviceConfig::SceneLink(s) => invalidated_devices
-                    .extend(self.get_invalidated_devices_for_scene(devices, groups, &s.scene_id)),
-                SceneDeviceConfig::DeviceState(_) => {}
+        let mut visited = HashSet::new();
+        let mut pending = vec![scene_id.clone()];
+        while let Some(id) = pending.pop() {
+            if !visited.insert(id.clone()) {
+                continue;
+            }
+            let Some((config, targets)) = self.scene_devices_configs.get(&id) else {
+                continue;
             };
+            if let Some(script) = config.script.as_deref() {
+                invalidated_devices
+                    .extend(get_script_dependency_device_keys(script, devices, groups));
+            }
+            for target in targets.values() {
+                match &target.config {
+                    SceneDeviceConfig::DeviceLink(link) => {
+                        if let Some(device) = devices.get_device_by_ref(&link.device_ref) {
+                            invalidated_devices.insert(device.get_device_key());
+                        }
+                    }
+                    SceneDeviceConfig::SceneLink(link) => pending.push(link.scene_id.clone()),
+                    SceneDeviceConfig::DeviceState(_) => {}
+                }
+            }
         }
-
         invalidated_devices
     }
 

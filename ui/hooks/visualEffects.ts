@@ -5,6 +5,8 @@ import { useEffect } from 'react';
 const backdropBlurEffectsAtom = atomWithStorage<boolean>(
   'homectl-backdrop-blur-effects',
   true,
+  undefined,
+  { getOnInit: true },
 );
 
 const noBackdropBlurClassName = 'homectl-disable-backdrop-blur';

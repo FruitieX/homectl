@@ -31,6 +31,61 @@ const selectClassName =
 
 export type TileType = 'empty' | 'floor' | 'wall' | 'door' | 'window';
 
+function GridDimensionInput({
+  value,
+  label,
+  max,
+  onCommit,
+}: {
+  value: number;
+  label: string;
+  max: number;
+  onCommit: (value: number) => void;
+}) {
+  const [text, setText] = useState(String(value));
+  const [error, setError] = useState(false);
+  useEffect(() => setText(String(value)), [value]);
+  const commit = (raw: string) => {
+    const next = Number(raw);
+    if (!raw.trim() || !Number.isInteger(next) || next < 1 || next > max) {
+      setText(String(value));
+      setError(true);
+      return;
+    }
+    setError(false);
+    onCommit(next);
+  };
+  return (
+    <div>
+      <Input
+        type="number"
+        aria-label={label}
+        className="h-9 w-20"
+        value={text}
+        min={1}
+        max={max}
+        onChange={(event) => {
+          setText(event.target.value);
+          setError(false);
+        }}
+        onBlur={(event) => commit(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+          if (event.key === 'Escape') {
+            setText(String(value));
+            setError(false);
+          }
+        }}
+      />
+      {error && (
+        <p role="alert" className="max-w-48 text-xs text-destructive">
+          Use a whole number from 1 to {max}. The canvas size was kept.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export interface DevicePosition {
   deviceKey: string;
   deviceName: string;
@@ -158,7 +213,7 @@ const normalizeGroupPoints = (
     }
 
     seen.add(key);
-    normalized.push({ x, y });
+    normalized.push({ ...point, x, y });
   }
 
   return normalized;
@@ -223,6 +278,7 @@ const translateGridPoint = (
 };
 
 const cloneGrid = (grid: FloorplanGrid): FloorplanGrid => ({
+  ...grid,
   width: grid.width,
   height: grid.height,
   tileSize: grid.tileSize,
@@ -514,7 +570,9 @@ const resizeGridState = (
                   newWidth,
                   newHeight,
                 );
-                return translatedPoint ? [translatedPoint] : [];
+                return translatedPoint
+                  ? [{ ...point, ...translatedPoint }]
+                  : [];
               }),
               newWidth,
               newHeight,
@@ -723,7 +781,21 @@ export function FloorplanGridEditor({
     'all' | FloorplanDeviceType
   >('all');
   const [deviceGroupFilter, setDeviceGroupFilter] = useState('all');
+  const [viewZoom, setViewZoom] = useState(1);
+  const [panning, setPanning] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const panGesture = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    left: number;
+    top: number;
+  } | null>(null);
+  const pointerGesture = useRef<{
+    grid: FloorplanGrid;
+    undoLength: number;
+    pointerId: number;
+  } | null>(null);
   const gridRef = useRef(grid);
   const undoStackRef = useRef<FloorplanGrid[]>([]);
   const activeOperationRef = useRef<ActiveOperation | null>(null);
@@ -789,10 +861,20 @@ export function FloorplanGridEditor({
       updateLineAnchor(null);
     }
   }, [height, updateLineAnchor, width]);
-  const renderMetrics = useMemo(
-    () => getFloorplanRenderMetrics(grid, backgroundImage),
-    [grid, backgroundImage],
-  );
+  const renderMetrics = useMemo(() => {
+    const metrics = getFloorplanRenderMetrics(grid, backgroundImage);
+    const scale = Math.min(
+      Math.max(1, 1280 / Math.max(metrics.width, metrics.height)),
+      4096 / Math.max(metrics.width, metrics.height),
+      Math.sqrt(8_000_000 / (metrics.width * metrics.height)),
+    );
+    return {
+      width: metrics.width * scale,
+      height: metrics.height * scale,
+      tileWidth: metrics.tileWidth * scale,
+      tileHeight: metrics.tileHeight * scale,
+    };
+  }, [grid, backgroundImage]);
   const canvasWidth = Math.round(renderMetrics.width);
   const canvasHeight = Math.round(renderMetrics.height);
   const columnBounds = useMemo(
@@ -1448,6 +1530,16 @@ export function FloorplanGridEditor({
 
   // Resize grid
   const resizeGrid = (newWidth: number, newHeight: number) => {
+    if (
+      !Number.isInteger(newWidth) ||
+      !Number.isInteger(newHeight) ||
+      newWidth < 1 ||
+      newHeight < 1 ||
+      newWidth > 1024 ||
+      newHeight > 1024 ||
+      newWidth * newHeight > 1_000_000
+    )
+      return;
     const currentGrid = cloneGrid(gridRef.current);
     const offsets = getResizeOffsets(
       currentGrid,
@@ -1587,153 +1679,6 @@ export function FloorplanGridEditor({
         onUndo={handleUndo}
         onAutoCrop={autoCrop}
       />
-
-      <details className="rounded-2xl border border-border p-4">
-        <summary className="cursor-pointer text-sm font-semibold">
-          Display and layout
-          <span className="ml-2 text-xs font-normal text-muted-foreground">
-            canvas size, labels, scale, background
-          </span>
-        </summary>
-        <div className="mt-4 space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">Canvas size</span>
-            <Input
-              type="number"
-              aria-label="Floorplan width in tiles"
-              className="h-9 w-20"
-              value={width}
-              min={5}
-              max={100}
-              onChange={(event) =>
-                resizeGrid(parseInt(event.target.value) || 10, height)
-              }
-            />
-            <span>×</span>
-            <Input
-              type="number"
-              aria-label="Floorplan height in tiles"
-              className="h-9 w-20"
-              value={height}
-              min={5}
-              max={100}
-              onChange={(event) =>
-                resizeGrid(width, parseInt(event.target.value) || 10)
-              }
-            />
-            <span className="text-xs text-muted-foreground">
-              tiles wide and tall; existing content moves with the canvas.
-            </span>
-          </div>
-
-          <div className="flex gap-2 items-center">
-            <span className="text-sm font-medium">Resize with</span>
-            <Input
-              type="number"
-              className="h-9 w-16"
-              value={width}
-              onChange={(e) =>
-                resizeGrid(parseInt(e.target.value) || 10, height)
-              }
-              min={5}
-              max={100}
-            />
-            <span>×</span>
-            <Input
-              type="number"
-              className="h-9 w-16"
-              value={height}
-              onChange={(e) =>
-                resizeGrid(width, parseInt(e.target.value) || 10)
-              }
-              min={5}
-              max={100}
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">Grow towards</span>
-            <div className="flex rounded-xl bg-muted p-1">
-              <Button
-                variant={
-                  horizontalResizeDirection === 'left' ? 'default' : 'ghost'
-                }
-                size="sm"
-                onClick={() => setHorizontalResizeDirection('left')}
-                type="button"
-              >
-                Left
-              </Button>
-              <Button
-                variant={
-                  horizontalResizeDirection === 'right' ? 'default' : 'ghost'
-                }
-                size="sm"
-                onClick={() => setHorizontalResizeDirection('right')}
-                type="button"
-              >
-                Right
-              </Button>
-            </div>
-            <div className="flex rounded-xl bg-muted p-1">
-              <Button
-                variant={
-                  verticalResizeDirection === 'top' ? 'default' : 'ghost'
-                }
-                size="sm"
-                onClick={() => setVerticalResizeDirection('top')}
-                type="button"
-              >
-                Top
-              </Button>
-              <Button
-                variant={
-                  verticalResizeDirection === 'bottom' ? 'default' : 'ghost'
-                }
-                size="sm"
-                onClick={() => setVerticalResizeDirection('bottom')}
-                type="button"
-              >
-                Bottom
-              </Button>
-            </div>
-          </div>
-          <FloorplanDeviceScaleControl
-            value={grid.deviceScale}
-            min={minFloorplanDeviceScale}
-            max={maxFloorplanDeviceScale}
-            onChange={updateDeviceScale}
-          />
-          <label className="flex items-center justify-between gap-3 text-sm">
-            Device labels
-            <select
-              className="h-10 rounded-md border border-input bg-background px-3"
-              value={grid.labelMode ?? 'sensors'}
-              onChange={(event) =>
-                onChange({
-                  ...grid,
-                  labelMode: event.target.value as FloorplanGrid['labelMode'],
-                })
-              }
-            >
-              <option value="none">Hidden</option>
-              <option value="sensors">Sensors</option>
-              <option value="lights">Lights</option>
-              <option value="all">All devices</option>
-            </select>
-          </label>
-
-          {backgroundImageUrl ? (
-            <FloorplanBackgroundControls
-              mode={mode}
-              showGrid={showGrid}
-              gridOpacity={gridOpacity}
-              onShowGridChange={setShowGrid}
-              onGridOpacityChange={setGridOpacity}
-            />
-          ) : null}
-        </div>
-      </details>
 
       {/* Tile toolbar */}
       {mode === 'tiles' && (
@@ -2037,22 +1982,25 @@ export function FloorplanGridEditor({
             <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
               <span className="text-sm text-muted-foreground">Placed:</span>
               {placedDevices.map((d) => (
-                <Button
+                <div
                   key={d.deviceKey}
-                  variant={
-                    selectedDevice === d.deviceKey ? 'default' : 'outline'
-                  }
-                  size="sm"
-                  className="gap-1 rounded-full"
-                  onClick={() => setSelectedDevice(d.deviceKey)}
+                  className="inline-flex rounded-lg border border-border"
                 >
-                  {d.deviceName}
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    className="ml-1 inline-flex size-5 items-center justify-center rounded-full hover:bg-background/20"
-                    onClick={(e) => {
-                      e.stopPropagation();
+                  <Button
+                    variant={
+                      selectedDevice === d.deviceKey ? 'secondary' : 'ghost'
+                    }
+                    size="sm"
+                    aria-pressed={selectedDevice === d.deviceKey}
+                    onClick={() => setSelectedDevice(d.deviceKey)}
+                  >
+                    {d.deviceName}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Remove placement for ${d.deviceName}`}
+                    onClick={() => {
                       const currentGrid = cloneGrid(gridRef.current);
                       const nextGrid = removeDeviceFromGrid(
                         currentGrid,
@@ -2065,27 +2013,10 @@ export function FloorplanGridEditor({
                         setSelectedDevice(null);
                       }
                     }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        const currentGrid = cloneGrid(gridRef.current);
-                        const nextGrid = removeDeviceFromGrid(
-                          currentGrid,
-                          d.deviceKey,
-                        );
-                        if (
-                          applyDiscreteChange(nextGrid, currentGrid) &&
-                          selectedDevice === d.deviceKey
-                        ) {
-                          setSelectedDevice(null);
-                        }
-                      }
-                    }}
                   >
                     ✕
-                  </span>
-                </Button>
+                  </Button>
+                </div>
               ))}
               {placedDevices.length === 0 && (
                 <span className="text-sm text-muted-foreground">
@@ -2098,20 +2029,306 @@ export function FloorplanGridEditor({
       )}
 
       {/* Canvas */}
-      <div className="overflow-auto rounded-2xl border border-border bg-muted/40 p-2">
+      <div
+        className="flex flex-wrap items-center gap-2"
+        aria-label="Canvas view controls"
+      >
+        <Button variant="outline" size="sm" onClick={() => setViewZoom(1)}>
+          Fit
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={viewZoom <= 1}
+          onClick={() => setViewZoom((zoom) => Math.max(1, zoom - 0.5))}
+        >
+          Zoom out
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={viewZoom >= 4}
+          onClick={() => setViewZoom((zoom) => Math.min(4, zoom + 0.5))}
+        >
+          Zoom in
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          {Math.round(viewZoom * 100)}%
+        </span>
+        <Button
+          variant={panning ? 'secondary' : 'outline'}
+          size="sm"
+          aria-pressed={panning}
+          onClick={() => setPanning(!panning)}
+        >
+          Pan canvas
+        </Button>
+      </div>
+      <div className="max-h-[70vh] overflow-auto rounded-2xl border border-border bg-muted/40 p-2">
         <canvas
           ref={canvasRef}
           width={canvasWidth}
           height={canvasHeight}
-          className="cursor-crosshair"
-          style={{ maxWidth: '100%', height: 'auto' }}
+          className={`${panning ? 'cursor-grab active:cursor-grabbing' : 'cursor-crosshair'} focus-visible:outline-2 focus-visible:outline-ring`}
+          tabIndex={0}
+          role="application"
+          aria-label="Floorplan drawing canvas"
+          aria-describedby="floorplan-canvas-help"
+          style={{
+            maxWidth: 'none',
+            width: `${viewZoom * 100}%`,
+            height: 'auto',
+            touchAction: panning ? 'pan-x pan-y' : 'none',
+          }}
           onContextMenu={(e) => e.preventDefault()}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseLeave}
+          onPointerDown={(event) => {
+            if (!event.isPrimary || pointerGesture.current) return;
+            if (panning) {
+              if (event.pointerType === 'touch' || event.button !== 0) return;
+              const viewport = event.currentTarget.parentElement!;
+              panGesture.current = {
+                pointerId: event.pointerId,
+                x: event.clientX,
+                y: event.clientY,
+                left: viewport.scrollLeft,
+                top: viewport.scrollTop,
+              };
+              event.currentTarget.setPointerCapture(event.pointerId);
+              event.preventDefault();
+              return;
+            }
+            pointerGesture.current = {
+              grid: cloneGrid(gridRef.current),
+              undoLength: undoStackRef.current.length,
+              pointerId: event.pointerId,
+            };
+            event.currentTarget.setPointerCapture(event.pointerId);
+            handleMouseDown(event);
+          }}
+          onPointerMove={(event) => {
+            const pan = panGesture.current;
+            if (pan?.pointerId === event.pointerId) {
+              const viewport = event.currentTarget.parentElement!;
+              viewport.scrollLeft = pan.left + pan.x - event.clientX;
+              viewport.scrollTop = pan.top + pan.y - event.clientY;
+              return;
+            }
+            if (!panning && event.isPrimary) handleMouseMove(event);
+          }}
+          onPointerUp={(event) => {
+            if (panGesture.current?.pointerId === event.pointerId) {
+              panGesture.current = null;
+              event.currentTarget.releasePointerCapture(event.pointerId);
+              return;
+            }
+            if (pointerGesture.current?.pointerId !== event.pointerId) return;
+            handleMouseUp();
+            pointerGesture.current = null;
+            if (event.currentTarget.hasPointerCapture(event.pointerId))
+              event.currentTarget.releasePointerCapture(event.pointerId);
+          }}
+          onLostPointerCapture={() => {
+            panGesture.current = null;
+            const gesture = pointerGesture.current;
+            if (!gesture) return;
+            pointerGesture.current = null;
+            resetInteractionState();
+            setUndoStack((stack) => stack.slice(0, gesture.undoLength));
+            updateGrid(gesture.grid);
+          }}
+          onPointerCancel={() => {
+            panGesture.current = null;
+            const gesture = pointerGesture.current;
+            if (!gesture) return;
+            pointerGesture.current = null;
+            resetInteractionState();
+            setUndoStack((stack) => stack.slice(0, gesture.undoLength));
+            updateGrid(gesture.grid);
+          }}
+          onPointerLeave={() => {
+            if (!pointerGesture.current) handleMouseLeave();
+          }}
+          onKeyDown={(event) => {
+            if (panning || event.ctrlKey || event.metaKey || event.altKey)
+              return;
+            const cell = hoveredCell ?? { x: 0, y: 0 };
+            if (
+              ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(
+                event.key,
+              )
+            ) {
+              event.preventDefault();
+              setHoveredCell({
+                x: Math.max(
+                  0,
+                  Math.min(
+                    width - 1,
+                    cell.x +
+                      (event.key === 'ArrowRight'
+                        ? 1
+                        : event.key === 'ArrowLeft'
+                          ? -1
+                          : 0),
+                  ),
+                ),
+                y: Math.max(
+                  0,
+                  Math.min(
+                    height - 1,
+                    cell.y +
+                      (event.key === 'ArrowDown'
+                        ? 1
+                        : event.key === 'ArrowUp'
+                          ? -1
+                          : 0),
+                  ),
+                ),
+              });
+            } else if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              const current = cloneGrid(gridRef.current);
+              const next =
+                mode === 'tiles'
+                  ? applyTilePoints(current, [cell], selectedTool)
+                  : mode === 'groups' && selectedGroup
+                    ? applyGroupPoints(
+                        current,
+                        selectedGroup,
+                        [cell],
+                        groupPaintMode,
+                      )
+                    : mode === 'devices' && selectedDevice
+                      ? placeSelectedDeviceOnGrid(
+                          current,
+                          selectedDevice,
+                          availableDevices,
+                          cell.x,
+                          cell.y,
+                        )
+                      : null;
+              applyDiscreteChange(next, current);
+            }
+          }}
         />
       </div>
+      <p id="floorplan-canvas-help" className="text-xs text-muted-foreground">
+        Draw or place items with a mouse or touch. With the canvas focused, use
+        arrow keys to move between tiles and Enter to apply the selected tool.
+        {hoveredCell &&
+          ` Selected tile: ${hoveredCell.x + 1}, ${hoveredCell.y + 1}.`}
+      </p>
+
+      <details open className="rounded-lg border border-border p-3">
+        <summary className="cursor-pointer text-sm font-semibold">
+          Display and layout
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            canvas size, labels, scale, background
+          </span>
+        </summary>
+        <div className="mt-4 space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">Canvas size</span>
+            <GridDimensionInput
+              label="Floorplan width in tiles"
+              value={width}
+              max={Math.min(1024, Math.floor(1_000_000 / height))}
+              onCommit={(value) => resizeGrid(value, height)}
+            />
+            <span>×</span>
+            <GridDimensionInput
+              label="Floorplan height in tiles"
+              value={height}
+              max={Math.min(1024, Math.floor(1_000_000 / width))}
+              onCommit={(value) => resizeGrid(width, value)}
+            />
+            <span className="text-xs text-muted-foreground">
+              tiles wide and tall; existing content moves with the canvas.
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">Grow towards</span>
+            <div className="flex rounded-xl bg-muted p-1">
+              <Button
+                variant={
+                  horizontalResizeDirection === 'left' ? 'default' : 'ghost'
+                }
+                size="sm"
+                onClick={() => setHorizontalResizeDirection('left')}
+                type="button"
+              >
+                Left
+              </Button>
+              <Button
+                variant={
+                  horizontalResizeDirection === 'right' ? 'default' : 'ghost'
+                }
+                size="sm"
+                onClick={() => setHorizontalResizeDirection('right')}
+                type="button"
+              >
+                Right
+              </Button>
+            </div>
+            <div className="flex rounded-xl bg-muted p-1">
+              <Button
+                variant={
+                  verticalResizeDirection === 'top' ? 'default' : 'ghost'
+                }
+                size="sm"
+                onClick={() => setVerticalResizeDirection('top')}
+                type="button"
+              >
+                Top
+              </Button>
+              <Button
+                variant={
+                  verticalResizeDirection === 'bottom' ? 'default' : 'ghost'
+                }
+                size="sm"
+                onClick={() => setVerticalResizeDirection('bottom')}
+                type="button"
+              >
+                Bottom
+              </Button>
+            </div>
+          </div>
+          <FloorplanDeviceScaleControl
+            value={grid.deviceScale}
+            min={minFloorplanDeviceScale}
+            max={maxFloorplanDeviceScale}
+            onChange={updateDeviceScale}
+          />
+          <label className="flex items-center justify-between gap-3 text-sm">
+            Device labels
+            <select
+              className="h-10 rounded-md border border-input bg-background px-3"
+              value={grid.labelMode ?? 'sensors'}
+              onChange={(event) =>
+                onChange({
+                  ...grid,
+                  labelMode: event.target.value as FloorplanGrid['labelMode'],
+                })
+              }
+            >
+              <option value="none">Hidden</option>
+              <option value="sensors">Sensors</option>
+              <option value="lights">Lights</option>
+              <option value="all">All devices</option>
+            </select>
+          </label>
+
+          {backgroundImageUrl ? (
+            <FloorplanBackgroundControls
+              mode={mode}
+              showGrid={showGrid}
+              gridOpacity={gridOpacity}
+              onShowGridChange={setShowGrid}
+              onGridOpacityChange={setGridOpacity}
+            />
+          ) : null}
+        </div>
+      </details>
 
       <FloorplanLegend tileColors={tileColors} tileLabels={tileLabels} />
     </div>

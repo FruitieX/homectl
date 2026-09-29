@@ -8,6 +8,7 @@ pub mod config_diagnostics;
 pub mod convert;
 pub mod deferred;
 pub mod devices;
+pub mod device_health;
 pub mod event;
 pub mod groups;
 pub mod helpers;

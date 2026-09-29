@@ -32,6 +32,9 @@ use homectl_server::types::{
         RoutinePreviewResponse, ValueFieldInfo, ValueHistoryEntry,
     },
     device::{Device, DevicesState},
+    device_health::{DeviceHealthSnapshot, ReportingPolicy},
+    logs::UiLogEntry,
+    config_diagnostics::ConfigDiagnostics,
     dim::FlattenedDimConfig,
     group::{FlattenedGroupConfig, FlattenedGroupsConfig, GroupId},
     integration::{
@@ -59,6 +62,10 @@ fn export_ts_bindings() -> Result<(), ExportError> {
     ] {
         let cfg = Config::new().with_out_dir(output_dir);
         Action::export_all(&cfg)?;
+        DeviceHealthSnapshot::export_all(&cfg)?;
+        ReportingPolicy::export_all(&cfg)?;
+        UiLogEntry::export_all(&cfg)?;
+        ConfigDiagnostics::export_all(&cfg)?;
         ApplyAssistantActionResponse::export_all(&cfg)?;
         ApplyAssistantPlanRequest::export_all(&cfg)?;
         ApplyAssistantPlanResponse::export_all(&cfg)?;
@@ -83,7 +90,6 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         AssistantThreadProposal::export_all(&cfg)?;
         AssistantThreadSummary::export_all(&cfg)?;
         AssistantUsage::export_all(&cfg)?;
-        homectl_server::types::config_diagnostics::ConfigDiagnostics::export_all(&cfg)?;
         homectl_server::types::config_write::ConfigWriteStatus::export_all(&cfg)?;
         ChooseBranch::export_all(&cfg)?;
         CircadianCompatParams::export_all(&cfg)?;

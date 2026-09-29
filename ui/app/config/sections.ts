@@ -38,7 +38,7 @@ export const configSections = [
   },
   {
     href: '/config/groups',
-    label: 'Rooms',
+    label: 'Rooms & groups',
     description: 'Organize devices and control them together.',
     group: 'Your home',
     keywords: ['rooms', 'memberships', 'devices', 'linked groups'],
@@ -89,8 +89,8 @@ export const configSections = [
   },
   {
     href: '/config/routine-history',
-    label: 'Automation history',
-    description: 'See when routines ran and what triggered them.',
+    label: 'Routine activity',
+    description: 'See what ran, what was blocked and the recorded reasons.',
     group: 'Automations',
     keywords: ['history', 'audit', 'why', 'trace', 'trigger', 'diagnostics'],
   },
@@ -110,11 +110,48 @@ export const configSections = [
     ],
   },
   {
+    href: '/config/sensors',
+    label: 'Sensor catalog',
+    description: 'Name dashboard sensors and organize their groups.',
+    group: 'Your home',
+    keywords: [
+      'sensors',
+      'catalog',
+      'temperature',
+      'humidity',
+      'influxdb',
+      'widgets',
+    ],
+  },
+  {
+    href: '/config/widget-sources',
+    label: 'Widget sources',
+    description:
+      'Connect weather, calendar, transport and historical sensor data.',
+    group: 'Your home',
+    keywords: [
+      'widgets',
+      'influxdb',
+      'token',
+      'calendar',
+      'feed',
+      'weather',
+      'train',
+    ],
+  },
+  {
     href: '/config/floorplan',
     label: 'Floorplan',
     description: 'Place devices and rooms on a map of your home.',
     group: 'Appearance',
     keywords: ['map', 'grid', 'walls', 'image', 'positions'],
+  },
+  {
+    href: '/config/dashboard',
+    label: 'Dashboards',
+    description: 'Manage layouts and the widgets shown on each display.',
+    group: 'Appearance',
+    keywords: ['widgets', 'layouts', 'cards', 'selections', 'dashboard'],
   },
   {
     href: '/config/settings',
@@ -148,7 +185,7 @@ export const configSections = [
   },
   {
     href: '/config/import-export',
-    label: 'Backups & migration',
+    label: 'Backups & restore',
     description: 'Save, restore, or import your configuration.',
     group: 'Maintenance',
     keywords: [

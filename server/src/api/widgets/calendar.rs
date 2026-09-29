@@ -29,6 +29,7 @@ pub fn route(snapshot: SnapshotHandle, http: reqwest::Client) -> BoxedFilter<(Re
 #[derive(Debug, Default, Deserialize)]
 struct CalendarQuery {
     url: Option<String>,
+    widget_id: Option<i32>,
 }
 
 fn non_empty(value: Option<String>) -> Option<String> {
@@ -37,7 +38,24 @@ fn non_empty(value: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-async fn handle(query: CalendarQuery, snapshot: SnapshotHandle, http: reqwest::Client) -> Response {
+async fn handle(
+    mut query: CalendarQuery,
+    snapshot: SnapshotHandle,
+    http: reqwest::Client,
+) -> Response {
+    if let Some(id) = query.widget_id {
+        if query.url.is_some() {
+            return error(
+                StatusCode::BAD_REQUEST,
+                "A widget request cannot override its saved source URL",
+            );
+        }
+        let options = match super::saved_widget_options(&snapshot, id, "clock") {
+            Ok(value) => value,
+            Err(message) => return error(StatusCode::NOT_FOUND, message),
+        };
+        query.url = super::option_string(&options, "calendarUrl");
+    }
     let url = match non_empty(query.url).or_else(|| {
         widget_setting_string_or_env(
             &snapshot.load().runtime_config.widget_settings,
@@ -73,11 +91,11 @@ async fn handle(query: CalendarQuery, snapshot: SnapshotHandle, http: reqwest::C
     sync_writes = "by_key"
 )]
 async fn fetch_calendar(url: String, http: reqwest::Client) -> Result<Value, String> {
-    let res = http.get(&url).send().await.map_err(|e| e.to_string())?;
+    let res = http.get(&url).send().await.map_err(|e| e.without_url().to_string())?;
     if !res.status().is_success() {
         return Err(format!("Failed to fetch ICS: {}", res.status()));
     }
-    let body = res.text().await.map_err(|e| e.to_string())?;
+    let body = res.text().await.map_err(|e| e.without_url().to_string())?;
     parse_events(&body).map_err(|e| e.to_string())
 }
 fn error(status: StatusCode, message: &str) -> Response {

@@ -219,6 +219,111 @@ impl crate::db::config_queries::ConfigExport {
 }
 
 impl crate::core::state::AppState {
+    /// Prepare the complete calibration change before either persistence or
+    /// runtime mutation. Shared profile edits validate every affected light.
+    pub(crate) fn prepare_calibration_edit(
+        &self,
+        profile: Option<&ColorCalibrationProfile>,
+        keys: &[String],
+        profile_id: Option<&str>,
+    ) -> Result<(crate::db::config_queries::ConfigExport, Vec<Device>), String> {
+        if keys.is_empty() || keys.len() > 500 {
+            return Err("Select between 1 and 500 lights".into());
+        }
+        if profile.is_some_and(|profile| Some(profile.id.as_str()) != profile_id) {
+            return Err("The saved profile must match the assignment".into());
+        }
+        let mut candidate = self.runtime_config.clone();
+        let mut affected = keys
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        if let Some(profile) = profile {
+            profile.validate()?;
+            affected.extend(
+                candidate
+                    .color_calibration_assignments
+                    .iter()
+                    .filter(|row| row.profile_id == profile.id)
+                    .map(|row| row.device_key.clone()),
+            );
+            candidate
+                .color_calibration_profiles
+                .retain(|row| row.id != profile.id);
+            candidate.color_calibration_profiles.push(profile.clone());
+        }
+        candidate
+            .color_calibration_assignments
+            .retain(|row| !keys.contains(&row.device_key));
+        candidate
+            .device_color_calibrations
+            .retain(|row| !keys.contains(&row.device_key));
+        if let Some(id) = profile_id {
+            for key in keys.iter().collect::<std::collections::BTreeSet<_>>() {
+                candidate
+                    .color_calibration_assignments
+                    .push(ColorCalibrationAssignment {
+                        device_key: key.clone(),
+                        profile_id: id.into(),
+                    });
+            }
+        }
+        candidate.validate_calibration_profiles()?;
+        let mut devices = Vec::new();
+        for key in affected {
+            if self.calibration_sessions.values().any(|session| {
+                std::iter::once(&session.target)
+                    .chain(session.reference.iter())
+                    .any(|device| device.get_device_key().to_string() == key)
+            }) {
+                return Err("Stop the preview using this light before saving calibration".into());
+            }
+            let resolved = candidate.calibration_for_device(&key);
+            let channels = CalibrationChannels {
+                color: resolved.as_ref().is_some_and(|row| !row.points.is_empty()),
+                brightness: resolved
+                    .as_ref()
+                    .is_some_and(|row| !row.brightness_points.is_empty()),
+            };
+            devices.push(self.calibration_device_for(&key, channels)?);
+        }
+        Ok((candidate, devices))
+    }
+
+    pub(crate) async fn save_calibration_edit(
+        &mut self,
+        profile: Option<ColorCalibrationProfile>,
+        keys: Vec<String>,
+        profile_id: Option<String>,
+    ) -> Result<(), String> {
+        let (candidate, devices) =
+            self.prepare_calibration_edit(profile.as_ref(), &keys, profile_id.as_deref())?;
+        // Calibration retains its existing database-first policy. Failed or
+        // unavailable persistence leaves both the profile and assignment intact.
+        let db = crate::db::get_db_connection().map_err(|_| {
+            "Calibration was not saved because the database is unavailable".to_string()
+        })?;
+        crate::db::config_queries::calibration::save_and_assign(
+            db,
+            profile.as_ref(),
+            &keys,
+            profile_id.as_deref(),
+        )
+        .await
+        .map_err(|_| {
+            "Calibration could not be saved to the database. No calibration changes were applied."
+                .to_string()
+        })?;
+        self.runtime_config.color_calibration_profiles = candidate.color_calibration_profiles;
+        self.runtime_config.color_calibration_assignments = candidate.color_calibration_assignments;
+        self.runtime_config.device_color_calibrations = candidate.device_color_calibrations;
+        for device in devices {
+            self.event_tx
+                .send(crate::types::event::Event::SetExternalState { device });
+        }
+        Ok(())
+    }
+
     pub async fn save_calibration_profile(
         &mut self,
         profile: ColorCalibrationProfile,

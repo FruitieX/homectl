@@ -4,7 +4,12 @@ import { useCallback, useEffect } from 'react';
 
 export type ThemeMode = 'light' | 'dark' | 'auto';
 
-const themeAtom = atomWithStorage<ThemeMode>('homectl-theme', 'auto');
+const themeAtom = atomWithStorage<ThemeMode>(
+  'homectl-theme',
+  'auto',
+  undefined,
+  { getOnInit: true },
+);
 
 const getSystemPrefersDark = (): boolean => {
   if (typeof window === 'undefined') return true;
@@ -58,9 +63,6 @@ export const useTheme = () => {
 
 // Hook to apply theme early (used in providers)
 export const useApplyTheme = () => {
-  const [themeMode] = useAtom(themeAtom);
-
-  useEffect(() => {
-    applyTheme(themeMode);
-  }, [themeMode]);
+  // Keep the system-theme listener active on every route.
+  useTheme();
 };

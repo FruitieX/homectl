@@ -1,106 +1,30 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
-const ts = require('typescript');
-const context = { exports: {} };
-vm.runInNewContext(
-  ts.transpileModule(
-    fs.readFileSync(
-      path.join(__dirname, '../lib/deviceReachability.ts'),
-      'utf8',
-    ),
-    {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2022,
-      },
-    },
-  ).outputText,
-  context,
-);
-const health = context.exports.deviceReachability;
-const now = 1_000_000;
-const device = (data) => ({ data: { Controllable: data } });
-test('reachable evidence is independent of scene confirmation and expires', () => {
-  const d = device({
-    requested_at_ms: now,
-    last_report: {
-      received_at_ms: now - 5000,
-      retained: false,
-      matches_requested: false,
-    },
-  });
-  assert.equal(health(d, now), 'online');
-  assert.equal(health(d, now + 600_000), 'stale');
+const { deviceReachability: health } = require('../lib/deviceReachability.ts');
+const device = (data = {}) => ({ data: { Controllable: data } });
+test('floorplan uses the shared evaluator, including policy-based lateness', () => {
+  assert.equal(health(device(), { status: 'healthy' }), 'online');
+  assert.equal(health(device(), { status: 'late' }), 'stale');
+  assert.equal(health(device(), { status: 'offline' }), 'offline');
+  assert.equal(health(device(), { status: 'error' }), 'stale');
 });
-test('cached reports do not establish reachability', () => {
+test('missing health never invents a browser timeout or asserts online', () => {
   assert.equal(
-    health(
-      device({ last_report: { received_at_ms: now, retained: true } }),
-      now,
-    ),
-    'cached',
+    health(device({ last_report: { received_at_ms: 1, retained: false } })),
+    'unknown',
   );
+  assert.equal(
+    health(device({ availability: { online: true, observed_at_ms: 1 } })),
+    'unknown',
+  );
+  assert.equal(health(device(), { status: 'ignored' }), 'unknown');
+  assert.equal(health(device(), { status: 'waiting' }), 'unknown');
+  assert.equal(health(device(), { status: 'cached' }), 'cached');
 });
-test('explicit offline wins unless a newer device report arrives', () => {
-  const d = device({
-    availability: { online: false, observed_at_ms: now },
-    last_report: { received_at_ms: now - 10, retained: false },
-  });
-  assert.equal(health(d, now), 'offline');
-  d.data.Controllable.last_report.received_at_ms = now + 1;
-  assert.equal(health(d, now + 1), 'online');
-  d.data.Controllable.disabled = true;
-  assert.equal(health(d, now + 1), 'disabled');
-});
-
-test('off devices can be reachable and old evidence is distinguished from first discovery', () => {
+test('disabled devices do not contribute floorplan light intensity', () => {
   assert.equal(
-    health(
-      device({
-        state: { power: false },
-        last_report: { received_at_ms: now - 100, retained: false },
-      }),
-      now,
-    ),
-    'online',
+    health(device({ disabled: true }), { status: 'healthy' }),
+    'disabled',
   );
-  assert.equal(
-    health(
-      device({
-        last_report: { received_at_ms: now - 700_000, retained: false },
-      }),
-      now,
-    ),
-    'stale',
-  );
-  assert.equal(health(device({}), now), 'unknown');
-  assert.equal(
-    health(
-      device({
-        availability: { online: false, observed_at_ms: 0 },
-        last_report: { received_at_ms: now - 100, retained: false },
-      }),
-      now,
-    ),
-    'online',
-  );
-});
-
-test('online MQTT availability does not expire with the last state report', () => {
-  assert.equal(
-    health(
-      device({
-        availability: { online: true, observed_at_ms: now - 86_400_000 },
-        last_report: {
-          received_at_ms: now - 86_400_000,
-          retained: false,
-        },
-      }),
-      now,
-    ),
-    'online',
-  );
+  assert.equal(health(device(), { status: 'disabled' }), 'disabled');
 });

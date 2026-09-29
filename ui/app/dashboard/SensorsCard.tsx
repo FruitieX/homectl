@@ -52,19 +52,24 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
   const now = Date.now();
   const isIdle = useIdle();
   useTimeout(() => setOpen(false), open && isIdle ? 10000 : null);
-  const sensorIds = getDashboardWidgetOptionStringArray(widget, 'sensorIds');
+  const sensorIds =
+    widget?.options.sensorSelection === 'all'
+      ? []
+      : getDashboardWidgetOptionStringArray(widget, 'sensorIds');
   const { catalog } = useSensorCatalog();
   const sensorGroups = catalog?.groups ?? [];
-  const url = getDashboardWidgetOptionString(widget, 'influxUrl', ''),
-    token = getDashboardWidgetOptionString(widget, 'influxToken', '');
+  const url = getDashboardWidgetOptionString(widget, 'influxUrl', '');
   const range = getDashboardWidgetOptionString(widget, 'range', '-6h'),
     window = getDashboardWidgetOptionString(widget, 'window', '10m');
   const custom =
-    url || token || sensorIds.length || range !== '-6h' || window !== '10m';
+    url ||
+    widget?.secret_fields?.includes('influxToken') ||
+    sensorIds.length ||
+    range !== '-6h' ||
+    window !== '10m';
   const endpointPath = custom
     ? buildDashboardWidgetProxyPath('/api/influxdb/temp-sensors', {
-        url,
-        token,
+        widget_id: widget?.id,
         device_ids: sensorIds.join(','),
         range,
         window,
@@ -77,6 +82,8 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
   const sensors = useSensorData({
     endpointPath,
     sensorIds,
+    selectionMode:
+      widget?.options.sensorSelection === 'selected' ? 'selected' : undefined,
   });
   const resource = useTempSensorsResource(endpointPath);
   // The settings picker is the source of truth. Keep every selected sensor in
@@ -165,16 +172,20 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
           </div>
           {(resource.isPending ||
             resource.isError ||
-            resource.rows.length === 0) && (
+            resource.rows.length === 0 ||
+            preview.length === 0) && (
             <p
               role="status"
               className="dashboard-widget-status pointer-events-none pt-3 text-xs text-muted-foreground"
             >
-              {resource.isPending
-                ? 'Loading sensor readings…'
-                : resource.isError
-                  ? 'Sensor readings could not be refreshed.'
-                  : 'No sensor readings available.'}
+              {widget?.options.sensorSelection === 'selected' &&
+              sensorIds.length === 0
+                ? 'No sensors selected.'
+                : resource.isPending
+                  ? 'Loading sensor readings…'
+                  : resource.isError
+                    ? 'Sensor readings could not be refreshed.'
+                    : 'No sensor readings available.'}
             </p>
           )}
         </div>

@@ -28,6 +28,7 @@ use crate::types::{
     device::{DeviceData, DeviceKey, DeviceRef, DevicesState},
     dim::DimDescriptor,
     group::GroupId,
+    logs::LogEntityReference,
     rule::{ForceTriggerRoutineDescriptor, RoutineId},
     scene::{
         ActivateSceneActionDescriptor, ActivateSceneDescriptor, CycleScenesDescriptor,
@@ -165,6 +166,7 @@ pub fn step_status(
         action_id: step.action_id.clone(),
         kind: step.kind.to_string(),
         targets: step_targets(step),
+        references: Some(step_references(step)),
         disposition,
         reason,
     }
@@ -209,6 +211,84 @@ pub fn step_targets(step: &PlannedStep) -> Vec<String> {
         _ => {}
     }
     targets
+}
+
+/// Preserve entity kinds before the historical display strings lose that information.
+/// A scene and a group can legitimately have the same identifier.
+fn step_references(step: &PlannedStep) -> Vec<LogEntityReference> {
+    let mut references = Vec::new();
+    let mut add = |entity: &str, entity_id: String| {
+        let reference = LogEntityReference {
+            entity: entity.to_owned(),
+            entity_id,
+        };
+        if !references.contains(&reference) {
+            references.push(reference);
+        }
+    };
+    match &step.body {
+        PlannedStepBody::SetHelper { helper, .. } => add("helper", helper.to_string()),
+        PlannedStepBody::TimerOperation { .. } => {}
+        PlannedStepBody::Dispatch(action) => match action.as_ref() {
+            Action::ActivateScene(descriptor) => {
+                add("scene", descriptor.scene_id.to_string());
+                if let Some(group) = &descriptor.mirror_from_group {
+                    add("group", group.to_string());
+                }
+                for key in descriptor.device_keys.iter().flatten() {
+                    add("device", key.to_string());
+                }
+                for key in descriptor.group_keys.iter().flatten() {
+                    add("group", key.to_string());
+                }
+            }
+            Action::Dim(descriptor) => {
+                for key in descriptor.device_keys.iter().flatten() {
+                    add("device", key.to_string());
+                }
+                for key in descriptor.group_keys.iter().flatten() {
+                    add("group", key.to_string());
+                }
+            }
+            Action::CycleScenes(descriptor) => {
+                for scene in &descriptor.scenes {
+                    add("scene", scene.scene_id.to_string());
+                    for key in scene.device_keys.iter().flatten() {
+                        add("device", key.to_string());
+                    }
+                    for key in scene.group_keys.iter().flatten() {
+                        add("group", key.to_string());
+                    }
+                    if let Some(group) = &scene.mirror_from_group {
+                        add("group", group.to_string());
+                    }
+                }
+                for key in descriptor.device_keys.iter().flatten() {
+                    add("device", key.to_string());
+                }
+                for key in descriptor.group_keys.iter().flatten() {
+                    add("group", key.to_string());
+                }
+            }
+            Action::ForceTriggerRoutine(descriptor) => {
+                add("routine", descriptor.routine_id.to_string())
+            }
+            Action::Custom(descriptor) => add("integration", descriptor.integration_id.to_string()),
+            Action::SetDeviceState(device) => add("device", device.get_device_key().to_string()),
+            Action::RandomizeColor(descriptor) => {
+                for key in &descriptor.device_keys {
+                    add("device", key.to_string());
+                }
+            }
+            Action::ToggleDeviceOverride { device_keys, .. } => {
+                for key in device_keys {
+                    add("device", key.to_string());
+                }
+            }
+            _ => {}
+        },
+    }
+    references
 }
 
 fn timer_operation_target(operation: &TimerOperation) -> String {
@@ -349,6 +429,17 @@ impl Planner<'_> {
             action_id: action.id().clone(),
             kind: kind.to_string(),
             targets,
+            references: match action {
+                NativeAction::SetHelper { helper, .. } => Some(vec![LogEntityReference {
+                    entity: "helper".into(),
+                    entity_id: helper.to_string(),
+                }]),
+                NativeAction::InvokeRoutine { routine_id, .. } => Some(vec![LogEntityReference {
+                    entity: "routine".into(),
+                    entity_id: routine_id.to_string(),
+                }]),
+                _ => None,
+            },
             disposition: StepDisposition::Suppressed,
             reason: Some(reason),
         });
@@ -1002,6 +1093,44 @@ mod tests {
 
     fn key(id: &str) -> DeviceKey {
         DeviceKey::new(IntegrationId::from("dummy".to_string()), DeviceId::new(id))
+    }
+
+    #[test]
+    fn recorded_step_references_preserve_target_kinds_and_old_history() {
+        let action: Action = serde_json::from_value(json!({
+            "action": "ActivateScene", "scene_id": "shared",
+            "group_keys": ["shared"], "device_keys": ["dummy/lamp"]
+        }))
+        .unwrap();
+        let step = PlannedStep {
+            action_id: NodeId("a1".into()),
+            kind: "activate_scene",
+            body: PlannedStepBody::Dispatch(Box::new(action)),
+            intent_guard: Vec::new(),
+            timer_capture: None,
+        };
+        let recorded = step_status(&step, StepDisposition::Dispatched, None);
+        let references = recorded.references.as_ref().unwrap();
+        assert_eq!(
+            references
+                .iter()
+                .map(|r| (r.entity.as_str(), r.entity_id.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("scene", "shared"),
+                ("device", "dummy/lamp"),
+                ("group", "shared"),
+            ]
+        );
+        let mut payload = serde_json::to_value(&recorded).unwrap();
+        assert_eq!(
+            serde_json::from_value::<PlannedStepStatus>(payload.clone()).unwrap(),
+            recorded
+        );
+        payload.as_object_mut().unwrap().remove("references");
+        let legacy: PlannedStepStatus = serde_json::from_value(payload).unwrap();
+        assert!(legacy.references.is_none());
+        assert_eq!(legacy.targets, recorded.targets);
     }
 
     fn lamp(id: &str, scene: Option<&str>, power: bool) -> crate::types::device::Device {

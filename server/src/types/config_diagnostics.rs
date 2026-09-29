@@ -29,6 +29,8 @@ pub struct ConfigDiagnostic {
     pub code: String,
     pub message: String,
     pub suggestion: String,
+    /// Explicit device references; consumers never parse keys from messages.
+    pub device_keys: Vec<String>,
 }
 
 /// Read-only inspection of one immutable runtime snapshot. Scripts are not executed.

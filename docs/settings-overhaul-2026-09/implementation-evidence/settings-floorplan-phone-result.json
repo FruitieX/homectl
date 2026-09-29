@@ -1,0 +1,21 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "Clearing a dimension while typing does not resize or save the canvas",
+   "Name, keyboard painting, dimensions and image replacement stay unsaved",
+   "Related navigation retains a discoverable floorplan draft",
+   "Pending layout and image survive related navigation",
+   "One Save applies the complete floorplan draft",
+   "Drawing and resizing preserve labels and extension fields",
+   "Image removal is staged",
+   "Discard restores the saved background",
+   "Conflicts keep the pending floorplan name",
+   "Conflict review keeps unrelated remote layout changes",
+   "Create uses the same explicit-save editor",
+   "Canceling deletion keeps the floorplan",
+   "Floorplan controls fit the viewport"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/floorplan?id=ground_floor","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 409 (Conflict)"]}

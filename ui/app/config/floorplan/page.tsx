@@ -1,848 +1,626 @@
-import { useAppConfig } from '@/hooks/appConfig';
+import { useState, useMemo, useRef } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Plus, Download, Trash2 } from 'lucide-react';
 import {
-  useDeviceDisplayNames,
   useFloorplans,
   useGroups,
-  type Group,
+  useDeviceDisplayNames,
+  ConfigApiError,
 } from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
-import { useCallback, useState, useRef, useEffect } from 'react';
+import {
+  useEntityDraft,
+  entityFieldProps,
+  type EntityDraftApi,
+} from '@/hooks/useEntityDraft';
+import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
-import { ConfigPageHeader } from '../page-header';
 import { getDeviceKey } from '@/lib/device';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
-import { Device } from '@/bindings/Device';
+import { readFloorplanDraft } from '@/lib/floorplanDraft';
+import { entityDraftStore } from '@/lib/entityDraft';
+import { deepEqual } from '@/lib/configSection';
+import { ConfigPageHeader } from '../page-header';
+import { SettingsSection } from '@/ui/settings/SettingsSection';
+import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import {
   FloorplanGridEditor,
-  FloorplanGrid,
   createEmptyGrid,
   serializeGrid,
-  deserializeGrid,
 } from '@/ui/FloorplanGridEditor';
-import {
-  ConfigField,
-  ConfigFormActions,
-  ConfigFormSection,
-} from '@/ui/config-form';
-import { useMediaQuery } from 'usehooks-ts';
-import { Link } from 'react-router-dom';
-
-import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
-import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Button } from '@/ui/primitives/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/ui/primitives/dropdown-menu';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/ui/primitives/card';
-import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
-import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
-import { Skeleton } from '@/ui/primitives/skeleton';
-import { SearchablePicker } from '@/ui/SearchablePicker';
+import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
+import { useFloorplanEditor, type FloorplanDraft } from './shared';
 
-const fieldClassName = 'space-y-2';
-const fieldLabelClassName = 'text-sm font-medium';
-
-const getFloorplanDeviceType = (device: Device) => {
-  if ('Sensor' in device.data) {
-    return 'sensor' as const;
-  }
-
-  if ('Controllable' in device.data) {
-    return 'controllable' as const;
-  }
-
-  return 'other' as const;
+const EMPTY: FloorplanDraft = {
+  id: '',
+  name: '',
+  grid_data: serializeGrid(createEmptyGrid()),
+  image: { kind: 'none' },
+  revision_token: '',
 };
-
-const getGroupDeviceKeys = (group: Group) => {
-  if (group.device_keys) {
-    return group.device_keys;
-  }
-
-  return group.devices.map(
-    (groupDevice) => `${groupDevice.integration_id}/${groupDevice.device_id}`,
+const slug = (name: string) =>
+  name
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+const download = (text: string, name: string) => {
+  const url = URL.createObjectURL(
+    new Blob([text], { type: 'application/json' }),
   );
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
 export default function FloorplanPage() {
-  const { apiEndpoint } = useAppConfig();
-  const { devices } = useDevicesApi();
-  const { data: deviceDisplayNames } = useDeviceDisplayNames();
-  const {
-    data: floorplans,
-    create: createFloorplan,
-    update: updateFloorplan,
-    remove: removeFloorplan,
-  } = useFloorplans();
-  const { data: groups } = useGroups();
-  const isNarrow = useMediaQuery('(max-width: 767px)');
-  const [loading, setLoading] = useState(false);
-  const [floorplanLoading, setFloorplanLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [grid, setGrid] = useState<FloorplanGrid>(() => createEmptyGrid());
-  const [hasChanges, setHasChanges] = useState(false);
-  const [backgroundImageUrl, setBackgroundImageUrl] = useState<
-    string | undefined
-  >();
-  const [selectedFloorplanId, setSelectedFloorplanId] = useState<string | null>(
-    null,
-  );
-  const [loadedFloorplanId, setLoadedFloorplanId] = useState<string | null>(
-    null,
-  );
-  const [selectedFloorplanName, setSelectedFloorplanName] = useState('');
-  const [floorplanLoadError, setFloorplanLoadError] = useState<string | null>(
-    null,
-  );
-  const [floorplanReloadKey, setFloorplanReloadKey] = useState(0);
-  const [showCreateFloorplan, setShowCreateFloorplan] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const nameSyncedForIdRef = useRef<string | null>(null);
-  const importInputRef = useRef<HTMLInputElement | null>(null);
-  const [newFloorplanId, setNewFloorplanId] = useState('');
-  const [newFloorplanName, setNewFloorplanName] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const deviceDisplayNameMap = Object.fromEntries(
-    deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
-  );
-  const availableGroups = groups.map((group) => ({
-    id: group.id,
-    name: group.name,
-    hidden: group.hidden,
-  }));
-  const groupIdsByDeviceKey = groups.reduce<Record<string, string[]>>(
-    (result, group) => {
-      for (const deviceKey of getGroupDeviceKeys(group)) {
-        if (!result[deviceKey]) {
-          result[deviceKey] = [];
+  const [params, setParams] = useSearchParams();
+  const floorplans = useFloorplans();
+  const creating = params.get('new') === '1';
+  const id = params.get('id') ?? floorplans.data[0]?.id ?? '';
+  return (
+    <div className="settings-page space-y-5">
+      <ConfigPageHeader
+        title="Floorplans"
+        description="Arrange the rooms and devices on each floor. Name, image and layout are saved together."
+        actions={
+          <>
+            <Button asChild variant="outline">
+              <Link to="/map">Open map</Link>
+            </Button>
+            {!creating && (
+              <Button asChild>
+                <Link to="/config/floorplan?new=1">
+                  <Plus className="size-4" />
+                  Add floorplan
+                </Link>
+              </Button>
+            )}
+          </>
         }
-        result[deviceKey].push(group.id);
+      />
+      {floorplans.error && (
+        <p role="alert" className="text-sm text-destructive">
+          {floorplans.error}{' '}
+          <Button variant="outline" onClick={() => void floorplans.refetch()}>
+            Retry
+          </Button>
+        </p>
+      )}
+      {!creating && floorplans.data.length > 0 && (
+        <label className="flex flex-wrap items-center gap-3 text-sm">
+          Floorplan
+          <select
+            aria-label="Select floorplan"
+            className="settings-select min-w-0 max-w-full"
+            value={id}
+            onChange={(event) => setParams({ id: event.target.value })}
+          >
+            {!floorplans.data.some((row) => row.id === id) && (
+              <option value={id}>Unavailable floorplan · {id}</option>
+            )}
+            {floorplans.data.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {creating || id ? (
+        <FloorplanEditor
+          key={creating ? 'new' : id}
+          id={id}
+          creating={creating}
+          onCreated={(id) => setParams({ id }, { replace: true })}
+          onDeleted={() => setParams({}, { replace: true })}
+        />
+      ) : floorplans.loading ? (
+        <p>Loading floorplans…</p>
+      ) : (
+        !floorplans.error && (
+          <p className="rounded-lg border border-border p-5 text-sm text-muted-foreground">
+            No floorplans yet. Add one to place your rooms and devices.
+          </p>
+        )
+      )}
+    </div>
+  );
+}
+function FloorplanEditor({
+  id,
+  creating,
+  onCreated,
+  onDeleted,
+}: {
+  id: string;
+  creating: boolean;
+  onCreated: (id: string) => void;
+  onDeleted: () => void;
+}) {
+  const api = useFloorplanEditor(id, creating),
+    { advanced } = useSettingsPreferences();
+  const devices = useDevicesApi(),
+    groups = useGroups(),
+    names = useDeviceDisplayNames();
+  const [fileError, setFileError] = useState(''),
+    [busy, setBusy] = useState(false),
+    [epoch, setEpoch] = useState(0),
+    [showAll, setShowAll] = useState(false);
+  const imageInput = useRef<HTMLInputElement>(null),
+    gridInput = useRef<HTMLInputElement>(null);
+  const draft: EntityDraftApi<FloorplanDraft> = useEntityDraft<FloorplanDraft>({
+    key: `${api.apiEndpoint}/floorplan/${creating ? 'new' : id}`,
+    item: creating ? EMPTY : api.saved.data,
+    label: creating ? 'New floorplan' : (api.saved.data?.name ?? 'Floorplan'),
+    href: creating
+      ? '/config/floorplan?new=1'
+      : `/config/floorplan?id=${encodeURIComponent(id)}`,
+    validate: (value) => [
+      ...(!value.name.trim()
+        ? [{ field: 'name', message: 'Give the floorplan a name.' }]
+        : []),
+      ...(!value.id.trim() || value.id.length > 128
+        ? [{ field: 'id', message: 'Use an ID of 1 to 128 characters.' }]
+        : []),
+      ...(value.grid_data !== draft.entry?.baseline.grid_data &&
+      value.grid_data !== null &&
+      readFloorplanDraft(value.grid_data).error
+        ? [
+            {
+              field: 'grid_data',
+              message: readFloorplanDraft(value.grid_data).error!,
+            },
+          ]
+        : []),
+    ],
+    save: async (value, expected) => {
+      const saved = await api.save(value, expected);
+      if (creating) {
+        entityDraftStore.forget(`${api.apiEndpoint}/floorplan/new`);
+        onCreated(saved.id);
       }
-
+      setEpoch((epoch) => epoch + 1);
+      return saved;
+    },
+  });
+  const value = draft.value;
+  const gridData = value?.grid_data;
+  const parsed = useMemo(
+    () =>
+      gridData === null
+        ? { grid: createEmptyGrid() }
+        : gridData !== undefined
+          ? readFloorplanDraft(gridData)
+          : { grid: null },
+    [gridData],
+  );
+  useAssistantPageContext(
+    value?.id
+      ? { kind: 'floorplan', id: value.id, label: value.name || value.id }
+      : { kind: 'floorplan' },
+  );
+  const displayNames = Object.fromEntries(
+    names.data.map((row) => [row.device_key, row.display_name]),
+  );
+  const memberGroups = groups.data.reduce<Record<string, string[]>>(
+    (result, group) => {
+      for (const key of group.device_keys ??
+        group.devices.map(
+          (device) => `${device.integration_id}/${device.device_id}`,
+        ))
+        (result[key] ??= []).push(group.id);
       return result;
     },
     {},
   );
-  const availableDevices = [...devices]
+  const available = devices.devices
     .map((device) => ({
-      device,
       key: getDeviceKey(device),
+      name: getDeviceDisplayLabel(device, displayNames),
+      type:
+        'Sensor' in device.data
+          ? ('sensor' as const)
+          : 'Controllable' in device.data
+            ? ('controllable' as const)
+            : ('other' as const),
+      groupIds: memberGroups[getDeviceKey(device)] ?? [],
     }))
-    .sort((left, right) => {
-      const leftLabel = getDeviceDisplayLabel(
-        left.device,
-        deviceDisplayNameMap,
-      );
-      const rightLabel = getDeviceDisplayLabel(
-        right.device,
-        deviceDisplayNameMap,
-      );
-      return (
-        leftLabel.localeCompare(rightLabel) || left.key.localeCompare(right.key)
-      );
-    })
-    .map(({ device, key }) => ({
-      key,
-      name: getDeviceDisplayLabel(device, deviceDisplayNameMap),
-      type: getFloorplanDeviceType(device),
-      groupIds: groupIdsByDeviceKey[key] ?? [],
-    }));
-
-  const selectFloorplan = useCallback((floorplanId: string | null) => {
-    setSelectedFloorplanId(floorplanId);
-    setLoadedFloorplanId(null);
-    setFloorplanLoading(floorplanId !== null);
-    setFloorplanLoadError(null);
-  }, []);
-
-  useEffect(() => {
-    if (floorplans.length === 0) {
-      if (selectedFloorplanId !== null) {
-        selectFloorplan(null);
-      }
-      if (selectedFloorplanName !== '') {
-        setSelectedFloorplanName('');
-      }
-      nameSyncedForIdRef.current = null;
-      return;
-    }
-
-    if (
-      !selectedFloorplanId ||
-      !floorplans.some((floorplan) => floorplan.id === selectedFloorplanId)
-    ) {
-      selectFloorplan(floorplans[0].id);
-      return;
-    }
-
-    const selectedFloorplan = floorplans.find(
-      (floorplan) => floorplan.id === selectedFloorplanId,
-    );
-    if (
-      selectedFloorplan &&
-      nameSyncedForIdRef.current !== selectedFloorplan.id
-    ) {
-      nameSyncedForIdRef.current = selectedFloorplan.id;
-      setSelectedFloorplanName(selectedFloorplan.name);
-    }
-  }, [floorplans, selectFloorplan, selectedFloorplanId, selectedFloorplanName]);
-
-  // Load saved grid and image for the selected floorplan
-  useEffect(() => {
-    if (!selectedFloorplanId) {
-      setFloorplanLoading(false);
-      setLoadedFloorplanId(null);
-      setGrid(createEmptyGrid());
-      setBackgroundImageUrl(undefined);
-      setHasChanges(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadData = async () => {
-      const floorplanQuery = `?id=${encodeURIComponent(selectedFloorplanId)}`;
-      const imageUrl = `${apiEndpoint}/api/v1/config/floorplan/image${floorplanQuery}`;
-
-      setFloorplanLoading(true);
-      setFloorplanLoadError(null);
-
-      let nextGrid = createEmptyGrid();
-      let nextBackgroundImageUrl: string | undefined;
-
-      try {
-        const gridResponse = await fetch(
-          `${apiEndpoint}/api/v1/config/floorplan/grid${floorplanQuery}`,
-        );
-        if (!gridResponse.ok) {
-          throw new Error(
-            `Failed to load floorplan grid (${gridResponse.status})`,
-          );
-        }
-        const gridResult = await gridResponse.json();
-        if (!gridResult.success) {
-          throw new Error(gridResult.error || 'Failed to load floorplan grid');
-        }
-        if (gridResult.data) {
-          const loadedGrid = deserializeGrid(gridResult.data);
-          if (loadedGrid) {
-            nextGrid = loadedGrid;
-          }
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setFloorplanLoadError(
-            e instanceof Error ? e.message : 'Failed to load floorplan grid',
-          );
-          setFloorplanLoading(false);
-        }
-        return;
-      }
-
-      try {
-        const imageResponse = await fetch(imageUrl, { method: 'HEAD' });
-        if (imageResponse.ok) {
-          nextBackgroundImageUrl = `${imageUrl}&t=${Date.now()}`;
-        }
-      } catch {
-        nextBackgroundImageUrl = undefined;
-      }
-
-      if (!cancelled) {
-        setGrid(nextGrid);
-        setBackgroundImageUrl(nextBackgroundImageUrl);
-        setHasChanges(false);
-        setLoadedFloorplanId(selectedFloorplanId);
-        setFloorplanLoading(false);
-      }
-    };
-
-    loadData();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [apiEndpoint, selectedFloorplanId, floorplanReloadKey]);
-
-  const handleGridChange = useCallback((newGrid: FloorplanGrid) => {
-    setGrid(newGrid);
-    setHasChanges(true);
-  }, []);
-
-  const isSelectedFloorplanReady =
-    selectedFloorplanId !== null &&
-    loadedFloorplanId === selectedFloorplanId &&
-    !floorplanLoading &&
-    floorplanLoadError === null;
-
-  useAssistantPageContext(
-    selectedFloorplanId
-      ? {
-          kind: 'floorplan',
-          id: selectedFloorplanId,
-          label: selectedFloorplanName || selectedFloorplanId,
-        }
-      : { kind: 'floorplan' },
-  );
-
-  const handleSave = async () => {
-    if (!selectedFloorplanId) {
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch(
-        `${apiEndpoint}/api/v1/config/floorplan/grid?id=${encodeURIComponent(selectedFloorplanId)}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ grid: serializeGrid(grid) }),
-        },
-      );
-
-      const result = await response.json();
-      if (result.success) {
-        setSuccess('Floorplan saved successfully');
-        setHasChanges(false);
-      } else {
-        setError(result.error || 'Save failed');
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
-    } finally {
-      setLoading(false);
-    }
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const savedImage = `${api.apiEndpoint}/api/v1/config/floorplan/image?id=${encodeURIComponent(id)}&revision=${value?.image.kind === 'stored' ? value.image.revision : ''}`;
+  const background =
+    value?.image.kind === 'upload'
+      ? `data:${value.image.mime_type};base64,${value.image.data_base64}`
+      : value?.image.kind === 'stored'
+        ? savedImage
+        : undefined;
+  const discard = () => {
+    draft.discard();
+    setEpoch((epoch) => epoch + 1);
+    setFileError('');
+    if (imageInput.current) imageInput.current.value = '';
   };
-
-  const handleImageUpload = async (file: File) => {
-    if (!selectedFloorplanId) {
-      return;
-    }
-
+  const stageImage = async (file: File) => {
+    setFileError('');
+    setBusy(true);
     try {
-      setLoading(true);
-      setError(null);
-
-      const formData = new FormData();
-      formData.append('image', file);
-
-      const response = await fetch(
-        `${apiEndpoint}/api/v1/config/floorplan/image?id=${encodeURIComponent(selectedFloorplanId)}`,
-        {
-          method: 'POST',
-          body: formData,
-        },
-      );
-
-      const result = await response.json();
-      if (result.success) {
-        setSuccess('Floorplan image uploaded successfully');
-        // Set the background image URL to trigger editor update
-        setBackgroundImageUrl(
-          `${apiEndpoint}/api/v1/config/floorplan/image?id=${encodeURIComponent(selectedFloorplanId)}&t=${Date.now()}`,
-        );
-      } else {
-        setError(result.error || 'Upload failed');
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload failed');
-    } finally {
-      setLoading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
-  };
-
-  const handleImageDelete = async () => {
-    if (!selectedFloorplanId) {
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch(
-        `${apiEndpoint}/api/v1/config/floorplan/image?id=${encodeURIComponent(selectedFloorplanId)}`,
-        {
-          method: 'DELETE',
-        },
-      );
-
-      const result = await response.json();
-      if (result.success) {
-        setBackgroundImageUrl(undefined);
-        setSuccess('Floorplan image removed successfully');
-      } else {
-        setError(result.error || 'Failed to remove image');
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to remove image');
-    } finally {
-      setLoading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
-  };
-
-  const handleExport = () => {
-    const blob = new Blob([serializeGrid(grid)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${selectedFloorplanId ?? 'floorplan'}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleImport = async (file: File) => {
-    try {
-      const text = await file.text();
-      const imported = deserializeGrid(text);
-      if (imported) {
-        setGrid(imported);
-        setHasChanges(true);
-        setSuccess('Floorplan imported. Remember to save.');
-      } else {
-        setError('Invalid floorplan file');
-      }
-    } catch {
-      setError('Failed to import floorplan');
-    }
-  };
-
-  const handleCreateFloorplan = async () => {
-    if (!newFloorplanId.trim() || !newFloorplanName.trim()) {
-      setCreateError('Floorplan id and name are required');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setCreateError(null);
-      await createFloorplan({
-        id: newFloorplanId.trim(),
-        name: newFloorplanName.trim(),
+      if (file.size > 10 * 1024 * 1024)
+        throw Error('Choose an image smaller than 10 MB.');
+      if (
+        !['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'].includes(
+          file.type,
+        )
+      )
+        throw Error('Choose a PNG, JPEG, WebP or SVG image.');
+      const data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(Error('Could not read the image.'));
+        reader.readAsDataURL(file);
       });
-      selectFloorplan(newFloorplanId.trim());
-      setShowCreateFloorplan(false);
-      setNewFloorplanId('');
-      setNewFloorplanName('');
-      setSuccess('Floorplan created successfully');
-    } catch (e) {
-      setCreateError(
-        e instanceof Error ? e.message : 'Failed to create floorplan',
+      const image = new Image();
+      image.src = data;
+      await image.decode();
+      if (!image.width || !image.height)
+        throw Error('The image must have a visible width and height.');
+      draft.patch({
+        image: {
+          kind: 'upload',
+          mime_type: file.type,
+          data_base64: data.slice(data.indexOf(',') + 1),
+        },
+      });
+    } catch (error) {
+      setFileError(
+        error instanceof Error ? error.message : 'Could not read the image.',
       );
     } finally {
-      setLoading(false);
+      setBusy(false);
+      if (imageInput.current) imageInput.current.value = '';
     }
   };
-
-  const handleRenameFloorplan = async () => {
-    if (!selectedFloorplanId || !selectedFloorplanName.trim()) {
-      return;
-    }
-
+  const stageGrid = async (file: File) => {
+    setFileError('');
+    setBusy(true);
     try {
-      setLoading(true);
-      setError(null);
-      await updateFloorplan(selectedFloorplanId, {
-        id: selectedFloorplanId,
-        name: selectedFloorplanName.trim(),
-      });
-      setSuccess('Floorplan renamed successfully');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to rename floorplan');
+      if (file.size > 16 * 1024 * 1024)
+        throw Error('Choose a layout JSON file smaller than 16 MB.');
+      const raw = await file.text(),
+        parsed = readFloorplanDraft(raw);
+      if (!parsed.grid) throw Error(parsed.error);
+      draft.patch({ grid_data: raw });
+      setEpoch((epoch) => epoch + 1);
+    } catch (error) {
+      setFileError(
+        error instanceof Error ? error.message : 'Could not read the layout.',
+      );
     } finally {
-      setLoading(false);
+      setBusy(false);
+      if (gridInput.current) gridInput.current.value = '';
     }
   };
-
-  const handleDeleteFloorplan = async () => {
-    if (!selectedFloorplanId) {
-      return;
-    }
-
-    const selectedFloorplan = floorplans.find(
-      (floorplan) => floorplan.id === selectedFloorplanId,
-    );
+  const remove = async () => {
     if (
+      !draft.entry ||
       !(await confirmDestructive(
-        `Delete floorplan "${selectedFloorplan?.name ?? selectedFloorplanId}"?`,
-        'Devices keep their positions in other floorplans; only this floorplan and its background image are removed.',
+        'Delete this floorplan?',
+        `This removes “${value?.name}”, its background image and placements. Devices and rooms remain available. ${draft.dirty ? 'Unsaved edits to this floorplan will be discarded.' : ''}`,
       ))
-    ) {
+    )
       return;
-    }
-
+    setBusy(true);
+    setFileError('');
     try {
-      setLoading(true);
-      setError(null);
-      await removeFloorplan(selectedFloorplanId);
-      selectFloorplan(null);
-      setSuccess('Floorplan deleted successfully');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete floorplan');
+      await api.remove(draft.entry.baseline);
+      draft.forget();
+      onDeleted();
+    } catch (error) {
+      setFileError(
+        error instanceof Error
+          ? error.message
+          : 'Could not delete the floorplan.',
+      );
+      if (
+        error instanceof ConfigApiError &&
+        error.status === 409 &&
+        error.current
+      )
+        entityDraftStore.sync(draft.key, error.current as FloorplanDraft, {
+          href: `/config/floorplan?id=${encodeURIComponent(id)}`,
+          label: value?.name ?? 'Floorplan',
+        });
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   };
-
-  return (
-    <div className="space-y-6">
-      {isNarrow ? (
-        <Alert>
-          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              The grid editor is built for larger screens. You can keep editing,
-              or open the read-only map view.
-            </span>
-            <Button asChild size="sm" variant="outline">
-              <Link to="/map">Open map view</Link>
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      <ConfigPageHeader
-        title={
-          selectedFloorplanName
-            ? `Floorplan · ${selectedFloorplanName}`
-            : 'Floorplan'
-        }
-        description="Add a map of your home, then place rooms and devices where they belong."
-        actions={
+  if (!value)
+    return (
+      <div
+        role={api.saved.isError ? 'alert' : undefined}
+        className="rounded-lg border border-border p-5 text-sm"
+      >
+        {api.saved.isError ? (
           <>
-            <span className="self-center text-xs text-muted-foreground">
-              {floorplanLoadError
-                ? 'Not saved: the selected floorplan failed to load'
-                : !selectedFloorplanId
-                  ? 'No floorplan selected'
-                  : hasChanges
-                    ? 'Unsaved changes'
-                    : 'All changes saved'}
-            </span>
-            <Button
-              onClick={handleSave}
-              disabled={
-                loading ||
-                floorplanLoading ||
-                !hasChanges ||
-                !selectedFloorplanId ||
-                floorplanLoadError !== null
-              }
-            >
-              {loading ? (
-                <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              ) : null}
-              Save changes
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline">More options</Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  disabled={loading || floorplanLoading || !selectedFloorplanId}
-                  onSelect={handleExport}
-                >
-                  Export JSON
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={loading || floorplanLoading || !selectedFloorplanId}
-                  onSelect={() => importInputRef.current?.click()}
-                >
-                  Import JSON
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  disabled={loading || floorplanLoading || !selectedFloorplanId}
-                  onSelect={async () => {
-                    if (
-                      await confirmDestructive(
-                        'Reset this floorplan grid?',
-                        'All device placements and room masks are cleared in the editor. The saved floorplan is unchanged until you save.',
-                      )
-                    ) {
-                      handleGridChange(createEmptyGrid());
-                    }
-                  }}
-                >
-                  Reset layout
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void handleImport(file);
-                e.target.value = '';
-              }}
-            />
-          </>
-        }
-      />
-
-      {floorplanLoadError && (
-        <Alert variant="destructive">
-          <AlertTitle>Could not load floorplan</AlertTitle>
-          <AlertDescription className="mt-2 flex flex-col gap-3">
-            <span>{floorplanLoadError}</span>
-            <span className="text-xs">
-              Saving is disabled until the floorplan loads, so the stored layout
-              cannot be overwritten by an empty grid.
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="self-start"
-              onClick={() => setFloorplanReloadKey((key) => key + 1)}
-            >
+            {api.saved.error.message}{' '}
+            <Button variant="outline" onClick={() => void api.saved.refetch()}>
               Retry
             </Button>
-          </AlertDescription>
-        </Alert>
+          </>
+        ) : (
+          'Loading floorplan…'
+        )}
+      </div>
+    );
+  const grid = parsed.grid;
+  const linked = [
+    ...(grid?.devices ?? []).map((device) => ({
+      key: `device/${device.deviceKey}`,
+      name:
+        available.find((item) => item.key === device.deviceKey)?.name ??
+        device.deviceName,
+      href: `/config/devices/detail/${encodeURIComponent(device.deviceKey)}`,
+    })),
+    ...Object.keys(grid?.groups ?? {}).map((key) => ({
+      key: `group/${key}`,
+      name: groups.data.find((group) => group.id === key)?.name ?? key,
+      href: `/config/groups/${encodeURIComponent(key)}`,
+    })),
+  ];
+  return (
+    <>
+      {api.saved.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          Could not refresh this floorplan. Your draft is kept.{' '}
+          <Button variant="outline" onClick={() => void api.saved.refetch()}>
+            Retry
+          </Button>
+        </p>
       )}
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription className="flex items-center justify-between gap-3">
-            <span>{error}</span>
-            <Button variant="ghost" size="sm" onClick={() => setError(null)}>
-              ✕
-            </Button>
-          </AlertDescription>
-        </Alert>
+      {fileError && (
+        <p role="alert" className="text-sm text-destructive">
+          {fileError}
+        </p>
       )}
-
-      {success && (
-        <Alert>
-          <AlertDescription className="flex items-center justify-between gap-3">
-            <span>{success}</span>
-            <Button variant="ghost" size="sm" onClick={() => setSuccess(null)}>
-              ✕
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Card>
-        <CardContent className="space-y-4 p-5">
-          <div className="flex flex-wrap items-end gap-3">
-            <label className={fieldClassName + ' w-full max-w-sm'}>
-              <span className={fieldLabelClassName}>Active floorplan</span>
-              <SearchablePicker
-                options={floorplans.map((floorplan) => ({
-                  value: floorplan.id,
-                  label: floorplan.name,
-                  detail: floorplan.id,
-                }))}
-                value={selectedFloorplanId ?? ''}
-                onChange={(id) => selectFloorplan(id || null)}
-                placeholder="Select floorplan…"
-              />
-            </label>
-
-            <label className={fieldClassName + ' w-full max-w-sm'}>
-              <span className={fieldLabelClassName}>Floorplan name</span>
-              <Input
-                type="text"
-                value={selectedFloorplanName}
-                onChange={(e) => setSelectedFloorplanName(e.target.value)}
-                disabled={!selectedFloorplanId}
-              />
-            </label>
-
+      <SettingsSection
+        title={creating ? 'New floorplan' : 'Floorplan details'}
+        description="Changes stay in this draft until you save."
+        actions={
+          !creating ? (
             <Button
               variant="outline"
-              disabled={loading || !selectedFloorplanId}
-              onClick={handleRenameFloorplan}
+              disabled={busy || draft.saving}
+              onClick={() => void remove()}
             >
-              Rename
+              <Trash2 className="size-4" />
+              Delete floorplan
             </Button>
-
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setCreateError(null);
-                setShowCreateFloorplan(true);
-              }}
-            >
-              New Floorplan
-            </Button>
-
-            <Button
-              variant="destructive"
-              disabled={loading || !selectedFloorplanId}
-              onClick={handleDeleteFloorplan}
-            >
-              Delete
-            </Button>
-          </div>
-
-          <p className="text-sm text-muted-foreground">
-            Each floorplan stores its own grid, image overlay, device
-            placements, and group masks.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Grid Editor */}
-      <Card>
-        <CardContent className="p-5">
-          {!selectedFloorplanId ? (
-            <EmptyState
-              title="No floorplan selected"
-              description="Create or select a floorplan to start editing."
-            />
-          ) : !isSelectedFloorplanReady ? (
-            <div className="flex min-h-96 items-center justify-center rounded-2xl border border-border bg-muted/30 p-8">
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <Skeleton className="size-6 rounded-full" />
-                Loading floorplan...
-              </div>
-            </div>
-          ) : (
-            <FloorplanGridEditor
-              key={selectedFloorplanId}
-              grid={grid}
-              onChange={handleGridChange}
-              availableDevices={availableDevices}
-              availableGroups={availableGroups}
-              backgroundImageUrl={backgroundImageUrl}
-            />
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Display and layout: what the canvas shows, rather than how you draw. */}
-      <Card>
-        <CardContent className="p-5">
-          <h3 className="font-medium">Display and layout</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            The background image sits beneath the grid in the editor and the map
-            view. The grid stretches across the whole image, so raising the grid
-            resolution never pushes it outside the image bounds.
-          </p>
-          {backgroundImageUrl ? (
-            <p className="mt-3 text-sm text-muted-foreground">
-              A background image is attached. Uploading another replaces it.
-            </p>
-          ) : (
-            <p className="mt-3 text-sm text-muted-foreground">
-              No background image yet: the grid stands alone.
-            </p>
-          )}
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          ) : undefined
+        }
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="space-y-2 text-sm">
+            Name
             <Input
-              ref={fileInputRef}
-              type="file"
-              accept=".svg,.png,.jpg,.jpeg"
-              className="w-full max-w-md"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleImageUpload(file);
-              }}
-              disabled={loading || floorplanLoading || !selectedFloorplanId}
+              {...entityFieldProps(draft, 'name')}
+              value={value.name}
+              disabled={draft.saving}
+              onChange={(event) =>
+                draft.patch({
+                  name: event.target.value,
+                  ...(creating &&
+                  (value.id === '' || value.id === slug(value.name))
+                    ? { id: slug(event.target.value) }
+                    : {}),
+                })
+              }
             />
-            {backgroundImageUrl ? (
+          </label>
+          {creating ? (
+            <label className="space-y-2 text-sm">
+              ID
+              <Input
+                {...entityFieldProps(draft, 'id')}
+                value={value.id}
+                disabled={draft.saving}
+                onChange={(event) => draft.patch({ id: event.target.value })}
+              />
+              <span className="block text-xs text-muted-foreground">
+                A stable identifier for links to this floorplan.
+              </span>
+            </label>
+          ) : (
+            advanced && (
+              <div className="text-sm">
+                ID
+                <p className="mt-2 break-all font-mono text-xs text-muted-foreground">
+                  {value.id}
+                </p>
+              </div>
+            )
+          )}
+        </div>
+      </SettingsSection>
+      <SettingsSection
+        title="Background image"
+        description="Optional. The image sits beneath the grid; uploading or removing it stays in this draft."
+      >
+        <div className="flex flex-wrap items-start gap-4">
+          {background && (
+            <img
+              src={background}
+              alt="Floorplan background preview"
+              className="max-h-28 max-w-full rounded border border-border object-contain"
+            />
+          )}
+          <div className="min-w-0 flex-1 space-y-3">
+            <label className="block space-y-2 text-sm">
+              {background ? 'Replace image' : 'Choose image'}
+              <Input
+                ref={imageInput}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                disabled={busy || draft.saving}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void stageImage(file);
+                }}
+              />
+            </label>
+            <p className="text-xs text-muted-foreground">
+              PNG, JPEG, WebP or SVG · up to 10 MB
+              {value.image.kind === 'upload'
+                ? ' · Replacement not saved yet'
+                : ''}
+            </p>
+            {background && (
               <Button
                 variant="outline"
-                disabled={loading || floorplanLoading || !selectedFloorplanId}
-                onClick={async () => {
-                  if (
-                    await confirmDestructive(
-                      'Remove the background image?',
-                      'The image is deleted immediately; device placements are not affected.',
-                    )
-                  ) {
-                    void handleImageDelete();
-                  }
-                }}
+                disabled={busy || draft.saving}
+                onClick={() => draft.patch({ image: { kind: 'none' } })}
               >
                 Remove image
               </Button>
-            ) : null}
+            )}
           </div>
-        </CardContent>
-      </Card>
-
-      {showCreateFloorplan && (
-        <ResponsiveOverlay
-          open
-          onOpenChange={(open) => {
-            if (!open) {
-              setShowCreateFloorplan(false);
-            }
-          }}
-          title="Create Floorplan"
-          description="Create a separate floorplan canvas and grid."
-          className="max-w-lg"
-        >
-          <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
-            <ConfigFormSection
-              title="Floorplan identity"
-              description="Create a separate editable grid, background image, and room mask set."
+        </div>
+      </SettingsSection>
+      <SettingsSection
+        title="Layout"
+        description="Draw the floor, place devices and mark rooms. Undo affects the draft; Discard restores the saved layout."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              disabled={busy || draft.saving}
+              onClick={() => gridInput.current?.click()}
             >
-              <ConfigField label="Floorplan ID">
-                <Input
-                  type="text"
-                  placeholder="upstairs"
-                  value={newFloorplanId}
-                  onChange={(e) => setNewFloorplanId(e.target.value)}
-                />
-              </ConfigField>
-
-              <ConfigField label="Floorplan name">
-                <Input
-                  type="text"
-                  placeholder="Upstairs"
-                  value={newFloorplanName}
-                  onChange={(e) => setNewFloorplanName(e.target.value)}
-                />
-              </ConfigField>
-            </ConfigFormSection>
-
-            {createError ? (
-              <p className="mb-3 text-sm text-destructive">{createError}</p>
-            ) : null}
-
-            <ConfigFormActions>
-              <Button
-                variant="ghost"
-                onClick={() => setShowCreateFloorplan(false)}
-              >
-                Cancel
-              </Button>
-              <Button disabled={loading} onClick={handleCreateFloorplan}>
-                Create
-              </Button>
-            </ConfigFormActions>
+              Import layout
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!value.grid_data}
+              onClick={() =>
+                download(value.grid_data!, `${value.id || 'floorplan'}.json`)
+              }
+            >
+              <Download className="size-4" />
+              Download layout
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy || draft.saving}
+              onClick={async () => {
+                if (
+                  await confirmDestructive(
+                    'Reset this layout?',
+                    'All placements and room masks are cleared in the draft. Discard restores them until you save.',
+                  )
+                ) {
+                  draft.patch({ grid_data: serializeGrid(createEmptyGrid()) });
+                  setEpoch((epoch) => epoch + 1);
+                }
+              }}
+            >
+              Reset layout
+            </Button>
+          </>
+        }
+      >
+        <input
+          ref={gridInput}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          aria-label="Import floorplan layout"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void stageGrid(file);
+          }}
+        />
+        {(devices.error || groups.error) && (
+          <p role="alert" className="mb-3 text-sm">
+            Some rooms or devices could not be loaded. Saved placements remain
+            in the draft.{' '}
+            <Button
+              variant="outline"
+              onClick={() => {
+                void devices.refetch();
+                void groups.refetch();
+              }}
+            >
+              Retry catalogs
+            </Button>
+          </p>
+        )}
+        {!grid ? (
+          <div className="space-y-3 text-sm" role="alert">
+            <p>This layout cannot be edited in this version: {parsed.error}</p>
+            <p className="text-muted-foreground">
+              Its saved content is retained. Download it for inspection, or
+              import a supported layout. Name and image edits preserve the
+              existing layout.
+            </p>
           </div>
-        </ResponsiveOverlay>
+        ) : (
+          <div
+            inert={draft.saving}
+            className={draft.saving ? 'opacity-60' : ''}
+          >
+            <FloorplanGridEditor
+              key={`${id}/${epoch}`}
+              grid={grid}
+              onChange={(next) => {
+                const baseline = draft.entry?.baseline.grid_data ?? null;
+                const original =
+                  baseline === null
+                    ? createEmptyGrid()
+                    : readFloorplanDraft(baseline).grid;
+                draft.patch({
+                  grid_data: deepEqual(original, next)
+                    ? baseline
+                    : serializeGrid(next),
+                });
+              }}
+              availableDevices={available}
+              availableGroups={groups.data}
+              backgroundImageUrl={background}
+            />
+          </div>
+        )}
+      </SettingsSection>
+      {linked.length > 0 && (
+        <SettingsSection
+          title="Placed devices & rooms"
+          description="Open related settings while keeping your floorplan draft."
+        >
+          <div className="flex flex-wrap gap-x-5 gap-y-3 text-sm">
+            {linked.slice(0, showAll ? undefined : 8).map((item) => (
+              <Link
+                className="settings-link break-words"
+                key={item.key}
+                to={item.href}
+              >
+                {item.name}
+              </Link>
+            ))}
+            {linked.length > 8 && (
+              <Button variant="ghost" onClick={() => setShowAll(!showAll)}>
+                {showAll ? 'Show fewer' : `Show all ${linked.length}`}
+              </Button>
+            )}
+          </div>
+        </SettingsSection>
       )}
-    </div>
+      <EntitySaveBar
+        draft={{ ...draft, discard }}
+        disabled={busy}
+        createLabel={creating ? 'Create floorplan' : undefined}
+      />
+    </>
   );
 }

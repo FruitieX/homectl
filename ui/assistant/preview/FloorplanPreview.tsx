@@ -1,3 +1,4 @@
+import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { MapPin } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -65,6 +66,10 @@ function AffectedEntityList({ plan }: { plan: AssistantPlan }) {
  * so layout edits are not visualized.
  */
 export function FloorplanPreview({ plan }: { plan: AssistantPlan }) {
+  const healthQuery = useDeviceHealth();
+  const healthByDevice = healthQuery.isError
+    ? undefined
+    : healthQuery.data?.devices;
   const { floorplans } = useAllFloorplans();
   const groups = useGroupsState();
   const { data: displayNames } = useDeviceDisplayNames();
@@ -115,13 +120,14 @@ export function FloorplanPreview({ plan }: { plan: AssistantPlan }) {
   const scene = useMemo(
     () =>
       buildFloorplanScene({
+        healthByDevice,
         grid: selectedFloorplan?.grid ?? null,
         image,
         devices,
         groups: groups ?? {},
         displayNames: displayNameMap,
       }),
-    [selectedFloorplan, image, devices, groups, displayNameMap],
+    [healthByDevice, selectedFloorplan, image, devices, groups, displayNameMap],
   );
 
   const canRender =

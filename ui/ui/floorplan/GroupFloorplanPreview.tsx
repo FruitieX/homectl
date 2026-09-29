@@ -1,3 +1,4 @@
+import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import {
   useEffect,
   useId,
@@ -80,6 +81,10 @@ export function GroupFloorplanPreview({
   className,
   interactive = false,
 }: GroupFloorplanPreviewProps) {
+  const healthQuery = useDeviceHealth();
+  const healthByDevice = healthQuery.isError
+    ? undefined
+    : healthQuery.data?.devices;
   const { floorplans } = useAllFloorplans();
   const groups = useGroupsState();
   const { data: displayNames } = useDeviceDisplayNames();
@@ -129,6 +134,7 @@ export function GroupFloorplanPreview({
   const scene = useMemo(
     () =>
       buildFloorplanScene({
+        healthByDevice,
         grid: selectedFloorplan?.grid ?? null,
         image,
         devices,
@@ -136,7 +142,15 @@ export function GroupFloorplanPreview({
         displayNames: displayNameMap,
         deviceKeys: placedKeys,
       }),
-    [selectedFloorplan, image, devices, groups, displayNameMap, placedKeys],
+    [
+      healthByDevice,
+      selectedFloorplan,
+      image,
+      devices,
+      groups,
+      displayNameMap,
+      placedKeys,
+    ],
   );
   const focusBounds = useMemo(() => {
     if (!selectedFloorplan?.grid || !selection) {

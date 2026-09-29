@@ -1,32 +1,27 @@
-import { useEffect, useState } from 'react';
 import { AlertTriangle, CirclePause, Clock3 } from 'lucide-react';
 import type { Device } from '@/bindings/Device';
-import {
-  deviceReachability,
-  reachabilityLabels,
-} from '@/lib/deviceReachability';
-
+import { useDeviceHealth } from '@/hooks/useDeviceHealth';
+import { healthLabel } from '@/ui/settings/HealthStatus';
 export function DeviceHealth({ device }: { device: Device }) {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(id);
-  }, []);
-  const status = deviceReachability(device, now);
+  const query = useDeviceHealth(),
+    health = query.isError
+      ? undefined
+      : query.data?.devices?.[`${device.integration_id}/${device.id}`];
+  const label = healthLabel(health);
   return (
     <span
       className="inline-flex shrink-0 items-center"
-      aria-label={reachabilityLabels[status]}
-      title={reachabilityLabels[status]}
+      aria-label={label}
+      title={label}
     >
-      {status === 'disabled' ? (
-        <CirclePause className="size-4 text-muted-foreground" />
-      ) : status === 'cached' ? (
-        <Clock3 className="size-4 text-muted-foreground" />
-      ) : status === 'offline' || status === 'stale' || status === 'unknown' ? (
+      {health?.issues.length ? (
         <AlertTriangle className="size-4 text-amber-500" />
-      ) : (
+      ) : health?.status === 'disabled' ? (
+        <CirclePause className="size-4 text-muted-foreground" />
+      ) : health?.status === 'healthy' ? (
         <span className="size-2 rounded-full bg-emerald-500" />
+      ) : (
+        <Clock3 className="size-4 text-muted-foreground" />
       )}
     </span>
   );

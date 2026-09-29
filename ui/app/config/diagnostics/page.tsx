@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Info, RefreshCw } from 'lucide-react';
 import type { ConfigDiagnostics } from '@/bindings/ConfigDiagnostics';
@@ -12,61 +12,53 @@ import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
 import { ConfigPageHeader } from '../page-header';
 
-const sections = { group: 'groups', scene: 'scenes', device: 'devices' };
 const labels = { group: 'room', scene: 'scene', device: 'device' };
 
-function Issue({ issue }: { issue: ConfigDiagnostic }) {
+function Issue({
+  issue,
+  advanced,
+}: {
+  issue: ConfigDiagnostic;
+  advanced: boolean;
+}) {
   const Icon = issue.severity === 'warning' ? AlertTriangle : Info;
   return (
-    <article className="flex items-start gap-3 rounded-xl border border-border bg-card p-4">
+    <article className="flex items-start gap-3 border-b border-border px-3 py-3 last:border-b-0">
       <Icon
         aria-hidden
-        className={`mt-1 size-5 shrink-0 ${issue.severity === 'warning' ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}
+        className={`mt-0.5 size-4 shrink-0 ${issue.severity === 'warning' ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}
       />
-      <div className="min-w-0 flex-1 space-y-2">
+      <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-baseline gap-x-2">
-          <h2 className="break-words font-semibold">{issue.name}</h2>
+          <h2 className="break-words text-sm font-medium">{issue.name}</h2>
           <span className="text-xs text-muted-foreground">
             {labels[issue.entity] ?? issue.entity}
           </span>
         </div>
-        <div className="space-y-2 text-sm">
-          <div>
-            <span className="text-xs font-medium text-muted-foreground">
-              What we found
-            </span>
-            <p className="mt-0.5 break-words">{issue.message}</p>
-          </div>
-          <div>
-            <span className="text-xs font-medium text-muted-foreground">
-              What to do
-            </span>
-            <p className="mt-0.5 break-words">{issue.suggestion}</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild size="sm" variant="outline">
-            <Link to={configItemHref(issue.entity, issue.entity_id)}>
-              Open {labels[issue.entity] ?? issue.entity}
+        <p className="break-words text-sm">{issue.message}</p>
+        <p className="break-words text-xs text-muted-foreground">
+          {issue.suggestion}
+        </p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <Link
+            className="settings-link"
+            to={configItemHref(issue.entity, issue.entity_id)}
+          >
+            Open {labels[issue.entity] ?? issue.entity}
+          </Link>
+          {issue.entity === 'device' && (
+            <Link
+              className="settings-link"
+              to={`/config/logs?device=${encodeURIComponent(issue.entity_id)}`}
+            >
+              Related logs
             </Link>
-          </Button>
-          <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer">Technical details</summary>
-            <dl className="mt-2 grid gap-1">
-              <div className="flex flex-wrap gap-x-2">
-                <dt className="font-medium">Type</dt>
-                <dd className="font-mono">{issue.entity}</dd>
-              </div>
-              <div className="flex flex-wrap gap-x-2">
-                <dt className="font-medium">ID</dt>
-                <dd className="break-all font-mono">{issue.entity_id}</dd>
-              </div>
-              <div className="flex flex-wrap gap-x-2">
-                <dt className="font-medium">Severity</dt>
-                <dd className="font-mono">{issue.severity}</dd>
-              </div>
-            </dl>
-          </details>
+          )}
+          {advanced && (
+            <span className="break-all font-mono text-[11px] text-muted-foreground">
+              {issue.entity_id} · {issue.code}
+            </span>
+          )}
         </div>
       </div>
     </article>
@@ -75,14 +67,31 @@ function Issue({ issue }: { issue: ConfigDiagnostic }) {
 
 export default function DiagnosticsPage() {
   const { apiEndpoint } = useAppConfig();
+  const { advanced } = useSettingsPreferences();
+  const [params, setParams] = useSearchParams();
   const [search, setSearch] = useSearchParamState();
-  const [severity, setSeverity] = useState<'all' | 'warning' | 'info'>(() =>
-    search ? 'all' : 'warning',
-  );
+  const severity = ['all', 'warning', 'info'].includes(
+    params.get('severity') ?? '',
+  )
+    ? params.get('severity')!
+    : search
+      ? 'all'
+      : 'warning';
+  const setSeverity = (value: string) =>
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.set('severity', value);
+        return next;
+      },
+      { replace: true },
+    );
   const query = useQuery({
     queryKey: ['config-diagnostics', apiEndpoint],
-    queryFn: async (): Promise<ConfigDiagnostics> => {
-      const response = await fetch(`${apiEndpoint}/api/v1/config/diagnostics`);
+    queryFn: async ({ signal }): Promise<ConfigDiagnostics> => {
+      const response = await fetch(`${apiEndpoint}/api/v1/config/diagnostics`, {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
+      });
       if (!response.ok)
         throw new Error(
           response.status === 404
@@ -95,13 +104,14 @@ export default function DiagnosticsPage() {
       return result.data;
     },
     staleTime: 0,
+    refetchInterval: 5000,
     retry: false,
   });
   const issues = query.data?.issues ?? [];
   const visible = issues.filter(
     (issue) =>
       (severity === 'all' || issue.severity === severity) &&
-      `${issue.name} ${issue.entity_id} ${issue.message}`
+      `${issue.name} ${issue.entity_id} ${issue.message} ${(issue.device_keys ?? []).join(' ')}`
         .toLocaleLowerCase()
         .includes(search.trim().toLocaleLowerCase()),
   );
@@ -109,7 +119,7 @@ export default function DiagnosticsPage() {
     (issue) => issue.severity === 'warning',
   ).length;
   return (
-    <div className="mx-auto max-w-4xl space-y-5">
+    <div className="settings-page">
       <ConfigPageHeader
         title="Check for problems"
         description="See what is affected, why it needs attention, and where to fix it. Checks do not change your home."
@@ -138,7 +148,7 @@ export default function DiagnosticsPage() {
               className="rounded-xl border border-border p-4 text-sm"
             >
               Devices are still starting up. Availability and active-scene
-              checks will be included after startup; refresh then.
+              checks update automatically after startup.
             </p>
           )}
           <div className="flex flex-wrap gap-2" aria-label="Filter checks">
@@ -200,8 +210,15 @@ export default function DiagnosticsPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      setSearch('');
-                      setSeverity('all');
+                      setParams(
+                        (previous) => {
+                          const next = new URLSearchParams(previous);
+                          next.delete('q');
+                          next.set('severity', 'all');
+                          return next;
+                        },
+                        { replace: true },
+                      );
                     }}
                   >
                     Show all checks
@@ -210,9 +227,9 @@ export default function DiagnosticsPage() {
               }
             />
           ) : (
-            <div className="space-y-4">
+            <div className="overflow-hidden rounded-lg border border-border bg-card">
               {visible.map((issue) => (
-                <Issue key={issue.id} issue={issue} />
+                <Issue key={issue.id} issue={issue} advanced={advanced} />
               ))}
             </div>
           )}

@@ -1,0 +1,25 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "Activity sorts by recorded time, newest first",
+   "Outcomes are glanceable in compact closed rows",
+   "Blocked counts are visible without opening evidence",
+   "Blocked attempts do not invent a dispatched run",
+   "Recorded scene and room references have direct detail links",
+   "Recorded trigger opens and focuses the current routine block",
+   "Routine detail links filter activity by exact routine ID",
+   "Activity navigation keeps the routine draft discoverable",
+   "Returning restores the pending routine value",
+   "Paused activity stays stable while new records arrive",
+   "Resuming shows fresh records",
+   "Exact routine filters exclude unrelated activity and stay in the URL",
+   "Failed refresh preserves the last successful activity",
+   "Large activity lists render a bounded first page",
+   "Show more reveals the next bounded page",
+   "Empty filtered results do not imply no trigger activity",
+   "Activity fits the viewport"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/routine-history","viewport":{"width":1440,"height":1100},"problems":["log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)"]}

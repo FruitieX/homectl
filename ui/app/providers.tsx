@@ -1,3 +1,5 @@
+import { SettingsDraftGuard } from '@/ui/settings/SettingsDrafts';
+import { entityDraftStore } from '@/lib/entityDraft';
 import { HomectlLogo } from '@/ui/HomectlLogo';
 import { Provider as JotaiProvider } from 'jotai';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -154,7 +156,8 @@ export const Layout = ({ children }: { children: ReactNode }) => {
     reloadAt.setDate(reloadAt.getDate() + 1);
 
     const reloadTimeout = setTimeout(() => {
-      window.location.reload();
+      if (!entityDraftStore.list().some((draft) => draft.dirty || draft.saving))
+        window.location.reload();
     }, reloadAt.getTime() - now.getTime());
 
     return () => {
@@ -164,6 +167,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
 
   return (
     <div className="app-ambient relative flex min-h-0 flex-1 overflow-hidden bg-background text-foreground">
+      <SettingsDraftGuard />
       <HomectlNavigationRail />
       <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
         <Navbar />

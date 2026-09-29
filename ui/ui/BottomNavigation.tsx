@@ -1,3 +1,4 @@
+import { SettingsNavigation } from '@/ui/settings/SettingsNavigation';
 import { HomectlLogo } from '@/ui/HomectlLogo';
 import { Link, useLocation } from 'react-router-dom';
 import { useSetAtom } from 'jotai';
@@ -49,7 +50,7 @@ export const HomectlBottomNavigation = () => {
     },
     { route: 'Floorplan' as const, to: '/map', label: 'Floorplan', icon: Map },
     { route: 'Groups' as const, to: '/groups', label: 'Rooms', icon: Layers3 },
-    { route: 'Config' as const, to: '/config', label: 'Config', icon: Cog },
+    { route: 'Config' as const, to: '/config', label: 'Settings', icon: Cog },
   ];
 
   return (
@@ -138,12 +139,13 @@ export const HomectlNavigationRail = () => {
   const openPalette = useSetAtom(commandPaletteOpenAtom);
 
   if (isFullscreen) return null;
+  if (pathname.startsWith('/config')) return <SettingsNavigation />;
 
   const items = [
     { route: 'Dashboard' as const, to: '/', label: 'Home', icon: House },
     { route: 'Floorplan' as const, to: '/map', label: 'Floorplan', icon: Map },
     { route: 'Groups' as const, to: '/groups', label: 'Rooms', icon: Layers3 },
-    { route: 'Config' as const, to: '/config', label: 'Config', icon: Cog },
+    { route: 'Config' as const, to: '/config', label: 'Settings', icon: Cog },
   ];
 
   return (

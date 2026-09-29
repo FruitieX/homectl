@@ -190,7 +190,9 @@ pub fn kind_index_for_command(cmd: &StateCommand) -> usize {
 fn event_kind_index(event: &crate::types::event::Event) -> usize {
     use crate::types::event::Event;
     match event {
-        Event::DeviceAvailability { .. } | Event::ExternalStateUpdate { .. } => 0,
+        Event::IntegrationConnected { .. }
+        | Event::DeviceAvailability { .. }
+        | Event::ExternalStateUpdate { .. } => 0,
         Event::InternalStateUpdate { .. } => 1,
         Event::SetExternalState { .. } => 2,
         Event::SetInternalState { .. } => 3,

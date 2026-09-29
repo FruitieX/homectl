@@ -267,6 +267,7 @@ async fn run_actor(
                 // Evaluate the mutations this command collected and merge any
                 // routine/derivation changes into the published snapshot.
                 snapshot_changes.include(app_state.flush_pending_frames().await);
+                snapshot_changes.include(app_state.refresh_device_health(false));
 
                 let publish_started_at = Instant::now();
                 app_state.publish_snapshot(snapshot_changes);
@@ -311,6 +312,7 @@ async fn run_actor(
                 if result.is_ok() {
                     let mut changes = SnapshotChanges::devices();
                     changes.include(app_state.flush_pending_frames().await);
+                    changes.include(app_state.refresh_device_health(false));
                     app_state.publish_snapshot(changes);
                 }
                 metrics.record(
@@ -372,6 +374,7 @@ async fn run_actor(
 
                 let publish_started_at = Instant::now();
                 app_state.flush_pending_frames().await;
+                app_state.refresh_device_health(true);
                 app_state.publish_snapshot(SnapshotChanges::all());
                 let publish_elapsed = publish_started_at.elapsed();
 
@@ -451,6 +454,7 @@ fn spawn_watchdog(
 /// Compact human-readable summary of an event for log messages.
 fn event_kind(event: &Event) -> &'static str {
     match event {
+        Event::IntegrationConnected { .. } => "IntegrationConnected",
         Event::DeviceAvailability { .. } | Event::ExternalStateUpdate { .. } => {
             "ExternalStateUpdate"
         }

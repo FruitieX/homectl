@@ -381,13 +381,20 @@ export function DashboardGridEditor({
       );
     };
 
-    const finishInteraction = () => {
+    const finishInteraction = (event: globalThis.PointerEvent) => {
       const interaction = interactionRef.current;
       if (!interaction) {
         return;
       }
 
       interactionRef.current = null;
+      if (event.type === 'pointercancel') {
+        setDraftWidgets(sortWidgets(widgets));
+        setActiveWidgetId(null);
+        setActiveInteractionKind(null);
+        setDropIndicator(null);
+        return;
+      }
       setActiveWidgetId(null);
       setActiveInteractionKind(null);
       setDropIndicator(null);
@@ -591,6 +598,31 @@ export function DashboardGridEditor({
                     : `${GRID_GAP_PX / 2}px`,
                 }}
                 onPointerDown={(event) => startDrag(event, widget)}
+                tabIndex={0}
+                role="group"
+                aria-label={`${widget.title} arrangement`}
+                aria-description="Use Alt and the up or down arrow to move this widget."
+                onKeyDown={(event) => {
+                  if (
+                    event.target !== event.currentTarget ||
+                    !event.altKey ||
+                    !['ArrowUp', 'ArrowDown'].includes(event.key)
+                  )
+                    return;
+                  event.preventDefault();
+                  const ids = draftWidgets.map((row) => row.id),
+                    from = ids.indexOf(widget.id),
+                    to = from + (event.key === 'ArrowUp' ? -1 : 1);
+                  if (to < 0 || to >= ids.length) return;
+                  [ids[from], ids[to]] = [ids[to], ids[from]];
+                  void onReorderWidgets(ids).catch((error) =>
+                    setEditorError(
+                      error instanceof Error
+                        ? error.message
+                        : 'Could not update arrangement.',
+                    ),
+                  );
+                }}
               >
                 <div className="pointer-events-none h-full min-h-0">
                   <WidgetPreview widget={widget} />
@@ -621,6 +653,45 @@ export function DashboardGridEditor({
                   type="button"
                   className="pointer-events-auto absolute bottom-2 right-2 z-30 size-10 touch-none select-none cursor-nwse-resize rounded-xl border border-primary/30 bg-primary/10 text-primary shadow-sm transition hover:bg-primary/20"
                   aria-label={`Resize ${widget.title}`}
+                  aria-description="Use the arrow keys to resize this widget."
+                  onKeyDown={(event) => {
+                    if (
+                      ![
+                        'ArrowLeft',
+                        'ArrowRight',
+                        'ArrowUp',
+                        'ArrowDown',
+                      ].includes(event.key)
+                    )
+                      return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const width = clampDashboardWidgetWidth(
+                      widget.width +
+                        (event.key === 'ArrowRight'
+                          ? gridSnap
+                          : event.key === 'ArrowLeft'
+                            ? -gridSnap
+                            : 0),
+                      previewColumns,
+                    );
+                    const height = clampDashboardWidgetHeight(
+                      widget.height +
+                        (event.key === 'ArrowDown'
+                          ? gridSnap
+                          : event.key === 'ArrowUp'
+                            ? -gridSnap
+                            : 0),
+                    );
+                    void onUpdateWidget(widget.id, { width, height }).catch(
+                      (error) =>
+                        setEditorError(
+                          error instanceof Error
+                            ? error.message
+                            : 'Could not update size.',
+                        ),
+                    );
+                  }}
                   onPointerDown={(event) => startResize(event, widget)}
                 >
                   <span aria-hidden="true">↘</span>

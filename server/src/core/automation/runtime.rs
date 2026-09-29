@@ -350,6 +350,7 @@ impl V2Runtime {
                 action_id: NodeId("script".to_string()),
                 kind: "script".to_string(),
                 targets: Vec::new(),
+                references: None,
                 disposition: StepDisposition::Suppressed,
                 reason: Some(reason),
             }],

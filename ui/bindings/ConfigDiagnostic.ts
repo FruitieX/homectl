@@ -11,4 +11,8 @@ export type ConfigDiagnostic = {
   code: string;
   message: string;
   suggestion: string;
+  /**
+   * Explicit device references; consumers never parse keys from messages.
+   */
+  device_keys: Array<string>;
 };

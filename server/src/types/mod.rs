@@ -9,6 +9,7 @@ pub mod color;
 pub mod config_authoring;
 pub mod config_diagnostics;
 pub mod device;
+pub mod device_health;
 pub mod dim;
 pub mod event;
 pub mod group;

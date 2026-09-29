@@ -1,0 +1,12 @@
+{
+ "evaluated": {
+  "passed": true,
+  "fullMessage": true,
+  "pause": true,
+  "heights": [
+   73,
+   54
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/logs","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 404 (Not Found)","log: Failed to load resource: the server responded with a status of 404 (Not Found)"]}

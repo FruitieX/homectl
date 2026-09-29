@@ -27,6 +27,8 @@ export interface DashboardWidget {
   width: number;
   height: number;
   options: Record<string, unknown>;
+  secret_fields?: string[];
+  revision_token?: string;
 }
 
 export interface DashboardLayout {
@@ -116,13 +118,14 @@ export function buildDashboardWidgetProxyPath(
   return query ? `${path}?${query}` : path;
 }
 
-type DashboardLayoutRow = {
+export type DashboardLayoutRow = {
   id: number;
   name: string;
   is_default: boolean;
+  revision_token?: string;
 };
 
-type DashboardWidgetRow = {
+export type DashboardWidgetRow = {
   id: number;
   layout_id: number;
   widget_type: string;
@@ -132,6 +135,8 @@ type DashboardWidgetRow = {
   grid_w: number;
   grid_h: number;
   sort_order: number;
+  revision_token?: string;
+  secret_fields?: string[];
 };
 
 // Widget registry - maps widget types to their metadata
@@ -363,6 +368,8 @@ function toDashboardWidget(row: DashboardWidgetRow): DashboardWidget {
     width: row.grid_w,
     height: row.grid_h,
     options,
+    secret_fields: row.secret_fields,
+    revision_token: row.revision_token,
   };
 }
 
@@ -569,9 +576,10 @@ export function useDashboardWidgets(layoutId: string | null) {
       const response = await fetch(`${baseUrl}/widgets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          toDashboardWidgetRow(layoutId, { ...widget, id }, existingRow),
-        ),
+        body: JSON.stringify({
+          ...toDashboardWidgetRow(layoutId, { ...widget, id }, existingRow),
+          expected: existingRow?.revision_token,
+        }),
       });
       const result = await response.json();
       if (result.success) {
@@ -625,7 +633,11 @@ export function useDashboardWidgets(layoutId: string | null) {
           const response = await fetch(`${baseUrl}/widgets`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(row),
+            body: JSON.stringify({
+              ...row,
+              expected: widgetRows.find((value) => value.id === row.id)
+                ?.revision_token,
+            }),
           });
           const result = await response.json();
           if (!result.success) {

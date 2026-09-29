@@ -1,5 +1,8 @@
+import { stringifyConfig } from '@/lib/routineDraft';
 import type { ConfigWriteStatus } from '@/bindings/ConfigWriteStatus';
 import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
+import type { HelperDefinition } from '@/bindings/HelperDefinition';
+import type { ReportingPolicy } from '@/bindings/ReportingPolicy';
 import type { IntegrationConfigFieldSchema } from '@/bindings/IntegrationConfigFieldSchema';
 import type { IntegrationConfigSchema } from '@/bindings/IntegrationConfigSchema';
 import type { SourcePresetInfo } from '@/bindings/SourcePresetInfo';
@@ -10,12 +13,16 @@ import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
 import { type RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
 import { type RoutineV2RuntimeStatus } from '@/bindings/RoutineV2RuntimeStatus';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDebounceValue } from 'usehooks-ts';
 import { useAppConfig } from './appConfig';
+import { useHelperStatuses } from './websocket';
 
 // Types for config API responses
 export interface Integration {
+  reporting_policy?: ReportingPolicy;
+  revision_token?: string;
+  secret_fields?: string[];
   id: string;
   plugin: string;
   config: Record<string, unknown>;
@@ -126,6 +133,8 @@ export interface UiLogEntry {
   level: LogLevel;
   target: string;
   message: string;
+  references?: import('@/bindings/LogEntityReference').LogEntityReference[];
+  details?: import('@/bindings/serde_json/JsonValue').JsonValue;
 }
 
 export type RoutineHistoryTriggerKind =
@@ -215,6 +224,31 @@ export interface ConfigExport {
   device_sensor_configs?: DeviceSensorConfig[];
   dashboard_layouts?: Record<string, unknown>[];
   dashboard_widgets?: Record<string, unknown>[];
+  helpers?: Record<string, unknown>[];
+  helper_values?: Record<string, unknown>[];
+  group_positions?: Record<string, unknown>[];
+  widget_settings?: Record<string, unknown>[];
+  scenario_suite?: Record<string, unknown> | null;
+}
+
+export interface BackupReview {
+  revision_token: string;
+  destructive: boolean;
+  legacy_routines: number;
+  warnings: string[];
+  sections: {
+    key: string;
+    label: string;
+    before: number;
+    after: number;
+    unchanged: number;
+    changes: {
+      id: string;
+      name: string;
+      action: 'add' | 'update' | 'remove';
+      fields: string[];
+    }[];
+  }[];
 }
 
 type ApiResponse<T> = {
@@ -222,7 +256,19 @@ type ApiResponse<T> = {
   success: boolean;
   data?: T;
   error?: string | null;
+  current?: T;
 };
+
+export class ConfigApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public current?: unknown,
+  ) {
+    super(message);
+    this.name = 'ConfigApiError';
+  }
+}
 
 export async function readApiResponse<T>(
   response: Response,
@@ -237,11 +283,15 @@ export async function readApiResponse<T>(
       return result;
     }
 
-    throw new Error(result.error || fallbackMessage);
+    throw new ConfigApiError(
+      result.error || fallbackMessage,
+      response.status,
+      result.current,
+    );
   }
 
   const responseBody = await response.text();
-  throw new Error(responseBody || fallbackMessage);
+  throw new ConfigApiError(responseBody || fallbackMessage, response.status);
 }
 
 // Generic fetch hook for config API
@@ -255,8 +305,10 @@ function useConfigApi<T>(endpoint: string, keyInBody = false) {
 
   const query = useQuery({
     queryKey,
-    queryFn: async () => {
-      const response = await fetch(`${baseUrl}/${endpoint}`);
+    queryFn: async ({ signal }) => {
+      const response = await fetch(`${baseUrl}/${endpoint}`, {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
+      });
       const result = await readApiResponse<T[]>(response, 'Failed to fetch');
       return result.data ?? [];
     },
@@ -264,10 +316,12 @@ function useConfigApi<T>(endpoint: string, keyInBody = false) {
 
   const createMutation = useMutation({
     mutationFn: async (item: Partial<T>) => {
+      await queryClient.cancelQueries({ queryKey });
       const response = await fetch(`${baseUrl}/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(item),
+        body: stringifyConfig(item),
+        signal: AbortSignal.timeout(15000),
       });
       const result = await readApiResponse<T>(response, 'Failed to create');
       recordWrite(
@@ -276,13 +330,35 @@ function useConfigApi<T>(endpoint: string, keyInBody = false) {
       );
       return result.data;
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      const keyField = keyInBody ? 'device_key' : 'id';
+      const savedId = (
+        saved as { id?: string; device_key?: string } | undefined
+      )?.[keyField];
+      if (saved && savedId !== undefined)
+        queryClient.setQueryData<T[]>(queryKey, (rows = []) => [
+          ...rows.filter(
+            (row) =>
+              (row as { id?: string; device_key?: string })[keyField] !==
+              savedId,
+          ),
+          saved,
+        ]);
       void queryClient.invalidateQueries({ queryKey });
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, item }: { id: string; item: Partial<T> }) => {
+    mutationFn: async ({
+      id,
+      item,
+      expected,
+    }: {
+      id: string;
+      item: Partial<T>;
+      expected?: T;
+    }) => {
+      await queryClient.cancelQueries({ queryKey });
       const response = await fetch(
         keyInBody
           ? `${baseUrl}/${endpoint}`
@@ -290,9 +366,11 @@ function useConfigApi<T>(endpoint: string, keyInBody = false) {
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(
-            keyInBody ? { ...item, device_key: id } : { id, ...item },
-          ),
+          body: stringifyConfig({
+            ...(keyInBody ? { ...item, device_key: id } : { id, ...item }),
+            ...(expected === undefined ? {} : { expected }),
+          }),
+          signal: AbortSignal.timeout(15000),
         },
       );
       const result = await readApiResponse<T>(response, 'Failed to update');
@@ -303,7 +381,17 @@ function useConfigApi<T>(endpoint: string, keyInBody = false) {
       );
       return result.data;
     },
-    onSuccess: () => {
+    onSuccess: (saved, { id }) => {
+      if (saved)
+        queryClient.setQueryData<T[]>(queryKey, (rows) =>
+          rows?.map((row) =>
+            (row as { id?: string; device_key?: string })[
+              keyInBody ? 'device_key' : 'id'
+            ] === id
+              ? saved
+              : row,
+          ),
+        );
       void queryClient.invalidateQueries({ queryKey });
     },
   });
@@ -316,6 +404,7 @@ function useConfigApi<T>(endpoint: string, keyInBody = false) {
           : `${baseUrl}/${endpoint}/${encodeURIComponent(id)}`,
         {
           method: 'DELETE',
+          signal: AbortSignal.timeout(15000),
           ...(keyInBody
             ? {
                 headers: { 'Content-Type': 'application/json' },
@@ -343,8 +432,8 @@ function useConfigApi<T>(endpoint: string, keyInBody = false) {
   };
 
   const create = (item: Partial<T>) => createMutation.mutateAsync(item);
-  const update = (id: string, item: Partial<T>) =>
-    updateMutation.mutateAsync({ id, item });
+  const update = (id: string, item: Partial<T>, expected?: T) =>
+    updateMutation.mutateAsync({ id, item, expected });
   const remove = (id: string) => removeMutation.mutateAsync(id);
   const error = query.error instanceof Error ? query.error.message : null;
 
@@ -449,11 +538,17 @@ export function useSourcePreview() {
   const [data, setData] = useState<SourcePreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pending = useRef<AbortController | null>(null);
+  useEffect(() => () => pending.current?.abort(), []);
 
   const preview = useCallback(
     async (request: SourcePreviewArgs) => {
+      pending.current?.abort();
+      const controller = new AbortController();
+      pending.current = controller;
       setLoading(true);
       setError(null);
+      setData(null);
       try {
         const response = await fetch(
           `${apiEndpoint}/api/v1/config/source-preview`,
@@ -461,15 +556,21 @@ export function useSourcePreview() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(request),
+            signal: AbortSignal.any([
+              controller.signal,
+              AbortSignal.timeout(15000),
+            ]),
           },
         );
         const result = await readApiResponse<SourcePreview>(
           response,
           'Failed to preview source',
         );
+        if (controller.signal.aborted) return null;
         setData(result.data ?? null);
         return result.data ?? null;
       } catch (previewFailure) {
+        if (controller.signal.aborted) return null;
         setError(
           previewFailure instanceof Error
             ? previewFailure.message
@@ -477,7 +578,7 @@ export function useSourcePreview() {
         );
         return null;
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     },
     [apiEndpoint],
@@ -487,7 +588,26 @@ export function useSourcePreview() {
 }
 
 export function useHelpers() {
-  return useConfigApi<HelperRuntimeStatus>('helpers');
+  const api = useConfigApi<HelperRuntimeStatus>('helpers');
+  const live = useHelperStatuses();
+  const data = useMemo(
+    () =>
+      api.data.map((row) => {
+        const current = live?.find((status) => status.id === row.id);
+        return current &&
+          current.revision >= row.revision &&
+          JSON.stringify(current.kind) === JSON.stringify(row.kind)
+          ? { ...row, value: current.value, revision: current.revision }
+          : row;
+      }),
+    [api.data, live],
+  );
+  return { ...api, data };
+}
+
+/** Definition writes share the status query, but compare only configuration. */
+export function useHelperDefinitions() {
+  return useConfigApi<HelperDefinition & { create_only?: boolean }>('helpers');
 }
 
 export function useSetHelperValue() {
@@ -503,6 +623,7 @@ export function useSetHelperValue() {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ value }),
+          signal: AbortSignal.timeout(15000),
         },
       );
       const result = await readApiResponse<{ id: string }>(
@@ -718,110 +839,60 @@ export function useFloorplans() {
   return useConfigApi<FloorplanMetadata>('floorplans');
 }
 
-export function useLogs(pollIntervalMs = 5000) {
+export function useLogs(pollIntervalMs = 5000, paused = false) {
   const { apiEndpoint } = useAppConfig();
-  const [data, setData] = useState<UiLogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-
-  const baseUrl = `${apiEndpoint}/api/v1/config`;
-
-  const fetchLogs = useCallback(
-    async (background = false) => {
-      if (!background) {
-        setLoading(true);
-      }
-
-      try {
-        const response = await fetch(`${baseUrl}/logs`);
-        const result = await response.json();
-        if (result.success) {
-          setData(result.data);
-          setError(null);
-          setLastUpdated(new Date().toISOString());
-          return;
-        }
-
-        setError(result.error || 'Failed to fetch logs');
-      } catch (nextError) {
-        setError(
-          nextError instanceof Error ? nextError.message : 'Unknown error',
-        );
-      } finally {
-        if (!background) {
-          setLoading(false);
-        }
-      }
+  const query = useQuery({
+    queryKey: ['config', apiEndpoint, 'logs'],
+    queryFn: async ({ signal }) => {
+      const result = await readApiResponse<UiLogEntry[]>(
+        await fetch(`${apiEndpoint}/api/v1/config/logs`, { signal }),
+        'Could not load logs',
+      );
+      return result.data ?? [];
     },
-    [baseUrl],
-  );
-
-  useEffect(() => {
-    void fetchLogs();
-
-    const intervalId = window.setInterval(() => {
-      void fetchLogs(true);
-    }, pollIntervalMs);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [fetchLogs, pollIntervalMs]);
-
-  return { data, loading, error, refetch: fetchLogs, lastUpdated };
+    refetchInterval: paused ? false : pollIntervalMs,
+    refetchOnWindowFocus: !paused,
+  });
+  return {
+    data: query.data ?? [],
+    loading: query.isFetching,
+    error: query.error?.message ?? null,
+    refetch: () => query.refetch(),
+    lastUpdated: query.dataUpdatedAt
+      ? new Date(query.dataUpdatedAt).toISOString()
+      : null,
+  };
 }
 
-export function useRoutineHistory(pollIntervalMs = 5000) {
+export function useRoutineHistory(pollIntervalMs = 5000, paused = false) {
   const { apiEndpoint } = useAppConfig();
-  const [data, setData] = useState<RoutineHistoryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-
-  const baseUrl = `${apiEndpoint}/api/v1/config`;
-
-  const fetchHistory = useCallback(
-    async (background = false) => {
-      if (!background) {
-        setLoading(true);
-      }
-
-      try {
-        const response = await fetch(`${baseUrl}/routine-history`);
-        const result = await readApiResponse<RoutineHistoryEntry[]>(
-          response,
-          'Failed to fetch routine history',
-        );
-        setData(result.data ?? []);
-        setError(null);
-        setLastUpdated(new Date().toISOString());
-      } catch (nextError) {
-        setError(
-          nextError instanceof Error ? nextError.message : 'Unknown error',
-        );
-      } finally {
-        if (!background) {
-          setLoading(false);
-        }
-      }
+  const query = useQuery({
+    queryKey: ['config', apiEndpoint, 'routine-history'],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/routine-history`,
+        {
+          signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
+        },
+      );
+      const result = await readApiResponse<RoutineHistoryEntry[]>(
+        response,
+        'Could not load routine activity',
+      );
+      return result.data ?? [];
     },
-    [baseUrl],
-  );
-
-  useEffect(() => {
-    void fetchHistory();
-
-    const intervalId = window.setInterval(() => {
-      void fetchHistory(true);
-    }, pollIntervalMs);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [fetchHistory, pollIntervalMs]);
-
-  return { data, loading, error, refetch: fetchHistory, lastUpdated };
+    refetchInterval: paused ? false : pollIntervalMs,
+    refetchOnWindowFocus: !paused,
+  });
+  return {
+    data: query.data ?? [],
+    loading: query.isFetching,
+    error: query.error?.message ?? null,
+    refetch: () => query.refetch(),
+    lastUpdated: query.dataUpdatedAt
+      ? new Date(query.dataUpdatedAt).toISOString()
+      : null,
+  };
 }
 
 export function useRuntimeStatus(pollIntervalMs = 5000) {
@@ -882,37 +953,64 @@ export function useRuntimeStatus(pollIntervalMs = 5000) {
 // Export/Import hooks
 export function useConfigExport() {
   const recordWrite = useRecordConfigWrite();
+  const queryClient = useQueryClient();
   const { apiEndpoint } = useAppConfig();
   const baseUrl = `${apiEndpoint}/api/v1/config`;
 
   const exportConfig = useCallback(
     async (includeSecrets = false): Promise<ConfigExport> => {
       const query = includeSecrets ? '?include_secrets=true' : '';
-      const response = await fetch(`${baseUrl}/export${query}`);
-      const result = await response.json();
-      if (result.success) {
-        return result.data;
-      }
-      throw new Error(result.error || 'Failed to export');
+      const response = await fetch(`${baseUrl}/export${query}`, {
+        signal: AbortSignal.timeout(30000),
+      });
+      const result = await readApiResponse<ConfigExport>(
+        response,
+        'Could not download the backup.',
+      );
+      return result.data!;
     },
     [baseUrl],
   );
 
   const importConfig = useCallback(
-    async (config: ConfigExport) => {
-      const response = await fetch(`${baseUrl}/import`, {
+    async (config: ConfigExport, expected?: string) => {
+      const query = expected ? `?expected=${encodeURIComponent(expected)}` : '';
+      const response = await fetch(`${baseUrl}/import${query}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
+        signal: AbortSignal.timeout(60000),
       });
-      const result = await response.json();
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to import');
-      }
-      recordWrite('Configuration import', result.write);
+      const result = await readApiResponse<unknown>(
+        response,
+        'Could not restore the backup.',
+      );
+      recordWrite('Configuration import', result.write, '');
+      for (const key of ['config', 'sensor-catalog', 'device-health'])
+        void queryClient.invalidateQueries({ queryKey: [key] });
+      return result.write;
     },
-    [baseUrl, recordWrite],
+    [baseUrl, recordWrite, queryClient],
   );
 
-  return { exportConfig, importConfig };
+  const previewImport = useCallback(
+    async (config: unknown, signal?: AbortSignal) => {
+      const response = await fetch(`${baseUrl}/import/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(30000)])
+          : AbortSignal.timeout(30000),
+      });
+      const result = await readApiResponse<BackupReview>(
+        response,
+        'Could not review the backup.',
+      );
+      return result.data!;
+    },
+    [baseUrl],
+  );
+
+  return { exportConfig, importConfig, previewImport };
 }

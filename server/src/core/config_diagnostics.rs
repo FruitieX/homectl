@@ -59,7 +59,17 @@ impl Inspector<'_> {
             severity,
             message,
             suggestion: suggestion.into(),
+            device_keys: if entity == DiagnosticEntity::Device {
+                vec![id.into()]
+            } else {
+                Vec::new()
+            },
         });
+    }
+    fn attach_device(&mut self, key: &str) {
+        if let Some(issue) = self.issues.last_mut() {
+            issue.device_keys.push(key.into());
+        }
     }
 
     fn scene_value(&mut self, scene_id: &str, name: &str, target: &str, value: &serde_json::Value) {
@@ -113,6 +123,7 @@ impl Inspector<'_> {
                         format!("Target {target} reads from unavailable device {key}."),
                         "Check the source integration or choose another source device.",
                     );
+                    self.attach_device(&key.to_string());
                 }
             }
             Ok(_) => {}
@@ -202,6 +213,7 @@ pub fn inspect_config(snapshot: &RuntimeSnapshot) -> ConfigDiagnostics {
                 if !found {
                     check.issue(Group, &group.id, &group.name, "missing_group_device", &key, Warning,
                         format!("Device {key} is not available in the current runtime."), "Check its integration, replace the device reference, or remove it from this group.");
+                    check.attach_device(&key);
                 }
             }
         }
@@ -219,8 +231,8 @@ pub fn inspect_config(snapshot: &RuntimeSnapshot) -> ConfigDiagnostics {
                     .and_then(|key| resolve_snapshot_device_key(snapshot, &key))
                     .and_then(|canonical| snapshot.devices.0.get(&canonical));
             match device {
-                None if !snapshot.warming_up => check.issue(Scene, &scene.id, &scene.name, "missing_scene_device", target, Warning,
-                    format!("Target device {target} is not available."), "Check its integration or update the scene target."),
+                None if !snapshot.warming_up => {check.issue(Scene, &scene.id, &scene.name, "missing_scene_device", target, Warning,
+                    format!("Target device {target} is not available."), "Check its integration or update the scene target.");check.attach_device(target);},
                 Some(device) if device.is_readonly() => check.issue(Scene, &scene.id, &scene.name, "readonly_scene_target", target, Info,
                     format!("Target {} is read-only; this scene cannot send changes to it.", device.name), "Remove it from the scene if unintended. Keep read-only policy unless this device should be controlled by homectl."),
                 _ => {},
@@ -296,6 +308,20 @@ pub fn inspect_config(snapshot: &RuntimeSnapshot) -> ConfigDiagnostics {
                     if exists { format!("Assigned scene {scene_id} has no resolved state for this device.") } else { format!("Assigned scene {scene_id} no longer exists.") },
                     "Review the device's assigned scene and its targets. No device state has been changed by this check.");
             }
+        }
+    }
+    for health in snapshot.device_health.devices.values() {
+        for issue in &health.issues {
+            check.issue(
+                Device,
+                &health.device_key,
+                &health.name,
+                &issue.code,
+                &health.device_key,
+                Warning,
+                issue.message.clone(),
+                "Check the device, its integration and its reporting policy.",
+            );
         }
     }
     check.issues.sort_by(|a, b| {

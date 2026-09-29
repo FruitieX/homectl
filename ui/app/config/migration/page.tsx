@@ -1,651 +1,592 @@
-import type { ConfigWriteStatus } from '@/bindings/ConfigWriteStatus';
-import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
-import { useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Info, Upload, X } from 'lucide-react';
-
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAppConfig } from '@/hooks/appConfig';
-import { cn } from '@/lib/cn';
+import { useEntityDraft } from '@/hooks/useEntityDraft';
+import { entityDraftStore } from '@/lib/entityDraft';
+import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
+import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
+import { readApiResponse, type BackupReview } from '@/hooks/useConfig';
+import { configItemHref } from '@/lib/configItemHref';
 import { ConfigTabs } from '@/ui/ConfigTabs';
-import { ConfigPageHeader } from '../page-header';
-import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
-import { Badge } from '@/ui/primitives/badge';
+import { SettingsSection } from '@/ui/settings/SettingsSection';
 import { Button } from '@/ui/primitives/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
-import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/ui/primitives/dialog';
+import { ConfigPageHeader } from '../page-header';
 
-type MigrationSelection = {
-  core: boolean;
-  integrations: boolean;
-  groups: boolean;
-  scenes: boolean;
-  routines: boolean;
+type Section = 'integrations' | 'groups' | 'scenes' | 'routines' | 'core';
+type Selection = Record<Section, boolean>;
+type Review = { review: BackupReview; skipped: string[] };
+type Draft = {
+  filename: string;
+  toml: string;
+  selection: Selection;
+  reviewed: Review | null;
+  acceptSkipped: boolean;
 };
-
-type MigrationSectionKey = keyof MigrationSelection;
-
-type MigrationPreview = {
-  core: {
-    warmup_time_seconds: number;
-  };
-  integrations: unknown[];
-  groups: unknown[];
-  scenes: unknown[];
-  routines: unknown[];
+const EMPTY: Draft = {
+  filename: '',
+  toml: '',
+  selection: {
+    integrations: true,
+    groups: false,
+    scenes: false,
+    routines: false,
+    core: false,
+  },
+  reviewed: null,
+  acceptSkipped: false,
 };
-
-type MigrationPreviewData = {
-  preview: MigrationPreview;
-  validation_errors: string[];
-};
-
-type MigrationApplyResult = {
-  core: boolean;
-  integrations: number;
-  groups: number;
-  scenes: number;
-  routines: number;
-};
-
-type ApiResult<T> = {
-  write?: ConfigWriteStatus;
-  success: boolean;
-  data?: T;
-  error?: string;
-};
-
-const defaultMigrationSelection: MigrationSelection = {
-  core: false,
-  integrations: true,
-  groups: false,
-  scenes: false,
-  routines: false,
-};
-
-const migrationSectionOptions: Array<{
-  key: MigrationSectionKey;
+const sections: {
+  key: Section;
   label: string;
   description: string;
-}> = [
+  entity?: string;
+}[] = [
   {
     key: 'integrations',
-    label: 'Integrations',
-    description: 'Load integrations first so they can discover devices.',
-  },
-  {
-    key: 'core',
-    label: 'Core Settings',
-    description: 'Warmup and other shared runtime settings.',
+    label: 'Connections',
+    description: 'Import first so devices can be discovered.',
+    entity: 'integration',
   },
   {
     key: 'groups',
-    label: 'Groups',
-    description: 'Import group definitions after devices are available.',
+    label: 'Rooms & groups',
+    description: 'Memberships and linked groups.',
+    entity: 'group',
   },
   {
     key: 'scenes',
     label: 'Scenes',
-    description: 'Import scene device links after discovery finishes.',
+    description: 'Preset states and device links.',
+    entity: 'scene',
   },
   {
     key: 'routines',
-    label: 'Routines',
-    description: 'Import rules and actions once device refs can resolve.',
+    label: 'Legacy routines',
+    description: 'Imported read-only; convert to edit.',
+    entity: 'routine',
+  },
+  {
+    key: 'core',
+    label: 'System behavior',
+    description: 'Warmup and legacy transition defaults.',
   },
 ];
 
-function hasSelectedSections(selection: MigrationSelection) {
-  return Object.values(selection).some(Boolean);
-}
-
-function buildMigrationQuery(selection: MigrationSelection) {
-  const query = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(selection)) {
-    query.set(key, String(value));
-  }
-
-  return query.toString();
-}
-
-function getSelectedSectionLabels(selection: MigrationSelection) {
-  return migrationSectionOptions
-    .filter((option) => selection[option.key])
-    .map((option) => option.label);
-}
-
-function formatPreviewSuccess(selection: MigrationSelection) {
-  const selected = getSelectedSectionLabels(selection);
-
-  if (selected.length === 0) {
-    return 'Select at least one section to import.';
-  }
-
-  return `${selected.join(', ')} parsed and validated successfully. Review the preview below.`;
-}
-
-function formatPreviewWarning(
-  selection: MigrationSelection,
-  validationErrors: string[],
-) {
-  const selected = getSelectedSectionLabels(selection);
-  const label = selected.join(', ');
-  const issueLabel = validationErrors.length === 1 ? 'warning' : 'warnings';
-
-  return `${label} parsed successfully with ${validationErrors.length} ${issueLabel}. The affected entries will be dropped if you continue with the import.`;
-}
-
-function formatMigrationSuccess(
-  result: MigrationApplyResult,
-  selection: MigrationSelection,
-) {
-  const parts: string[] = [];
-
-  if (result.core) {
-    parts.push('updated core settings');
-  }
-  if (selection.integrations) {
-    parts.push(`imported ${result.integrations} integrations`);
-  }
-  if (selection.groups) {
-    parts.push(`imported ${result.groups} groups`);
-  }
-  if (selection.scenes) {
-    parts.push(`imported ${result.scenes} scenes`);
-  }
-  if (selection.routines) {
-    parts.push(`imported ${result.routines} routines`);
-  }
-
-  const summary =
-    parts.length > 0 ? `${parts.join(', ')}.` : 'made no changes.';
-  const integrationsOnly =
-    selection.integrations &&
-    !selection.core &&
-    !selection.groups &&
-    !selection.scenes &&
-    !selection.routines;
-
-  if (integrationsOnly) {
-    return `Migration complete! ${summary} Wait for device discovery and the warmup period to finish, then rerun the migration for the remaining sections.`;
-  }
-
-  return `Migration complete! ${summary}`;
-}
-
-async function readApiResult<T>(response: Response, fallbackMessage: string) {
-  try {
-    return (await response.json()) as ApiResult<T>;
-  } catch {
-    return { success: false, error: fallbackMessage } satisfies ApiResult<T>;
-  }
-}
-
 export default function MigrationPage() {
-  const recordWrite = useRecordConfigWrite();
   const { apiEndpoint } = useAppConfig();
-  const [loading, setLoading] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [errorContext, setErrorContext] = useState<
-    'preview' | 'apply' | 'selection'
-  >('apply');
-  const [success, setSuccess] = useState<string | null>(null);
-  const [preview, setPreview] = useState<MigrationPreview | null>(null);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [selection, setSelection] = useState<MigrationSelection>(
-    defaultMigrationSelection,
+  const queryClient = useQueryClient();
+  const recordWrite = useRecordConfigWrite();
+  const { advanced } = useSettingsPreferences();
+  const [reviewing, setReviewing] = useState(false);
+  const [reading, setReading] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState('');
+  const [confirm, setConfirm] = useState(false);
+  const [filter, setFilter] = useState('');
+  const [limit, setLimit] = useState(80);
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const request = useRef<AbortController | null>(null);
+  const fileGeneration = useRef(0);
+  const key = `${apiEndpoint}/legacy-import`;
+  useEffect(() => {
+    const generation = fileGeneration;
+    setHost(document.getElementById('settings-save-slot'));
+    return () => {
+      request.current?.abort();
+      generation.current++;
+    };
+  }, []);
+  const draft = useEntityDraft<Draft>({
+    key,
+    // A completed first pass keeps the file in session memory for the next pass.
+    item: entityDraftStore.get<Draft>(key)?.baseline ?? EMPTY,
+    href: '/config/migration',
+    label: 'Legacy import',
+    validate: (value) =>
+      !value.reviewed
+        ? [
+            {
+              field: 'review',
+              message: 'Review this file and selection before importing.',
+            },
+          ]
+        : value.reviewed.skipped.length && !value.acceptSkipped
+          ? [
+              {
+                field: 'skipped',
+                message:
+                  'Acknowledge the skipped references, or change the setup and review again.',
+              },
+            ]
+          : [],
+    save: async (value) => {
+      try {
+        const response = await readApiResponse<{
+          core: boolean;
+          integrations: number;
+          groups: number;
+          scenes: number;
+          routines: number;
+        }>(
+          await fetch(`${apiEndpoint}/api/v1/config/migrate/import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              toml: value.toml,
+              selection: value.selection,
+              expected: value.reviewed!.review.revision_token,
+              accept_skipped: value.acceptSkipped,
+            }),
+            signal: AbortSignal.timeout(60000),
+          }),
+          'Could not import this file. Review again before retrying.',
+        );
+        recordWrite('Legacy import', response.write, '');
+        setResult(
+          response.write?.persistence === 'persisted'
+            ? 'Selected entries imported and saved. The file is kept here for another pass.'
+            : 'Selected entries applied, but not saved to the database. Download a backup and resolve the persistence warning.',
+        );
+        for (const prefix of [
+          'config',
+          'dashboard',
+          'sensor-catalog',
+          'device-settings',
+          'device-health',
+          'settings-preferences',
+        ])
+          void queryClient.invalidateQueries({ queryKey: [prefix] });
+        return { ...value, reviewed: null, acceptSkipped: false };
+      } catch (error) {
+        draft.patch({ reviewed: null, acceptSkipped: false });
+        throw error;
+      }
+    },
+  });
+  const value = draft.value!;
+  const reviewed = value.reviewed;
+  const changes =
+    reviewed?.review.sections.flatMap((section) =>
+      section.changes.map((change) => ({ ...change, section })),
+    ) ?? [];
+  const replacements = changes.filter((row) => row.action === 'update').length;
+  const additions = changes.filter((row) => row.action === 'add').length;
+  const visible = changes.filter((row) =>
+    `${row.name} ${row.id} ${row.section.label}`
+      .toLocaleLowerCase()
+      .includes(filter.toLocaleLowerCase()),
   );
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const selectedSectionLabels = getSelectedSectionLabels(selection);
-
-  const resetUploadState = () => {
-    setValidationErrors([]);
-    setPreview(null);
-    setConfirmOpen(false);
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+  const busy = draft.saving || reviewing || reading;
+  const invalidateReview = () => {
+    entityDraftStore.errors(key, []);
+    request.current?.abort();
+    setReviewing(false);
+    setConfirm(false);
+    setError('');
+    setResult('');
+    draft.patch({ reviewed: null, acceptSkipped: false });
   };
-
-  const handleSelectionChange = (
-    section: MigrationSectionKey,
-    checked: boolean,
-  ) => {
-    setSelection((current) => ({
-      ...current,
-      [section]: checked,
-    }));
-    setError(null);
-    setSuccess(null);
-    resetUploadState();
-  };
-
-  const toggleSelection = (section: MigrationSectionKey) => {
-    handleSelectionChange(section, !selection[section]);
-  };
-
-  const handleTomlUpload = async (file: File) => {
-    if (!hasSelectedSections(selection)) {
-      setErrorContext('selection');
-      setError('Select at least one section to import.');
-      resetUploadState();
+  const reviewFile = async (toml = value.toml, selection = value.selection) => {
+    if (!toml.trim() || !Object.values(selection).some(Boolean)) {
+      setError('Choose a TOML file and at least one section.');
       return;
     }
-
-    setLoading(true);
-    setErrorContext('preview');
-    setError(null);
-    setSuccess(null);
-    setConfirmOpen(false);
-    setValidationErrors([]);
-    setPreview(null);
-
-    let text: string;
+    invalidateReview();
+    const controller = new AbortController();
+    request.current = controller;
+    setReviewing(true);
     try {
-      text = await file.text();
-    } catch (nextError) {
-      setErrorContext('preview');
-      setError(
-        nextError instanceof Error ? nextError.message : 'Upload failed',
-      );
-      setLoading(false);
-      resetUploadState();
-      return;
-    }
-
-    let response: Response;
-    try {
-      response = await fetch(
-        `${apiEndpoint}/api/v1/config/migrate/preview?${buildMigrationQuery(selection)}`,
-        {
+      const response = await readApiResponse<Review>(
+        await fetch(`${apiEndpoint}/api/v1/config/migrate/review`, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: text,
-        },
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ toml, selection }),
+          signal: AbortSignal.any([
+            controller.signal,
+            AbortSignal.timeout(30000),
+          ]),
+        }),
+        'Could not review this file.',
       );
-    } catch (nextError) {
-      setErrorContext('preview');
-      setError(
-        nextError instanceof Error ? nextError.message : 'Upload failed',
-      );
-      setLoading(false);
-      resetUploadState();
+      if (!controller.signal.aborted && response.data) {
+        draft.patch({ reviewed: response.data, acceptSkipped: false });
+        setFilter('');
+        setLimit(80);
+        requestAnimationFrame(() => {
+          const heading = document.getElementById('migration-review-title');
+          heading?.focus({ preventScroll: true });
+          heading?.scrollIntoView({ block: 'start' });
+        });
+      }
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setError(
+          error instanceof Error
+            ? error.name === 'TimeoutError'
+              ? 'Review timed out. Nothing was imported; try again.'
+              : error.message
+            : 'Could not review this file.',
+        );
+    } finally {
+      if (request.current === controller) setReviewing(false);
+    }
+  };
+  const chooseFile = async (file: File) => {
+    const generation = ++fileGeneration.current;
+    invalidateReview();
+    if (file.size > 16 * 1024 * 1024) {
+      setError('Choose a TOML file smaller than 16 MB.');
       return;
     }
-
-    const result = await readApiResult<MigrationPreviewData>(
-      response,
-      'Failed to parse TOML',
-    );
-
-    if (result.success && result.data) {
-      setPreview(result.data.preview);
-      setValidationErrors(result.data.validation_errors);
-      setSuccess(
-        result.data.validation_errors.length > 0
-          ? formatPreviewWarning(selection, result.data.validation_errors)
-          : formatPreviewSuccess(selection),
-      );
-    } else {
-      setValidationErrors([]);
-      setError(result.error || 'Failed to parse TOML');
-    }
-
-    setLoading(false);
-  };
-
-  const applyMigration = async () => {
-    if (!preview) return;
-
-    setLoading(true);
-    setErrorContext('apply');
-    setError(null);
-    setSuccess(null);
-
-    let response: Response;
+    setReading(true);
     try {
-      response = await fetch(`${apiEndpoint}/api/v1/config/migrate/apply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ preview, selection }),
+      const toml = await file.text();
+      if (generation !== fileGeneration.current) return;
+      draft.patch({
+        filename: file.name,
+        toml,
+        reviewed: null,
+        acceptSkipped: false,
       });
-    } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : 'Migration failed',
-      );
-      setLoading(false);
-      resetUploadState();
-      return;
-    }
-
-    const result = await readApiResult<MigrationApplyResult>(
-      response,
-      'Migration failed',
-    );
-
-    if (result.success && result.data) {
-      recordWrite('Configuration migration', result.write);
-      setSuccess(formatMigrationSuccess(result.data, selection));
-      setValidationErrors([]);
-      setPreview(null);
-      setConfirmOpen(false);
-    } else {
-      setError(result.error || 'Migration failed');
-    }
-
-    setLoading(false);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      await reviewFile(toml);
+    } catch {
+      setError('Could not read this file. Choose it again.');
+    } finally {
+      if (generation === fileGeneration.current) setReading(false);
     }
   };
-
-  const handleMigrate = async () => {
-    if (!hasSelectedSections(selection)) {
-      setErrorContext('selection');
-      setError('Select at least one section to import.');
-      return;
-    }
-
-    if (!preview) {
-      return;
-    }
-
-    if (validationErrors.length > 0) {
-      setConfirmOpen(true);
-      return;
-    }
-
-    await applyMigration();
+  const discard = () => {
+    fileGeneration.current++;
+    request.current?.abort();
+    setReading(false);
+    setReviewing(false);
+    setConfirm(false);
+    setError('');
+    setResult('');
+    entityDraftStore.forget(key);
+    entityDraftStore.sync(key, EMPTY, {
+      label: 'Legacy import',
+      href: '/config/migration',
+    });
+    if (fileInput.current) fileInput.current.value = '';
   };
-
-  const handleConfirmMigrate = async () => {
-    await applyMigration();
-  };
-
   return (
-    <div className="max-w-6xl space-y-5">
+    <div className="settings-detail space-y-5">
       <ConfigPageHeader
         title="Import an older setup"
-        description="Move settings from a legacy Settings.toml file into the current database."
+        description="Review selected entries from a legacy TOML file before adding them to your saved setup."
       />
       <ConfigTabs
         tabs={[
           { label: 'Backups', to: '/config/import-export' },
-          { label: 'Migration', to: '/config/migration', active: true },
+          { label: 'Legacy import', to: '/config/migration', active: true },
         ]}
       />
-
-      <Alert variant="warning">
-        <AlertTriangle className="size-4" />
-        <AlertTitle>Import in two steps</AlertTitle>
-        <AlertDescription>
-          This tool imports your existing Settings.toml configuration into the
-          database. Use it in two passes: import integrations first, wait for
-          device discovery and warmup, then rerun the migration for groups,
-          scenes, and routines.
-        </AlertDescription>
-      </Alert>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Import Scope</CardTitle>
-          <CardDescription>
-            Preview and apply only use the sections checked below.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Alert>
-            <Info className="size-4" />
-            <AlertTitle>Recommended flow</AlertTitle>
-            <AlertDescription>
-              First import integrations only, then wait for integrations to
-              discover devices. After discovery, upload the same TOML again and
-              import the remaining sections.
-            </AlertDescription>
-          </Alert>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {migrationSectionOptions.map((option) => (
-              <button
-                key={option.key}
-                type="button"
-                aria-pressed={selection[option.key]}
-                className={cn(
-                  'flex w-full items-start justify-between gap-3 rounded-2xl border p-4 text-left transition-colors',
-                  selection[option.key]
-                    ? 'border-primary bg-primary/10'
-                    : 'border-border bg-background/60 hover:bg-accent/50',
-                )}
-                disabled={loading}
-                onClick={() => toggleSelection(option.key)}
-              >
-                <span>
-                  <span className="block font-medium">{option.label}</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {option.description}
-                  </span>
+      <SettingsSection
+        title="Choose what to import"
+        description="For a new setup, import connections first, wait for device discovery, then review rooms, scenes and routines from the same file. Other saved entries are kept."
+      >
+        <fieldset disabled={busy} className="grid gap-3 sm:grid-cols-2">
+          <legend className="sr-only">Import sections</legend>
+          {sections.map((section) => (
+            <label key={section.key} className="flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={value.selection[section.key]}
+                onChange={(event) => {
+                  invalidateReview();
+                  draft.patch({
+                    selection: {
+                      ...value.selection,
+                      [section.key]: event.target.checked,
+                    },
+                  });
+                }}
+              />
+              <span>
+                {section.label}
+                <span className="block text-xs text-muted-foreground">
+                  {section.description}
                 </span>
-                <Badge
-                  variant={selection[option.key] ? 'default' : 'outline'}
-                  className="shrink-0"
-                >
-                  {selection[option.key] ? 'Include' : 'Skip'}
-                </Badge>
-              </button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Upload Settings.toml</CardTitle>
-          <CardDescription>
-            Upload your legacy TOML configuration file. Preview and apply will
-            only use selected sections.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Input
-            ref={fileInputRef}
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <p className="mt-4 text-xs text-muted-foreground">
+          Entries with matching IDs are replaced.{' '}
+          <Link className="settings-link" to="/config/import-export">
+            Download a backup
+          </Link>{' '}
+          or{' '}
+          <Link className="settings-link" to="/config/integrations">
+            check connections and device discovery
+          </Link>
+          .
+        </p>
+      </SettingsSection>
+      <SettingsSection
+        title="Legacy file"
+        description="The file stays in this session while you visit related settings. Nothing is imported during review."
+      >
+        <label className="block space-y-2 text-sm">
+          TOML file
+          <input
+            ref={fileInput}
             type="file"
-            accept=".toml"
-            className="max-w-md file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground"
+            accept=".toml,text/plain"
+            disabled={busy}
+            className="block w-full min-w-0 rounded-md border border-input p-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-muted file:px-3 file:py-2"
             onChange={(event) => {
               const file = event.target.files?.[0];
-              if (file) void handleTomlUpload(file);
+              if (file) void chooseFile(file);
             }}
-            disabled={loading}
           />
-
-          {loading && (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Upload className="size-4 animate-pulse" /> Processing…
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertTitle>
-            {errorContext === 'preview'
-              ? 'Could not preview this file'
-              : errorContext === 'selection'
-                ? 'Nothing selected'
-                : 'Migration failed'}
-          </AlertTitle>
-          <AlertDescription className="flex items-start justify-between gap-3">
-            <span className="whitespace-pre-wrap">{error}</span>
-            <Button variant="ghost" size="icon" onClick={() => setError(null)}>
-              <X />
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {preview && validationErrors.length > 0 && (
-        <Alert variant="warning">
-          <AlertTriangle className="size-4" />
-          <AlertTitle>Entries Will Be Dropped On Import</AlertTitle>
-          <AlertDescription>
-            <p>
-              Some entries in the uploaded TOML could not be matched to existing
-              devices. You can proceed, but affected entries will be skipped.
-            </p>
-            <ul className="mt-3 list-inside list-disc space-y-1 whitespace-pre-wrap text-sm">
-              {validationErrors.map((issue) => (
-                <li key={issue}>{issue}</li>
-              ))}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {success && (
-        <Alert>
-          <CheckCircle2 className="size-4" />
-          <AlertTitle>Done</AlertTitle>
-          <AlertDescription className="flex items-start justify-between gap-3">
-            <span>{success}</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSuccess(null)}
-            >
-              <X />
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {preview && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Migration Preview</CardTitle>
-            <CardDescription>
-              Review the selected sections before applying this migration run.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Previewing:</span>
-              {selectedSectionLabels.map((label) => (
-                <Badge key={label} variant="outline">
-                  {label}
-                </Badge>
-              ))}
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <PreviewSection
-                title="Core Settings"
-                count={selection.core ? 1 : 0}
-              />
-              <PreviewSection
-                title="Integrations"
-                count={preview.integrations.length}
-              />
-              <PreviewSection title="Groups" count={preview.groups.length} />
-              <PreviewSection title="Scenes" count={preview.scenes.length} />
-              <PreviewSection
-                title="Routines"
-                count={preview.routines.length}
-              />
-            </div>
-
-            <details className="rounded-2xl border border-border bg-muted/50">
-              <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
-                Full Configuration JSON
-              </summary>
-              <pre className="max-h-96 overflow-auto border-t border-border p-4 text-xs text-muted-foreground">
-                {JSON.stringify(preview, null, 2)}
-              </pre>
-            </details>
-          </CardContent>
-          <CardFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="ghost" onClick={resetUploadState}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void handleMigrate()}
-              disabled={loading}
-            >
-              Apply Selected Sections
-            </Button>
-          </CardFooter>
-        </Card>
-      )}
-
-      <ResponsiveOverlay
-        open={confirmOpen}
-        onOpenChange={(open) => {
-          if (!loading) {
-            setConfirmOpen(open);
-          }
-        }}
-        title="Apply migration with warnings?"
-        description="Some TOML entries cannot be resolved and will be dropped if you continue."
-      >
-        <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
-          <p className="text-sm text-muted-foreground">
-            This migration preview contains {validationErrors.length}{' '}
-            name-resolution {validationErrors.length === 1 ? 'issue' : 'issues'}
-            .
+        </label>
+        {value.filename && (
+          <p className="mt-3 break-all text-sm">
+            {value.filename} · retained in this session
           </p>
-
-          <Alert variant="warning">
-            <AlertTriangle className="size-4" />
-            <AlertTitle>Affected entries</AlertTitle>
-            <AlertDescription>
-              <ul className="mt-2 max-h-64 list-disc space-y-1 overflow-auto pl-5 whitespace-pre-wrap text-sm">
-                {validationErrors.map((issue) => (
-                  <li key={issue}>{issue}</li>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            disabled={
+              busy ||
+              !value.toml.trim() ||
+              !Object.values(value.selection).some(Boolean)
+            }
+            onClick={() => void reviewFile()}
+          >
+            {reviewing ? 'Reviewing…' : 'Review selected entries'}
+          </Button>
+          {value.toml && !draft.dirty && (
+            <Button variant="ghost" disabled={busy} onClick={discard}>
+              Clear file
+            </Button>
+          )}
+        </div>
+        {error && (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        {result && (
+          <p role="status" className="mt-3 text-sm">
+            {result}
+          </p>
+        )}
+      </SettingsSection>
+      {reviewed && (
+        <SettingsSection
+          id="migration-review"
+          title="Review import"
+          description="Only the selected entries below are added or replaced. Credential values are hidden."
+        >
+          <div
+            aria-label="Import summary"
+            className="flex flex-wrap gap-3 text-sm"
+          >
+            <span>{additions} to add</span>
+            <span>{replacements} to replace</span>
+            <span className="text-muted-foreground">
+              {reviewed.review.sections.reduce(
+                (n, section) => n + section.unchanged,
+                0,
+              )}{' '}
+              unchanged
+            </span>
+          </div>
+          <div className="my-4 space-y-2 text-xs text-muted-foreground">
+            {reviewed.review.warnings.map((warning) => (
+              <p key={warning}>{warning}</p>
+            ))}
+          </div>
+          {reviewed.skipped.length > 0 && (
+            <div className="my-4 space-y-3 rounded-md border border-amber-500/40 p-3 text-sm">
+              <h3 className="font-medium">Some references will be skipped</h3>
+              <ul className="max-h-64 list-inside list-disc space-y-1 overflow-auto break-words">
+                {reviewed.skipped.map((message, index) => (
+                  <li key={index}>{message}</li>
                 ))}
               </ul>
-            </AlertDescription>
-          </Alert>
-
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setConfirmOpen(false)}
-              disabled={loading}
-            >
+              <label className="flex items-start gap-2">
+                <input
+                  data-field="skipped"
+                  type="checkbox"
+                  checked={value.acceptSkipped}
+                  disabled={busy}
+                  onChange={(event) =>
+                    draft.patch({ acceptSkipped: event.target.checked })
+                  }
+                />
+                <span>
+                  Import with these skips; affected routines stay disabled.
+                </span>
+              </label>
+            </div>
+          )}
+          <label className="block space-y-1 text-sm">
+            Filter affected entries
+            <Input
+              value={filter}
+              onChange={(event) => {
+                setFilter(event.target.value);
+                setLimit(80);
+              }}
+              placeholder="Name, ID or category"
+            />
+          </label>
+          <ul
+            className="mt-3 divide-y divide-border"
+            aria-label="Migration changes"
+          >
+            {visible.slice(0, limit).map((row) => {
+              const entity = sections.find(
+                (section) => section.key === row.section.key,
+              )?.entity;
+              return (
+                <li
+                  key={`${row.section.key}/${row.id}`}
+                  className="flex items-start gap-3 py-3 text-sm"
+                >
+                  <span className="w-16 shrink-0 text-xs font-medium">
+                    {row.action === 'add' ? 'Add' : 'Replace'}
+                  </span>
+                  <div className="min-w-0 flex-1 break-words">
+                    <div className="font-medium">
+                      {entity && row.action !== 'add' ? (
+                        <Link
+                          className="settings-link"
+                          to={configItemHref(entity, row.id)}
+                        >
+                          {row.name}
+                        </Link>
+                      ) : (
+                        row.name
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {row.section.label}
+                      {advanced
+                        ? ` · ${row.id} · ${row.fields.join(', ')}`
+                        : ''}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          {!changes.length && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              No selected entries would change.
+            </p>
+          )}
+          {visible.length > limit && (
+            <Button variant="outline" onClick={() => setLimit((n) => n + 80)}>
+              Show more ({visible.length - limit} remaining)
+            </Button>
+          )}
+          <p className="mt-3 text-xs text-muted-foreground">
+            {visible.length} affected entries
+            {filter ? ' matching this filter' : ''}. Changes to the saved setup
+            or device resolution require a new review.
+          </p>
+        </SettingsSection>
+      )}
+      {draft.dirty &&
+        host &&
+        createPortal(
+          <div className="settings-savebar" aria-label="Legacy import actions">
+            {draft.errors.map((error, index) => (
+              <p role="alert" className="settings-save-errors" key={index}>
+                {error.message}
+              </p>
+            ))}
+            <div className="settings-save-actions">
+              <div className="min-w-0 flex-1 text-xs">
+                <strong>
+                  {draft.saving
+                    ? 'Importing…'
+                    : reviewing
+                      ? 'Reviewing…'
+                      : 'Import not applied'}
+                </strong>
+                <p className="truncate text-muted-foreground">
+                  {value.filename || 'Choose a file'}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                disabled={draft.saving}
+                onClick={discard}
+              >
+                Discard
+              </Button>
+              <Button
+                data-field="review"
+                disabled={
+                  busy ||
+                  !value.toml.trim() ||
+                  !Object.values(value.selection).some(Boolean) ||
+                  !!(
+                    reviewed &&
+                    (!changes.length ||
+                      (reviewed.skipped.length && !value.acceptSkipped))
+                  )
+                }
+                onClick={() => {
+                  if (!reviewed) void reviewFile();
+                  else setConfirm(true);
+                }}
+              >
+                {reviewed ? 'Import selected entries' : 'Review again'}
+              </Button>
+            </div>
+          </div>,
+          host,
+        )}
+      <Dialog open={confirm} onOpenChange={setConfirm}>
+        <DialogContent className="settings-dialog">
+          <DialogHeader>
+            <DialogTitle>Import selected entries?</DialogTitle>
+            <DialogDescription>
+              This adds {additions} entries and replaces {replacements}. Other
+              saved entries are kept. Connections may restart and pending
+              routine timers are canceled.
+              {reviewed?.skipped.length
+                ? ' Acknowledged references are skipped and affected routines remain disabled.'
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirm(false)}>
               Cancel
             </Button>
             <Button
-              type="button"
-              variant="secondary"
-              onClick={() => void handleConfirmMigrate()}
-              disabled={loading}
+              variant={replacements ? 'destructive' : 'default'}
+              onClick={() => {
+                setConfirm(false);
+                void draft.save();
+              }}
             >
-              Apply anyway
+              Confirm import
             </Button>
-          </div>
-        </div>
-      </ResponsiveOverlay>
-    </div>
-  );
-}
-
-function PreviewSection({ title, count }: { title: string; count: number }) {
-  return (
-    <div className="rounded-2xl border border-border bg-muted p-4">
-      <div className="text-3xl font-bold tracking-tight">{count}</div>
-      <div className="text-sm text-muted-foreground">{title}</div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

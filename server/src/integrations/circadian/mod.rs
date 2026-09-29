@@ -84,6 +84,7 @@ impl Integration for Circadian {
         let device = mk_circadian_device(self);
 
         self.event_tx.send(Event::ExternalStateUpdate {
+            report_retained: false,
             device,
             integration_epoch: None,
         });

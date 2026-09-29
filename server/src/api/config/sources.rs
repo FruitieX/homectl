@@ -82,7 +82,6 @@ pub(super) fn sources_routes(
     let upsert = warp::path!("sources" / String)
         .and(warp::put())
         .and(warp::body::json())
-        .and(with_snapshot(snapshot))
         .and(with_handle(handle))
         .and_then(upsert_source);
 
@@ -119,12 +118,26 @@ async fn list_sources(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Reje
     Ok(ApiResponse::success(snap.runtime_config.sources.clone()))
 }
 
+#[derive(Deserialize)]
+struct SourceUpdate {
+    #[serde(flatten)]
+    source: SourceDefinition,
+    #[serde(default)]
+    expected: Option<SourceDefinition>,
+    #[serde(default)]
+    create_only: bool,
+}
+
 async fn upsert_source(
     id: String,
-    mut source: SourceDefinition,
-    snapshot: SnapshotHandle,
+    request: SourceUpdate,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let SourceUpdate {
+        mut source,
+        expected,
+        create_only,
+    } = request;
     if source.id.0 != id {
         return Ok(error_response(
             "Source id in the path does not match the body.",
@@ -140,33 +153,30 @@ async fn upsert_source(
         Err(_) => return Ok(actor_unavailable()),
     };
 
-    // Revisions are server-owned so consumers can reject superseded results.
-    source.revision = {
-        let snap = snapshot.load();
-        snap.runtime_config
-            .sources
-            .iter()
-            .find(|existing| existing.id == source.id)
-            .map(|existing| existing.revision + 1)
-            .unwrap_or(1)
+    let outcome = handle.mutate(move |state| Box::pin(async move {
+        let current = state.runtime_config.sources.iter().find(|row| row.id == source.id);
+        if create_only && current.is_some() {
+            return Err((StatusCode::CONFLICT, serde_json::json!({"success": false, "error": "This source ID is already in use."})));
+        }
+        if let Some(expected) = expected.as_ref() {
+            match current {
+                None => return Err((StatusCode::NOT_FOUND, serde_json::json!({"success": false, "error": "This source was deleted. Your draft has not been saved."}))),
+                Some(current) if current != expected => return Err((StatusCode::CONFLICT, serde_json::json!({"success": false, "error": "This source changed elsewhere.", "current": current}))),
+                _ => {}
+            }
+        }
+        source.revision = current.map(|row| row.revision + 1).unwrap_or(1);
+        state.upsert_source(source.clone());
+        state.schedule_ws_broadcast(SnapshotChanges { runtime_config: true, ..SnapshotChanges::none() });
+        Ok(source)
+    })).await;
+    let source = match outcome {
+        Ok(Ok(source)) => source,
+        Ok(Err((status, body))) => {
+            return Ok(warp::reply::with_status(warp::reply::json(&body), status))
+        }
+        Err(_) => return Ok(actor_unavailable()),
     };
-
-    let source_for_state = source.clone();
-    if handle
-        .mutate(move |state| {
-            Box::pin(async move {
-                state.upsert_source(source_for_state);
-                state.schedule_ws_broadcast(SnapshotChanges {
-                    runtime_config: true,
-                    ..SnapshotChanges::none()
-                });
-            })
-        })
-        .await
-        .is_err()
-    {
-        return Ok(actor_unavailable());
-    }
 
     let database_available = db::is_db_connected();
     let persistence = config_queries::db_upsert_source(&source).await;
@@ -252,6 +262,60 @@ mod tests {
                 },
             },
         }
+    }
+
+    #[tokio::test]
+    async fn source_edits_compare_the_baseline_and_increment_revision_atomically() {
+        use crate::core::state::actor::spawn_state_actor;
+        let (state, _events) = crate::core::event::tests::test_state();
+        let snapshot = state.snapshot.clone();
+        let (deferred_tx, _deferred_rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = spawn_state_actor(state, snapshot.clone(), deferred_tx);
+        let routes = sources_routes(&snapshot, &handle);
+        let mut source = valid_source();
+        source.revision = 900;
+        let mut create = serde_json::to_value(&source).unwrap();
+        create["create_only"] = serde_json::json!(true);
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/sources/circadian")
+            .json(&create)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK, "{:?}", response.body());
+        let saved: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        assert_eq!(saved["data"]["revision"], 1);
+        assert_eq!(saved["data"]["compute"]["params"]["day_color"]["ct"], 3000);
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/sources/circadian")
+            .json(&create)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let baseline = saved["data"].clone();
+        let mut update = baseline.clone();
+        update["expected"] = baseline;
+        update["name"] = serde_json::json!("New source name");
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/sources/circadian")
+            .json(&update)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let saved: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        assert_eq!(saved["data"]["revision"], 2);
+        let response = warp::test::request()
+            .method("PUT")
+            .path("/sources/circadian")
+            .json(&update)
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let conflict: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        assert_eq!(conflict["current"]["name"], "New source name");
+        assert_eq!(conflict["current"]["revision"], 2);
     }
 
     #[test]

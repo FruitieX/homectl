@@ -389,6 +389,7 @@ async fn run_event_loop(
     integrations.run_start_pass().await?;
 
     let snapshot = new_snapshot_handle(RuntimeSnapshot {
+        device_health: Default::default(),
         runtime_config: Arc::new(runtime_config.config.clone()),
         devices: Arc::new(devices.get_state().clone()),
         flattened_groups: Arc::new(groups.get_flattened_groups().clone()),
@@ -401,6 +402,7 @@ async fn run_event_loop(
     });
 
     let mut state = AppState {
+        device_health: Default::default(),
         calibration_sessions: Default::default(),
         warming_up: true,
         runtime_config: runtime_config.config.clone(),

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { Check, ChevronsUpDown, X } from 'lucide-react';
 import { useMediaQuery } from 'usehooks-ts';
@@ -36,12 +37,27 @@ export function SearchablePicker({
 }) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [limit, setLimit] = useState(50);
+  const matching = options.filter((option) =>
+    `${option.label} ${option.value} ${option.detail ?? ''}`
+      .toLowerCase()
+      .includes(query.toLowerCase().trim()),
+  );
   const selected = options.find((option) => option.value === value);
   const triggerLabel =
     selected?.label ?? (value ? `${value} (unavailable)` : placeholder);
   const list = (
-    <Command>
-      <CommandInput autoFocus placeholder="Search by name or ID…" />
+    <Command shouldFilter={false}>
+      <CommandInput
+        autoFocus
+        placeholder="Search by name or ID…"
+        value={query}
+        onValueChange={(value) => {
+          setQuery(value);
+          setLimit(50);
+        }}
+      />
       <CommandList className="max-h-[min(45dvh,20rem)]">
         <CommandEmpty>No matches. Check the name or ID.</CommandEmpty>
         {value && clearable && (
@@ -55,7 +71,7 @@ export function SearchablePicker({
             Clear selection
           </CommandItem>
         )}
-        {options.map((option) => (
+        {matching.slice(0, limit).map((option) => (
           <CommandItem
             key={option.value}
             value={`${option.label} ${option.value} ${option.detail ?? ''}`}
@@ -75,6 +91,14 @@ export function SearchablePicker({
             </span>
           </CommandItem>
         ))}
+        {matching.length > limit && (
+          <CommandItem
+            value="show-more-results"
+            onSelect={() => setLimit((value) => value + 50)}
+          >
+            Show more ({matching.length - limit} remaining)
+          </CommandItem>
+        )}
       </CommandList>
     </Command>
   );
@@ -145,11 +169,13 @@ export function SearchableMultiPicker({
   value,
   onChange,
   placeholder = 'Add items…',
+  hrefFor,
 }: {
   options: PickerOption[];
   value: string[];
   onChange: (value: string[]) => void;
   placeholder?: string;
+  hrefFor?: (key: string) => string;
 }) {
   const selected = value.map(
     (key) =>
@@ -167,7 +193,16 @@ export function SearchableMultiPicker({
               key={option.value}
               className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border bg-muted/40 px-2 py-1 text-sm"
             >
-              <span className="truncate">{option.label}</span>
+              {hrefFor ? (
+                <Link
+                  to={hrefFor(option.value)}
+                  className="truncate hover:underline"
+                >
+                  {option.label}
+                </Link>
+              ) : (
+                <span className="truncate">{option.label}</span>
+              )}
               <button
                 type="button"
                 aria-label={`Remove ${option.label}`}

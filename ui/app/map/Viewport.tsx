@@ -1,3 +1,4 @@
+import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SlidersHorizontal } from 'lucide-react';
@@ -47,12 +48,11 @@ import { GroupPanel } from '../groups/GroupPanel';
 type FloorplanMode = 'all' | 'lights' | 'sensors';
 
 export const Viewport = ({ groupId }: { groupId?: string }) => {
+  const healthQuery = useDeviceHealth();
+  const healthByDevice = healthQuery.isError
+    ? undefined
+    : healthQuery.data?.devices;
   const navigate = useNavigate();
-  const [, refreshHealth] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => refreshHealth((value) => value + 1), 30000);
-    return () => clearInterval(timer);
-  }, []);
   const devicesState = useDevicesState();
   const liveGroups = useGroupsState();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
@@ -155,6 +155,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
     [deviceSensorConfigs],
   );
   const floorplanScene = buildFloorplanScene({
+    healthByDevice,
     grid: floorplanGrid,
     image: floorplanImage,
     devices: visibleDevices,

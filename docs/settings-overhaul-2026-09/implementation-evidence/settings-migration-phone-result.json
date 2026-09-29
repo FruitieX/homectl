@@ -1,0 +1,24 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "Review separates additions from replacements",
+   "Review does not import configuration",
+   "Related navigation retains file, scope and review",
+   "Changing scope retains the file and invalidates its old review",
+   "Skipped references require explicit acknowledgment",
+   "Canceling import confirmation makes no changes",
+   "Failed import keeps the file and requires review before retry",
+   "Stale review cannot replace entries",
+   "Import merges selected entries and keeps unrelated changes",
+   "A routine with skipped references remains disabled",
+   "Successful import retains the file for another pass without an unsaved draft",
+   "The completed import file survives a device-discovery visit",
+   "Unchanged repeated imports do not apply again",
+   "Discard clears the uploaded file and review",
+   "Invalid input stays available for correction and cannot be imported",
+   "Migration controls fit the viewport"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/migration","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 500 (Internal Server Error)","log: Failed to load resource: the server responded with a status of 409 (Conflict)","log: Failed to load resource: the server responded with a status of 400 (Bad Request)"]}

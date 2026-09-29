@@ -1,0 +1,20 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+   Compiling homectl-server v0.9.5 (/home/rasse/homectl/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.59s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/homectl_server-deb79e13f06b027d)
+
+running 9 tests
+test api::config::tests::canonicalize_migration_preview_resolves_legacy_name_refs ... ok
+test api::config::tests::canonicalize_migration_preview_reports_all_name_resolution_errors ... ok
+test api::config::tests::merge_selected_migration_config_preserves_unselected_sections ... ok
+test api::config::migration_review::tests::migration_review_preserves_omitted_connection_credentials_and_rejects_invalid_input ... ok
+test api::config::migration_review::tests::migration_review_token_changes_when_discovery_resolves_a_skipped_reference ... ok
+test api::config::migration_review::tests::migration_skips_require_acknowledgment_and_disable_affected_routines ... ok
+test api::config::migration_review::tests::migration_review_is_read_only_binds_file_and_state_and_keeps_other_entries ... ok
+test db::migrations::tests::routine_v2_columns_are_additive_and_preserve_legacy_rows ... ok
+test db::migrations::tests::uv_migration_removes_incompatible_hsv_calibration_data ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 777 filtered out; finished in 0.04s

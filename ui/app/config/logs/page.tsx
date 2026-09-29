@@ -1,285 +1,281 @@
-import { LogLevel, UiLogEntry, useLogs } from '@/hooks/useConfig';
-import { ConfigPageHeader } from '../page-header';
-import { Alert, AlertDescription } from '@/ui/primitives/alert';
-import { Badge } from '@/ui/primitives/badge';
-import { Button } from '@/ui/primitives/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/ui/primitives/card';
-import { EmptyState } from '@/ui/primitives/empty-state';
-import { Input } from '@/ui/primitives/input';
-import { Label } from '@/ui/primitives/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/ui/primitives/select';
-import { Skeleton } from '@/ui/primitives/skeleton';
-import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
-
-const levelBadgeVariant: Record<
-  LogLevel,
-  'default' | 'destructive' | 'secondary' | 'muted' | 'outline'
-> = {
-  ERROR: 'destructive',
-  WARN: 'secondary',
-  INFO: 'default',
-  DEBUG: 'muted',
-  TRACE: 'outline',
+import { Link, useSearchParams } from 'react-router-dom';
+import { configItemHref } from '@/lib/configItemHref';
+import { Copy, Pause, Play, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
+import { type LogLevel, type UiLogEntry, useLogs } from '@/hooks/useConfig';
+import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
+import { Button } from '@/ui/primitives/button';
+import { Input } from '@/ui/primitives/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/ui/primitives/dialog';
+import { ConfigPageHeader } from '../page-header';
+const levels: LogLevel[] = ['ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE'];
+const shortTime = (timestamp: string) => {
+  const time = new Date(timestamp);
+  return Number.isNaN(time.valueOf())
+    ? timestamp
+    : time.toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+      });
 };
-
-const levelOptions: Array<LogLevel | 'ALL'> = [
-  'ALL',
-  'ERROR',
-  'WARN',
-  'INFO',
-  'DEBUG',
-  'TRACE',
-];
-
-/** Log rows lead with the clock time; the full timestamp stays in details. */
-function formatShortTime(timestamp: string) {
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) {
-    return timestamp;
-  }
-  return date.toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-}
-
-function formatTimestamp(timestamp: string) {
-  return new Date(timestamp).toLocaleString(undefined, {
-    dateStyle: 'short',
-    timeStyle: 'medium',
-  });
-}
-
-function matchesLevelFilter(entry: UiLogEntry, levelFilter: LogLevel | 'ALL') {
-  if (levelFilter === 'ALL') {
-    return true;
-  }
-
-  return entry.level === levelFilter;
-}
-
-function matchesSearchFilter(entry: UiLogEntry, search: string) {
-  if (!search) {
-    return true;
-  }
-
-  const haystack =
-    `${entry.level} ${entry.target} ${entry.message}`.toLowerCase();
-  return haystack.includes(search);
-}
-
 export default function LogsPage() {
-  const { data, loading, error, refetch, lastUpdated } = useLogs();
-  const [levelFilter, setLevelFilter] = useState<LogLevel | 'ALL'>('ALL');
-  const [search, setSearch] = useState('');
-
-  const normalizedSearch = search.trim().toLowerCase();
-  const visibleLogs = [...data]
+  const [paused, setPaused] = useState(false),
+    [frozen, setFrozen] = useState<UiLogEntry[]>([]);
+  const { data, loading, error, refetch, lastUpdated } = useLogs(5000, paused);
+  const { advanced } = useSettingsPreferences();
+  const [params, setParams] = useSearchParams();
+  const [limit, setLimit] = useState(200),
+    [selected, setSelected] = useState<UiLogEntry | null>(null);
+  const search = params.get('q') ?? '',
+    level = params.get('level') ?? '',
+    target = params.get('source') ?? '';
+  const rows = paused ? frozen : data;
+  const visible = [...rows]
     .reverse()
-    .filter((entry) => matchesLevelFilter(entry, levelFilter))
-    .filter((entry) => matchesSearchFilter(entry, normalizedSearch));
-  const filtersActive = levelFilter !== 'ALL' || normalizedSearch.length > 0;
-  const initialLoading = loading && data.length === 0;
-
+    .filter(
+      (row) =>
+        (!level || row.level === level) &&
+        (!target || row.target === target) &&
+        (!params.get('device') ||
+          (row.references ?? []).some(
+            (reference) =>
+              reference.entity === 'device' &&
+              reference.entity_id === params.get('device'),
+          )) &&
+        `${row.level} ${row.target} ${row.message}`
+          .toLocaleLowerCase()
+          .includes(search.trim().toLocaleLowerCase()),
+    );
+  const patch = (key: string, value: string) => {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setParams(next, { replace: true });
+    setLimit(200);
+  };
   return (
-    <div className="max-w-6xl space-y-5">
+    <div className="mx-auto max-w-[1600px] space-y-4">
       <ConfigPageHeader
         title="Logs"
-        description="Technical events from the server. Use these when a device or automation needs troubleshooting."
+        description="Recent events from the server."
         actions={
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="text-xs text-muted-foreground">
-              {lastUpdated
-                ? `Last updated ${formatTimestamp(lastUpdated)}`
-                : 'Waiting for first update'}
-            </div>
+          <div className="flex gap-2">
             <Button
               variant="outline"
-              size="sm"
-              disabled={loading}
+              onClick={() => {
+                if (!paused) setFrozen(data);
+                setPaused(!paused);
+              }}
+            >
+              {paused ? (
+                <Play className="size-4" />
+              ) : (
+                <Pause className="size-4" />
+              )}
+              {paused ? 'Resume' : 'Pause'}
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Refresh logs"
+              disabled={loading || paused}
               onClick={() => void refetch()}
             >
-              <RefreshCw className={loading ? 'animate-spin' : ''} />
-              Refresh Now
+              <RefreshCw
+                className={`size-4 ${loading ? 'animate-spin' : ''}`}
+              />
             </Button>
           </div>
         }
       />
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription className="flex flex-col gap-3">
-            <span>{error}</span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="self-start"
-              onClick={() => void refetch()}
-            >
-              Retry
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Card>
-        <CardContent className="gap-4 pt-5">
-          <div className="flex flex-col gap-3 lg:flex-row">
-            <div className="grid w-full gap-2 lg:max-w-xs">
-              <Label htmlFor="log-level">Level</Label>
-              <Select
-                value={levelFilter}
-                onValueChange={(value) =>
-                  setLevelFilter(value as LogLevel | 'ALL')
-                }
-              >
-                <SelectTrigger id="log-level">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {levelOptions.map((level) => (
-                    <SelectItem key={level} value={level}>
-                      {level === 'ALL' ? 'All levels' : level}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid w-full gap-2">
-              <Label htmlFor="log-search">Search</Label>
-              <Input
-                id="log-search"
-                type="search"
-                placeholder="Filter by target or message"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 flex items-center gap-3 text-sm text-muted-foreground">
-            <span>
-              Showing {visibleLogs.length} of {data.length} buffered log
-              entries.
-            </span>
-            {filtersActive ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                type="button"
-                onClick={() => {
-                  setLevelFilter('ALL');
-                  setSearch('');
-                }}
-              >
-                Clear
-              </Button>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
-
-      {initialLoading ? (
-        <div className="grid gap-4">
-          <Skeleton className="h-24" />
-          <Skeleton className="h-36" />
-          <Skeleton className="h-32" />
+      {params.get('device') && (
+        <div className="flex items-center gap-2 text-xs">
+          Logs linked to {params.get('device')}
+          <Button variant="ghost" size="sm" onClick={() => patch('device', '')}>
+            Clear device filter
+          </Button>
         </div>
-      ) : visibleLogs.length === 0 ? (
-        <EmptyState
-          title={filtersActive ? 'No matching log entries' : 'No log entries'}
-          description={
-            filtersActive
-              ? 'Nothing matches the current level and search filters.'
-              : 'Logs appear here as soon as the server emits them.'
-          }
-          action={
-            filtersActive ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setLevelFilter('ALL');
-                  setSearch('');
-                }}
-              >
-                Show all levels
-              </Button>
-            ) : undefined
-          }
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Input
+          type="search"
+          aria-label="Search logs"
+          placeholder="Search messages or sources"
+          className="min-w-48 flex-1"
+          value={search}
+          onChange={(event) => patch('q', event.target.value)}
         />
+        <select
+          aria-label="Log level"
+          className="settings-select"
+          value={level}
+          onChange={(event) => patch('level', event.target.value)}
+        >
+          <option value="">All levels</option>
+          {levels.map((value) => (
+            <option key={value}>{value}</option>
+          ))}
+        </select>
+        <select
+          aria-label="Log source"
+          className="settings-select max-w-full sm:max-w-64"
+          value={target}
+          onChange={(event) => patch('source', event.target.value)}
+        >
+          <option value="">All sources</option>
+          {[
+            ...new Set([
+              ...rows.map((row) => row.target),
+              ...(target ? [target] : []),
+            ]),
+          ]
+            .sort()
+            .map((value) => (
+              <option key={value}>{value}</option>
+            ))}
+        </select>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>
+          {visible.length} of {rows.length} buffered events
+          {paused ? ' · Updates paused' : ' · Newest first'}
+        </span>
+        <span>
+          {lastUpdated
+            ? `Updated ${shortTime(lastUpdated)}`
+            : 'Waiting for events'}
+        </span>
+      </div>
+      {error && (
+        <div
+          role="alert"
+          className="flex items-center gap-2 text-xs text-destructive"
+        >
+          {error}
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            Retry
+          </Button>
+        </div>
+      )}
+      {loading && !data.length ? (
+        <p className="text-sm text-muted-foreground">Loading logs…</p>
+      ) : !visible.length ? (
+        <p className="rounded-md border border-dashed border-border p-5 text-sm text-muted-foreground">
+          {search || level || target
+            ? 'No events match these filters.'
+            : 'No buffered events yet.'}
+        </p>
       ) : (
-        <div className="space-y-4">
-          {visibleLogs.map((entry, index) => (
-            <Card key={`${entry.timestamp}-${entry.target}-${index}`}>
-              <CardHeader className="gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <CardDescription className="tabular-nums">
-                    {formatShortTime(entry.timestamp)}
-                  </CardDescription>
-                  <Badge variant={levelBadgeVariant[entry.level]}>
-                    {entry.level}
-                  </Badge>
-                  <CardTitle className="text-sm font-medium">
-                    {entry.target}
-                  </CardTitle>
-                </div>
-                <p className="line-clamp-2 text-sm leading-6 text-foreground">
-                  {entry.message}
-                </p>
-              </CardHeader>
-              <CardContent>
-                <details className="rounded-xl border border-border p-3">
-                  <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                    Raw entry
-                  </summary>
-                  <dl className="mt-2 space-y-1 text-xs">
-                    <div className="flex gap-2">
-                      <dt className="w-20 shrink-0 text-muted-foreground">
-                        Time
-                      </dt>
-                      <dd className="tabular-nums">
-                        {formatTimestamp(entry.timestamp)}
-                      </dd>
-                    </div>
-                    <div className="flex gap-2">
-                      <dt className="w-20 shrink-0 text-muted-foreground">
-                        Source
-                      </dt>
-                      <dd className="font-mono break-all">{entry.target}</dd>
-                    </div>
-                    <div className="flex gap-2">
-                      <dt className="w-20 shrink-0 text-muted-foreground">
-                        Level
-                      </dt>
-                      <dd className="font-mono">{entry.level}</dd>
-                    </div>
-                  </dl>
-                  <pre className="mt-2 whitespace-pre-wrap wrap-break-word rounded-lg bg-muted p-3 font-mono text-xs leading-5 text-muted-foreground">
-                    {entry.message}
-                  </pre>
-                </details>
-              </CardContent>
-            </Card>
+        <div
+          className={`settings-log-list ${advanced ? 'show-source' : ''}`}
+          aria-label="Log events"
+        >
+          {visible.slice(0, limit).map((entry, index) => (
+            <button
+              key={`${entry.timestamp}-${entry.target}-${index}`}
+              type="button"
+              className="settings-log-row"
+              onClick={() => setSelected(entry)}
+              aria-label={`${shortTime(entry.timestamp)} ${entry.level}: ${entry.message}`}
+            >
+              <time
+                dateTime={entry.timestamp}
+                className="log-time"
+                title={new Date(entry.timestamp).toLocaleString()}
+              >
+                {shortTime(entry.timestamp)}
+              </time>
+              <span className={`log-level log-${entry.level.toLowerCase()}`}>
+                {entry.level}
+              </span>
+              {advanced && (
+                <span className="log-source" title={entry.target}>
+                  {entry.target.split('::').at(-1)}
+                </span>
+              )}
+              <span className="log-message">{entry.message}</span>
+            </button>
           ))}
         </div>
       )}
+      {visible.length > limit && (
+        <Button
+          variant="outline"
+          onClick={() => setLimit((value) => value + 200)}
+        >
+          Show more ({visible.length - limit} remaining)
+        </Button>
+      )}
+      <Dialog
+        open={selected !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null);
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Event details</DialogTitle>
+            <DialogDescription>
+              {selected
+                ? `${new Date(selected.timestamp).toLocaleString()} · ${selected.level}`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          {selected && (
+            <>
+              <p className="break-all font-mono text-xs text-muted-foreground">
+                {selected.target}
+              </p>
+              <pre className="max-h-[55dvh] overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs leading-5">
+                {selected.message}
+              </pre>
+              {(selected.references ?? []).length > 0 && (
+                <div className="flex flex-wrap gap-3">
+                  {(selected.references ?? []).map((reference) => (
+                    <Link
+                      onClick={() => setSelected(null)}
+                      key={`${reference.entity}/${reference.entity_id}`}
+                      className="text-sm text-primary underline"
+                      to={configItemHref(reference.entity, reference.entity_id)}
+                    >
+                      Open {reference.entity}: {reference.entity_id}
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {advanced && selected.details && (
+                <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-all text-xs">
+                  {JSON.stringify(selected.details, null, 2)}
+                </pre>
+              )}
+              <Button
+                variant="outline"
+                className="w-fit"
+                onClick={() =>
+                  void navigator.clipboard
+                    .writeText(
+                      `${selected.timestamp} ${selected.level} ${selected.target}\n${selected.message}`,
+                    )
+                    .then(() => toast.success('Event copied'))
+                    .catch(() => toast.error('Could not copy this event.'))
+                }
+              >
+                <Copy className="size-4" />
+                Copy event
+              </Button>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

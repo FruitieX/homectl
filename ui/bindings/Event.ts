@@ -6,6 +6,7 @@ import type { EventCausation } from './EventCausation';
 import type { EventId } from './EventId';
 import type { EventOrigin } from './EventOrigin';
 import type { HelperId } from './HelperId';
+import type { IntegrationId } from './IntegrationId';
 import type { RoutineId } from './RoutineId';
 import type { SceneConfig } from './SceneConfig';
 import type { SceneId } from './SceneId';
@@ -16,6 +17,12 @@ import type { TimerWakeupJob } from './TimerWakeupJob';
 import type { JsonValue } from './serde_json/JsonValue';
 
 export type Event =
+  | {
+      IntegrationConnected: {
+        integration_id: IntegrationId;
+        integration_epoch: bigint | null;
+      };
+    }
   | {
       DeviceAvailability: {
         device_key: DeviceKey;
@@ -30,6 +37,10 @@ export type Event =
   | {
       ExternalStateUpdate: {
         device: Device;
+        /**
+         * Cached/discovery replay must never count as fresh heartbeat evidence.
+         */
+        report_retained: boolean;
         /**
          * Integration instance that produced the report.
          */
@@ -120,6 +131,10 @@ export type Event =
         definition_revision: bigint;
         state_revision: bigint;
         causation: EventCausation;
+        /**
+         * Frozen matched report source for scripted spatial rollouts.
+         */
+        triggering_device?: DeviceKey | null;
         /**
          * Strictly serialized worker result when the invocation succeeded.
          */
