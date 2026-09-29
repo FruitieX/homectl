@@ -1,0 +1,17 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "Matching edits do not write calibration",
+   "Incomplete hue stays visible and cannot be confirmed",
+   "Restored draft does not restart preview",
+   "Incomplete numeric draft survives closing",
+   "Shared Save and Discard controls available",
+   "Saving color preserves existing brightness channel",
+   "Save stops preview before the atomic write",
+   "Shared profile assignments preserved",
+   "No page overflow"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/groups","viewport":{"width":390,"height":844},"problems":[]}

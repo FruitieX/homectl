@@ -39,7 +39,7 @@ function OperationRow({
   return (
     <div
       className={cn(
-        'space-y-2 rounded-2xl border border-border/60 p-2',
+        'space-y-2 rounded-lg border border-border/60 p-2',
         isDestructiveOperation(operation) &&
           'border-destructive/30 bg-destructive/5',
         result && !result.ok && 'border-destructive/40',
@@ -188,10 +188,10 @@ export function PlanCard({
   };
 
   return (
-    <div className="space-y-3 rounded-3xl border border-border bg-card p-3 shadow-sm">
+    <div className="space-y-3 rounded-lg border border-border bg-card p-3 shadow-sm">
       <div className="space-y-2">
         <div className="flex items-start gap-2">
-          <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+          <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
             <Sparkles className="size-4" />
           </span>
           <div className="min-w-0 flex-1 space-y-1">

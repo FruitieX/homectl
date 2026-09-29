@@ -1,0 +1,17 @@
+{
+ "evaluated": {
+  "checks": [
+   "Proposal writes nothing before Apply",
+   "State previews are labelled",
+   "Explicit selected-device count",
+   "Unchecked device excluded from API request",
+   "Unselected rows are not marked applied",
+   "Outcome reports success and failure separately",
+   "No page overflow",
+   "Canonical target link",
+   "Opening a target closes the assistant panel"
+  ],
+  "width": 390
+ }
+}
+{"url":"http://127.0.0.1:3021/groups/living_room","viewport":{"width":390,"height":844},"problems":[]}

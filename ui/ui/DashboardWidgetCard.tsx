@@ -1,4 +1,11 @@
+import { useState } from 'react';
+import {
+  WidgetRecovery,
+  widgetSettingsHref,
+} from '../app/dashboard/WidgetRecovery';
+import { TimersCard } from '../app/dashboard/TimersCard';
 import type { DashboardWidget } from '@/hooks/useDashboard';
+import { Link } from 'react-router-dom';
 import { getDashboardWidgetOptionString } from '@/hooks/useDashboard';
 import { CardContent, CardHeader, CardTitle } from '@/ui/primitives/card';
 import { Button } from '@/ui/primitives/button';
@@ -12,11 +19,54 @@ import { SpotPriceCard } from '../app/dashboard/SpotPriceCard';
 import { TrainScheduleCard } from '../app/dashboard/TrainScheduleCard';
 import { WeatherCard } from '../app/dashboard/WeatherCard';
 import { DashboardCard } from '../app/dashboard/WidgetChrome';
+import {
+  RoomsCard,
+  ScenesCard,
+  IndoorClimateCard,
+} from '../app/dashboard/EverydayWidgets';
 
-export function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
+export function DashboardWidgetCard({
+  widget,
+  preview = false,
+}: {
+  widget: DashboardWidget;
+  preview?: boolean;
+}) {
+  if (widget.unsupportedType)
+    return (
+      <DashboardCard>
+        <CardContent className="overflow-auto p-4">
+          <EmptyState
+            title="Widget unavailable"
+            description={`This version cannot display “${widget.unsupportedType}”. Its saved configuration is kept.`}
+            action={
+              <Button variant="outline" asChild>
+                <Link
+                  to={
+                    widget.layoutId
+                      ? `/config/dashboard/${widget.layoutId}/widgets/${widget.id}`
+                      : '/config/dashboard'
+                  }
+                >
+                  Widget settings
+                </Link>
+              </Button>
+            }
+          />
+        </CardContent>
+      </DashboardCard>
+    );
   switch (widget.widget_type) {
+    case 'timers':
+      return <TimersCard widget={widget} />;
+    case 'rooms':
+      return <RoomsCard widget={widget} />;
+    case 'scenes':
+      return <ScenesCard widget={widget} />;
+    case 'indoor_climate':
+      return <IndoorClimateCard widget={widget} />;
     case 'home_overview':
-      return <HomeOverview />;
+      return <HomeOverview title={widget.title} />;
     case 'clock':
       return <ClockCard widget={widget} />;
     case 'controls':
@@ -37,14 +87,30 @@ export function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
           <CardHeader className="dashboard-widget-title shrink-0">
             <CardTitle>{widget.title}</CardTitle>
           </CardHeader>
-          <CardContent className="dashboard-text-content min-h-0 flex-1 overflow-hidden">
-            <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
-              {getDashboardWidgetOptionString(widget, 'body', '')}
-            </p>
+          <CardContent className="dashboard-text-content min-h-0 flex-1 overflow-auto">
+            {getDashboardWidgetOptionString(widget, 'body', '') ? (
+              <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                {getDashboardWidgetOptionString(widget, 'body', '')}
+              </p>
+            ) : (
+              <WidgetRecovery
+                widget={widget}
+                message="Add text to this widget."
+              />
+            )}
           </CardContent>
         </DashboardCard>
       );
     case 'link':
+      if (!getDashboardWidgetOptionString(widget, 'url', ''))
+        return (
+          <DashboardCard>
+            <WidgetRecovery
+              widget={widget}
+              message="Choose a destination for this link."
+            />
+          </DashboardCard>
+        );
       return (
         <DashboardCard className="dashboard-link-card">
           <Button
@@ -69,30 +135,52 @@ export function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
           </Button>
         </DashboardCard>
       );
-    case 'iframe':
+    case 'iframe': {
+      const url = getDashboardWidgetOptionString(widget, 'url', '');
       return (
         <DashboardCard className="dashboard-iframe-card">
-          <iframe
-            title={getDashboardWidgetOptionString(
-              widget,
-              'title',
-              widget.title,
-            )}
-            src={getDashboardWidgetOptionString(widget, 'url', 'about:blank')}
-            className="h-full min-h-0 w-full flex-1 border-0"
-            loading="lazy"
-          />
+          {url ? (
+            <>
+              <iframe
+                title={getDashboardWidgetOptionString(
+                  widget,
+                  'title',
+                  widget.title || 'Embedded page',
+                )}
+                src={url}
+                sandbox={preview ? '' : undefined}
+                className="min-h-0 w-full flex-1 border-0"
+                loading="lazy"
+              />
+              <div className="flex shrink-0 justify-between gap-3 border-t border-border px-3 text-xs">
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-9 items-center text-primary underline"
+                >
+                  Open page
+                </a>
+                <Link
+                  to={widgetSettingsHref(widget)}
+                  className="inline-flex min-h-9 items-center text-primary underline"
+                >
+                  Widget settings
+                </Link>
+              </div>
+            </>
+          ) : (
+            <WidgetRecovery widget={widget} message="Choose a page to embed." />
+          )}
         </DashboardCard>
       );
+    }
     case 'image':
       return (
-        <DashboardCard className="dashboard-image-card">
-          <img
-            src={getDashboardWidgetOptionString(widget, 'imageUrl', '')}
-            alt={getDashboardWidgetOptionString(widget, 'alt', widget.title)}
-            className="h-full min-h-0 w-full flex-1 object-cover"
-          />
-        </DashboardCard>
+        <ImageWidget
+          key={getDashboardWidgetOptionString(widget, 'imageUrl', '')}
+          widget={widget}
+        />
       );
     case 'custom': {
       const content = getDashboardWidgetOptionString(widget, 'content', '');
@@ -110,9 +198,10 @@ export function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
                 title={widget.title}
               />
             ) : (
-              <p className="p-4 text-sm opacity-70">
-                Add HTML in the widget settings; scripts do not run.
-              </p>
+              <WidgetRecovery
+                widget={widget}
+                message="Add HTML in widget settings; scripts do not run."
+              />
             )}
           </CardContent>
         </DashboardCard>
@@ -130,4 +219,46 @@ export function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
         </DashboardCard>
       );
   }
+}
+
+function ImageWidget({ widget }: { widget: DashboardWidget }) {
+  const [failed, setFailed] = useState(false),
+    [attempt, setAttempt] = useState(0);
+  const url = getDashboardWidgetOptionString(widget, 'imageUrl', '');
+  return (
+    <DashboardCard className="dashboard-image-card">
+      {!url || failed ? (
+        <div className="min-h-0 overflow-auto">
+          <WidgetRecovery
+            widget={widget}
+            message={
+              failed
+                ? 'Image unavailable. Check its address or try again.'
+                : 'Choose an image for this widget.'
+            }
+          />
+          {failed && (
+            <Button
+              variant="outline"
+              className="mx-4 mb-4"
+              onClick={() => {
+                setAttempt((n) => n + 1);
+                setFailed(false);
+              }}
+            >
+              Retry image
+            </Button>
+          )}
+        </div>
+      ) : (
+        <img
+          key={attempt}
+          src={url}
+          alt={getDashboardWidgetOptionString(widget, 'alt', widget.title)}
+          className="h-full min-h-0 w-full flex-1 object-cover"
+          onError={() => setFailed(true)}
+        />
+      )}
+    </DashboardCard>
+  );
 }

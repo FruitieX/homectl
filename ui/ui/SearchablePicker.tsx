@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { Check, ChevronsUpDown, X } from 'lucide-react';
 import { useMediaQuery } from 'usehooks-ts';
 import { Button } from '@/ui/primitives/button';
+import { ReorderButtons } from '@/ui/settings/ReorderButtons';
+import { moveSibling } from '@/lib/routineDraft';
 import {
   Popover,
   PopoverContent,
@@ -170,12 +172,14 @@ export function SearchableMultiPicker({
   onChange,
   placeholder = 'Add items…',
   hrefFor,
+  ordered = false,
 }: {
   options: PickerOption[];
   value: string[];
   onChange: (value: string[]) => void;
   placeholder?: string;
   hrefFor?: (key: string) => string;
+  ordered?: boolean;
 }) {
   const selected = value.map(
     (key) =>
@@ -187,12 +191,22 @@ export function SearchableMultiPicker({
   return (
     <div className="space-y-2">
       {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {selected.map((option) => (
+        <div className={ordered ? 'grid gap-1.5' : 'flex flex-wrap gap-1.5'}>
+          {selected.map((option, index) => (
             <span
               key={option.value}
-              className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border bg-muted/40 px-2 py-1 text-sm"
+              className="inline-flex max-w-full items-center gap-2 rounded-md border border-border bg-muted/40 px-2 py-1 text-sm"
             >
+              {ordered && (
+                <ReorderButtons
+                  label={option.label}
+                  index={index}
+                  total={selected.length}
+                  onMove={(offset) =>
+                    onChange(moveSibling(value, index, offset))
+                  }
+                />
+              )}
               {hrefFor ? (
                 <Link
                   to={hrefFor(option.value)}

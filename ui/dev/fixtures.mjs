@@ -1008,4 +1008,31 @@ export const fixtures = {
   normal: normalHome,
   large: largeHome,
   degraded: degradedHome,
+  everyday: () => {
+    const value = normalHome();
+    const floor = value.devices.find((d) => d.id === 'living_room_floor_lamp');
+    if (floor) floor.data.Controllable.managed = 'FullReadOnly';
+    value.config.floorplans = [];
+    value.config.groups.push(
+      {
+        id: 'everyday_parent',
+        name: 'Upstairs',
+        hidden: false,
+        devices: [
+          { integration_id: 'zigbee2mqtt', device_id: 'living_room_lamp' },
+          { integration_id: 'dummy', device_id: 'missing_light' },
+          { integration_id: 'zigbee2mqtt', device_id: 'living_room_motion' },
+        ],
+        linked_groups: ['living_room', 'everyday_empty'],
+      },
+      {
+        id: 'everyday_empty',
+        name: 'Spare room',
+        hidden: false,
+        devices: [],
+        linked_groups: [],
+      },
+    );
+    return value;
+  },
 };

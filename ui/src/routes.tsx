@@ -1,3 +1,4 @@
+import { NotFoundPage } from './NotFoundPage';
 import { Layout } from '../app/providers';
 import ConfigLayout from '../app/config/layout';
 
@@ -12,6 +13,7 @@ import {
 import { Navigate } from 'react-router-dom';
 
 const DashboardPage = lazy(() => import('../app/dashboard/page'));
+const ConfigTimersPage = lazy(() => import('../app/config/timers/page'));
 const ConfigDevicesPage = lazy(() => import('../app/config/devices/page'));
 const ConfigFloorplanPage = lazy(() => import('../app/config/floorplan/page'));
 const ConfigGroupsPage = lazy(() => import('../app/config/groups/page'));
@@ -143,6 +145,10 @@ export const router = createBrowserRouter([
             element: withSuspense(<ConfigPage />),
           },
           {
+            path: 'timers',
+            element: withSuspense(<ConfigTimersPage />),
+          },
+          {
             path: 'devices',
             element: withSuspense(<ConfigDevicesPage />),
           },
@@ -266,7 +272,7 @@ export const router = createBrowserRouter([
       },
       {
         path: '*',
-        element: <Navigate to="/" replace />,
+        element: <NotFoundPage />,
       },
     ],
   },

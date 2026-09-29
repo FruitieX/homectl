@@ -1,3 +1,7 @@
+import { Link } from 'react-router-dom';
+import { configItemHref } from '@/lib/configItemHref';
+import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
+import { WidgetRecovery } from './WidgetRecovery';
 import { useState } from 'react';
 
 import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
@@ -6,7 +10,7 @@ import {
   getDashboardWidgetOptionString,
 } from '@/hooks/useDashboard';
 import { useHelpers, useSetHelperValue } from '@/hooks/useConfig';
-import { useHelperStatuses } from '@/hooks/websocket';
+import { useHelperStatuses, useConnectionStatus } from '@/hooks/websocket';
 import { Button } from '@/ui/primitives/button';
 import { CardContent, CardHeader, CardTitle } from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
@@ -27,7 +31,14 @@ function helperOptions(helper: HelperRuntimeStatus) {
 }
 
 export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
-  const { data: definitions } = useHelpers();
+  const {
+    data: definitions,
+    loading,
+    error: loadError,
+    refetch,
+  } = useHelpers();
+  const { advanced } = useSettingsPreferences();
+  const connected = useConnectionStatus() === 'connected';
   const liveStatuses = useHelperStatuses();
   const setValue = useSetHelperValue();
   const [draft, setDraft] = useState('');
@@ -39,6 +50,7 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
     definitions?.find((status) => status.id === helperId);
 
   const apply = (value: unknown) => {
+    if (!connected || setValue.isPending) return;
     setError(null);
     setValue.mutate(
       { id: helperId, value },
@@ -60,24 +72,39 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
         <CardTitle>{widget?.title || 'Mode'}</CardTitle>
       </CardHeader>
       <CardContent className="dashboard-helper-mode-content flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
-        {!helperId ? (
-          <p className="text-sm text-muted-foreground">
-            Choose a helper in dashboard settings.
+        {loading && !helper ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            Loading helper…
           </p>
+        ) : loadError && !helper ? (
+          <div role="alert" className="text-sm">
+            Helper unavailable.{' '}
+            <Button variant="outline" onClick={() => void refetch()}>
+              Retry
+            </Button>
+          </div>
+        ) : !helperId ? (
+          <WidgetRecovery
+            widget={widget}
+            message="Choose a helper for this widget."
+          />
         ) : !helper ? (
-          <p className="text-sm text-muted-foreground">
-            Helper <span className="font-mono">{helperId}</span> is not defined.
-          </p>
+          <WidgetRecovery
+            widget={widget}
+            message={`Helper ${helperId} is no longer available.`}
+          />
         ) : (
           <>
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-2xl font-semibold leading-tight">
                 {displayValue(helper.value)}
               </span>
-              <span className="text-xs text-muted-foreground">
-                {helper.persistence === 'durable' ? 'durable' : 'session'} · rev{' '}
-                {Number(helper.revision)}
-              </span>
+              {advanced && (
+                <span className="text-xs text-muted-foreground">
+                  {helper.persistence === 'durable' ? 'durable' : 'session'} ·
+                  rev {Number(helper.revision)}
+                </span>
+              )}
             </div>
             {helper.kind.kind === 'enum' ? (
               <div className="flex flex-wrap gap-2">
@@ -87,7 +114,7 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
                     type="button"
                     size="sm"
                     variant={helper.value === option ? 'default' : 'outline'}
-                    disabled={setValue.isPending}
+                    disabled={setValue.isPending || !connected}
                     onClick={() => apply(option)}
                   >
                     {option}
@@ -101,7 +128,7 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
                   type="button"
                   size="sm"
                   variant={helper.value === true ? 'default' : 'outline'}
-                  disabled={setValue.isPending}
+                  disabled={setValue.isPending || !connected}
                   onClick={() => apply(true)}
                 >
                   On
@@ -110,7 +137,7 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
                   type="button"
                   size="sm"
                   variant={helper.value === false ? 'default' : 'outline'}
-                  disabled={setValue.isPending}
+                  disabled={setValue.isPending || !connected}
                   onClick={() => apply(false)}
                 >
                   Off
@@ -124,7 +151,7 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
                   event.preventDefault();
                   if (helper.kind.kind === 'number') {
                     const parsed = Number(draft);
-                    if (draft.trim() === '' || Number.isNaN(parsed)) {
+                    if (draft.trim() === '' || !Number.isFinite(parsed)) {
                       setError('Enter a number.');
                       return;
                     }
@@ -150,12 +177,31 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
                   }
                   onChange={(event) => setDraft(event.target.value)}
                 />
-                <Button type="submit" size="sm" disabled={setValue.isPending}>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={setValue.isPending || !connected}
+                >
                   Set
                 </Button>
               </form>
             ) : null}
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {!connected && (
+              <p role="status" className="text-xs text-muted-foreground">
+                Disconnected · waiting for live state
+              </p>
+            )}
+            <Link
+              className="text-xs text-primary underline"
+              to={configItemHref('helper', helperId)}
+            >
+              Helper details
+            </Link>
+            {error ? (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
           </>
         )}
       </CardContent>

@@ -1,0 +1,37 @@
+{
+ "evaluated": {}
+}
+{"exceptionId":1,"text":"Uncaught (in promise) Error: Draft restored","lineNumber":17,"columnNumber":11,"scriptId":"203","stackTrace":{"callFrames":[{"functionName":"until","scriptId":"203","url":"","lineNumber":16,"columnNumber":10}]},"exception":{"type":"object","subtype":"error","className":"Error","description":"Error: Draft restored\n    at until (<anonymous>:17:11)\n    at async <anonymous>:97:3","objectId":"-2537428299713455262.2.1"}}
+{"url":"http://127.0.0.1:3021/config/timers","viewport":{"width":390,"height":844},"problems":[]}
+c63a-4296-9c32-420e6a0244c0",
+   "name": "Morning warmth 1790707582376",
+   "icon": "coffee",
+   "enabled": false,
+   "schedule": {
+    "kind": "ready_by",
+    "time": "08:30",
+    "timezone": "Europe/Helsinki",
+    "date": null,
+    "weekdays": [
+     1,
+     2,
+     3,
+     4,
+     5
+    ],
+    "warmup_minutes": 35
+   },
+   "action": {
+    "kind": "device",
+    "device_key": "zigbee2mqtt/living_room_lamp",
+    "power": true
+   },
+   "finish_action": {
+    "kind": "device",
+    "device_key": "zigbee2mqtt/living_room_lamp",
+    "power": false
+   }
+  }
+ }
+}
+{"url":"http://127.0.0.1:3021/config/timers","viewport":{"width":390,"height":844},"problems":[]}

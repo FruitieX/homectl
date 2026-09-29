@@ -17,6 +17,11 @@ import {
   PopoverTrigger,
 } from '@/ui/primitives/popover';
 import { GroupFloorplanPreview } from '@/ui/floorplan/GroupFloorplanPreview';
+import { LiveSensorRow } from '@/ui/LiveSensorRow';
+import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
+import { LiveAttention } from '@/ui/LiveAttention';
+import { useDeviceHealth } from '@/hooks/useDeviceHealth';
+import { resolveGroupDeviceKeys } from '@/lib/group-floorplan-preview';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import type { Device } from '@/bindings/Device';
 
@@ -35,6 +40,7 @@ export default function Page() {
   const navigate = useNavigate();
   const groups = useGroupsState();
   const state = useDevicesState();
+  const health = useDeviceHealth();
   const { data: overrides } = useDeviceDisplayNames();
   const names = useMemo(
     () =>
@@ -47,6 +53,7 @@ export default function Page() {
   const [view, setView] = useState<'rooms' | 'devices'>('rooms');
   const [onOnly, setOnOnly] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
+  const [deviceType, setDeviceType] = useState('all');
   const [filtersOpen, setFiltersOpen] = useState(false);
   useAssistantPageContext({ kind: 'group' });
   const devices = Object.values(state ?? {}).filter(
@@ -65,11 +72,16 @@ export default function Page() {
       getDeviceDisplayLabel(device, names)
         .toLocaleLowerCase()
         .includes(query) &&
-      (!onOnly || getPower(device.data)),
+      (!onOnly || getPower(device.data)) &&
+      (deviceType === 'all' ||
+        (deviceType === 'lights'
+          ? 'Controllable' in device.data
+          : 'Sensor' in device.data)),
   );
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
       <div className="mx-auto max-w-6xl space-y-5">
+        <LiveAttention />
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex gap-1" aria-label="Browse">
             <Button
@@ -147,6 +159,21 @@ export default function Page() {
             </PopoverContent>
           </Popover>
         </div>
+        {view === 'devices' && (
+          <label className="flex items-center gap-3 text-sm">
+            Device type
+            <select
+              aria-label="Device type"
+              className="h-11 rounded-md border border-input bg-background px-3"
+              value={deviceType}
+              onChange={(e) => setDeviceType(e.target.value)}
+            >
+              <option value="all">All devices</option>
+              <option value="lights">Lights &amp; switches</option>
+              <option value="sensors">Sensors</option>
+            </select>
+          </label>
+        )}
         {!state || !groups ? (
           <p role="status" className="text-sm text-muted-foreground">
             Loading devices…
@@ -155,21 +182,31 @@ export default function Page() {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {visibleGroups
               .filter(
-                ([, group]) =>
+                ([id]) =>
                   !onOnly ||
-                  group!.device_keys.some(
+                  resolveGroupDeviceKeys(id, groups).some(
                     (key) => state[key] && getPower(state[key]!.data),
                   ),
               )
               .map(([id, group]) => {
                 if (!group) return null;
-                const roomDevices = group.device_keys.flatMap((key) =>
+                const roomKeys = resolveGroupDeviceKeys(id, groups);
+                const roomDevices = roomKeys.flatMap((key) =>
                   state[key] ? [state[key]!] : [],
                 );
+                const lights = roomDevices.filter(
+                  (d) => 'Controllable' in d.data,
+                );
+                const on = lights.filter((d) => getPower(d.data)).length;
+                const attention = health.isError
+                  ? 0
+                  : roomKeys.filter((key) =>
+                      health.data?.attention_device_keys.includes(key),
+                    ).length;
                 return (
                   <section
                     key={id}
-                    className="flex cursor-pointer flex-col gap-3 rounded-xl border border-border bg-card p-4"
+                    className="flex cursor-pointer flex-col gap-3 rounded-lg border border-border bg-card p-4"
                     onClick={(event) => {
                       // The header link and the power toggle handle their own
                       // clicks; every other tap opens the room.
@@ -183,15 +220,33 @@ export default function Page() {
                         to={roomPath(id)}
                         className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
+                        <LiveStatePreview
+                          states={[
+                            ...lights.map(devicePreviewState),
+                            ...roomKeys
+                              .filter((key) => !state[key])
+                              .map(() => undefined),
+                          ]}
+                        />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate">{group.name}</span>
                           <span className="block text-xs font-normal text-muted-foreground">
-                            {roomDevices.length}{' '}
-                            {roomDevices.length === 1 ? 'device' : 'devices'}
-                            {roomDevices.length !== group.device_keys.length
-                              ? ` · ${group.device_keys.length - roomDevices.length} unavailable`
+                            {lights.length
+                              ? `${on} of ${lights.length} on`
+                              : `${roomDevices.length} sensors`}
+                            {roomDevices.length !== roomKeys.length
+                              ? ` · ${roomKeys.length - roomDevices.length} unavailable`
                               : ''}
                           </span>
+                          {attention > 0 && (
+                            <span className="block text-xs font-normal text-amber-700 dark:text-amber-400">
+                              {attention}{' '}
+                              {attention === 1
+                                ? 'device needs'
+                                : 'devices need'}{' '}
+                              attention
+                            </span>
+                          )}
                         </span>
                         <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
                       </Link>
@@ -209,9 +264,9 @@ export default function Page() {
                 );
               })}
             {visibleGroups.filter(
-              ([, group]) =>
+              ([id]) =>
                 !onOnly ||
-                group!.device_keys.some(
+                resolveGroupDeviceKeys(id, groups).some(
                   (key) => state[key] && getPower(state[key]!.data),
                 ),
             ).length === 0 && (
@@ -236,7 +291,7 @@ export default function Page() {
                   displayNames={names}
                 />
               ) : (
-                <SensorRow
+                <LiveSensorRow
                   key={getDeviceKey(device)}
                   device={device}
                   displayNames={names}
@@ -252,32 +307,6 @@ export default function Page() {
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-export function SensorRow({
-  device,
-  displayNames,
-}: {
-  device: Device;
-  displayNames: Record<string, string>;
-}) {
-  const sensor = 'Sensor' in device.data ? device.data.Sensor : null;
-  const value =
-    sensor && 'value' in sensor
-      ? String(sensor.value)
-      : getPower(device.data)
-        ? 'On'
-        : 'Off';
-  return (
-    <div className="flex min-h-20 min-w-0 items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
-      <span className="min-w-0 break-words text-sm font-medium">
-        {getDeviceDisplayLabel(device, displayNames)}
-      </span>
-      <span className="max-w-[50%] break-words text-sm text-muted-foreground">
-        {value}
-      </span>
     </div>
   );
 }

@@ -1,13 +1,16 @@
+import { useUserTimers } from '@/hooks/useUserTimers';
 import { Link } from 'react-router-dom';
 import { useSensorData } from '@/hooks/influxdb';
 import { useSensorCatalog } from '@/hooks/sensorCatalog';
-import { useGroups, useHelpers } from '@/hooks/useConfig';
+import { useGroups, useHelpers, useScenes } from '@/hooks/useConfig';
 import { type WidgetType } from '@/hooks/useDashboard';
 import {
   DEFAULT_MAX_MINUTES_AHEAD,
   MAX_MAX_MINUTES_AHEAD,
 } from '@/lib/trainSchedule';
-import { SearchableMultiPicker } from '@/ui/SearchablePicker';
+import { SearchableMultiPicker, SearchablePicker } from '@/ui/SearchablePicker';
+import { Button } from '@/ui/primitives/button';
+import { ArrowUp, ArrowDown, X } from 'lucide-react';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { configItemHref } from '@/lib/configItemHref';
 import { ConfigField, ConfigHelpPanel } from '@/ui/config-form';
@@ -15,6 +18,170 @@ import { Input } from '@/ui/primitives/input';
 import { Textarea } from '@/ui/primitives/textarea';
 
 const selectClassName = 'settings-select';
+
+function WidgetEntitySelection({
+  kind,
+  value,
+  onChange,
+}: {
+  kind: 'group' | 'scene';
+  value: unknown;
+  onChange: (value: string[]) => void;
+}) {
+  const groups = useGroups(),
+    scenes = useScenes();
+  const catalog = kind === 'group' ? groups : scenes;
+  const selected = Array.isArray(value)
+    ? [...new Set(value.filter((id): id is string => typeof id === 'string'))]
+    : [];
+  const move = (index: number, delta: number) => {
+    const next = [...selected];
+    [next[index], next[index + delta]] = [next[index + delta], next[index]];
+    onChange(next);
+  };
+  return (
+    <div className="space-y-2">
+      {selected.map((id, index) => (
+        <div
+          key={id}
+          className="flex items-center gap-1 rounded-md border border-border p-2"
+        >
+          <Link
+            className="min-w-0 flex-1 truncate text-sm text-primary underline"
+            to={configItemHref(kind, id)}
+          >
+            {catalog.data?.find((row) => row.id === id)?.name ??
+              `${id} · Unavailable`}
+          </Link>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={`Move ${id} up`}
+            disabled={index === 0}
+            onClick={() => move(index, -1)}
+          >
+            <ArrowUp />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={`Move ${id} down`}
+            disabled={index === selected.length - 1}
+            onClick={() => move(index, 1)}
+          >
+            <ArrowDown />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={`Remove ${id}`}
+            onClick={() => onChange(selected.filter((key) => key !== id))}
+          >
+            <X />
+          </Button>
+        </div>
+      ))}
+      <SearchablePicker
+        value=""
+        options={(catalog.data ?? [])
+          .filter((row) => !selected.includes(row.id))
+          .map((row) => ({ value: row.id, label: row.name }))}
+        placeholder={kind === 'group' ? 'Add a room or group…' : 'Add a scene…'}
+        onChange={(id) => {
+          if (id) onChange([...selected, id]);
+        }}
+      />
+      {catalog.error && (
+        <p role="alert" className="text-xs">
+          Catalog unavailable. Saved selections are kept.
+        </p>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Displayed in this order. An empty selection shows no items.
+      </p>
+    </div>
+  );
+}
+
+function IndoorClimateOptions({
+  options,
+  onChange,
+}: {
+  options: Record<string, unknown>;
+  onChange: (key: string, value: unknown) => void;
+}) {
+  const { catalog, isError } = useSensorCatalog();
+  const sensors = useSensorData();
+  const choices = [
+    ...(catalog?.sensors ?? [])
+      .filter((s) => s.source === 'influxdb' && s.enabled)
+      .map((s) => ({ value: s.id, label: s.name })),
+    ...sensors
+      .filter((s) => !catalog?.sensors.some((item) => item.id === s.device_id))
+      .map((s) => ({ value: s.device_id, label: s.device_name })),
+  ];
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <ConfigField label="Temperature sensor">
+        <SearchablePicker
+          options={choices}
+          value={
+            typeof options.temperatureSensorId === 'string'
+              ? options.temperatureSensorId
+              : ''
+          }
+          placeholder="Choose a temperature sensor…"
+          onChange={(id) => onChange('temperatureSensorId', id)}
+        />
+      </ConfigField>
+      <ConfigField
+        label="Humidity sensor"
+        description="Leave empty to use the same sensor as temperature."
+      >
+        <SearchablePicker
+          options={choices}
+          value={
+            typeof options.humiditySensorId === 'string'
+              ? options.humiditySensorId
+              : ''
+          }
+          placeholder="Same as temperature"
+          onChange={(id) => onChange('humiditySensorId', id)}
+        />
+      </ConfigField>
+      <ConfigField label="History range">
+        <select
+          aria-label="History range"
+          className={selectClassName}
+          value={typeof options.range === 'string' ? options.range : '-24h'}
+          onChange={(e) => onChange('range', e.target.value)}
+        >
+          <option value="-6h">6 hours</option>
+          <option value="-24h">24 hours</option>
+          <option value="-7d">7 days</option>
+          {typeof options.range === 'string' &&
+            !['-6h', '-24h', '-7d'].includes(options.range) && (
+              <option value={options.range}>{options.range} · Custom</option>
+            )}
+        </select>
+      </ConfigField>
+      <div className="space-y-2 text-xs text-muted-foreground">
+        <p>
+          Uses the shared sensor reporting source. Values and history remain
+          unavailable until the selected sensors report.
+        </p>
+        <Link className="settings-link" to="/config/sensors">
+          Sensor catalog
+        </Link>
+      </div>
+      {isError && (
+        <p role="alert">
+          Sensor catalog unavailable. Saved selections are kept.
+        </p>
+      )}
+    </div>
+  );
+}
 
 function OptionTextField({
   label,
@@ -124,23 +291,24 @@ function HelperOptionField({
 function GroupOptionField({
   value,
   onChange,
+  emptyLabel = 'All controllable devices',
+  description = 'Show controls for this group. Specific device keys below override it.',
 }: {
   value: string;
   onChange: (value: string) => void;
+  emptyLabel?: string;
+  description?: string;
 }) {
   const { data: groups } = useGroups();
 
   return (
-    <ConfigField
-      label="Group"
-      description="Show controls for this group. Specific device keys below override it."
-    >
+    <ConfigField label="Group" description={description}>
       <select
         className={selectClassName}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
-        <option value="">All controllable devices</option>
+        <option value="">{emptyLabel}</option>
         {value && !groups?.some((group) => group.id === value) && (
           <option value={value}>{value} · Unavailable</option>
         )}
@@ -345,6 +513,95 @@ export function WidgetOptionFields({
     const value = options[key];
     return typeof value === 'boolean' ? value : fallback;
   };
+
+  if (widgetType === 'timers')
+    return <TimerWidgetOptions options={options} onChange={onChange} />;
+  if (widgetType === 'indoor_climate')
+    return <IndoorClimateOptions options={options} onChange={onChange} />;
+  if (widgetType === 'rooms' || widgetType === 'scenes') {
+    const rooms = widgetType === 'rooms';
+    const modeKey = rooms ? 'roomSelection' : 'sceneSelection';
+    return (
+      <div className="space-y-4">
+        <ConfigField label={rooms ? 'Rooms shown' : 'Scenes shown'}>
+          <select
+            aria-label={rooms ? 'Rooms shown' : 'Scenes shown'}
+            className={selectClassName}
+            value={getString(modeKey, 'all')}
+            onChange={(e) => onChange(modeKey, e.target.value)}
+          >
+            <option value="all">
+              All visible {rooms ? 'rooms' : 'scenes'}
+            </option>
+            <option value="selected">
+              Selected {rooms ? 'rooms' : 'scenes'}
+            </option>
+          </select>
+        </ConfigField>
+        {getString(modeKey, 'all') === 'selected' && (
+          <WidgetEntitySelection
+            kind={rooms ? 'group' : 'scene'}
+            value={options[rooms ? 'groupIds' : 'sceneIds']}
+            onChange={(value) =>
+              onChange(rooms ? 'groupIds' : 'sceneIds', value)
+            }
+          />
+        )}
+        {rooms ? (
+          <>
+            <OptionCheckboxField
+              label="Show room power controls"
+              checked={getBoolean('showPower', true)}
+              onChange={(value) => onChange('showPower', value)}
+            />
+            <OptionCheckboxField
+              label="Show device attention counts"
+              checked={getBoolean('showAttention', true)}
+              onChange={(value) => onChange('showAttention', value)}
+            />
+            <OptionCheckboxField
+              label="Show floorplan previews"
+              checked={getBoolean('showFloorplan', true)}
+              onChange={(value) => onChange('showFloorplan', value)}
+            />
+          </>
+        ) : (
+          <>
+            <ConfigField label="Activation scope">
+              <select
+                aria-label="Activation scope"
+                className={selectClassName}
+                value={getString('scope', 'home')}
+                onChange={(e) => onChange('scope', e.target.value)}
+              >
+                <option value="home">Whole home</option>
+                <option value="group">Room or group</option>
+                <option value="devices">Selected devices</option>
+              </select>
+            </ConfigField>
+            {getString('scope', 'home') === 'group' && (
+              <GroupOptionField
+                value={getString('groupId')}
+                emptyLabel="Choose a room or group…"
+                description="Only devices in this room or group will be affected."
+                onChange={(value) => onChange('groupId', value)}
+              />
+            )}
+            {getString('scope', 'home') === 'devices' && (
+              <DeviceSelectionField
+                value={options.deviceKeys}
+                onChange={(value) => onChange('deviceKeys', value)}
+              />
+            )}
+            <p className="text-xs text-muted-foreground">
+              Activation only affects devices targeted by both the scene and
+              this scope. An empty room/device selection activates nothing.
+            </p>
+          </>
+        )}
+      </div>
+    );
+  }
 
   if (widgetType === 'home_overview')
     return (
@@ -720,5 +977,50 @@ export function WidgetOptionFields({
     <ConfigHelpPanel>
       This widget type only exposes advanced JSON options for now.
     </ConfigHelpPanel>
+  );
+}
+
+function TimerWidgetOptions({
+  options,
+  onChange,
+}: {
+  options: Record<string, unknown>;
+  onChange: (key: string, value: unknown) => void;
+}) {
+  const api = useUserTimers();
+  const ids = Array.isArray(options.timerIds)
+    ? options.timerIds.filter((id): id is string => typeof id === 'string')
+    : [];
+  return (
+    <div className="space-y-4">
+      <ConfigField label="Timers shown">
+        <select
+          className={selectClassName}
+          value={options.timerSelection === 'selected' ? 'selected' : 'all'}
+          onChange={(e) => onChange('timerSelection', e.target.value)}
+        >
+          <option value="all">All timers</option>
+          <option value="selected">Selected timers</option>
+        </select>
+      </ConfigField>
+      {options.timerSelection === 'selected' && (
+        <SearchableMultiPicker
+          value={ids}
+          options={(api.data?.timers ?? []).map((t) => ({
+            value: t.definition.id,
+            label: t.definition.name,
+          }))}
+          onChange={(ids) => onChange('timerIds', ids)}
+          placeholder="Add timers…"
+          hrefFor={(id) => `/config/timers?timer=${encodeURIComponent(id)}`}
+        />
+      )}
+      <Link to="/config/timers" className="text-sm text-primary underline">
+        Manage timer schedules and icons
+      </Link>
+      {api.isError && (
+        <p role="alert">Could not load timers. Existing selections are kept.</p>
+      )}
+    </div>
   );
 }

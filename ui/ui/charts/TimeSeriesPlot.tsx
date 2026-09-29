@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { scaleLinear, scaleTime } from '@visx/scale';
 
 import { enforceMinimumSpan, minimumSpanForUnit } from './axisSpan';
@@ -64,7 +64,27 @@ export function TimeSeriesPlot({
 }) {
   const id = useId();
   const [keyboardInspect, setKeyboardInspect] = useState(false);
+  const touchInspect = useRef(false);
   const [active, setActive] = useState<number | null>(null);
+  const chartRoot = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (active === null) return;
+    // Dialogs observe Escape in document capture. Handle a focused chart's
+    // reading one level earlier so the first Escape does not close its detail.
+    const escape = (event: KeyboardEvent) => {
+      if (
+        event.key !== 'Escape' ||
+        !chartRoot.current?.contains(document.activeElement)
+      )
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      setActive(null);
+      setKeyboardInspect(false);
+    };
+    window.addEventListener('keydown', escape, true);
+    return () => window.removeEventListener('keydown', escape, true);
+  }, [active]);
   const [hidden, setHidden] = useState<string[]>([]);
   const clean = useMemo(
     () =>
@@ -182,6 +202,7 @@ export function TimeSeriesPlot({
   };
   return (
     <div
+      ref={chartRoot}
       className="relative min-w-0 overflow-hidden text-foreground"
       style={{ width, height }}
     >
@@ -250,15 +271,22 @@ export function TimeSeriesPlot({
           setKeyboardInspect(false);
         }}
         onPointerDown={(event) => {
+          touchInspect.current = event.pointerType !== 'mouse';
           setKeyboardInspect(false);
           if (event.pointerType === 'mouse') event.preventDefault();
           else event.currentTarget.setPointerCapture(event.pointerId);
           inspect(event);
         }}
-        onPointerUp={() => setActive(null)}
+        onPointerUp={() => {
+          if (!touchInspect.current) setActive(null);
+        }}
         onPointerCancel={() => setActive(null)}
-        onLostPointerCapture={() => setActive(null)}
-        onPointerLeave={() => setActive(null)}
+        onLostPointerCapture={() => {
+          if (!touchInspect.current) setActive(null);
+        }}
+        onPointerLeave={() => {
+          if (!touchInspect.current) setActive(null);
+        }}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             event.stopPropagation();
@@ -515,6 +543,16 @@ export function TimeSeriesPlot({
           {selectedTime !== null ? (
             <>
               <span className="mr-3">{timeLabel(selectedTime)}</span>
+              {touchInspect.current && (
+                <button
+                  type="button"
+                  aria-label="Close chart reading"
+                  className="pointer-events-auto float-right grid size-8 place-items-center rounded-md border border-border"
+                  onClick={() => setActive(null)}
+                >
+                  ×
+                </button>
+              )}
               {visible.map((s) => {
                 const p = nearest(s);
                 return (

@@ -22,8 +22,8 @@ export function RetainedDrafts({ activeKey }: { activeKey?: string } = {}) {
     (draft) =>
       (draft.dirty || draft.saving) &&
       draft.key !== activeKey &&
-      (draft.href.split('?')[0] !== pathname ||
-        [...new URLSearchParams(draft.href.split('?')[1])].some(
+      (draft.href.split('#')[0].split('?')[0] !== pathname ||
+        [...new URLSearchParams(draft.href.split('#')[0].split('?')[1])].some(
           ([key, value]) => new URLSearchParams(search).get(key) !== value,
         )),
   );

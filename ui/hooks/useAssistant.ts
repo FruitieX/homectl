@@ -1,3 +1,4 @@
+import type { ApplyAssistantActionRequest } from '@/bindings/ApplyAssistantActionRequest';
 import { useCallback, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -449,17 +450,27 @@ export function useApplyAssistantPlan() {
 
 /**
  * Applies a stored light-state action through the normal device command path.
- * Actions are single-use and only written when the user applies them.
+ * Only the reviewed selection is written when the user applies it.
  */
 export function useApplyAssistantActionPlan() {
   const { apiEndpoint } = useAppConfig();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (actionId: string) => {
+    mutationFn: async ({
+      actionId,
+      deviceKeys,
+    }: {
+      actionId: string;
+      deviceKeys: NonNullable<ApplyAssistantActionRequest['deviceKeys']>;
+    }) => {
       const response = await fetch(
         `${apiEndpoint}/api/v1/config/assistant/actions/${encodeURIComponent(actionId)}/apply`,
-        { method: 'POST' },
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceKeys }),
+        },
       );
       const result = await readAssistantResponse<ApplyAssistantActionResponse>(
         response,

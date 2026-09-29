@@ -7,6 +7,13 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useSetAtom } from 'jotai';
+import { closeAssistantPanelAtom } from './state';
+import { useDevicesState } from '@/hooks/websocket';
+import { configItemHref } from '@/lib/configItemHref';
+import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
+import { Checkbox } from '@/ui/primitives/checkbox';
 
 import { toast } from 'sonner';
 
@@ -43,9 +50,13 @@ export function ActionCard({
 }) {
   const applyAction = useApplyAssistantActionPlan();
   const discardAction = useDiscardAssistantAction();
-  // The device list can be long; the floorplan preview is the part worth
-  // showing at a glance, so the list starts collapsed.
-  const [devicesOpen, setDevicesOpen] = useState(false);
+  const [devicesOpen, setDevicesOpen] = useState(true);
+  const [selected, setSelected] = useState(
+    () =>
+      new Set((results ?? action.changes).map((change) => change.deviceKey)),
+  );
+  const devices = useDevicesState();
+  const closePanel = useSetAtom(closeAssistantPanelAtom);
 
   const applied = results !== null;
   const resultsByDevice = useMemo(
@@ -70,31 +81,34 @@ export function ActionCard({
   );
 
   const apply = () => {
-    if (action.changes.length === 0 || applyAction.isPending) {
+    if (selected.size === 0 || applyAction.isPending || readOnly) {
       return;
     }
-    applyAction.mutate(action.actionId, {
-      onSuccess: (response) => {
-        onApplied(response.results);
-        const failed = response.results.filter((result) => !result.ok);
-        if (failed.length === 0) {
-          toast.success(
-            `Updated ${response.appliedCount} device${response.appliedCount === 1 ? '' : 's'}`,
+    applyAction.mutate(
+      { actionId: action.actionId, deviceKeys: [...selected] },
+      {
+        onSuccess: (response) => {
+          onApplied(response.results);
+          const failed = response.results.filter((result) => !result.ok);
+          if (failed.length === 0) {
+            toast.success(
+              `Updated ${response.appliedCount} device${response.appliedCount === 1 ? '' : 's'}`,
+            );
+          } else {
+            toast.warning(
+              `Updated ${response.appliedCount} of ${response.results.length} devices`,
+            );
+          }
+        },
+        onError: (error) => {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : 'Failed to apply assistant action',
           );
-        } else {
-          toast.warning(
-            `Updated ${response.appliedCount} of ${response.results.length} devices`,
-          );
-        }
+        },
       },
-      onError: (error) => {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : 'Failed to apply assistant action',
-        );
-      },
-    });
+    );
   };
 
   const discard = () => {
@@ -108,9 +122,9 @@ export function ActionCard({
   };
 
   return (
-    <div className="space-y-3 rounded-3xl border border-border bg-card p-3 shadow-sm">
+    <div className="space-y-3 rounded-lg border border-border bg-card p-3">
       <div className="flex items-start gap-2">
-        <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-300">
+        <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-300">
           <Lightbulb className="size-4" />
         </span>
         <div className="min-w-0 flex-1 space-y-1">
@@ -120,22 +134,35 @@ export function ActionCard({
               {action.changes.length} light
               {action.changes.length === 1 ? '' : 's'}
             </Badge>
-            {applied ? <span>Applied</span> : null}
+            {applied ? (
+              <span>
+                {(results?.length ?? 0) - failedCount} applied
+                {failedCount ? ` · ${failedCount} failed` : ''}
+                {action.changes.length > (results?.length ?? 0)
+                  ? ` · ${action.changes.length - (results?.length ?? 0)} not included`
+                  : ''}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
 
       {action.changes.length > 0 ? (
-        <ActionFloorplanPreview changes={action.changes} className="h-40" />
+        <ActionFloorplanPreview
+          changes={action.changes.filter((change) =>
+            selected.has(change.deviceKey),
+          )}
+          className="h-32"
+        />
       ) : null}
 
       {action.changes.length > 0 ? (
-        <div className="rounded-2xl border border-border/60">
+        <div className="rounded-lg border border-border/60">
           <button
             type="button"
             aria-expanded={devicesOpen}
             onClick={() => setDevicesOpen((current) => !current)}
-            className="flex w-full items-center gap-2 rounded-2xl px-2.5 py-2 text-left transition hover:bg-muted/40"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition hover:bg-muted/40"
           >
             <ChevronRight
               className={cn(
@@ -161,14 +188,44 @@ export function ActionCard({
             <ul className="space-y-1.5 border-t border-border/60 p-2.5">
               {action.changes.map((change) => {
                 const result = resultsByDevice.get(change.deviceKey);
+                const current = devices?.[change.deviceKey]
+                  ? devicePreviewState(devices[change.deviceKey]!)
+                  : undefined;
+                const proposed = current
+                  ? {
+                      ...current,
+                      ...(change.power === undefined
+                        ? {}
+                        : { power: change.power }),
+                      ...(change.brightness === undefined
+                        ? {}
+                        : { brightness: change.brightness }),
+                      ...(change.color === undefined
+                        ? {}
+                        : { color: change.color }),
+                    }
+                  : undefined;
                 return (
                   <li
                     key={change.deviceKey}
                     className={cn(
-                      'flex items-start gap-2 rounded-2xl border border-border/60 px-2.5 py-2 text-sm',
+                      'flex items-start gap-2 rounded-md border border-border px-2.5 py-2 text-sm',
                       result && !result.ok && 'border-destructive/40',
                     )}
                   >
+                    <Checkbox
+                      aria-label={`Apply change to ${displayNameByKey.get(change.deviceKey) || change.name || change.deviceKey}`}
+                      checked={selected.has(change.deviceKey)}
+                      disabled={readOnly || applyAction.isPending}
+                      onCheckedChange={(checked) =>
+                        setSelected((previous) => {
+                          const next = new Set(previous);
+                          if (checked) next.add(change.deviceKey);
+                          else next.delete(change.deviceKey);
+                          return next;
+                        })
+                      }
+                    />
                     {result ? (
                       result.ok ? (
                         <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
@@ -179,16 +236,32 @@ export function ActionCard({
                       <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">
+                      <Link
+                        className="block truncate font-medium text-primary underline"
+                        to={configItemHref('device', change.deviceKey)}
+                        onClick={closePanel}
+                      >
                         {displayNameByKey.get(change.deviceKey) ||
                           change.name ||
                           change.deviceKey}
-                      </p>
+                      </Link>
+                      <div className="my-2 flex items-center gap-2 text-[10px] text-muted-foreground">
+                        <span>Current</span>
+                        <LiveStatePreview states={[current]} size={28} />
+                        <span aria-hidden>→</span>
+                        <LiveStatePreview states={[proposed]} size={28} />
+                        <span>Proposed</span>
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         {result && !result.ok
                           ? (result.error ?? 'Failed')
                           : describeAssistantActionChange(change)}
                       </p>
+                      {applied && !result && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Not included in the last application
+                        </p>
+                      )}
                     </div>
                   </li>
                 );
@@ -217,15 +290,15 @@ export function ActionCard({
         </Button>
         <Button
           type="button"
-          disabled={action.changes.length === 0 || applyAction.isPending}
+          disabled={selected.size === 0 || applyAction.isPending || readOnly}
           onClick={apply}
         >
           {applyAction.isPending ? <Loader2 className="animate-spin" /> : null}
           {applyAction.isPending
             ? 'Applying…'
             : applied
-              ? 'Apply again'
-              : 'Apply now'}
+              ? `Apply ${selected.size} again`
+              : `Apply ${selected.size} change${selected.size === 1 ? '' : 's'}`}
         </Button>
       </div>
 

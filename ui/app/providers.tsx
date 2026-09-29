@@ -41,16 +41,6 @@ const SaveSceneModal = lazy(() =>
     default: SaveSceneModal,
   })),
 );
-const SceneModal = lazy(() =>
-  import('@/ui/SceneModal').then(({ SceneModal }) => ({
-    default: SceneModal,
-  })),
-);
-const CarHeaterModal = lazy(() =>
-  import('./dashboard/CarHeaterModal').then(({ CarHeaterModal }) => ({
-    default: CarHeaterModal,
-  })),
-);
 const AssistantPanel = lazy(() =>
   import('@/assistant/AssistantPanel').then(({ AssistantPanel }) => ({
     default: AssistantPanel,
@@ -194,8 +184,6 @@ export const Layout = ({ children }: { children: ReactNode }) => {
       <Suspense fallback={null}>
         <ColorPickerModal />
         <SaveSceneModal />
-        <SceneModal />
-        <CarHeaterModal />
         <AssistantPanel />
       </Suspense>
     </div>

@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
+import {
+  WidgetTypeGallery,
+  WidgetSizePresets,
+  WidgetDraftPreview,
+} from './WidgetDesignTools';
 import { ConfigApiError } from '@/hooks/useConfig';
 import { widgetRegistry, type WidgetType } from '@/hooks/useDashboard';
 import { useEntityDraft, entityFieldProps } from '@/hooks/useEntityDraft';
@@ -42,6 +47,7 @@ const credentials = (kind: string) =>
 const sourceFor: Record<string, string> = {
   clock: 'calendar',
   sensors: 'influxdb',
+  indoor_climate: 'influxdb',
   spot_price: 'influxdb',
   weather: 'weather',
   train_schedule: 'train_schedule',
@@ -197,7 +203,18 @@ export default function WidgetEditor() {
           </Link>
         }
         actions={
-          !creating && (
+          creating ? (
+            <Button
+              variant="outline"
+              onClick={() =>
+                document
+                  .getElementById('widget-preview')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }
+            >
+              Preview widget
+            </Button>
+          ) : (
             <Button variant="outline" asChild>
               <Link to={`/?layout=${layoutId}`}>View dashboard</Link>
             </Button>
@@ -234,32 +251,17 @@ export default function WidgetEditor() {
         </SettingsSection>
       ) : (
         <>
-          <SettingsSection title="Widget">
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="block space-y-2 text-sm">
-                Title
-                <Input
-                  {...entityFieldProps(draft, 'title')}
-                  value={widgetTitle(row)}
-                  onChange={(event) =>
-                    setRow({
-                      config: {
-                        ...(row.config as object),
-                        title: event.target.value,
-                      },
-                    })
-                  }
-                />
-              </label>
-              <label className="block space-y-2 text-sm">
-                Type
-                {creating ? (
-                  <select
-                    className="settings-select"
-                    aria-label="Widget type"
-                    value={row.widget_type}
-                    onChange={(event) => {
-                      const next = event.target.value as WidgetType;
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+            <div className="min-w-0 space-y-4">
+              {creating && (
+                <SettingsSection
+                  title="Choose a widget"
+                  description="Choose what you want to see on this dashboard."
+                >
+                  {' '}
+                  <WidgetTypeGallery
+                    value={row.widget_type as WidgetType}
+                    onChange={(next) => {
                       const config = entityDraftStore.switchVariant(
                         key,
                         'widget-type',
@@ -290,180 +292,231 @@ export default function WidgetEditor() {
                         },
                       });
                     }}
-                  >
-                    {Object.entries(widgetRegistry).map(([key, info]) => (
-                      <option key={key} value={key}>
-                        {info.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <span className="block py-2 text-muted-foreground">
-                    {widgetRegistry[row.widget_type as WidgetType].name}
-                  </span>
-                )}
-              </label>
-            </div>
-          </SettingsSection>
-          <SettingsSection id="widget-options" title="Content">
-            <WidgetOptionFields
-              widgetType={row.widget_type as WidgetType}
-              options={options}
-              onChange={setOption}
-            />
-          </SettingsSection>
-          {sourceFor[row.widget_type] && (
-            <SettingsSection
-              title="Data source"
-              description="Empty widget overrides use the shared service."
-            >
-              <Link
-                className="settings-link text-sm"
-                to={`/config/widget-sources/${sourceFor[row.widget_type]}`}
+                  />
+                </SettingsSection>
+              )}
+              <SettingsSection
+                title="Widget"
+                description={
+                  creating
+                    ? undefined
+                    : widgetRegistry[row.widget_type as WidgetType].name
+                }
               >
-                Open shared {sourceFor[row.widget_type].replace('_', ' ')}{' '}
-                settings
-              </Link>
-              {credentials(row.widget_type).map((field) => (
-                <div className="space-y-2" key={field.key}>
+                <div className="grid gap-4">
                   <label className="block space-y-2 text-sm">
-                    {field.label} override
+                    Title
                     <Input
-                      {...entityFieldProps(draft, field.key)}
-                      type="password"
-                      autoComplete="new-password"
-                      value={value.replacements[field.key] ?? ''}
-                      disabled={value.clear[field.key]}
-                      placeholder={
-                        row.secret_fields?.includes(field.key)
-                          ? 'Saved — leave empty to keep'
-                          : 'Use shared service'
-                      }
+                      {...entityFieldProps(draft, 'title')}
+                      value={widgetTitle(row)}
                       onChange={(event) =>
-                        draft.patch({
-                          replacements: {
-                            ...value.replacements,
-                            [field.key]: event.target.value,
+                        setRow({
+                          config: {
+                            ...(row.config as object),
+                            title: event.target.value,
                           },
                         })
                       }
                     />
                   </label>
-                  {row.secret_fields?.includes(field.key) && (
-                    <label className="flex min-h-11 items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={value.clear[field.key] ?? false}
-                        onChange={(event) =>
-                          draft.patch({
-                            clear: {
-                              ...value.clear,
-                              [field.key]: event.target.checked,
-                            },
-                          })
-                        }
-                      />
-                      Remove override on Save
-                    </label>
-                  )}
                 </div>
-              ))}
-            </SettingsSection>
-          )}
-          <SettingsSection
-            title="Layout"
-            description="Width and height use grid cells. Quarter-cell sizes are supported."
-          >
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-              {(
-                ['grid_w', 'grid_h', 'grid_x', 'grid_y', 'sort_order'] as const
-              ).map((field) => (
-                <label key={field} className="block space-y-2 text-sm">
-                  {
-                    {
-                      grid_w: 'Width',
-                      grid_h: 'Height',
-                      grid_x: 'Column',
-                      grid_y: 'Row',
-                      sort_order: 'Display order',
-                    }[field]
-                  }
-                  <Input
-                    {...entityFieldProps(draft, field)}
-                    type="number"
-                    step={field === 'grid_w' || field === 'grid_h' ? 0.25 : 1}
-                    value={Number.isNaN(row[field]) ? '' : row[field]}
-                    onChange={(event) =>
-                      setRow({ [field]: event.target.valueAsNumber })
-                    }
+              </SettingsSection>
+              <SettingsSection id="widget-options" title="Content">
+                <WidgetOptionFields
+                  widgetType={row.widget_type as WidgetType}
+                  options={options}
+                  onChange={setOption}
+                />
+              </SettingsSection>
+              {sourceFor[row.widget_type] && (
+                <SettingsSection
+                  title="Data source"
+                  description="Empty widget overrides use the shared service."
+                >
+                  <Link
+                    className="settings-link text-sm"
+                    to={`/config/widget-sources/${sourceFor[row.widget_type]}`}
+                  >
+                    Open shared {sourceFor[row.widget_type].replace('_', ' ')}{' '}
+                    settings
+                  </Link>
+                  {credentials(row.widget_type).map((field) => (
+                    <div className="space-y-2" key={field.key}>
+                      <label className="block space-y-2 text-sm">
+                        {field.label} override
+                        <Input
+                          {...entityFieldProps(draft, field.key)}
+                          type="password"
+                          autoComplete="new-password"
+                          value={value.replacements[field.key] ?? ''}
+                          disabled={value.clear[field.key]}
+                          placeholder={
+                            row.secret_fields?.includes(field.key)
+                              ? 'Saved — leave empty to keep'
+                              : 'Use shared service'
+                          }
+                          onChange={(event) =>
+                            draft.patch({
+                              replacements: {
+                                ...value.replacements,
+                                [field.key]: event.target.value,
+                              },
+                            })
+                          }
+                        />
+                      </label>
+                      {row.secret_fields?.includes(field.key) && (
+                        <label className="flex min-h-11 items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={value.clear[field.key] ?? false}
+                            onChange={(event) =>
+                              draft.patch({
+                                clear: {
+                                  ...value.clear,
+                                  [field.key]: event.target.checked,
+                                },
+                              })
+                            }
+                          />
+                          Remove override on Save
+                        </label>
+                      )}
+                    </div>
+                  ))}
+                </SettingsSection>
+              )}
+              <SettingsSection
+                title="Layout"
+                description="Widgets flow by display order and size. Narrow screens adapt the width automatically."
+              >
+                <WidgetSizePresets
+                  width={row.grid_w}
+                  height={row.grid_h}
+                  onChange={(grid_w, grid_h) => setRow({ grid_w, grid_h })}
+                />
+                <details className="mt-3">
+                  <summary className="cursor-pointer py-2 text-sm text-muted-foreground">
+                    Custom size & order · {row.grid_w} × {row.grid_h}
+                  </summary>
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                    {(['grid_w', 'grid_h', 'sort_order'] as const).map(
+                      (field) => (
+                        <label key={field} className="block space-y-2 text-sm">
+                          {
+                            {
+                              grid_w: 'Width',
+                              grid_h: 'Height',
+                              grid_x: 'Column',
+                              grid_y: 'Row',
+                              sort_order: 'Display order',
+                            }[field]
+                          }
+                          <Input
+                            {...entityFieldProps(draft, field)}
+                            type="number"
+                            step={
+                              field === 'grid_w' || field === 'grid_h'
+                                ? 0.25
+                                : 1
+                            }
+                            value={Number.isNaN(row[field]) ? '' : row[field]}
+                            onChange={(event) =>
+                              setRow({ [field]: event.target.valueAsNumber })
+                            }
+                          />
+                        </label>
+                      ),
+                    )}
+                  </div>
+                </details>
+              </SettingsSection>
+              {(Object.keys(extra).length > 0 || advanced) && (
+                <SettingsSection
+                  title="Additional options"
+                  description="Extension fields are preserved alongside the typed controls."
+                >
+                  <JsonValueEditor
+                    label="Options"
+                    value={extra}
+                    fixedType="object"
+                    draftKey={key}
+                    path="widget-extensions"
+                    onChange={(next) => {
+                      if (!isRecord(next)) return;
+                      const copy = structuredClone(row),
+                        target = widgetOptions(copy);
+                      for (const key of Object.keys(extra)) delete target[key];
+                      for (const [key, value] of Object.entries(next))
+                        if (
+                          !knownKeys.includes(key) &&
+                          key !== 'sensorSelection' &&
+                          !credentials(row.widget_type).some(
+                            (field) => field.key === key,
+                          )
+                        )
+                          target[key] = value;
+                      setRow({ config: copy.config });
+                    }}
                   />
-                </label>
-              ))}
-            </div>
-          </SettingsSection>
-          {(Object.keys(extra).length > 0 || advanced) && (
-            <SettingsSection
-              title="Additional options"
-              description="Extension fields are preserved alongside the typed controls."
-            >
-              <JsonValueEditor
-                label="Options"
-                value={extra}
-                fixedType="object"
-                draftKey={key}
-                path="widget-extensions"
-                onChange={(next) => {
-                  if (!isRecord(next)) return;
-                  const copy = structuredClone(row),
-                    target = widgetOptions(copy);
-                  for (const key of Object.keys(extra)) delete target[key];
-                  for (const [key, value] of Object.entries(next))
-                    if (
-                      !knownKeys.includes(key) &&
-                      key !== 'sensorSelection' &&
-                      !credentials(row.widget_type).some(
-                        (field) => field.key === key,
+                </SettingsSection>
+              )}
+              {!creating && (
+                <SettingsSection title="Remove widget">
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      if (
+                        !(await confirmDialog({
+                          title: `Remove ${widgetTitle(row)}?`,
+                          description:
+                            'This removes the widget from this layout and discards its pending edits.',
+                          confirmLabel: 'Remove widget',
+                          destructive: true,
+                        }))
                       )
-                    )
-                      target[key] = value;
-                  setRow({ config: copy.config });
+                        return;
+                      try {
+                        await api.write(
+                          `/widgets/${row.id}`,
+                          undefined,
+                          'DELETE',
+                        );
+                        draft.forget();
+                        navigate(`/config/dashboard/${layoutId}`);
+                      } catch (error) {
+                        setError(
+                          error instanceof Error
+                            ? error.message
+                            : 'Could not remove widget.',
+                        );
+                      }
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                    Remove widget
+                  </Button>
+                </SettingsSection>
+              )}
+            </div>
+            <div className="min-w-0 xl:sticky xl:top-4">
+              <WidgetDraftPreview
+                widget={{
+                  id: creating ? 'preview' : String(row.id),
+                  widget_type: row.widget_type as WidgetType,
+                  title: widgetTitle(row),
+                  options,
+                  width: row.grid_w,
+                  height: row.grid_h,
+                  x: row.grid_x,
+                  y: row.grid_y,
+                  position: row.sort_order,
+                  layoutId: String(row.layout_id),
+                  secret_fields: row.secret_fields,
                 }}
               />
-            </SettingsSection>
-          )}
-          {!creating && (
-            <SettingsSection title="Remove widget">
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  if (
-                    !(await confirmDialog({
-                      title: `Remove ${widgetTitle(row)}?`,
-                      description:
-                        'This removes the widget from this layout and discards its pending edits.',
-                      confirmLabel: 'Remove widget',
-                      destructive: true,
-                    }))
-                  )
-                    return;
-                  try {
-                    await api.write(`/widgets/${row.id}`, undefined, 'DELETE');
-                    draft.forget();
-                    navigate(`/config/dashboard/${layoutId}`);
-                  } catch (error) {
-                    setError(
-                      error instanceof Error
-                        ? error.message
-                        : 'Could not remove widget.',
-                    );
-                  }
-                }}
-              >
-                <Trash2 className="size-4" />
-                Remove widget
-              </Button>
-            </SettingsSection>
-          )}
+            </div>
+          </div>
           <EntitySaveBar
             draft={draft}
             createLabel={creating ? 'Create widget' : undefined}

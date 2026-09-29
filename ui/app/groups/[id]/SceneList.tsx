@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { createUuid } from '@/lib/uuid';
 import { useAtom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
-import { Check, SquarePen, Star } from 'lucide-react';
+import { Check, ExternalLink, Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   useConnectionStatus,
@@ -10,7 +10,8 @@ import {
   useScenesState,
   useWebsocket,
 } from '@/hooks/websocket';
-import { useSceneModalState } from '@/hooks/sceneModalState';
+import { LiveStatePreview } from '@/ui/LiveStatePreview';
+import { configItemHref } from '@/lib/configItemHref';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 import { Button } from '@/ui/primitives/button';
@@ -25,15 +26,28 @@ const pinnedScenesAtom = atomWithStorage<string[]>(
   undefined,
   { getOnInit: true },
 );
-type Props = { deviceKeys: string[]; showAll?: boolean; compact?: boolean };
+type Props = {
+  deviceKeys: string[];
+  showAll?: boolean;
+  compact?: boolean;
+  sceneIds?: string[];
+  allowPins?: boolean;
+  layout?: 'rows' | 'tiles' | 'strip';
+};
 
-export function SceneList({ deviceKeys, showAll, compact }: Props) {
+export function SceneList({
+  deviceKeys,
+  showAll,
+  compact,
+  sceneIds,
+  allowPins = true,
+  layout = 'rows',
+}: Props) {
   const navigate = useNavigate();
   const ws = useWebsocket();
   const connected = useConnectionStatus() === 'connected';
   const scenes = useScenesState();
   const devices = useDevicesState();
-  const modal = useSceneModalState();
   const deviceModal = useDeviceModalState();
   const [search, setSearch] = useState('');
   const [pendingScene, setPendingScene] = useState<string | null>(null);
@@ -45,11 +59,16 @@ export function SceneList({ deviceKeys, showAll, compact }: Props) {
   const selected = new Set(deviceKeys);
   const eligible = Object.entries(scenes ?? {})
     .flatMap(([id, scene]) => {
-      if (!scene || (!showAll && scene.hidden)) return [];
+      if (
+        !scene ||
+        (sceneIds ? !sceneIds.includes(id) : !showAll && scene.hidden)
+      )
+        return [];
       const targets = Object.keys(scene.devices).filter(
         (key) =>
           selected.has(key) &&
           devices?.[key] &&
+          'Controllable' in devices[key]!.data &&
           !isDeviceReadOnly(devices[key]!),
       );
       if (!showAll && targets.length === 0) return [];
@@ -65,7 +84,8 @@ export function SceneList({ deviceKeys, showAll, compact }: Props) {
               return (
                 device &&
                 'Controllable' in device.data &&
-                device.data.Controllable.scene_id === id
+                device.data.Controllable.scene_id === id &&
+                !device.data.Controllable.scene_paused
               );
             }),
         },
@@ -73,8 +93,11 @@ export function SceneList({ deviceKeys, showAll, compact }: Props) {
     })
     .sort(
       (a, b) =>
-        Number(pins.includes(b.id)) - Number(pins.includes(a.id)) ||
-        a.scene.name.localeCompare(b.scene.name),
+        (sceneIds
+          ? sceneIds.indexOf(a.id) - sceneIds.indexOf(b.id)
+          : allowPins
+            ? Number(pins.includes(b.id)) - Number(pins.includes(a.id))
+            : 0) || a.scene.name.localeCompare(b.scene.name),
     );
   const visible = eligible.filter(({ scene }) =>
     scene.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
@@ -135,17 +158,31 @@ export function SceneList({ deviceKeys, showAll, compact }: Props) {
             : 'No scenes target controllable devices in this selection.'}
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-2">
+        <div
+          className={
+            layout === 'strip'
+              ? 'flex flex-wrap gap-2'
+              : layout === 'tiles'
+                ? 'grid grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-2'
+                : 'divide-y divide-border'
+          }
+        >
           {visible.map(({ id, scene, targets, active }) => (
             <div
               key={id}
               className={cn(
-                'flex min-w-0 items-center rounded-xl border border-border bg-card transition-colors',
-                active && 'border-primary bg-primary/10',
+                'flex min-w-0 items-center gap-1 py-1 transition-colors',
+                layout !== 'rows' &&
+                  'rounded-lg border border-border bg-card px-2',
+                layout === 'strip' && 'max-w-full',
+                active && 'text-primary',
               )}
             >
               <button
-                className="flex min-h-20 min-w-0 flex-1 items-center gap-2 rounded-xl p-3 text-left hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                className={cn(
+                  'flex min-w-0 flex-1 items-center gap-2 rounded-md pr-2 text-left hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+                  layout === 'strip' ? 'min-h-11 py-1' : 'min-h-14 py-2',
+                )}
                 aria-label={`Activate ${scene.name}`}
                 title={scene.name}
                 aria-pressed={active}
@@ -154,21 +191,25 @@ export function SceneList({ deviceKeys, showAll, compact }: Props) {
                 }
                 aria-busy={pendingScene === id}
                 onClick={() => activate(id, targets)}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  modal.setState(id);
-                  modal.setOpen(true);
-                }}
               >
+                <LiveStatePreview
+                  states={targets.map((key) => scene.devices[key])}
+                  size={layout === 'strip' ? 26 : 36}
+                />
                 <span className="min-w-0 flex-1">
-                  <span className="line-clamp-2 break-words font-medium">
+                  <span className="line-clamp-2 break-words text-sm font-medium">
                     {scene.name}
                   </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
+                  <span
+                    className={cn(
+                      'mt-1 block text-xs text-muted-foreground',
+                      layout === 'strip' && pendingScene !== id && 'sr-only',
+                    )}
+                  >
                     {pendingScene === id
                       ? 'Applying…'
                       : active
-                        ? 'Active'
+                        ? `Active · ${targets.length} ${targets.length === 1 ? 'device' : 'devices'}`
                         : `${targets.length} ${targets.length === 1 ? 'device' : 'devices'}`}
                   </span>
                 </span>
@@ -183,38 +224,36 @@ export function SceneList({ deviceKeys, showAll, compact }: Props) {
                 aria-label={`Edit ${scene.name} in scene settings`}
                 title="Edit in scene settings"
                 onClick={() => {
-                  const params = new URLSearchParams({ scene: id });
-                  if (deviceKeys.length === 1) {
-                    params.set('device', deviceKeys[0]!);
-                  }
                   deviceModal.setOpen(false);
-                  navigate(`/config/scenes?${params.toString()}`);
+                  navigate(configItemHref('scene', id));
                 }}
               >
-                <SquarePen />
+                <ExternalLink />
               </Button>
-              <Button
-                className="mr-1 shrink-0"
-                size="icon"
-                variant="ghost"
-                aria-label={`${pins.includes(id) ? 'Unpin' : 'Pin'} ${scene.name}`}
-                aria-pressed={pins.includes(id)}
-                onClick={() =>
-                  setPins(
-                    pins.includes(id)
-                      ? pins.filter((pin) => pin !== id)
-                      : [...pins, id],
-                  )
-                }
-              >
-                <Star
-                  className={
-                    pins.includes(id)
-                      ? 'fill-current text-primary'
-                      : 'text-muted-foreground'
+              {allowPins && (
+                <Button
+                  className="mr-1 shrink-0"
+                  size="icon"
+                  variant="ghost"
+                  aria-label={`${pins.includes(id) ? 'Unpin' : 'Pin'} ${scene.name}`}
+                  aria-pressed={pins.includes(id)}
+                  onClick={() =>
+                    setPins(
+                      pins.includes(id)
+                        ? pins.filter((pin) => pin !== id)
+                        : [...pins, id],
+                    )
                   }
-                />
-              </Button>
+                >
+                  <Star
+                    className={
+                      pins.includes(id)
+                        ? 'fill-current text-primary'
+                        : 'text-muted-foreground'
+                    }
+                  />
+                </Button>
+              )}
             </div>
           ))}
         </div>

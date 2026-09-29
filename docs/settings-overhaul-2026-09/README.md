@@ -31,10 +31,14 @@ The study toolbar and state selectors are prototype tools. Other dirty pages app
 
 ## Documentation
 
+- [Everyday UI mockup gallery: rooms, dashboard, controls and remaining views](everyday-review.html)
+- [Everyday UI review notes and interactive coverage](EVERYDAY-REVIEW.md)
+- [Everyday UI implementation and acceptance tracker](EVERYDAY-IMPLEMENTATION.md)
 - [Working plan and confirmed decisions](PLAN.md)
 - [Final interaction review and engineering handoff](FINAL-PASS.md)
 - [Shared interaction rules](INTERACTION-SYSTEM.md)
 - [Implementation readiness](IMPLEMENTATION-READINESS.md)
+- [Inventory and priorities for views beyond settings](UI-INVENTORY.md)
 - [Review notes and verification scope](REVIEW-NOTES.md)
 - [Typed routine fixture](complex-routine.fixture.ts)
 

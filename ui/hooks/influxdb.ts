@@ -207,7 +207,8 @@ export const useSensorData = (
       )
         return;
       if (
-        (options.selectionMode === 'selected' || selectedSensorIds.length > 0) &&
+        (options.selectionMode === 'selected' ||
+          selectedSensorIds.length > 0) &&
         !selectedSensorIds.includes(deviceId)
       ) {
         return;
@@ -255,9 +256,19 @@ export const useSensorData = (
       sensor.humidity_data.sort((a, b) => a.time.getTime() - b.time.getTime());
     });
 
-    // Keep the settings order stable and make the fallback list alphabetical.
+    // Explicit widget selections lead; otherwise use the catalog order.
+    // Only readings absent from the catalog fall back to alphabetical order.
+    const orderedIds =
+      options.selectionMode === 'selected' || selectedSensorIds.length > 0
+        ? selectedSensorIds
+        : catalogItems.map((sensor) => sensor.id);
     return Array.from(deviceMap.values()).sort((a, b) => {
-      return a.device_name.localeCompare(b.device_name);
+      const aIndex = orderedIds.indexOf(a.device_id),
+        bIndex = orderedIds.indexOf(b.device_id);
+      return (
+        (aIndex < 0 ? Infinity : aIndex) - (bIndex < 0 ? Infinity : bIndex) ||
+        a.device_name.localeCompare(b.device_name)
+      );
     });
   }, [
     catalogQuery.catalog,

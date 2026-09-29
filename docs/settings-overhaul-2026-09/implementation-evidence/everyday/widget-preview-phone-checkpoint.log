@@ -1,0 +1,29 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   "Rooms selects with keyboard and renders without page overflow",
+   "Scenes selects with keyboard and renders without page overflow",
+   "Indoor climate selects with keyboard and renders without page overflow",
+   "Controls selects with keyboard and renders without page overflow",
+   "Timers selects with keyboard and renders without page overflow",
+   "Mode / helper selects with keyboard and renders without page overflow",
+   "Home overview selects with keyboard and renders without page overflow",
+   "Clock selects with keyboard and renders without page overflow",
+   "Weather selects with keyboard and renders without page overflow",
+   "Sensors selects with keyboard and renders without page overflow",
+   "Spot Price selects with keyboard and renders without page overflow",
+   "Train Schedule selects with keyboard and renders without page overflow",
+   "Text selects with keyboard and renders without page overflow",
+   "Image selects with keyboard and renders without page overflow",
+   "Link selects with keyboard and renders without page overflow",
+   "Iframe selects with keyboard and renders without page overflow",
+   "Custom HTML selects with keyboard and renders without page overflow",
+   "Embedded preview disables script execution",
+   "Incomplete dimensions keep a finite preview",
+   "Invalid dimensions block creation",
+   "Preview controls cannot receive keyboard focus; configuration is untouched"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/dashboard/1/widgets/new","viewport":{"width":390,"height":844},"problems":[]}

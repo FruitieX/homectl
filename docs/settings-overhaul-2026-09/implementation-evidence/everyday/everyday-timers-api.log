@@ -1,0 +1,13 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+   Compiling homectl-server v0.9.5 (/home/rasse/homectl/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 35s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running tests/config_api_integration.rs (target/debug/deps/config_api_integration-b0af4d87f6ffddde)
+
+running 2 tests
+test user_timers_execute_without_browser_and_survive_restart ... ok
+test user_timers_migrate_helsinki_and_recover_end_actions ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 47 filtered out; finished in 5.16s

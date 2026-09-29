@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn';
 import { Card } from '@/ui/primitives/card';
 
 const dashboardCardClassName =
-  'dashboard-widget-container flex h-full min-h-0 min-w-0 flex-col overflow-hidden';
+  'dashboard-widget-container flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border-border bg-card shadow-none';
 
 export function DashboardCard({ className, ...props }: ComponentProps<'div'>) {
   return <Card className={cn(dashboardCardClassName, className)} {...props} />;
@@ -20,7 +20,7 @@ export function WidgetCard({
     <Card
       className={cn(
         dashboardCardClassName,
-        'relative rounded-[1.5rem] border-border/55 bg-gradient-to-br from-card via-card to-muted/30 shadow-[0_1px_0_hsl(var(--foreground)/0.03),0_12px_32px_-24px_hsl(var(--foreground)/0.35)]',
+        'relative',
         interactive && 'transition-transform active:scale-[0.98]',
         className,
       )}
@@ -45,11 +45,11 @@ export function WidgetHeading({
   return (
     <div
       className={cn(
-        'dashboard-widget-heading flex w-full items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground',
+        'dashboard-widget-heading flex w-full items-center gap-2 text-sm font-semibold text-foreground',
         className,
       )}
     >
-      <span className="grid size-7 place-items-center rounded-full bg-primary/10 text-primary [&>svg]:size-3.5">
+      <span className="grid size-7 place-items-center rounded-md bg-muted text-muted-foreground [&>svg]:size-4">
         {icon}
       </span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -72,7 +72,7 @@ export function DetailPanel({
   return (
     <section
       className={cn(
-        'rounded-2xl border border-border/50 bg-muted/25 p-4 sm:p-5',
+        'rounded-lg border border-border bg-card p-3 sm:p-4',
         className,
       )}
       {...props}

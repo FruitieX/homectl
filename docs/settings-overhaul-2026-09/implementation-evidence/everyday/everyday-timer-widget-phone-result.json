@@ -1,0 +1,14 @@
+{
+ "evaluated": {
+  "checks": [
+   "Empty selected scope stays empty",
+   "Widget links to the selected timer",
+   "Start arms a server countdown",
+   "Stop updates the canonical schedule",
+   "No horizontal overflow"
+  ],
+  "width": 390,
+  "layout": 2
+ }
+}
+{"url":"http://127.0.0.1:3021/groups","viewport":{"width":390,"height":844},"problems":[]}

@@ -136,7 +136,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
           <div className="dashboard-sensors-heading mb-3 shrink-0">
             <WidgetHeading
               icon={<Activity />}
-              label="Climate sensors"
+              label={widget?.title || 'Climate sensors'}
               compactValue={
                 primarySensor ? (
                   <span className="dashboard-sensors-heading-value">

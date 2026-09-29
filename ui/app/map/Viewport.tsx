@@ -35,6 +35,8 @@ import { excludeUndefined } from 'utils/excludeUndefined';
 import { buildFloorplanScene } from '@/lib/floorplan-scene';
 import { PixiFloorplanRenderer } from '@/ui/floorplan';
 import { SensorActionModal } from '@/ui/SensorActionModal';
+import { DeviceRow } from '@/ui/DeviceControls';
+import { LiveSensorRow } from '@/ui/LiveSensorRow';
 import { Button } from '@/ui/primitives/button';
 import {
   Popover,
@@ -473,11 +475,66 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
               )
             }
           />
-        ) : pixiFallbackReason ? (
-          <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
-            {pixiFallbackReason}
+        ) : (
+          <div className="absolute inset-0 overflow-y-auto p-4">
+            <div className="mx-auto max-w-3xl space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p role="status" className="text-sm text-muted-foreground">
+                  {pixiFallbackReason ??
+                    'No floorplan image is available. Devices can still be controlled here.'}
+                </p>
+                {pixiFallbackReason && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setPixiFallbackReason(null)}
+                  >
+                    Retry map
+                  </Button>
+                )}
+                <Link
+                  className="text-sm text-primary underline"
+                  to={
+                    groupId
+                      ? `/groups/${encodeURIComponent(groupId)}`
+                      : '/groups'
+                  }
+                >
+                  Room controls
+                </Link>
+              </div>
+              <div className="grid gap-2 lg:grid-cols-2">
+                {Object.entries(devicesState ?? {})
+                  .filter(
+                    ([key, device]) =>
+                      device &&
+                      (!groupFilterKeys || groupFilterKeys.has(key)) &&
+                      (floorplanMode === 'all' ||
+                        (floorplanMode === 'lights'
+                          ? 'Controllable' in device.data
+                          : 'Sensor' in device.data)),
+                  )
+                  .map(
+                    ([key, device]) =>
+                      device &&
+                      ('Controllable' in device.data ? (
+                        <DeviceRow
+                          presentation="floorplan"
+                          key={key}
+                          device={device}
+                          displayNames={deviceDisplayNameMap}
+                        />
+                      ) : (
+                        <LiveSensorRow
+                          key={key}
+                          device={device}
+                          displayNames={deviceDisplayNameMap}
+                        />
+                      )),
+                  )}
+              </div>
+            </div>
           </div>
-        ) : null}
+        )}
       </div>
 
       <div

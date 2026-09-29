@@ -53,13 +53,22 @@ Implemented locally: visual searchable type gallery, size presets, desktop/phone
 width diagrams, real read-only widget preview, explicit Create/Save, retained
 per-type drafts. Eight creation checks pass on desktop and phone.
 
-- [ ] Finish phone composition and preview discoverability; verify all widget
+- [x] Finish phone composition and preview discoverability; verify all widget
       families, empty/missing sources, invalid draft dimensions and recovery.
-- [ ] Verify keyboard operation and that preview interactions issue no commands.
-- [ ] Ensure layout guidance reflects actual order/size-based dashboard placement;
+- [x] Verify keyboard operation and that preview interactions issue no commands.
+- [x] Ensure layout guidance reflects actual order/size-based dashboard placement;
       retain custom dimensions without making raw coordinates the primary UI.
-- [ ] Capture creation-state screenshots as well as the saved editor.
-- [ ] Commit and push the widget editor with its required widget dependencies.
+- [x] Capture creation-state screenshots as well as the saved editor.
+- [x] Commit and push the widget editor with its required widget dependencies.
+
+Widget checkpoint: 21 native keyboard/preview checks at each viewport cover all
+17 types, blank dimensions, creation validation, inert preview controls and
+sandboxed embedded pages. Eight creation checks at each size verify exact saved
+widget identity, retained per-type fields, dimensions and no writes before Create.
+Unexpected weather/timetable responses now become resource errors rather than
+rendering exceptions. Widget headings respect configured titles; saved private
+calendar source metadata reaches the preview. Creation and phone-preview captures
+are in the comparison gallery; logs are under `implementation-evidence/everyday/`.
 
 ## 3. Rooms and dashboard
 
@@ -106,10 +115,18 @@ Desktop Fit check passes; further interaction acceptance remains.
 
 - [ ] Timers: refresh desktop UI evidence and finish all three mode/target editing
       flows. Server execution, restart and Helsinki migration API tests pass.
-- [ ] Calibration: finish bulk assignment, reset of raw numeric edits and required
+- [x] Calibration: finish bulk assignment, reset of raw numeric edits and required
       keyboard/phone acceptance without losing retained drafts or color modes.
 - [ ] Charts: finish phone/touch checks and retain precise inspection, keyboard
       dismissal and readable empty/error states.
+
+Calibration follow-up: eight bulk checks pass at both sizes, including retained
+scope, Discard, exact assignment/removal and preserved profiles. A same-route
+bulk link now opens selection correctly. Ten color checks pass on phone,
+including Reset of an unfinished numeric input; earlier brightness keyboard and
+phone lifecycle checks remain recorded in IMPLEMENTATION.md. Five chart input
+checks now pass on phone (keyboard, touch, dismissal, 200% zoom); final chart
+empty/error visual review remains in the outstanding acceptance gate.
 - [ ] Close remaining widget detail, assistant, navigation and recovery gates in
       the two implementation ledgers; remove superseded surfaces safely.
 - [ ] Run only the remaining meaningful type/lint/build, integration and browser

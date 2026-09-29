@@ -40,7 +40,10 @@ export function DrawerContent({
         {...props}
       >
         <div className="mx-auto mt-3 h-1.5 w-12 shrink-0 rounded-full bg-muted-foreground/30" />
-        <DrawerPrimitive.Close className="absolute right-4 top-4 inline-flex size-10 items-center justify-center rounded-full border border-border bg-background/90 text-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none">
+        <DrawerPrimitive.Close
+          aria-label="Close"
+          className="absolute right-4 top-4 inline-flex size-11 items-center justify-center rounded-md border border-border bg-background/90 text-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
+        >
           <X className="size-4" />
           <span className="sr-only">Close</span>
         </DrawerPrimitive.Close>

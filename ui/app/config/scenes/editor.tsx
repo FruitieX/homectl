@@ -85,7 +85,11 @@ export function SceneEditor({ id }: { id?: string }) {
   const [previewError, setPreviewError] = useState('');
   const [activating, setActivating] = useState(false);
   const saved = api.data.find((scene) => scene.id === id);
-  const key = `${apiEndpoint}/scenes/${id ?? '$new'}`;
+  const captureId = creating ? params.get('capture') : null;
+  const key = `${apiEndpoint}/scenes/${id ?? '$new'}${captureId ? '/' + captureId : ''}`;
+  const returnTo = params.get('returnTo');
+  const liveReturn =
+    returnTo && /^\/(map|groups)(\/|\?|$)/.test(returnTo) ? returnTo : null;
   const href = creating
     ? `/config/scenes/new${params.size ? '?' + params.toString() : ''}`
     : configItemHref('scene', id!);
@@ -135,7 +139,14 @@ export function SceneEditor({ id }: { id?: string }) {
           navigate(`${destination.pathname}${destination.search}`, {
             replace: true,
           });
-        } else navigate(configItemHref('scene', result.id), { replace: true });
+        } else
+          navigate(
+            configItemHref('scene', result.id) +
+              (liveReturn
+                ? '?' + new URLSearchParams({ returnTo: liveReturn })
+                : ''),
+            { replace: true },
+          );
       }
       return result;
     },
@@ -494,7 +505,21 @@ export function SceneEditor({ id }: { id?: string }) {
       backTo="/config/scenes"
       backLabel="Scenes"
       title={creating ? 'New scene' : (saved?.name ?? 'Scene')}
-      status="Choose what each target sets or follows."
+      status={
+        <>
+          {captureId
+            ? 'Captured requested states. Review targets, then create the scene.'
+            : 'Choose what each target sets or follows.'}
+          {liveReturn && (
+            <>
+              {' '}
+              <Link className="settings-link" to={liveReturn}>
+                Return to controls
+              </Link>
+            </>
+          )}
+        </>
+      }
       loading={api.loading || groups.loading}
       error={api.error ?? groups.error}
       onRetry={() => {

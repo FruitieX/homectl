@@ -9,6 +9,10 @@ import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { DeviceRow } from '@/ui/DeviceControls';
 import { CardContent, CardHeader, CardTitle } from '@/ui/primitives/card';
 import { DashboardCard } from './WidgetChrome';
+import { WidgetRecovery } from './WidgetRecovery';
+import { Link } from 'react-router-dom';
+import { configItemHref } from '@/lib/configItemHref';
+import { resolveGroupDeviceKeys } from '@/lib/group-floorplan-preview';
 
 export const ControlsCard = ({ widget }: { widget?: DashboardWidget }) => {
   const state = useDevicesState();
@@ -30,18 +34,31 @@ export const ControlsCard = ({ widget }: { widget?: DashboardWidget }) => {
     configuredKeys.length > 0
       ? configuredKeys
       : groupId
-        ? (groups?.[groupId]?.device_keys ?? [])
+        ? resolveGroupDeviceKeys(groupId, groups ?? {})
         : Object.keys(state ?? {});
   return (
     <DashboardCard>
       <CardHeader className="dashboard-controls-title shrink-0">
         <CardTitle>{widget?.title || 'Controls'}</CardTitle>
       </CardHeader>
-      <CardContent className="dashboard-controls-content min-h-0 flex-1 space-y-2 overflow-hidden">
-        {keys.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Choose devices in dashboard settings.
+      <CardContent className="dashboard-controls-content min-h-0 flex-1 space-y-2 overflow-auto">
+        {!state || !groups ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            Loading controls…
           </p>
+        ) : groupId && !groups[groupId] && !configuredKeys.length ? (
+          <WidgetRecovery
+            widget={widget}
+            message="This room or group is no longer available."
+          />
+        ) : keys.length === 0 ||
+          keys.every(
+            (key) => state[key] && !('Controllable' in state[key]!.data),
+          ) ? (
+          <WidgetRecovery
+            widget={widget}
+            message="No controllable devices in this selection."
+          />
         ) : (
           keys.map((key) => {
             const device = state?.[key];
@@ -51,7 +68,12 @@ export const ControlsCard = ({ widget }: { widget?: DashboardWidget }) => {
                   key={key}
                   className="dashboard-controls-row break-words text-sm text-muted-foreground"
                 >
-                  {names[key] ?? key} · Unavailable
+                  <Link
+                    className="text-primary underline"
+                    to={configItemHref('device', key)}
+                  >
+                    {names[key] ?? key} · Unavailable
+                  </Link>
                 </p>
               );
             return 'Controllable' in device.data ? (

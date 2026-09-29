@@ -1,0 +1,15 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   "Native Home/End expose dated readings and source labels",
+   "Escape dismisses the reading without closing its detail",
+   "Native touch reading remains after releasing the finger",
+   "Touch reading has a working explicit close",
+   "Dashboard remains within the viewport at 200% zoom"
+  ],
+  "width": 390,
+  "layout": 2
+ }
+}
+{"url":"http://127.0.0.1:3021/groups","viewport":{"width":390,"height":844},"problems":[]}

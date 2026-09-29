@@ -49,6 +49,9 @@ const fetchCalendar = async (
     throw new Error(`Failed to fetch calendar: ${res.status}`);
   }
   const json: CalendarResponse = await res.json();
+  if (!Array.isArray(json.events)) {
+    throw new Error('Calendar response did not contain events.');
+  }
   return json;
 };
 
@@ -467,7 +470,7 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
           <CardContent className="flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
             <WidgetHeading
               icon={<Clock />}
-              label="Now"
+              label={widget?.title || 'Now'}
               compactValue={
                 <span className="dashboard-clock-heading-value">
                   {formatClockValue(liveClockTime, showSeconds)}

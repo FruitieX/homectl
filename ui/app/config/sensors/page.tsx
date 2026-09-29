@@ -1,3 +1,5 @@
+import { ReorderButtons } from '@/ui/settings/ReorderButtons';
+import { moveSibling } from '@/lib/routineDraft';
 import { Link } from 'react-router-dom';
 import { useAppConfig } from '@/hooks/appConfig';
 import {
@@ -267,28 +269,40 @@ export default function SensorCatalogPage() {
                         </p>
                       )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="self-end justify-self-end"
-                      aria-label={`Remove sensor ${sensor.name || index + 1}`}
-                      onClick={() =>
-                        draft.change((current) => ({
-                          ...current,
-                          sensors: current.sensors.filter(
-                            (_, i) => i !== index,
-                          ),
-                          groups: current.groups.map((group) => ({
-                            ...group,
-                            sensorIds: group.sensorIds.filter(
-                              (id) => id !== sensor.id,
+                    <div className="flex items-center justify-end gap-1 self-end">
+                      <ReorderButtons
+                        label={`sensor ${sensor.name || index + 1}`}
+                        index={index}
+                        total={value.sensors.length}
+                        onMove={(offset) =>
+                          draft.patch({
+                            sensors: moveSibling(value.sensors, index, offset),
+                          })
+                        }
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="self-end justify-self-end"
+                        aria-label={`Remove sensor ${sensor.name || index + 1}`}
+                        onClick={() =>
+                          draft.change((current) => ({
+                            ...current,
+                            sensors: current.sensors.filter(
+                              (_, i) => i !== index,
                             ),
-                          })),
-                        }))
-                      }
-                    >
-                      Remove
-                    </Button>
+                            groups: current.groups.map((group) => ({
+                              ...group,
+                              sensorIds: group.sensorIds.filter(
+                                (id) => id !== sensor.id,
+                              ),
+                            })),
+                          }))
+                        }
+                      >
+                        Remove
+                      </Button>
+                    </div>
                   </div>
                 );
               })}
@@ -347,25 +361,38 @@ export default function SensorCatalogPage() {
                       }
                     />
                   </label>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="self-end justify-self-end"
-                    aria-label={`Remove group ${group.name || index + 1}`}
-                    onClick={() =>
-                      draft.patch({
-                        groups: value.groups.filter((_, i) => i !== index),
-                      })
-                    }
-                  >
-                    Remove
-                  </Button>
+                  <div className="flex items-center justify-end gap-1 self-end">
+                    <ReorderButtons
+                      label={`group ${group.name || index + 1}`}
+                      index={index}
+                      total={value.groups.length}
+                      onMove={(offset) =>
+                        draft.patch({
+                          groups: moveSibling(value.groups, index, offset),
+                        })
+                      }
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="self-end justify-self-end"
+                      aria-label={`Remove group ${group.name || index + 1}`}
+                      onClick={() =>
+                        draft.patch({
+                          groups: value.groups.filter((_, i) => i !== index),
+                        })
+                      }
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 </div>
                 <div
                   {...entityFieldProps(draft, `groups.${index}.sensorIds`)}
                   tabIndex={-1}
                 >
                   <SearchableMultiPicker
+                    ordered
                     options={value.sensors
                       .filter((sensor) => sensor.id)
                       .map((sensor) => ({

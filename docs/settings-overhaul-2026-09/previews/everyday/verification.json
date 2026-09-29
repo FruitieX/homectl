@@ -1,0 +1,809 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "name": "home at 1440",
+      "passed": true,
+      "title": "Home",
+      "width": 1425,
+      "viewport": 1440,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "dashboard at 1440",
+      "passed": true,
+      "title": "Home",
+      "width": 1425,
+      "viewport": 1440,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "rooms at 1440",
+      "passed": true,
+      "title": "Rooms & groups",
+      "width": 1440,
+      "viewport": 1440,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "devices at 1440",
+      "passed": true,
+      "title": "All devices",
+      "width": 1425,
+      "viewport": 1440,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "room at 1440",
+      "passed": true,
+      "title": "Living room",
+      "width": 1440,
+      "viewport": 1440,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "room-map at 1440",
+      "passed": true,
+      "title": "Living room",
+      "width": 1425,
+      "viewport": 1440,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "room-simple at 1440",
+      "passed": true,
+      "title": "Bedroom",
+      "width": 1440,
+      "viewport": 1440,
+      "rings": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "light at 1440",
+      "passed": true,
+      "title": "Light controls",
+      "width": 1425,
+      "viewport": 1440,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "group at 1440",
+      "passed": true,
+      "title": "Adjust room lights",
+      "width": 1425,
+      "viewport": 1440,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "map at 1440",
+      "passed": true,
+      "title": "Floorplan",
+      "width": 1425,
+      "viewport": 1440,
+      "rings": [
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "capture at 1440",
+      "passed": true,
+      "title": "Create scene",
+      "width": 1440,
+      "viewport": 1440,
+      "rings": [
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "sensor at 1440",
+      "passed": true,
+      "title": "Living room climate",
+      "width": 1440,
+      "viewport": 1440,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "widgets at 1440",
+      "passed": true,
+      "title": "Widget details",
+      "width": 1425,
+      "viewport": 1440,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "heater at 1440",
+      "passed": true,
+      "title": "Car heater",
+      "width": 1440,
+      "viewport": 1440,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "assistant at 1440",
+      "passed": true,
+      "title": "Assistant",
+      "width": 1440,
+      "viewport": 1440,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "search at 1440",
+      "passed": true,
+      "title": "Search",
+      "width": 1440,
+      "viewport": 1440,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "attention at 1440",
+      "passed": true,
+      "title": "Devices needing attention",
+      "width": 1440,
+      "viewport": 1440,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "states at 1440",
+      "passed": true,
+      "title": "Connection & recovery",
+      "width": 1440,
+      "viewport": 1440,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "home at 390",
+      "passed": true,
+      "title": "Home",
+      "width": 390,
+      "viewport": 390,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "dashboard at 390",
+      "passed": true,
+      "title": "Home",
+      "width": 390,
+      "viewport": 390,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "rooms at 390",
+      "passed": true,
+      "title": "Rooms & groups",
+      "width": 390,
+      "viewport": 390,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "devices at 390",
+      "passed": true,
+      "title": "All devices",
+      "width": 390,
+      "viewport": 390,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "room at 390",
+      "passed": true,
+      "title": "Living room",
+      "width": 390,
+      "viewport": 390,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "room-map at 390",
+      "passed": true,
+      "title": "Living room",
+      "width": 390,
+      "viewport": 390,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "room-simple at 390",
+      "passed": true,
+      "title": "Bedroom",
+      "width": 390,
+      "viewport": 390,
+      "rings": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "light at 390",
+      "passed": true,
+      "title": "Light controls",
+      "width": 390,
+      "viewport": 390,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "group at 390",
+      "passed": true,
+      "title": "Adjust room lights",
+      "width": 390,
+      "viewport": 390,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "map at 390",
+      "passed": true,
+      "title": "Floorplan",
+      "width": 390,
+      "viewport": 390,
+      "rings": [
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "capture at 390",
+      "passed": true,
+      "title": "Create scene",
+      "width": 390,
+      "viewport": 390,
+      "rings": [
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "sensor at 390",
+      "passed": true,
+      "title": "Living room climate",
+      "width": 390,
+      "viewport": 390,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "widgets at 390",
+      "passed": true,
+      "title": "Widget details",
+      "width": 390,
+      "viewport": 390,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "heater at 390",
+      "passed": true,
+      "title": "Car heater",
+      "width": 390,
+      "viewport": 390,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "assistant at 390",
+      "passed": true,
+      "title": "Assistant",
+      "width": 390,
+      "viewport": 390,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "search at 390",
+      "passed": true,
+      "title": "Search",
+      "width": 390,
+      "viewport": 390,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "attention at 390",
+      "passed": true,
+      "title": "Devices needing attention",
+      "width": 390,
+      "viewport": 390,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "states at 390",
+      "passed": true,
+      "title": "Connection & recovery",
+      "width": 390,
+      "viewport": 390,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "home at 360",
+      "passed": true,
+      "title": "Home",
+      "width": 360,
+      "viewport": 360,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "dashboard at 360",
+      "passed": true,
+      "title": "Home",
+      "width": 360,
+      "viewport": 360,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "rooms at 360",
+      "passed": true,
+      "title": "Rooms & groups",
+      "width": 360,
+      "viewport": 360,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "devices at 360",
+      "passed": true,
+      "title": "All devices",
+      "width": 360,
+      "viewport": 360,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "room at 360",
+      "passed": true,
+      "title": "Living room",
+      "width": 360,
+      "viewport": 360,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "room-map at 360",
+      "passed": true,
+      "title": "Living room",
+      "width": 360,
+      "viewport": 360,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "room-simple at 360",
+      "passed": true,
+      "title": "Bedroom",
+      "width": 360,
+      "viewport": 360,
+      "rings": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "light at 360",
+      "passed": true,
+      "title": "Light controls",
+      "width": 360,
+      "viewport": 360,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "group at 360",
+      "passed": true,
+      "title": "Adjust room lights",
+      "width": 360,
+      "viewport": 360,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "map at 360",
+      "passed": true,
+      "title": "Floorplan",
+      "width": 360,
+      "viewport": 360,
+      "rings": [
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "capture at 360",
+      "passed": true,
+      "title": "Create scene",
+      "width": 360,
+      "viewport": 360,
+      "rings": [
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "sensor at 360",
+      "passed": true,
+      "title": "Living room climate",
+      "width": 360,
+      "viewport": 360,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "widgets at 360",
+      "passed": true,
+      "title": "Widget details",
+      "width": 360,
+      "viewport": 360,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "heater at 360",
+      "passed": true,
+      "title": "Car heater",
+      "width": 360,
+      "viewport": 360,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "assistant at 360",
+      "passed": true,
+      "title": "Assistant",
+      "width": 360,
+      "viewport": 360,
+      "rings": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "unnamed": 0
+    },
+    {
+      "name": "search at 360",
+      "passed": true,
+      "title": "Search",
+      "width": 360,
+      "viewport": 360,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "attention at 360",
+      "passed": true,
+      "title": "Devices needing attention",
+      "width": 360,
+      "viewport": 360,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "states at 360",
+      "passed": true,
+      "title": "Connection & recovery",
+      "width": 360,
+      "viewport": 360,
+      "rings": [],
+      "unnamed": 0
+    },
+    {
+      "name": "Device search includes sensors",
+      "passed": true
+    },
+    {
+      "name": "Search shows an empty state",
+      "passed": true
+    },
+    {
+      "name": "Device row opens shared controls",
+      "passed": true
+    },
+    {
+      "name": "Brightness updates the control and preview",
+      "passed": true
+    },
+    {
+      "name": "Escape dismisses the control sheet",
+      "passed": true
+    },
+    {
+      "name": "Scene activation is visible",
+      "passed": true
+    },
+    {
+      "name": "Timer draft survives navigation",
+      "passed": true
+    },
+    {
+      "name": "Discard restores the saved schedule",
+      "passed": true
+    },
+    {
+      "name": "Added timer saves explicitly",
+      "passed": true
+    },
+    {
+      "name": "Capture requires a name",
+      "passed": true
+    },
+    {
+      "name": "Capture draft survives route navigation",
+      "passed": true
+    },
+    {
+      "name": "Capture shows save result",
+      "passed": true
+    },
+    {
+      "name": "Advanced toggle hides raw details",
+      "passed": true
+    },
+    {
+      "name": "Ctrl+K opens search and focuses input",
+      "passed": true
+    },
+    {
+      "name": "Enter follows the filtered search result",
+      "passed": true
+    },
+    {
+      "name": "Assistant apply reflects selection",
+      "passed": true
+    },
+    {
+      "name": "Assistant shows applied state",
+      "passed": true
+    }
+  ],
+  "scope": "Local synthetic prototype; geometry checks, native Escape/Ctrl+K/Enter, DOM-driven control interactions. Not production acceptance or a full accessibility audit."
+}

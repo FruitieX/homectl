@@ -1,58 +1,16 @@
-import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import type { Device } from '@/bindings/Device';
-import {
-  useDeviceDisplayNames,
-  useDeviceSensorConfigs,
-} from '@/hooks/useConfig';
-import {
-  useConnectionStatus,
-  useDevicesState,
-  useGroupsState,
-} from '@/hooks/websocket';
-import { getPower } from '@/lib/colors';
-import { getDeviceKey } from '@/lib/device';
-import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
-import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
+import { useDevicesState, useGroupsState } from '@/hooks/websocket';
+import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { resolveGroupDeviceKeys } from '@/lib/group-floorplan-preview';
-import { getSensorConfigRef } from '@/lib/sensorInteraction';
-import { DeviceColorTabs, colorToDeviceHs } from '@/ui/DeviceColorTabs';
-import {
-  DevicePowerToggle,
-  DeviceQuickControls,
-  useLiveDeviceControls,
-} from '@/ui/DeviceControls';
+import { configItemHref } from '@/lib/configItemHref';
+import { DeviceQuickControls, DeviceRow } from '@/ui/DeviceControls';
+import { LiveSensorRow } from '@/ui/LiveSensorRow';
+import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
+import { LiveAttention } from '@/ui/LiveAttention';
 import { FloorplanInspector } from '@/ui/FloorplanInspector';
-import { SensorActionPanel } from '@/ui/SensorActionPanel';
-import { Button } from '@/ui/primitives/button';
-import { Tabs, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import { SceneList } from './[id]/SceneList';
 
-function summarizeDevice(device: Device, readOnly: boolean): string {
-  const prefix = readOnly ? 'Read-only · ' : '';
-  if ('Controllable' in device.data) {
-    const state = device.data.Controllable.state;
-    const active = getPower(device.data);
-    if (!active) return `${prefix}Off`;
-    return state.brightness === null
-      ? `${prefix}On`
-      : `${prefix}On · ${Math.round(state.brightness * 100)}%`;
-  }
-  if ('Sensor' in device.data) {
-    const sensor = device.data.Sensor;
-    const value = 'value' in sensor ? String(sensor.value) : null;
-    return value ?? (getPower(device.data) ? 'On' : 'Off');
-  }
-  return readOnly ? 'Read-only' : '';
-}
-
-/**
- * Room/group detail sheet: the floorplan side panel on desktop and a bottom
- * sheet on mobile. Groups its devices into Controls, Scenes, Color and
- * Devices tabs; picking a device from the Devices tab navigates within the
- * sheet and returns via the back chevron in the header.
- */
+/** The floorplan keeps map context while exposing the same room controls. */
 export function GroupPanel({
   groupId,
   onClose,
@@ -60,195 +18,89 @@ export function GroupPanel({
   groupId: string;
   onClose: () => void;
 }) {
-  const groups = useGroupsState();
-  const devicesState = useDevicesState();
+  const groups = useGroupsState(),
+    state = useDevicesState();
   const { data: overrides } = useDeviceDisplayNames();
-  const { data: sensorConfigs } = useDeviceSensorConfigs();
-  const connected = useConnectionStatus() === 'connected';
-  const setState = useLiveDeviceControls();
-  const [tab, setTab] = useState('controls');
-  const [activeKey, setActiveKey] = useState<string | null>(null);
-
-  const names = useMemo(
-    () =>
-      Object.fromEntries(
-        overrides.map((row) => [row.device_key, row.display_name]),
-      ),
-    [overrides],
+  const names = Object.fromEntries(
+    overrides.map((row) => [row.device_key, row.display_name]),
   );
-  const group = groups?.[groupId] ?? null;
-  const deviceKeys = useMemo(
-    () =>
-      group
-        ? resolveGroupDeviceKeys(groupId, { ...groups, [groupId]: group })
-        : [],
-    [groupId, group, groups],
-  );
-  const devices = useMemo(
-    () =>
-      deviceKeys.flatMap((key) =>
-        devicesState?.[key] ? [devicesState[key]!] : [],
-      ),
-    [deviceKeys, devicesState],
-  );
-  const controllable = devices.filter(
-    (device) => 'Controllable' in device.data && !isDeviceReadOnly(device),
-  );
-  const onCount = controllable.filter((device) => getPower(device.data)).length;
-  const colorDevices = devices.filter((device) => {
-    if (!('Controllable' in device.data) || isDeviceReadOnly(device))
-      return false;
-    const capabilities = device.data.Controllable.capabilities;
-    return Boolean(
-      capabilities.hs || capabilities.xy || capabilities.rgb || capabilities.ct,
-    );
-  });
-  const unavailableCount = deviceKeys.length - devices.length;
-
-  const active = activeKey ? (devicesState?.[activeKey] ?? null) : null;
-  const activeLabel = active
-    ? getDeviceDisplayLabel(active, names)
-    : (names[activeKey ?? ''] ?? activeKey ?? '');
-  const sensorConfigMap = useMemo(
-    () => Object.fromEntries(sensorConfigs.map((row) => [row.device_ref, row])),
-    [sensorConfigs],
-  );
-
+  const group = groups?.[groupId];
   if (!group) return null;
+  const keys = resolveGroupDeviceKeys(groupId, groups ?? {});
+  const devices = keys.flatMap((key) => (state?.[key] ? [state[key]!] : []));
+  const controls = devices.filter((d) => 'Controllable' in d.data);
   return (
-    <FloorplanInspector
-      title={
-        active ? (
-          <button
-            type="button"
-            className="flex min-w-0 max-w-full items-center gap-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => setActiveKey(null)}
-          >
-            <ChevronLeft className="size-4 shrink-0" />
-            <span className="truncate">{activeLabel}</span>
-          </button>
-        ) : (
-          <span className="block truncate">{group.name}</span>
-        )
-      }
-      onClose={onClose}
-    >
-      {active ? (
-        <div className="space-y-4">
-          {'Controllable' in active.data ? (
-            <DeviceQuickControls key={activeKey} devices={[active]} />
-          ) : (
-            <SensorActionPanel
-              device={active}
-              sensorConfig={sensorConfigMap[getSensorConfigRef(active)] ?? null}
-            />
+    <FloorplanInspector title={group.name} onClose={onClose}>
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <LiveStatePreview
+            states={[
+              ...controls.map(devicePreviewState),
+              ...keys.filter((key) => !state?.[key]).map(() => undefined),
+            ]}
+          />
+          <span className="text-xs text-muted-foreground">
+            {devices.length} devices
+            {keys.length > devices.length
+              ? ` · ${keys.length - devices.length} unavailable`
+              : ''}
+          </span>
+        </div>
+        <LiveAttention deviceKeys={keys} />
+        <DeviceQuickControls key={groupId} devices={controls} />
+        <section className="space-y-2 border-t border-border pt-3">
+          <h3 className="text-sm font-semibold">Scenes</h3>
+          <SceneList deviceKeys={keys} compact />
+        </section>
+        <section className="space-y-2 border-t border-border pt-3">
+          <h3 className="text-sm font-semibold">Devices</h3>
+          {keys.map((key) => {
+            const device = state?.[key];
+            return device ? (
+              'Controllable' in device.data ? (
+                <DeviceRow
+                  key={key}
+                  device={device}
+                  displayNames={names}
+                  presentation="floorplan"
+                />
+              ) : (
+                <LiveSensorRow key={key} device={device} displayNames={names} />
+              )
+            ) : (
+              <Link
+                key={key}
+                className="block text-sm text-primary underline"
+                to={configItemHref('device', key)}
+              >
+                {names[key] ?? key} · Unavailable
+              </Link>
+            );
+          })}
+          {!keys.length && (
+            <p className="text-sm text-muted-foreground">
+              No devices in this room yet.
+            </p>
           )}
+        </section>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <Link
+            className="text-primary underline"
+            to={`/groups/${encodeURIComponent(groupId)}`}
+            onClick={onClose}
+          >
+            Room controls
+          </Link>
+          <Link
+            className="text-primary underline"
+            to={configItemHref('group', groupId)}
+            onClick={onClose}
+          >
+            Room settings
+          </Link>
         </div>
-      ) : (
-        <div className="space-y-3">
-          <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="controls">Controls</TabsTrigger>
-              <TabsTrigger value="scenes">Scenes</TabsTrigger>
-              <TabsTrigger value="color" disabled={colorDevices.length === 0}>
-                Color
-              </TabsTrigger>
-              <TabsTrigger value="devices">
-                Devices{unavailableCount > 0 ? ` (${devices.length})` : ''}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-          {tab === 'controls' ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {onCount} of {controllable.length} on
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {deviceKeys.length}{' '}
-                    {deviceKeys.length === 1 ? 'device' : 'devices'}
-                    {unavailableCount > 0
-                      ? ` · ${unavailableCount} unavailable`
-                      : ''}
-                  </p>
-                </div>
-                <DevicePowerToggle devices={devices} label={group.name} />
-              </div>
-              <DeviceQuickControls
-                key={groupId}
-                devices={devices}
-                showColorTabs={false}
-              />
-            </div>
-          ) : null}
-          {tab === 'scenes' ? (
-            <SceneList deviceKeys={deviceKeys} compact />
-          ) : null}
-          {tab === 'color' ? (
-            <DeviceColorTabs
-              devices={devices}
-              connected={connected}
-              onChange={(device, color, brightness) => {
-                if ('Controllable' in device.data)
-                  setState(
-                    device,
-                    getPower(device.data),
-                    brightness,
-                    colorToDeviceHs(color),
-                  );
-              }}
-              onNativeChange={setState}
-            />
-          ) : null}
-          {tab === 'devices' ? (
-            <div className="space-y-2">
-              {deviceKeys.map((key) => {
-                const device = devicesState?.[key];
-                if (!device) {
-                  return (
-                    <p
-                      key={key}
-                      className="break-words rounded-xl border border-border p-4 text-sm text-muted-foreground"
-                    >
-                      {names[key] ?? key} · Unavailable
-                    </p>
-                  );
-                }
-                const readOnly = isDeviceReadOnly(device);
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setActiveKey(key)}
-                    className="flex min-h-14 w-full min-w-0 items-center gap-3 rounded-xl border border-border bg-card p-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">
-                        {getDeviceDisplayLabel(device, names)}
-                      </span>
-                      <span className="block text-xs text-muted-foreground">
-                        {summarizeDevice(device, readOnly)}
-                      </span>
-                    </span>
-                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                  </button>
-                );
-              })}
-              {deviceKeys.length === 0 ? (
-                <p className="rounded-xl border border-border p-4 text-sm text-muted-foreground">
-                  No devices in this room yet.
-                </p>
-              ) : null}
-              <Button asChild variant="outline" className="w-full">
-                <Link to="/config/groups">Manage room devices</Link>
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      )}
+      </div>
     </FloorplanInspector>
   );
 }
-
 export default GroupPanel;

@@ -27,14 +27,14 @@ export const useSetDeviceState = () => {
     ) => {
       if (isDeviceReadOnly(device)) {
         toast.error('This device is read-only.');
-        return;
+        return Promise.resolve(false);
       }
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         toast.error('Not connected. Try again when the connection returns.');
-        return;
+        return Promise.resolve(false);
       }
       const hsv = color?.hsv();
-      void sendDeviceCommand(ws, {
+      return sendDeviceCommand(ws, {
         request_id: createUuid(),
         device_key: getDeviceKey(device),
         power,
@@ -46,9 +46,12 @@ export const useSetDeviceState = () => {
           (hsv
             ? { h: Math.round(hsv.hue()), s: hsv.saturationv() / 100 }
             : null),
-      }).catch((error: Error) =>
-        toast.error(error.message, { id: 'device-command-error' }),
-      );
+      })
+        .then(() => true)
+        .catch((error: Error) => {
+          toast.error(error.message, { id: 'device-command-error' });
+          return false;
+        });
     },
     [ws],
   );

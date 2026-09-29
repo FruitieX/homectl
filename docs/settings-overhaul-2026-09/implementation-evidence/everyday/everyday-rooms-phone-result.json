@@ -1,0 +1,19 @@
+{
+ "evaluated": {
+  "checks": [
+   "Nested and direct membership deduplicated",
+   "Missing member stays visible",
+   "No floorplan preview without placements",
+   "Read-only power control disabled",
+   "Read-only detail explains unavailable controls",
+   "Nested sensor row visible",
+   "Sensor canonical detail link",
+   "Empty room offers no broad control command",
+   "Missing room recovery destination",
+   "Unknown URL is not silently redirected",
+   "No horizontal overflow"
+  ],
+  "width": 390
+ }
+}
+{"url":"http://127.0.0.1:3021/groups/everyday_parent","viewport":{"width":390,"height":844},"problems":[]}

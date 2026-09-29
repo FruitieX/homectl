@@ -1,5 +1,6 @@
+import { CalibrationAssignment } from '@/ui/settings/CalibrationAssignment';
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAppConfig } from '@/hooks/appConfig';
 import { useEntityDraft } from '@/hooks/useEntityDraft';
@@ -13,7 +14,6 @@ import {
   useCalibrationProfiles,
   useCalibrationAssignments,
   useDeviceColorCalibrations,
-  useAssignCalibrationProfile,
 } from '@/hooks/useConfig';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { getDeviceKey } from '@/lib/device';
@@ -60,15 +60,25 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
   const profiles = useCalibrationProfiles(),
     assignments = useCalibrationAssignments(),
     calibrations = useDeviceColorCalibrations();
-  const assign = useAssignCalibrationProfile(),
-    mutations = useConfigDevices();
+  const mutations = useConfigDevices();
   const device = catalog.byKey[deviceKey];
   const name = device ? catalog.label(device) : deviceKey;
   const navigate = useNavigate();
   const [replacement, setReplacement] = useState(''),
     [busy, setBusy] = useState(false);
-  const [wizard, setWizard] = useState<'color' | 'brightness' | null>(null);
-  const [profileChoice, setProfileChoice] = useState<string | undefined>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedWizard = searchParams.get('calibration');
+  const wizard =
+    requestedWizard === 'color' || requestedWizard === 'brightness'
+      ? requestedWizard
+      : null;
+  const setWizard = (value: 'color' | 'brightness' | null) =>
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value) next.set('calibration', value);
+      else next.delete('calibration');
+      return next;
+    });
   const href = configItemHref('device', deviceKey),
     key = `${apiEndpoint}/device-settings/${deviceKey}`;
   const draft = useEntityDraft({
@@ -153,16 +163,8 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
       setBusy(false);
     }
   }
-  async function closeWizard() {
-    if (
-      await confirmDialog({
-        title: 'Close calibration?',
-        description:
-          'Unsaved calibration steps will be discarded. Saved device settings are unaffected.',
-        confirmLabel: 'Close calibration',
-      })
-    )
-      setWizard(null);
+  function closeWizard() {
+    setWizard(null);
   }
   return (
     <DetailPageShell
@@ -555,55 +557,7 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
                       </Button>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-end gap-2">
-                    <div className="min-w-0 max-w-sm flex-1">
-                      <SearchablePicker
-                        ariaLabel="Calibration profile"
-                        options={profiles.data.map((row) => ({
-                          value: row.id,
-                          label: row.name,
-                        }))}
-                        value={profileChoice ?? assignedId ?? ''}
-                        onChange={setProfileChoice}
-                        placeholder="Choose a profile"
-                      />
-                    </div>
-                    <Button
-                      variant="outline"
-                      disabled={
-                        assign.isPending || !(profileChoice ?? assignedId)
-                      }
-                      onClick={() =>
-                        void assign
-                          .mutateAsync({
-                            deviceKeys: [deviceKey],
-                            profileId: profileChoice ?? assignedId!,
-                          })
-                          .then(() =>
-                            toast.success('Calibration profile assigned'),
-                          )
-                          .catch((error: Error) => toast.error(error.message))
-                      }
-                    >
-                      Assign profile
-                    </Button>
-                    {assignedId && (
-                      <Button
-                        variant="ghost"
-                        disabled={assign.isPending}
-                        onClick={() =>
-                          void assign
-                            .mutateAsync({
-                              deviceKeys: [deviceKey],
-                              profileId: null,
-                            })
-                            .catch((error: Error) => toast.error(error.message))
-                        }
-                      >
-                        Remove assignment
-                      </Button>
-                    )}
-                  </div>
+                  <CalibrationAssignment deviceKey={deviceKey} />
                 </>
               )}
             </SettingsSection>

@@ -128,7 +128,7 @@ interface SceneRenderState {
 const emptySelection: readonly string[] = [];
 const longPressDelayMs = 500;
 const tapMoveTolerancePx = 8;
-const minScale = 0.08;
+const minScale = 0.001;
 const maxScale = 8;
 const labelTextureScaleStep = 0.25;
 const lightGradientTextureCache = new Map<number, Texture>();
@@ -617,14 +617,24 @@ function drawLightMarker(
       alpha: 0.85,
     });
   graphics
-    .circle(light.x, light.y - 3, 7)
+    .circle(light.x, light.y, 10)
     .fill({ color: tint, alpha: disabled || !light.power ? 0.35 : 0.9 })
     .stroke({ color: tint, width: 1.3 });
-  graphics.roundRect(light.x - 4, light.y + 4, 8, 3, 1.5).fill({ color: tint });
   graphics
-    .moveTo(light.x - 2, light.y + 9)
-    .lineTo(light.x + 2, light.y + 9)
-    .stroke({ color: tint, width: 1.5 });
+    .circle(light.x, light.y, 14)
+    .stroke({ color: 0x64748b, width: 2.5, alpha: 0.5 });
+  const brightness =
+    light.power && !disabled ? Math.max(0, Math.min(1, light.intensity)) : 0;
+  if (brightness > 0)
+    graphics
+      .arc(
+        light.x,
+        light.y,
+        14,
+        -Math.PI / 2,
+        -Math.PI / 2 + brightness * Math.PI * 2,
+      )
+      .stroke({ color: tint, width: 2.5, cap: 'round' });
 
   if (selected) {
     graphics

@@ -1,0 +1,23 @@
+{
+ "evaluated": {
+  "passed": 15,
+  "results": [
+   "Incomplete numeric input is kept and prevents review",
+   "Editing brightness does not write configuration",
+   "Closing and reopening retains point edits and wizard position",
+   "Returning to a draft does not restart the live preview",
+   "Leaving during a pending preview start still restores the lights",
+   "Related navigation retains the calibration draft",
+   "A failed preview stop prevents any calibration write",
+   "Failed combined save leaves no orphan profile",
+   "Conflict identifies the changed saved profile",
+   "Reviewed save preserves local brightness and the latest saved color",
+   "Other lights keep their shared profile",
+   "Live previews are stopped before the successful save",
+   "Removing brightness is staged until Save",
+   "Removing brightness preserves color calibration",
+   "Phone and desktop page width stays within the viewport"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/devices/detail/zigbee2mqtt/living_room_lamp?calibration=brightness","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 500 (Internal Server Error)","log: Failed to load resource: the server responded with a status of 409 (Conflict)"]}

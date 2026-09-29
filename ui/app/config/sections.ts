@@ -8,6 +8,13 @@ export type ConfigSection = {
 
 export const configSections = [
   {
+    href: '/config/timers',
+    label: 'Timers',
+    description: 'Countdowns, scheduled actions and ready-by times.',
+    group: 'Automations',
+    keywords: ['timer', 'countdown', 'car heater', 'ready by', 'schedule'],
+  },
+  {
     href: '/config/diagnostics',
     label: 'Check for problems',
     description: 'Find broken links and get a next step for each issue.',

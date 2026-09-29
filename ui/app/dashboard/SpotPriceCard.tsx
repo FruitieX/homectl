@@ -109,7 +109,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
             <div className="pointer-events-none relative z-[1] shrink-0">
               <WidgetHeading
                 icon={<Zap />}
-                label="Electricity price"
+                label={widget?.title || 'Electricity price'}
                 compactValue={stats ? formatPrice(stats.current?.value) : null}
                 detail
               />

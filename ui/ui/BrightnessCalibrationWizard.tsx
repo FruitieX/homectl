@@ -1,8 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 
-import { useAppConfig } from '@/hooks/appConfig';
-import { useAssignCalibrationProfile } from '@/hooks/useConfig';
+import {
+  useCalibrationEditor,
+  deviceCalibration,
+  type CalibrationEditorView,
+} from '@/hooks/useCalibrationEditor';
+import { useCalibrationDraft } from '@/hooks/useCalibrationDraft';
+import { useCalibrationPreview } from '@/hooks/useCalibrationPreview';
+import { createUuid } from '@/lib/uuid';
+import { configItemHref } from '@/lib/configItemHref';
+import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
+import { CalibrationConflict } from '@/ui/settings/CalibrationConflict';
+import { StatePreview } from '@/ui/settings/StatePreview';
 import { getDeviceKey } from '@/lib/device';
 import {
   BRIGHTNESS_COARSE_STEP,
@@ -52,40 +63,174 @@ const percentText = (value: number) => formatPercent(value);
  * before saving. Nothing is saved automatically and no light is commanded
  * except through the clearly labelled preview.
  */
-export function BrightnessCalibrationWizard({
+export function BrightnessCalibrationWizard(
+  props: BrightnessCalibrationWizardProps,
+) {
+  const query = useCalibrationEditor();
+  if (!query.data)
+    return (
+      <div
+        className="space-y-2 text-sm"
+        role={query.error ? 'alert' : 'status'}
+      >
+        {query.error ? query.error.message : 'Loading calibration…'}
+        {query.error && (
+          <Button variant="outline" onClick={() => void query.refetch()}>
+            Retry
+          </Button>
+        )}
+      </div>
+    );
+  return (
+    <BrightnessCalibrationForm
+      key={getDeviceKey(props.device)}
+      {...props}
+      initial={query.data}
+    />
+  );
+}
+
+type BrightnessDraft = {
+  id: string;
+  name: string;
+  step: Step;
+  mode: 'reference' | 'manual';
+  referenceKey: string;
+  pointInputs: Array<{ logical: string; output: string }>;
+  remove: boolean;
+};
+
+const numericPoints = (form: BrightnessDraft): BrightnessPoint[] =>
+  form.pointInputs.map((row) => ({
+    logical: parsePercent(row.logical) ?? NaN,
+    output: parsePercent(row.output) ?? NaN,
+  }));
+const pointText = (value: number) => formatPercent(value).replace('%', '');
+
+function BrightnessCalibrationForm({
   device,
   devices,
-  existingPoints = [],
-  profile = null,
-  existingBrightnessPoints = [],
-  profileUsage = 0,
   onSaved,
-}: BrightnessCalibrationWizardProps) {
-  const { apiEndpoint } = useAppConfig();
-  const assignCalibration = useAssignCalibrationProfile();
+  initial,
+}: BrightnessCalibrationWizardProps & { initial: CalibrationEditorView }) {
   const deviceKey = getDeviceKey(device);
-
-  const [step, setStep] = useState<Step>('mode');
-  const [mode, setMode] = useState<'reference' | 'manual'>('reference');
-  const [referenceKey, setReferenceKey] = useState('');
+  const session = useCalibrationPreview('brightness');
+  const draft = useCalibrationDraft<BrightnessDraft>({
+    kind: 'brightness',
+    deviceKey,
+    label: device.name,
+    initial,
+    form: () => {
+      const existing =
+        deviceCalibration(initial, deviceKey).resolved?.brightness_points ?? [];
+      return {
+        id: createUuid(),
+        name: `${device.name || 'Light'} brightness`.slice(0, 200),
+        step: 'mode',
+        mode: 'reference',
+        referenceKey: '',
+        remove: false,
+        pointInputs: (existing.length >= 2
+          ? sortBrightnessPoints(existing)
+          : suggestedBrightnessPoints()
+        ).map((row) => ({
+          logical: pointText(row.logical),
+          output: pointText(row.output),
+        })),
+      };
+    },
+    beforeSave: session.stop,
+    validate: (form) => {
+      if (form.remove) return [];
+      const error = brightnessCurveError(numericPoints(form));
+      return [
+        ...(!form.name.trim()
+          ? [{ field: 'calibration_name', message: 'Give the profile a name.' }]
+          : []),
+        ...(error ? [{ field: 'calibration_points', message: error }] : []),
+      ];
+    },
+    prepare: (form, basis) => {
+      const { profile, resolved } = deviceCalibration(basis, deviceKey);
+      const points = resolved?.points ?? [];
+      if (form.remove && !points.length)
+        return { device_keys: [deviceKey], profile_id: null };
+      return {
+        device_keys: [deviceKey],
+        profile_id: form.id,
+        profile: {
+          id: form.id,
+          name: form.remove
+            ? `${device.name || 'Light'} color only`
+            : form.name.trim(),
+          points,
+          // Matching brightness must not overwrite the color reference metadata.
+          reference_device_key: points.length
+            ? (profile?.reference_device_key ?? null)
+            : form.mode === 'reference'
+              ? form.referenceKey || null
+              : null,
+          brightness: profile?.brightness ?? 1,
+          brightness_points: form.remove
+            ? []
+            : sortBrightnessPoints(numericPoints(form)),
+        },
+      };
+    },
+    onSaved: () => {
+      setSaved(draft.value.form.remove ? 'removed' : draft.value.form.id);
+      onSaved?.();
+    },
+  });
+  const [step, setStep] = draft.field('step');
+  const [mode, setMode] = draft.field('mode');
+  const [referenceKey, setReferenceKey] = draft.field('referenceKey');
+  const points = useMemo(
+    () => numericPoints(draft.value.form),
+    [draft.value.form],
+  );
+  const setPoints = (
+    next:
+      BrightnessPoint[] | ((points: BrightnessPoint[]) => BrightnessPoint[]),
+  ) =>
+    draft.change((current) => {
+      const previous = numericPoints(current.form);
+      const updated = typeof next === 'function' ? next(previous) : next;
+      return {
+        ...current,
+        form: {
+          ...current.form,
+          pointInputs: updated.map((row, index) => ({
+            logical: Object.is(row.logical, previous[index]?.logical)
+              ? current.form.pointInputs[index].logical
+              : pointText(row.logical),
+            output: Object.is(row.output, previous[index]?.output)
+              ? current.form.pointInputs[index].output
+              : pointText(row.output),
+          })),
+        },
+      };
+    });
+  const [name, setName] = draft.field('name');
+  const { profile, resolved } = deviceCalibration(draft.value.basis, deviceKey);
+  const existingPoints = resolved?.points ?? [];
+  const profileUsage = draft.value.basis.assignments.filter(
+    (row) => row.profile_id === profile?.id,
+  ).length;
   const [previewLogical, setPreviewLogical] = useState<number | null>(null);
-  const [points, setPoints] = useState<BrightnessPoint[]>(() =>
-    // Editing what a light already has beats starting from a blank curve.
-    existingBrightnessPoints.length >= 2
-      ? sortBrightnessPoints(existingBrightnessPoints)
-      : suggestedBrightnessPoints(),
-  );
-  const [preview, setPreview] = useState<{
-    state: 'idle' | 'starting' | 'active' | 'error';
-    message?: string;
-  }>({ state: 'idle' });
-  const [name, setName] = useState(
-    `${device.name || 'Light'} brightness`.slice(0, 200),
-  );
-  const [saving, setSaving] = useState(false);
+  const saving = draft.saving;
+  const preview = {
+    state: session.pending
+      ? 'starting'
+      : session.error
+        ? 'error'
+        : session.active
+          ? 'active'
+          : 'idle',
+    message: session.error,
+  };
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const sessionRef = useRef<string | null>(null);
 
   const dimmable = isDimmableDevice(device);
   const ordered = useMemo(() => sortBrightnessPoints(points), [points]);
@@ -111,189 +256,68 @@ export function BrightnessCalibrationWizard({
     [referenceKey, referenceOptions],
   );
 
-  const stopPreview = useCallback(async () => {
-    const session = sessionRef.current;
-    sessionRef.current = null;
-    setPreview({ state: 'idle' });
-    if (!session) return;
-    // Cancel restores the runtime state of both lights server-side.
-    await fetch(
-      `${apiEndpoint}/api/v1/config/calibration-sessions/${encodeURIComponent(session)}`,
-      { method: 'DELETE' },
-    ).catch(() => undefined);
-  }, [apiEndpoint]);
-
-  // Never leave a preview running: unmount, or the browser closing the tab.
-  useEffect(() => {
-    return () => {
-      const session = sessionRef.current;
-      if (session) {
-        void fetch(
-          `${apiEndpoint}/api/v1/config/calibration-sessions/${encodeURIComponent(session)}`,
-          { method: 'DELETE', keepalive: true },
-        ).catch(() => undefined);
-      }
-    };
-  }, [apiEndpoint]);
-
-  const startPreview = async (point: BrightnessPoint) => {
-    setPreview({ state: 'starting' });
-    setError(null);
-    const session = `${deviceKey.replace(/[^a-zA-Z0-9]+/g, '-')}-brightness`;
-    const start = sessionRef.current !== session;
-    const body = {
-      target_key: deviceKey,
-      reference_key: mode === 'reference' && referenceKey ? referenceKey : null,
-      output: point.output,
-      reference_logical:
-        mode === 'reference' && referenceKey ? point.logical : null,
-    };
-    const response = await fetch(
-      `${apiEndpoint}/api/v1/config/calibration-brightness-sessions/${encodeURIComponent(session)}`,
-      {
-        method: start ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      },
-    ).catch(() => null);
-    const payload = response ? await response.json().catch(() => null) : null;
-    if (!response || !response.ok || payload?.success === false) {
-      setPreview({
-        state: 'error',
-        message:
-          payload?.error ??
-          'The preview could not start. The numbers you typed are still here.',
-      });
-      return;
+  const stopPreview = async () => {
+    try {
+      await session.stop();
+      setError(null);
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : 'Could not stop preview',
+      );
     }
-    sessionRef.current = session;
-    setPreviewLogical(point.logical);
-    setPreview({ state: 'active' });
   };
-
-  // A slow heartbeat keeps the session alive while a person compares lights.
-  useEffect(() => {
-    if (preview.state !== 'active') return;
-    const timer = window.setInterval(() => {
-      const session = sessionRef.current;
-      if (!session) return;
-      void fetch(
-        `${apiEndpoint}/api/v1/config/calibration-sessions/${encodeURIComponent(session)}/heartbeat`,
-        { method: 'POST' },
-      ).catch(() => undefined);
-    }, 30000);
-    return () => window.clearInterval(timer);
-  }, [apiEndpoint, preview.state]);
+  const startPreview = async (point: BrightnessPoint) => {
+    setError(null);
+    try {
+      await session.preview({
+        target_key: deviceKey,
+        reference_key: mode === 'reference' ? referenceKey || null : null,
+        output: point.output,
+        reference_logical:
+          mode === 'reference' && referenceKey ? point.logical : null,
+      });
+      setPreviewLogical(point.logical);
+    } catch {
+      /* The shared session exposes the failure. */
+    }
+  };
 
   const updateRow = (
     index: number,
     field: 'logical' | 'output',
     text: string,
   ) => {
-    const value = parsePercent(text);
-    // An unparsable entry keeps the old number: the field reports the reason
-    // instead of silently jumping to zero.
-    if (value === null) return;
-    setPoints((current) => setBrightnessPoint(current, index, field, value));
-  };
-
-  const save = async () => {
-    if (curveError) return;
-    setSaving(true);
-    setError(null);
-    const id = `${deviceKey.replace(/[^a-zA-Z0-9]+/g, '_')}_brightness_${Date.now()
-      .toString(36)
-      .slice(-4)}`;
-    const profileBody = {
-      id,
-      name: name.trim(),
-      // The other channel is preserved: a colour match this light already has
-      // travels into the new profile, and the old profile is left alone.
-      points: profile?.points ?? existingPoints,
-      reference_device_key:
-        mode === 'reference' && referenceKey ? referenceKey : null,
-      brightness: profile?.brightness ?? 1,
-      brightness_points: ordered,
-    };
-    const create = await fetch(
-      `${apiEndpoint}/api/v1/config/calibration-profiles`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profileBody),
+    draft.change((current) => ({
+      ...current,
+      form: {
+        ...current.form,
+        pointInputs: current.form.pointInputs.map((row, i) =>
+          i === index ? { ...row, [field]: text } : row,
+        ),
       },
-    ).catch(() => null);
-    const payload = create ? await create.json().catch(() => null) : null;
-    if (!create || !create.ok || payload?.success === false) {
-      setSaving(false);
-      setError(payload?.error ?? 'The profile could not be saved');
-      return;
-    }
-    try {
-      await assignCalibration.mutateAsync({
-        deviceKeys: [deviceKey],
-        profileId: id,
-      });
-      setSaved(id);
-      onSaved?.();
-    } catch (assignError) {
-      setError(
-        assignError instanceof Error
-          ? assignError.message
-          : 'The profile was saved but could not be assigned to this light',
-      );
-    } finally {
-      setSaving(false);
-    }
+    }));
   };
 
-  const removeCalibration = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      // Removing only the brightness channel: a colour match this light has is
-      // kept by assigning a profile that still carries it.
-      if (existingPoints.length > 0 || (profile?.points ?? []).length > 0) {
-        const id = `${deviceKey.replace(/[^a-zA-Z0-9]+/g, '_')}_color_only`;
-        const keep = await fetch(
-          `${apiEndpoint}/api/v1/config/calibration-profiles`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id,
-              name: `${device.name || 'Light'} color only`,
-              points: profile?.points ?? existingPoints,
-              reference_device_key: profile?.reference_device_key ?? null,
-              brightness: profile?.brightness ?? 1,
-              brightness_points: [],
-            }),
-          },
-        ).catch(() => null);
-        if (!keep || !keep.ok) {
-          throw new Error('That calibration could not be changed');
-        }
-        await assignCalibration.mutateAsync({
-          deviceKeys: [deviceKey],
-          profileId: id,
-        });
-      } else {
-        await assignCalibration.mutateAsync({
-          deviceKeys: [deviceKey],
-          profileId: null,
-        });
-      }
-      setSaved('removed');
-      onSaved?.();
-    } catch (removeError) {
-      setError(
-        removeError instanceof Error
-          ? removeError.message
-          : 'That calibration could not be removed',
+  const removeCalibration = () => {
+    setSaved(null);
+    draft.change((current) => ({
+      ...current,
+      form: { ...current.form, id: createUuid(), remove: true, step: 'review' },
+    }));
+  };
+  const discard = () => {
+    void session
+      .stop()
+      .then(() => {
+        draft.discard();
+        setSaved(null);
+        setError(null);
+      })
+      .catch((error) =>
+        setError(
+          error instanceof Error ? error.message : 'Could not stop preview',
+        ),
       );
-    } finally {
-      setSaving(false);
-    }
   };
 
   if (!dimmable) {
@@ -329,7 +353,15 @@ export function BrightnessCalibrationWizard({
             size="sm"
             onClick={() => {
               setSaved(null);
-              setStep('points');
+              draft.change((current) => ({
+                ...current,
+                form: {
+                  ...current.form,
+                  id: createUuid(),
+                  remove: false,
+                  step: 'points',
+                },
+              }));
             }}
           >
             Change brightness calibration
@@ -352,532 +384,598 @@ export function BrightnessCalibrationWizard({
   }
 
   return (
-    <div className="space-y-4">
-      <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-        {(['mode', 'points', 'review'] as Step[]).map((entry, index) => (
-          <li key={entry} className="flex items-center gap-2">
-            {index > 0 ? <span aria-hidden>/</span> : null}
-            <span
-              className={cn(entry === step && 'font-medium text-foreground')}
-            >
-              {index + 1}.{' '}
-              {entry === 'mode'
-                ? 'What to match'
-                : entry === 'points'
-                  ? 'Build points'
-                  : 'Review and save'}
-            </span>
-          </li>
-        ))}
-      </ol>
-
-      {step === 'mode' ? (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Brightness calibration changes the command this light receives, so a
-            level in homectl looks like the same level on another light. Compare
-            under the same conditions — brightness also depends on the room, the
-            shade, and the ambient light.
-          </p>
-          {profile?.brightness_points?.length ||
-          (profile?.points?.length ?? 0) > 0 ? (
-            <p className="text-sm">
-              This light is calibrated for{' '}
-              {[
-                (profile?.points?.length ?? 0) > 0 ? 'Color' : null,
-                (profile?.brightness_points?.length ?? 0) > 0
-                  ? 'Brightness'
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(' and ')}
-              . Saving a new profile keeps the other part.
-              {profileUsage > 1
-                ? ` ${profileUsage} lights share this profile; they keep it.`
-                : null}
-            </p>
-          ) : null}
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">
-              How do you want to work?
-            </legend>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="radio"
-                name="brightness-mode"
-                className="mt-1 size-4 accent-primary"
-                checked={mode === 'reference'}
-                onChange={() => setMode('reference')}
-              />
-              <span>
-                Match a reference light
-                <span className="block text-xs text-muted-foreground">
-                  Set both lights to a level and adjust this one until they look
-                  alike.
-                </span>
+    <div className="space-y-4" aria-label="Brightness calibration">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span role="status">
+          {draft.dirty ? 'Unsaved calibration' : 'Calibration draft'} ·{' '}
+          {session.active ? 'Live preview active' : 'Preview stopped'}
+        </span>
+        {referenceKey && (
+          <Link
+            className="settings-link"
+            to={configItemHref('device', referenceKey)}
+          >
+            Open reference light
+          </Link>
+        )}
+        {step !== 'review' && draft.dirty && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={saving}
+            onClick={discard}
+          >
+            Discard
+          </Button>
+        )}
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      {draft.value.form.remove && (
+        <p role="status" className="text-sm">
+          Brightness calibration will be removed on Save. Existing color
+          calibration is kept.
+        </p>
+      )}
+      <CalibrationConflict
+        before={draft.value.basis}
+        current={draft.conflictCatalog}
+        onReview={draft.reviewLatest}
+      />
+      <fieldset disabled={saving} className="min-w-0 space-y-4">
+        <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          {(['mode', 'points', 'review'] as Step[]).map((entry, index) => (
+            <li key={entry} className="flex items-center gap-2">
+              {index > 0 ? <span aria-hidden>/</span> : null}
+              <span
+                className={cn(entry === step && 'font-medium text-foreground')}
+              >
+                {index + 1}.{' '}
+                {entry === 'mode'
+                  ? 'What to match'
+                  : entry === 'points'
+                    ? 'Build points'
+                    : 'Review and save'}
               </span>
-            </label>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="radio"
-                name="brightness-mode"
-                className="mt-1 size-4 accent-primary"
-                checked={mode === 'manual'}
-                onChange={() => setMode('manual')}
-              />
-              <span>
-                Enter a curve manually
-                <span className="block text-xs text-muted-foreground">
-                  You already know the numbers. No reference light is needed.
-                </span>
-              </span>
-            </label>
-          </fieldset>
-          {mode === 'reference' ? (
-            <div className="space-y-2">
-              <label className="block space-y-1.5 text-sm font-medium">
-                Reference light
-                <select
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                  value={referenceKey}
-                  onChange={(event) => setReferenceKey(event.target.value)}
-                >
-                  <option value="">Choose a light…</option>
-                  {referenceOptions.map((option) => (
-                    <option key={option.key} value={option.key}>
-                      {option.name} — {option.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p className="text-xs text-muted-foreground">
-                Use a light you like the look of at a given level. Its own
-                calibration is kept, and it is set to the level you choose.
-              </p>
-            </div>
-          ) : null}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              disabled={mode === 'reference' && !referenceKey}
-              onClick={() => setStep('points')}
-            >
-              Continue
-            </Button>
-            <span className="self-center text-xs text-muted-foreground">
-              {mode === 'reference' && !referenceKey
-                ? 'Choose a reference light, or switch to entering a curve manually'
-                : 'Nothing is saved until you review'}
-            </span>
-          </div>
-        </div>
-      ) : null}
+            </li>
+          ))}
+        </ol>
 
-      {step === 'points' ? (
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Desired brightness is what you choose in homectl. Target output is
-            the command this light receives. Edit either number, or add a point
-            anywhere.
-          </p>
+        {step === 'mode' ? (
           <div className="space-y-3">
-            {points.map((point, index) => {
-              const rowError = brightnessPointError(points, index);
-              const previewing =
-                preview.state === 'active' &&
-                previewLogical !== null &&
-                Math.abs(previewLogical - point.logical) < 1e-9;
-              const mirrors =
-                Math.abs(point.logical - point.output) > 1e-9 ||
-                index < ordered.length - 1 ||
-                index === 0;
-              const isExtraLow =
-                ordered.length > 0 &&
-                point.logical < ordered[0].logical + 1e-9 &&
-                point.output < point.logical;
-              return (
-                <div
-                  key={`${point.logical}-${index}`}
-                  className="space-y-2 rounded-xl border border-border/70 p-3"
-                >
-                  <div className="flex flex-wrap items-end gap-3">
-                    <label className="space-y-1 text-sm">
-                      <span className="block text-xs text-muted-foreground">
-                        Desired brightness
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          min={0.1}
-                          max={100}
-                          step={0.1}
-                          inputMode="decimal"
-                          aria-label={`Desired brightness for point ${index + 1}`}
-                          className="w-24 rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
-                          value={formatPercent(point.logical).replace('%', '')}
-                          onChange={(event) =>
-                            updateRow(index, 'logical', event.target.value)
-                          }
-                        />
-                        <span className="text-xs text-muted-foreground">%</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`Decrease desired brightness for point ${index + 1} by 1%`}
-                          onClick={() =>
-                            setPoints((current) =>
-                              setBrightnessPoint(
-                                current,
-                                index,
-                                'logical',
-                                stepBrightnessValue(point.logical, 'down'),
-                              ),
-                            )
-                          }
-                        >
-                          −1%
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`Increase desired brightness for point ${index + 1} by 0.1%`}
-                          onClick={() =>
-                            setPoints((current) =>
-                              setBrightnessPoint(
-                                current,
-                                index,
-                                'logical',
-                                stepBrightnessValue(
-                                  point.logical,
-                                  'up',
-                                  BRIGHTNESS_FINE_STEP,
-                                ),
-                              ),
-                            )
-                          }
-                        >
-                          +0.1%
-                        </Button>
-                      </div>
-                    </label>
-                    <label className="space-y-1 text-sm">
-                      <span className="block text-xs text-muted-foreground">
-                        Target output
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          min={0.1}
-                          max={100}
-                          step={0.1}
-                          inputMode="decimal"
-                          aria-label={`Target output for point ${index + 1}`}
-                          className="w-24 rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
-                          value={formatPercent(point.output).replace('%', '')}
-                          onChange={(event) =>
-                            updateRow(index, 'output', event.target.value)
-                          }
-                        />
-                        <span className="text-xs text-muted-foreground">%</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`Decrease target output for point ${index + 1} by 1%`}
-                          onClick={() =>
-                            setPoints((current) =>
-                              setBrightnessPoint(
-                                current,
-                                index,
-                                'output',
-                                stepBrightnessValue(point.output, 'down'),
-                              ),
-                            )
-                          }
-                        >
-                          −1%
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`Increase target output for point ${index + 1} by 0.1%`}
-                          onClick={() =>
-                            setPoints((current) =>
-                              setBrightnessPoint(
-                                current,
-                                index,
-                                'output',
-                                stepBrightnessValue(
-                                  point.output,
-                                  'up',
-                                  BRIGHTNESS_FINE_STEP,
-                                ),
-                              ),
-                            )
-                          }
-                        >
-                          +0.1%
-                        </Button>
-                      </div>
-                    </label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      aria-label={`Remove point ${index + 1}`}
-                      disabled={points.length <= 1}
-                      onClick={() =>
-                        setPoints((current) =>
-                          removeBrightnessPoint(current, point.logical),
-                        )
-                      }
-                    >
-                      <Trash2 aria-hidden className="size-4" />
-                      Remove
-                    </Button>
-                  </div>
-                  <input
-                    type="range"
-                    min={0.1}
-                    max={100}
-                    step={0.1}
-                    aria-label={`Target output slider for point ${index + 1}`}
-                    className="w-full accent-primary"
-                    value={Math.round(point.output * 1000) / 10}
-                    onChange={(event) => {
-                      const value = Number(event.target.value) / 100;
-                      setPoints((current) =>
-                        setBrightnessPoint(current, index, 'output', value),
-                      );
-                    }}
-                  />
-                  {isExtraLow ? (
-                    <p className="text-xs text-muted-foreground">
-                      This is an authored extra-low point: the reference light
-                      cannot reach this level, so it is your own choice rather
-                      than a visual match.
-                    </p>
-                  ) : null}
-                  {rowError ? (
-                    <p
-                      className="text-xs text-amber-700 dark:text-amber-300"
-                      role="alert"
-                    >
-                      {rowError}
-                    </p>
-                  ) : null}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={
-                        preview.state === 'starting' || Boolean(rowError)
-                      }
-                      onClick={() => void startPreview(point)}
-                    >
-                      {preview.state === 'starting' ? (
-                        <Loader2 aria-hidden className="size-4 animate-spin" />
-                      ) : null}
-                      {previewing
-                        ? 'Previewing this point'
-                        : 'Preview this point'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={preview.state !== 'active'}
-                      onClick={() => void stopPreview()}
-                    >
-                      Stop preview
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        setPoints((current) => {
-                          const next = [...current];
-                          next[index] = { ...point, output: point.logical };
-                          return next;
-                        })
-                      }
-                    >
-                      Looks matched
-                    </Button>
-                    <span className="text-xs text-muted-foreground">
-                      {mirrors
-                        ? `sends ${percentText(mapBrightnessOutput(ordered, point.logical))}`
-                        : 'identity'}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setPoints((current) =>
-                  addBrightnessPoint(
-                    current,
-                    Math.max(0.001, (ordered[0]?.logical ?? 0.5) / 2),
-                  ),
-                )
-              }
-            >
-              <Plus aria-hidden className="size-4" />
-              Add a point
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setPoints(suggestedBrightnessPoints())}
-            >
-              Reset suggestions
-            </Button>
-          </div>
-          {preview.state === 'error' ? (
-            <p
-              className="text-sm text-amber-700 dark:text-amber-300"
-              role="alert"
-            >
-              {preview.message}
+            <p className="text-sm text-muted-foreground">
+              Brightness calibration changes the command this light receives, so
+              a level in homectl looks like the same level on another light.
+              Compare under the same conditions — brightness also depends on the
+              room, the shade, and the ambient light.
             </p>
-          ) : null}
-          {curveError ? (
-            <p
-              className="text-sm text-amber-700 dark:text-amber-300"
-              role="alert"
-            >
-              {curveError}
-            </p>
-          ) : null}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              disabled={Boolean(curveError)}
-              onClick={() => setStep('review')}
-            >
-              Review
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setStep('mode')}>
-              Back
-            </Button>
+            {profile?.brightness_points?.length ||
+            (profile?.points?.length ?? 0) > 0 ? (
+              <p className="text-sm">
+                This light is calibrated for{' '}
+                {[
+                  (profile?.points?.length ?? 0) > 0 ? 'Color' : null,
+                  (profile?.brightness_points?.length ?? 0) > 0
+                    ? 'Brightness'
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' and ')}
+                . Saving a new profile keeps the other part.
+                {profileUsage > 1
+                  ? ` ${profileUsage} lights share this profile; they keep it.`
+                  : null}
+              </p>
+            ) : null}
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">
+                How do you want to work?
+              </legend>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="brightness-mode"
+                  className="mt-1 size-4 accent-primary"
+                  checked={mode === 'reference'}
+                  onChange={() => setMode('reference')}
+                />
+                <span>
+                  Match a reference light
+                  <span className="block text-xs text-muted-foreground">
+                    Set both lights to a level and adjust this one until they
+                    look alike.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="brightness-mode"
+                  className="mt-1 size-4 accent-primary"
+                  checked={mode === 'manual'}
+                  onChange={() => setMode('manual')}
+                />
+                <span>
+                  Enter a curve manually
+                  <span className="block text-xs text-muted-foreground">
+                    You already know the numbers. No reference light is needed.
+                  </span>
+                </span>
+              </label>
+            </fieldset>
+            {mode === 'reference' ? (
+              <div className="space-y-2">
+                <label className="block space-y-1.5 text-sm font-medium">
+                  Reference light
+                  <select
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                    value={referenceKey}
+                    onChange={(event) => setReferenceKey(event.target.value)}
+                  >
+                    <option value="">Choose a light…</option>
+                    {referenceOptions.map((option) => (
+                      <option key={option.key} value={option.key}>
+                        {option.name} — {option.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Use a light you like the look of at a given level. Its own
+                  calibration is kept, and it is set to the level you choose.
+                </p>
+              </div>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                disabled={mode === 'reference' && !referenceKey}
+                onClick={() => setStep('points')}
+              >
+                Continue
+              </Button>
+              <span className="self-center text-xs text-muted-foreground">
+                {mode === 'reference' && !referenceKey
+                  ? 'Choose a reference light, or switch to entering a curve manually'
+                  : 'Nothing is saved until you review'}
+              </span>
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
 
-      {step === 'review' ? (
-        <div className="space-y-4">
-          <table className="w-full text-sm">
-            <caption className="sr-only">
-              What the brightness curve sends for each desired level
-            </caption>
-            <thead>
-              <tr className="text-left text-xs text-muted-foreground">
-                <th scope="col" className="py-1">
-                  Desired brightness
-                </th>
-                <th scope="col" className="py-1">
-                  Send
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {brightnessReviewRows(ordered).map((row) => (
-                <tr key={row.logical} className="border-t border-border/60">
-                  <td className="py-1">{row.logical}</td>
-                  <td className="py-1">
-                    {row.output}
-                    {row.changes ? (
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        authored
-                      </span>
-                    ) : (
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        unchanged
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <ul className="space-y-1 text-xs text-muted-foreground">
-            <li>{clamp.floor}</li>
-            <li>{clamp.ceiling}</li>
-            <li>
-              {mode === 'reference' && reference
-                ? `Compared against ${reference.name}; matched points are your visual match.`
-                : 'Entered by hand; no reference light was used.'}
-            </li>
-            <li>
-              {(profile?.points?.length ?? 0) > 0 || existingPoints.length > 0
-                ? 'Color calibration is preserved in the new profile.'
-                : 'No color calibration to preserve on this light.'}
-            </li>
-            <li>Saving assigns the new profile to this light only.</li>
-          </ul>
-          <label className="block space-y-1.5 text-sm font-medium">
-            Profile name
-            <input
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-              value={name}
-              maxLength={200}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </label>
-          <details className="text-sm">
-            <summary className="cursor-pointer text-muted-foreground">
-              Details
-            </summary>
-            <p className="mt-2 text-xs text-muted-foreground">
-              The profile id is generated from this light. Existing profiles are
-              never changed: this is a new profile for this light.
+        {step === 'points' ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Desired brightness is what you choose in homectl. Target output is
+              the command this light receives. Edit either number, or add a
+              point anywhere.
             </p>
-          </details>
-          {error ? (
-            <p
-              className="text-sm text-amber-700 dark:text-amber-300"
-              role="alert"
-            >
-              {error}
-            </p>
-          ) : null}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              disabled={saving || !name.trim()}
-              onClick={() => void save()}
-            >
-              {saving ? (
-                <Loader2 aria-hidden className="size-4 animate-spin" />
-              ) : null}
-              Save and assign
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setStep('points')}>
-              Back
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={saving}
-              onClick={() => void removeCalibration()}
-            >
-              Remove brightness calibration
-            </Button>
+            <div className="space-y-3">
+              {points.map((point, index) => {
+                const rowError = brightnessPointError(points, index);
+                const previewing =
+                  preview.state === 'active' &&
+                  previewLogical !== null &&
+                  Math.abs(previewLogical - point.logical) < 1e-9;
+                const mirrors =
+                  Math.abs(point.logical - point.output) > 1e-9 ||
+                  index < ordered.length - 1 ||
+                  index === 0;
+                const isExtraLow =
+                  ordered.length > 0 &&
+                  point.logical < ordered[0].logical + 1e-9 &&
+                  point.output < point.logical;
+                return (
+                  <div
+                    key={index}
+                    className="space-y-2 rounded-xl border border-border/70 p-3"
+                  >
+                    <div className="flex flex-wrap items-end gap-3">
+                      <StatePreview
+                        brightness={point.output}
+                        power
+                        label={
+                          Number.isFinite(point.output)
+                            ? `Target output ${formatPercent(point.output)}`
+                            : 'Enter a valid target output'
+                        }
+                      />
+                      <label className="space-y-1 text-sm">
+                        <span className="block text-xs text-muted-foreground">
+                          Desired brightness
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0.1}
+                            max={100}
+                            step={0.1}
+                            inputMode="decimal"
+                            aria-label={`Desired brightness for point ${index + 1}`}
+                            className="w-24 rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+                            value={draft.value.form.pointInputs[index].logical}
+                            onChange={(event) =>
+                              updateRow(index, 'logical', event.target.value)
+                            }
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            %
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Decrease desired brightness for point ${index + 1} by 1%`}
+                            onClick={() =>
+                              setPoints((current) =>
+                                setBrightnessPoint(
+                                  current,
+                                  index,
+                                  'logical',
+                                  stepBrightnessValue(point.logical, 'down'),
+                                ),
+                              )
+                            }
+                          >
+                            −1%
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Increase desired brightness for point ${index + 1} by 0.1%`}
+                            onClick={() =>
+                              setPoints((current) =>
+                                setBrightnessPoint(
+                                  current,
+                                  index,
+                                  'logical',
+                                  stepBrightnessValue(
+                                    point.logical,
+                                    'up',
+                                    BRIGHTNESS_FINE_STEP,
+                                  ),
+                                ),
+                              )
+                            }
+                          >
+                            +0.1%
+                          </Button>
+                        </div>
+                      </label>
+                      <label className="space-y-1 text-sm">
+                        <span className="block text-xs text-muted-foreground">
+                          Target output
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0.1}
+                            max={100}
+                            step={0.1}
+                            inputMode="decimal"
+                            aria-label={`Target output for point ${index + 1}`}
+                            className="w-24 rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+                            value={draft.value.form.pointInputs[index].output}
+                            onChange={(event) =>
+                              updateRow(index, 'output', event.target.value)
+                            }
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            %
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Decrease target output for point ${index + 1} by 1%`}
+                            onClick={() =>
+                              setPoints((current) =>
+                                setBrightnessPoint(
+                                  current,
+                                  index,
+                                  'output',
+                                  stepBrightnessValue(point.output, 'down'),
+                                ),
+                              )
+                            }
+                          >
+                            −1%
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Increase target output for point ${index + 1} by 0.1%`}
+                            onClick={() =>
+                              setPoints((current) =>
+                                setBrightnessPoint(
+                                  current,
+                                  index,
+                                  'output',
+                                  stepBrightnessValue(
+                                    point.output,
+                                    'up',
+                                    BRIGHTNESS_FINE_STEP,
+                                  ),
+                                ),
+                              )
+                            }
+                          >
+                            +0.1%
+                          </Button>
+                        </div>
+                      </label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Remove point ${index + 1}`}
+                        disabled={points.length <= 1}
+                        onClick={() =>
+                          setPoints((current) =>
+                            removeBrightnessPoint(current, point.logical),
+                          )
+                        }
+                      >
+                        <Trash2 aria-hidden className="size-4" />
+                        Remove
+                      </Button>
+                    </div>
+                    <input
+                      type="range"
+                      min={0.1}
+                      max={100}
+                      step={0.1}
+                      aria-label={`Target output slider for point ${index + 1}`}
+                      className="w-full accent-primary"
+                      value={
+                        Number.isFinite(point.output)
+                          ? Math.round(point.output * 1000) / 10
+                          : 0
+                      }
+                      onChange={(event) => {
+                        const value = Number(event.target.value) / 100;
+                        setPoints((current) =>
+                          setBrightnessPoint(current, index, 'output', value),
+                        );
+                      }}
+                    />
+                    {isExtraLow ? (
+                      <p className="text-xs text-muted-foreground">
+                        This is an authored extra-low point: the reference light
+                        cannot reach this level, so it is your own choice rather
+                        than a visual match.
+                      </p>
+                    ) : null}
+                    {rowError ? (
+                      <p
+                        className="text-xs text-amber-700 dark:text-amber-300"
+                        role="alert"
+                      >
+                        {rowError}
+                      </p>
+                    ) : null}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          preview.state === 'starting' || Boolean(rowError)
+                        }
+                        onClick={() => void startPreview(point)}
+                      >
+                        {preview.state === 'starting' ? (
+                          <Loader2
+                            aria-hidden
+                            className="size-4 animate-spin"
+                          />
+                        ) : null}
+                        {previewing
+                          ? 'Previewing this point'
+                          : 'Preview this point'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={preview.state === 'idle'}
+                        onClick={() => void stopPreview()}
+                      >
+                        Stop preview
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setPoints((current) => {
+                            const next = [...current];
+                            next[index] = { ...point, output: point.logical };
+                            return next;
+                          })
+                        }
+                      >
+                        Reset this point
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        {rowError
+                          ? 'Correct the point before previewing.'
+                          : mirrors
+                            ? `sends ${percentText(mapBrightnessOutput(ordered, point.logical))}`
+                            : 'identity'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setPoints((current) =>
+                    addBrightnessPoint(
+                      current,
+                      Math.max(0.001, (ordered[0]?.logical ?? 0.5) / 2),
+                    ),
+                  )
+                }
+              >
+                <Plus aria-hidden className="size-4" />
+                Add a point
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setPoints(suggestedBrightnessPoints())}
+              >
+                Reset suggestions
+              </Button>
+            </div>
+            {preview.state === 'error' ? (
+              <p
+                className="text-sm text-amber-700 dark:text-amber-300"
+                role="alert"
+              >
+                {preview.message}
+              </p>
+            ) : null}
+            {curveError ? (
+              <p
+                className="text-sm text-amber-700 dark:text-amber-300"
+                role="alert"
+              >
+                {curveError}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                disabled={Boolean(curveError)}
+                onClick={() => setStep('review')}
+              >
+                Review
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setStep('mode')}>
+                Back
+              </Button>
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+
+        {step === 'review' ? (
+          <div className="space-y-4">
+            <table className="w-full text-sm">
+              <caption className="sr-only">
+                What the brightness curve sends for each desired level
+              </caption>
+              <thead>
+                <tr className="text-left text-xs text-muted-foreground">
+                  <th scope="col" className="py-1">
+                    Desired brightness
+                  </th>
+                  <th scope="col" className="py-1">
+                    Send
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {brightnessReviewRows(ordered).map((row) => (
+                  <tr key={row.logical} className="border-t border-border/60">
+                    <td className="py-1">{row.logical}</td>
+                    <td className="py-1">
+                      {row.output}
+                      {row.changes ? (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          authored
+                        </span>
+                      ) : (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          unchanged
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              <li>{clamp.floor}</li>
+              <li>{clamp.ceiling}</li>
+              <li>
+                {mode === 'reference' && reference
+                  ? `Compared against ${reference.name}; matched points are your visual match.`
+                  : 'Entered by hand; no reference light was used.'}
+              </li>
+              <li>
+                {(profile?.points?.length ?? 0) > 0 || existingPoints.length > 0
+                  ? 'Color calibration is preserved in the new profile.'
+                  : 'No color calibration to preserve on this light.'}
+              </li>
+              <li>Saving assigns the new profile to this light only.</li>
+            </ul>
+            <label className="block space-y-1.5 text-sm font-medium">
+              Profile name
+              <input
+                data-field="calibration_name"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                value={name}
+                maxLength={200}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </label>
+            <details className="text-sm">
+              <summary className="cursor-pointer text-muted-foreground">
+                Details
+              </summary>
+              <p className="mt-2 text-xs text-muted-foreground">
+                A new profile is created for this light. Other lights keep their
+                current assignments.
+              </p>
+            </details>
+            {error ? (
+              <p
+                className="text-sm text-amber-700 dark:text-amber-300"
+                role="alert"
+              >
+                {error}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setStep('points')}
+              >
+                Back
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={saving}
+                onClick={removeCalibration}
+              >
+                Remove brightness calibration
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </fieldset>
+      {step === 'review' && (
+        <EntitySaveBar
+          inline
+          draft={{ ...draft, discard }}
+          saveDisabled={Boolean(draft.conflictCatalog) || session.pending}
+        />
+      )}
     </div>
   );
 }

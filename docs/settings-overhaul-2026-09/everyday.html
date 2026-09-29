@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>homectl · Everyday controls study</title>
+  <link rel="stylesheet" href="everyday.css">
+</head>
+<body>
+  <div class="study-bar">
+    <a href="everyday-review.html" class="study-brand">STUDY 05 <span>COMPACT</span></a>
+    <label><span>View</span><select id="study-view" aria-label="Choose prototype view"></select></label>
+    <label class="advanced-choice"><input type="checkbox" id="advanced" checked> Advanced details</label>
+    <label><span>Theme</span><select id="theme"><option value="light">Light</option><option value="dark">Dark</option></select></label>
+    <small>Synthetic home · no server connection</small>
+  </div>
+  <div class="app-shell">
+    <aside class="rail">
+      <a class="brand" href="#home"><span>h</span>homectl</a>
+      <button class="rail-search" data-open="search"><span data-icon="search"></span> Search <kbd>⌘ K</kbd></button>
+      <nav aria-label="Main navigation" id="rail-nav"></nav>
+      <div class="rail-bottom"><span class="status-dot"></span> Home connected<small>Last update just now</small><a href="everyday-review.html">View design gallery ↗</a></div>
+    </aside>
+    <div class="workspace">
+      <header class="appbar"><div id="breadcrumbs"></div><div class="bar-actions"><span class="connection"><span class="status-dot"></span>Connected</span><button class="icon-button" data-open="assistant" aria-label="Open assistant"><span data-icon="sparkles"></span></button></div></header>
+      <main id="main"></main>
+    </div>
+  </div>
+  <nav class="bottom-nav" aria-label="Mobile navigation" id="bottom-nav"></nav>
+  <dialog id="overlay"><div id="overlay-content"></div></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="everyday.js"></script>
+</body>
+</html>

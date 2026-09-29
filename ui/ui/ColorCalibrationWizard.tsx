@@ -5,10 +5,14 @@ type Color = ColorInstance;
 import type { Device } from '@/bindings/Device';
 import type { Hs } from '@/bindings/Hs';
 import {
-  useAssignCalibrationProfile,
-  useCalibrationAssignments,
-  useCalibrationProfiles,
-} from '@/hooks/useConfig';
+  useCalibrationEditor,
+  deviceCalibration,
+  type CalibrationEditorView,
+} from '@/hooks/useCalibrationEditor';
+import { useCalibrationDraft } from '@/hooks/useCalibrationDraft';
+import { CalibrationConflict } from '@/ui/settings/CalibrationConflict';
+import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
+import { StatePreview } from '@/ui/settings/StatePreview';
 import { useAppConfig } from '@/hooks/appConfig';
 import { getDeviceKey } from '@/lib/device';
 import { compareDeviceNames } from '@/lib/deviceLabel';
@@ -67,37 +71,176 @@ function SliderStepButtons({
   );
 }
 
-export function ColorCalibrationWizard({
-  device,
-  devices,
-}: {
+type ColorDraft = {
+  id: string;
+  editingProfileId: string | null;
+  phase: Phase;
+  referenceKey: string;
+  name: string;
+  brightness: number;
+  numberEdits: Record<string, string>;
+  points: ReturnType<typeof suggestedMatchingPoints>;
+  index: number;
+};
+export function ColorCalibrationWizard(props: {
   device: Device;
   devices: Device[];
 }) {
-  const { apiEndpoint } = useAppConfig();
-  const { data: profiles, create, update } = useCalibrationProfiles();
-  const { data: assignments } = useCalibrationAssignments();
-  const assign = useAssignCalibrationProfile();
-  const targetKey = getDeviceKey(device);
-  const currentProfile = profiles.find(
-    (profile) =>
-      profile.id ===
-      assignments.find((row) => row.device_key === targetKey)?.profile_id,
+  const query = useCalibrationEditor();
+  if (!query.data)
+    return (
+      <div
+        role={query.error ? 'alert' : 'status'}
+        className="space-y-2 text-sm"
+      >
+        {query.error ? query.error.message : 'Loading calibration…'}
+        {query.error && (
+          <Button variant="outline" onClick={() => void query.refetch()}>
+            Retry
+          </Button>
+        )}
+      </div>
+    );
+  return (
+    <ColorCalibrationForm
+      key={getDeviceKey(props.device)}
+      {...props}
+      initial={query.data}
+    />
   );
-  const [phase, setPhase] = useState<Phase>('setup');
-  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
-  const [referenceKey, setReferenceKey] = useState('');
-  const [name, setName] = useState(`${device.name} color match`);
-  const [brightness, setBrightness] = useState(50);
-  const [points, setPoints] = useState(suggestedMatchingPoints);
-  const [index, setIndex] = useState(0);
+}
+function ColorCalibrationForm({
+  device,
+  devices,
+  initial,
+}: {
+  device: Device;
+  devices: Device[];
+  initial: CalibrationEditorView;
+}) {
+  const { apiEndpoint } = useAppConfig();
+  const targetKey = getDeviceKey(device);
+  const [savedNotice, setSavedNotice] = useState(false);
+  const draft = useCalibrationDraft<ColorDraft>({
+    kind: 'color',
+    deviceKey: targetKey,
+    label: device.name,
+    initial,
+    form: () => ({
+      id: createUuid(),
+      editingProfileId: null,
+      phase: 'setup',
+      referenceKey: '',
+      name: device.name + ' color match',
+      brightness: 50,
+      numberEdits: {},
+      points: suggestedMatchingPoints(),
+      index: 0,
+    }),
+    beforeSave: () => stop(),
+    validate: (form) => [
+      ...(Object.keys(form.numberEdits ?? {}).length
+        ? [
+            {
+              field: 'calibration_numbers',
+              message:
+                'Finish the brightness, hue or saturation entry before saving.',
+            },
+          ]
+        : []),
+      ...(!form.points.length ||
+      !Number.isFinite(form.brightness) ||
+      form.brightness < 1 ||
+      form.brightness > 100
+        ? [
+            {
+              field: 'calibration_points',
+              message:
+                'Add color points and choose brightness between 1% and 100%.',
+            },
+          ]
+        : []),
+      ...(!form.name.trim()
+        ? [{ field: 'calibration_name', message: 'Give the profile a name.' }]
+        : []),
+      ...(form.points.some((p) => !p.matched)
+        ? [
+            {
+              field: 'calibration_points',
+              message: 'Match each color point before saving.',
+            },
+          ]
+        : []),
+    ],
+    prepare: (form, basis) => ({
+      device_keys: [targetKey],
+      profile_id: form.editingProfileId ?? form.id,
+      profile: {
+        id: form.editingProfileId ?? form.id,
+        name: form.name.trim(),
+        reference_device_key: form.referenceKey || null,
+        brightness: form.brightness / 100,
+        points: form.points.map(({ reference, output }) =>
+          calibrationPointToUv({ reference, output }),
+        ),
+        brightness_points:
+          deviceCalibration(basis, targetKey).resolved?.brightness_points ?? [],
+      },
+    }),
+    onSaved: () => setSavedNotice(true),
+  });
+  const currentProfile = deviceCalibration(
+    draft.value.basis,
+    targetKey,
+  ).profile;
+  const [storedPhase, changePhase] = draft.field('phase');
+  const phase = savedNotice ? 'saved' : storedPhase;
+  const setPhase = (value: Phase) => {
+    setSavedNotice(false);
+    changePhase(value);
+  };
+  const [referenceKey, setReferenceKey] = draft.field('referenceKey');
+  const [editingProfileId, setEditingProfileId] =
+    draft.field('editingProfileId');
+  const [name, setName] = draft.field('name');
+  const [brightness, setBrightnessValue] = draft.field('brightness');
+  const [numberEditsValue, setNumberEdits] = draft.field('numberEdits');
+  const numberEdits = numberEditsValue ?? {};
+  const invalidNumbers = Object.keys(numberEdits).length > 0;
+  const clearNumber = (key: string) =>
+    setNumberEdits((previous) => {
+      const next = { ...previous };
+      delete next[key];
+      return next;
+    });
+  const setBrightness = (value: number | ((current: number) => number)) => {
+    clearNumber('brightness');
+    setBrightnessValue(value);
+  };
+  const numberInput = (
+    key: string,
+    raw: string,
+    min: number,
+    max: number,
+    apply: (n: number) => void,
+  ) => {
+    const n = Number(raw);
+    if (!raw.trim() || !Number.isFinite(n) || n < min || n > max) {
+      setNumberEdits((previous) => ({ ...previous, [key]: raw }));
+      setPreviewed(false);
+    } else {
+      clearNumber(key);
+      apply(n);
+    }
+  };
+  const [points, setPoints] = draft.field('points');
+  const [index, setIndex] = draft.field('index');
   const [busy, setBusy] = useState(false);
   const [previewed, setPreviewed] = useState(false);
   const [error, setError] = useState('');
   const [checkIndex, setCheckIndex] = useState<number | null>(null);
   const session = useRef<string | null>(null);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
-  const saved = useRef<{ content: string; id: string } | null>(null);
   const point = points[index];
   const referenceDevice = devices.find(
     (candidate) => getDeviceKey(candidate) === referenceKey,
@@ -178,23 +321,27 @@ export function ColorCalibrationWizard({
 
   const editCurrentProfile = () => {
     if (!currentProfile) return;
+    setNumberEdits({});
     setEditingProfileId(currentProfile.id);
     setName(currentProfile.name);
     setReferenceKey(currentProfile.reference_device_key ?? '');
     setBrightness(Math.round(currentProfile.brightness * 100));
-    setPoints(matchingPointsFromProfile(currentProfile));
+    setPoints(
+      currentProfile.points.length
+        ? matchingPointsFromProfile(currentProfile)
+        : suggestedMatchingPoints(),
+    );
     setIndex(0);
     setCheckIndex(null);
     setPreviewed(false);
     setError('');
-    saved.current = null;
     setPhase('setup');
   };
 
   // Requests run in order: dragging cannot make an older response overwrite a
   // newer test. Only the latest acknowledged adjustment enables Next.
   useEffect(() => {
-    if (phase !== 'match' || !session.current) return;
+    if (phase !== 'match' || !session.current || invalidNumbers) return;
     let disposed = false;
     setPreviewed(false);
     const id = session.current;
@@ -225,6 +372,7 @@ export function ColorCalibrationWizard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     phase,
+    invalidNumbers,
     index,
     point.reference.h,
     point.reference.s,
@@ -274,6 +422,7 @@ export function ColorCalibrationWizard({
 
   const adjust = (field: 'h' | 's', value: number) => {
     if (!Number.isFinite(value)) return;
+    clearNumber(`${index}.${field}`);
     setPreviewed(false);
     setPoints((previous) =>
       previous.map((item, i) =>
@@ -336,6 +485,18 @@ export function ColorCalibrationWizard({
   const deleteCurrentPoint = () => {
     const result = removeCalibrationPoint(points, index);
     if (result.points === points) return;
+    setNumberEdits((previous) =>
+      Object.fromEntries(
+        Object.entries(previous ?? {}).flatMap(([key, value]) => {
+          if (key === 'brightness') return [[key, value]];
+          const [pointIndex, field] = key.split('.');
+          const n = Number(pointIndex);
+          return n === index
+            ? []
+            : [[`${n > index ? n - 1 : n}.${field}`, value]];
+        }),
+      ),
+    );
     setPoints(result.points);
     setIndex(result.index);
     setPreviewed(false);
@@ -429,6 +590,8 @@ export function ColorCalibrationWizard({
             <label className="block space-y-2 text-sm">
               Profile name
               <Input
+                aria-label="Profile name"
+                data-field="calibration_name"
                 value={name}
                 maxLength={200}
                 onChange={(event) => setName(event.target.value)}
@@ -460,8 +623,17 @@ export function ColorCalibrationWizard({
                 type="number"
                 min={1}
                 max={100}
-                value={Number.isFinite(brightness) ? brightness : ''}
-                onChange={(event) => setBrightness(event.target.valueAsNumber)}
+                value={numberEdits.brightness ?? brightness}
+                aria-invalid={'brightness' in numberEdits || undefined}
+                onChange={(event) =>
+                  numberInput(
+                    'brightness',
+                    event.target.value,
+                    1,
+                    100,
+                    setBrightness,
+                  )
+                }
                 disabled={busy}
               />
             </div>
@@ -474,6 +646,7 @@ export function ColorCalibrationWizard({
               type="button"
               disabled={
                 busy ||
+                'brightness' in numberEdits ||
                 !referenceDevice ||
                 !canCalibrateDevice(referenceDevice) ||
                 !name.trim() ||
@@ -571,9 +744,14 @@ export function ColorCalibrationWizard({
                   type="number"
                   min={0}
                   max={359}
-                  value={point.output.h}
+                  value={numberEdits[`${index}.h`] ?? point.output.h}
+                  aria-invalid={`${index}.h` in numberEdits || undefined}
                   disabled={busy}
-                  onChange={(event) => adjust('h', event.target.valueAsNumber)}
+                  onChange={(event) =>
+                    numberInput(`${index}.h`, event.target.value, 0, 359, (n) =>
+                      adjust('h', n),
+                    )
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -602,10 +780,16 @@ export function ColorCalibrationWizard({
                   min={0}
                   max={100}
                   step={0.1}
-                  value={Math.round(point.output.s * 1000) / 10}
+                  value={
+                    numberEdits[`${index}.s`] ??
+                    Math.round(point.output.s * 1000) / 10
+                  }
+                  aria-invalid={`${index}.s` in numberEdits || undefined}
                   disabled={busy}
                   onChange={(event) =>
-                    adjust('s', event.target.valueAsNumber / 100)
+                    numberInput(`${index}.s`, event.target.value, 0, 100, (n) =>
+                      adjust('s', n / 100),
+                    )
                   }
                 />
               </div>
@@ -642,9 +826,11 @@ export function ColorCalibrationWizard({
               </p>
             </div>
             <p className="text-xs text-muted-foreground">
-              {previewed
-                ? 'Adjustment sent. Judge the actual light, not your screen.'
-                : 'Sending adjustment…'}{' '}
+              {invalidNumbers
+                ? 'Finish the number entry: hue 0–359°, saturation 0–100%, brightness 1–100%.'
+                : previewed
+                  ? 'Adjustment sent. Judge the actual light, not your screen.'
+                  : 'Sending adjustment…'}{' '}
               {point.reference.s === 0
                 ? 'For white, increase saturation slightly if needed to correct a color tint.'
                 : 'Some colors may be outside this lamp’s range; use the closest match.'}
@@ -663,7 +849,7 @@ export function ColorCalibrationWizard({
               </Button>
               <Button
                 type="button"
-                disabled={busy || !previewed || !!error}
+                disabled={busy || invalidNumbers || !previewed || !!error}
                 onClick={() => {
                   setPoints((previous) =>
                     previous.map((item, i) =>
@@ -685,6 +871,8 @@ export function ColorCalibrationWizard({
                 disabled={busy}
                 onClick={() => {
                   setPreviewed(false);
+                  clearNumber(`${index}.h`);
+                  clearNumber(`${index}.s`);
                   setPoints((previous) =>
                     previous.map((item, i) =>
                       i === index
@@ -704,6 +892,33 @@ export function ColorCalibrationWizard({
           </>
         )}
 
+        {(phase === 'match' || phase === 'review') && !session.current && (
+          <div
+            role="status"
+            className="space-y-2 rounded-lg border border-border p-3 text-sm"
+          >
+            <p>Your matching points are kept. Preview is stopped.</p>
+            <Button disabled={busy} onClick={() => startMatching(point)}>
+              Resume live preview
+            </Button>
+          </div>
+        )}
+        {phase !== 'setup' && (
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <StatePreview
+              power
+              color={point.reference}
+              brightness={brightness / 100}
+            />
+            <span>Reference</span>
+            <StatePreview
+              power
+              color={point.output}
+              brightness={brightness / 100}
+            />
+            <span>Matched output</span>
+          </div>
+        )}
         {phase === 'review' && (
           <>
             <h3 className="font-semibold">
@@ -778,6 +993,8 @@ export function ColorCalibrationWizard({
             <label className="block space-y-2 text-sm">
               Profile name
               <Input
+                aria-label="Profile name"
+                data-field="calibration_name"
                 value={name}
                 maxLength={200}
                 onChange={(event) => setName(event.target.value)}
@@ -787,9 +1004,14 @@ export function ColorCalibrationWizard({
             <p className="text-sm">
               {points.filter((item) => item.matched).length} matched points ·{' '}
               {brightness}% brightness. Save applies this profile to{' '}
-              {device.name}. Saving ends the temporary preview and reapplies the
-              current normal-scene state through the profile; it does not pin
-              the lights to the last test point.
+              {device.name}
+              {editingProfileId
+                ? ' and every light assigned to this profile'
+                : ' using a new profile'}
+              . Existing brightness calibration is preserved. Saving ends the
+              temporary preview and reapplies the current normal-scene state
+              through the profile; it does not pin the lights to the last test
+              point.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -802,45 +1024,6 @@ export function ColorCalibrationWizard({
                 }}
               >
                 Review matching points
-              </Button>
-              <Button
-                type="button"
-                disabled={
-                  busy || !name.trim() || points.some((item) => !item.matched)
-                }
-                onClick={() =>
-                  void run(async () => {
-                    const profile = {
-                      name: name.trim(),
-                      reference_device_key: referenceKey,
-                      brightness: brightness / 100,
-                      points: points.map(({ reference, output }) =>
-                        calibrationPointToUv({ reference, output }),
-                      ),
-                    };
-                    const content = JSON.stringify(profile);
-                    const profileId = editingProfileId ?? createUuid();
-                    if (
-                      saved.current?.content !== content ||
-                      saved.current?.id !== profileId
-                    ) {
-                      if (editingProfileId) {
-                        await update(editingProfileId, profile);
-                      } else {
-                        await create({ id: profileId, ...profile });
-                      }
-                      saved.current = { id: profileId, content };
-                    }
-                    await assign.mutateAsync({
-                      deviceKeys: [targetKey],
-                      profileId: saved.current!.id,
-                    });
-                    await stop();
-                    setPhase('saved');
-                  })
-                }
-              >
-                Save profile & finish
               </Button>
             </div>
           </>
@@ -861,8 +1044,9 @@ export function ColorCalibrationWizard({
               type="button"
               variant="outline"
               onClick={() => {
+                setNumberEdits({});
                 setEditingProfileId(null);
-                saved.current = null;
+                draft.field('id')[1](createUuid());
                 setPoints(suggestedMatchingPoints());
                 setIndex(0);
                 setCheckIndex(null);
@@ -881,16 +1065,33 @@ export function ColorCalibrationWizard({
             onClick={() =>
               void run(async () => {
                 await stop();
-                setPoints(suggestedMatchingPoints());
-                setIndex(0);
                 setCheckIndex(null);
                 setPhase('setup');
               })
             }
           >
-            Cancel & restore lights
+            Stop preview & restore lights
           </Button>
         )}
+        <CalibrationConflict
+          before={draft.value.basis}
+          current={draft.conflictCatalog}
+          onReview={draft.reviewLatest}
+        />
+        <EntitySaveBar
+          inline
+          draft={{
+            ...draft,
+            discard: () => {
+              void run(async () => {
+                await stop();
+                draft.discard();
+                setSavedNotice(false);
+              });
+            },
+          }}
+          saveDisabled={busy || phase !== 'review'}
+        />
       </div>
     </ConfigFormSection>
   );

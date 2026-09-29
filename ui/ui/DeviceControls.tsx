@@ -3,14 +3,14 @@ import {
   isDeviceReadOnly,
   supportsDeviceBrightness,
 } from '@/lib/deviceCapabilities';
-import { useCarHeaterModalOpenState } from '@/hooks/carHeaterModalState';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { toast } from 'sonner';
 import { createUuid } from '@/lib/uuid';
 import { sendSceneCommand } from '@/lib/deviceCommands';
 import type { DeviceColor } from '@/bindings/DeviceColor';
-import { Lightbulb, Power, SlidersHorizontal } from 'lucide-react';
+import { LoaderCircle, Power, SlidersHorizontal } from 'lucide-react';
+import { LiveStatePreview } from '@/ui/LiveStatePreview';
 import type { Device } from '@/bindings/Device';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { useSetDeviceState } from '@/hooks/useSetDeviceColor';
@@ -38,51 +38,63 @@ export function useLiveDeviceControls() {
     brightness?: number,
     color?: DeviceColor,
   ) => {
-    if (!('Controllable' in device.data) || isDeviceReadOnly(device)) return;
+    if (!('Controllable' in device.data) || isDeviceReadOnly(device))
+      return Promise.resolve(false);
     const sceneId = device.data.Controllable.scene_id;
     const persist = Boolean(
       sceneId &&
       scenes?.[sceneId]?.active_overrides.includes(getDeviceKey(device)),
     );
     // Omitted color/brightness preserve each device's own state and color mode.
-    setState(device, persist, power, undefined, brightness, undefined, color);
+    return setState(
+      device,
+      persist,
+      power,
+      undefined,
+      brightness,
+      undefined,
+      color,
+    );
   };
 }
 
 export function DeviceRow({
   device,
   displayNames = {},
+  presentation = 'sidepanel',
+  inlineBrightness = false,
+  plain = false,
 }: {
   device: Device;
   displayNames?: Record<string, string>;
+  presentation?: 'dialog' | 'sidepanel' | 'floorplan';
+  inlineBrightness?: boolean;
+  plain?: boolean;
 }) {
   const modal = useDeviceModalState();
-  const heater = useCarHeaterModalOpenState();
   const connected = useConnectionStatus() === 'connected';
   const setState = useLiveDeviceControls();
+  const [pending, setPending] = useState(false);
+  const [brightnessDraft, setBrightnessDraft] = useState<number | null>(null);
   const label = getDeviceDisplayLabel(device, displayNames);
   const active = getPower(device.data);
   const state =
     'Controllable' in device.data ? device.data.Controllable.state : null;
   if (!state) return null;
   return (
-    <div className="dashboard-device-row flex min-w-0 items-center gap-3 rounded-xl border border-border bg-card p-3">
+    <div
+      className={`dashboard-device-row flex min-w-0 items-center gap-3 bg-card py-2 ${plain ? '' : 'rounded-lg border border-border px-3'}`}
+    >
       <button
         className="dashboard-device-adjust flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`Adjust ${label}`}
         onClick={() => {
-          if (getDeviceKey(device) === 'tuya_devices/bfe553b84e883ace37nvxw') {
-            heater.setOpen(true);
-            return;
-          }
           modal.setState([getDeviceKey(device)]);
-          modal.setPresentation('sidepanel');
+          modal.setPresentation(presentation);
           modal.setOpen(true);
         }}
       >
-        <Lightbulb
-          className={`size-5 shrink-0 ${active ? 'text-primary' : 'text-muted-foreground'}`}
-        />
+        <LiveStatePreview states={[state]} />
         <span className="dashboard-device-label min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">{label}</span>
           <span className="block text-sm text-muted-foreground">
@@ -96,16 +108,48 @@ export function DeviceRow({
         </span>
         <SlidersHorizontal className="dashboard-device-settings size-4 shrink-0 text-muted-foreground" />
       </button>
+      {inlineBrightness && supportsDeviceBrightness(device) && (
+        <div className="hidden w-36 shrink-0 items-center gap-2 md:flex">
+          <Slider
+            aria-label={`${label} brightness`}
+            min={0}
+            max={100}
+            step={1}
+            value={[
+              brightnessDraft ?? Math.round((state.brightness ?? 1) * 100),
+            ]}
+            disabled={!connected || isDeviceReadOnly(device) || pending}
+            onValueChange={(values) => setBrightnessDraft(values[0])}
+            onValueCommit={async (values) => {
+              setPending(true);
+              try {
+                await setState(device, true, values[0] / 100);
+              } finally {
+                setBrightnessDraft(null);
+                setPending(false);
+              }
+            }}
+          />
+          <span className="w-9 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+            {brightnessDraft ?? Math.round((state.brightness ?? 1) * 100)}%
+          </span>
+        </div>
+      )}
       <Button
         variant={active ? 'secondary' : 'outline'}
         size="icon"
         className="dashboard-device-power"
         aria-label={`Turn ${label} ${active ? 'off' : 'on'}`}
         aria-pressed={active}
-        disabled={!connected || isDeviceReadOnly(device)}
-        onClick={() => setState(device, !active)}
+        disabled={!connected || isDeviceReadOnly(device) || pending}
+        aria-busy={pending}
+        onClick={async () => {
+          setPending(true);
+          await setState(device, !active);
+          setPending(false);
+        }}
       >
-        <Power />
+        {pending ? <LoaderCircle className="animate-spin" /> : <Power />}
       </Button>
     </div>
   );
@@ -128,6 +172,7 @@ export function DevicePowerToggle({
 }) {
   const connected = useConnectionStatus() === 'connected';
   const setState = useLiveDeviceControls();
+  const [pending, setPending] = useState(false);
   const controllable = devices.filter(
     (device) => 'Controllable' in device.data && !isDeviceReadOnly(device),
   );
@@ -140,10 +185,17 @@ export function DevicePowerToggle({
       className={className}
       aria-label={`Turn ${label ?? 'all devices'} ${allOn ? 'off' : 'on'}`}
       aria-pressed={allOn}
-      disabled={!connected}
-      onClick={() => controllable.forEach((device) => setState(device, !allOn))}
+      disabled={!connected || pending}
+      aria-busy={pending}
+      onClick={async () => {
+        setPending(true);
+        await Promise.all(
+          controllable.map((device) => setState(device, !allOn)),
+        );
+        setPending(false);
+      }}
     >
-      <Power />
+      {pending ? <LoaderCircle className="animate-spin" /> : <Power />}
     </Button>
   );
 }
@@ -160,6 +212,8 @@ export function DeviceQuickControls({
   const connected = useConnectionStatus() === 'connected';
   const setState = useLiveDeviceControls();
   const [draft, setDraft] = useState<number | null>(null);
+  const [powerPending, setPowerPending] = useState(false);
+  const brightnessGeneration = useRef(0);
   const [pendingBrightness, setPendingBrightness] = useState<number | null>(
     null,
   );
@@ -246,6 +300,11 @@ export function DeviceQuickControls({
     return () => clearTimeout(timeout);
   }, [pendingBrightness, confirmed, connected]);
   const onCount = controllable.filter((device) => getPower(device.data)).length;
+  const setPower = async (power: boolean) => {
+    setPowerPending(true);
+    await Promise.all(controllable.map((device) => setState(device, power)));
+    setPowerPending(false);
+  };
   if (controllable.length === 0)
     return readonlyCount > 0 ? (
       <p className="rounded-xl border border-border p-4 text-sm text-muted-foreground">
@@ -268,20 +327,18 @@ export function DeviceQuickControls({
           <Button
             variant={onCount === controllable.length ? 'secondary' : 'outline'}
             aria-pressed={onCount === controllable.length}
-            disabled={!connected}
-            onClick={() =>
-              controllable.forEach((device) => setState(device, true))
-            }
+            disabled={!connected || powerPending}
+            aria-busy={powerPending}
+            onClick={() => void setPower(true)}
           >
             On
           </Button>
           <Button
             variant={onCount === 0 ? 'secondary' : 'outline'}
             aria-pressed={onCount === 0}
-            disabled={!connected}
-            onClick={() =>
-              controllable.forEach((device) => setState(device, false))
-            }
+            disabled={!connected || powerPending}
+            aria-busy={powerPending}
+            onClick={() => void setPower(false)}
           >
             Off
           </Button>
@@ -317,15 +374,26 @@ export function DeviceQuickControls({
             step={1}
             disabled={!connected}
             onValueChange={([value]) => {
+              brightnessGeneration.current++;
               setPendingBrightness(null);
               setDraft(value);
             }}
-            onValueCommit={([value]) => {
-              dimmable.forEach((device) =>
-                setState(device, value > 0, value / 100),
-              );
+            onValueCommit={async ([value]) => {
+              const generation = ++brightnessGeneration.current;
               setDraft(value);
               setPendingBrightness(value);
+              const results = await Promise.all(
+                dimmable.map((device) =>
+                  setState(device, value > 0, value / 100),
+                ),
+              );
+              if (
+                results.some((applied) => !applied) &&
+                brightnessGeneration.current === generation
+              ) {
+                setDraft(null);
+                setPendingBrightness(null);
+              }
             }}
           />
           {dimmable.length !== controllable.length && (

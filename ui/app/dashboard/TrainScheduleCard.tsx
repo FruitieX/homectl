@@ -26,11 +26,7 @@ import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { WidgetCard, WidgetHeading } from './WidgetChrome';
 
 type RealtimeState =
-  | 'SCHEDULED'
-  | 'UPDATED'
-  | 'CANCELED'
-  | 'ADDED'
-  | 'MODIFIED';
+  'SCHEDULED' | 'UPDATED' | 'CANCELED' | 'ADDED' | 'MODIFIED';
 
 type Train = {
   destination?: string;
@@ -43,6 +39,21 @@ type Train = {
   realtime: boolean;
   realtimeState: RealtimeState;
 };
+
+function parseDepartures(value: unknown): Train[] {
+  if (
+    !Array.isArray(value) ||
+    value.some(
+      (train) =>
+        !train ||
+        typeof train.name !== 'string' ||
+        typeof train.departureFormatted !== 'string' ||
+        !Number.isFinite(train.minUntilHomeDeparture),
+    )
+  )
+    throw new Error('The timetable source returned invalid departures.');
+  return value;
+}
 
 export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
   const { apiEndpoint } = useAppConfig();
@@ -115,7 +126,12 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
     trainSchedulePath,
   );
 
-  const query = useWidgetResource<Train[]>(trainScheduleUrl);
+  const query = useWidgetResource<Train[]>(
+    trainScheduleUrl,
+    60000,
+    true,
+    parseDepartures,
+  );
   const remainingMinutes = (train: Train) => {
     const leaveAt =
       train.leaveAt ??
@@ -212,7 +228,7 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
           <CardContent className="flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
             <WidgetHeading
               icon={<TrainFront />}
-              label="Next departures"
+              label={widget?.title || 'Next departures'}
               compactValue={
                 compactDeparture ? (
                   <span className="dashboard-train-heading-value">
@@ -271,7 +287,7 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
           {trains.length > 0 ? (
             departureRows(trains)
           ) : (
-            <div className="rounded-2xl border border-dashed border-border p-10 text-center text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border p-10 text-center text-muted-foreground">
               No upcoming departures
             </div>
           )}

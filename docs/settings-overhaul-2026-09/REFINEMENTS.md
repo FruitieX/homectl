@@ -8,11 +8,11 @@ the remaining implementation and acceptance work there.
 
 - [ ] Compare current desktop and phone screenshots against approved mockups;
       record omissions and corrections in [VISUAL-AUDIT.md](VISUAL-AUDIT.md).
-- [ ] Prioritize the Study 04 complex routine. Preserve its three-column
+- [x] Prioritize the Study 04 complex routine. Preserve its three-column
       desktop board, compact readable nodes, and connected vertical phone flow.
 - [ ] Verify embedded floorplan previews on rooms list, room details and
       dashboard room cards, including failure/recovery and saved map edits.
-- [ ] Redesign New widget with a visual type gallery, layout presets/visual
+- [x] Redesign New widget with a visual type gallery, layout presets/visual
       placement, and a preview of the configured widget before Create.
 
 ## Sensor configuration
@@ -50,14 +50,14 @@ the remaining implementation and acceptance work there.
 Design reference: `index.html?direction=compact&detail=useful&theme=light#complex-routine`
 in this directory, especially its desktop composition.
 
-- [ ] Restore the reference's clear section hierarchy, titles, icons, colors
+- [x] Restore the reference's clear section hierarchy, titles, icons, colors
       and readable desktop layout, while keeping complex branches available.
-- [ ] Make the dotted node-editor background clearly visible.
-- [ ] Show Move up/down icon buttons immediately before the context menu.
+- [x] Make the dotted node-editor background clearly visible.
+- [x] Show Move up/down icon buttons immediately before the context menu.
       Duplicate/delete may remain in the menu. Support keyboard and touch.
-- [ ] Align form controls vertically and use consistent heights; explanatory
+- [x] Align form controls vertically and use consistent heights; explanatory
       text must not push adjacent controls onto different baselines.
-- [ ] Add sandboxed scripts as actions within the ordered Then flow, including
+- [x] Add sandboxed scripts as actions within the ordered Then flow, including
       branches. Do not require replacing the whole native program. Preserve
       existing script routines, sandbox limits, validation, runtime outcomes,
       action order and draft/export compatibility.
@@ -75,20 +75,20 @@ Reported on a Linux home automation dashboard: after the automatic reload around
 The user confirmed Chromium with kiosk launch options plus homectl's expand
 button. Treat the browser window's kiosk mode and DOM fullscreen separately.
 
-- [ ] Trace fullscreen preference persistence, startup/reload restoration,
+- [x] Trace fullscreen preference persistence, startup/reload restoration,
       browser fullscreen events and the scheduled reload path.
-- [ ] Fix application-controlled state loss or restoration races. Distinguish
+- [x] Fix application-controlled state loss or restoration races. Distinguish
       browser fullscreen restrictions from the app's own kiosk layout; do not
       falsely report that browser fullscreen was restored.
-- [ ] Verify reload behavior and document any browser-dependent limitations.
+- [x] Verify reload behavior and document any browser-dependent limitations.
 
 ## App & system regression
 
-- [ ] Fix `/config/settings` repeatedly alternating tabs after selecting
+- [x] Fix `/config/settings` repeatedly alternating tabs after selecting
       Assistant, another tab, then Assistant again. Preserve keyboard navigation,
       retained drafts and useful scroll/focus restoration without activating
       an old tab while restoring focus.
-- [ ] Replace native-looking switches/selects/radio styling with the shared
+- [x] Replace native-looking switches/selects/radio styling with the shared
       Compact controls, retaining labels and keyboard access.
 
 ## Delivery
@@ -103,8 +103,10 @@ button. Treat the browser window's kiosk mode and DOM fullscreen separately.
 Initial edits add retained ordering controls, separator/picker padding fixes,
 disabled-device scene checks, routine layout and visible ordering controls,
 two-dimensional canvas fitting, a placement list, and brightness-ring map
-markers. These remain under verification. Script action runtime support is in
-progress; no completed acceptance is claimed yet.
+markers. Remaining verification is tracked in WORK-QUEUE.md. The routine and
+widget-creation gates above are now verified, including mixed-script execution,
+local code editing, nested conditions, keyboard previews and explicit creation.
+The comparison gallery contains refreshed routine and creation-state captures.
 
 ### Settings tabs and fullscreen checkpoint
 

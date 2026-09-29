@@ -206,7 +206,7 @@ export function ResponsiveOverlay({
           className={cn(
             contentClassName,
             isSidePanel &&
-              'left-auto right-0 top-0 h-dvh max-h-dvh w-[min(32rem,calc(100vw-1rem))] max-w-none translate-x-0 translate-y-0 rounded-l-3xl rounded-r-none p-5 sm:p-6',
+              'left-auto right-0 top-0 h-dvh max-h-dvh w-[min(32rem,calc(100vw-1rem))] max-w-none translate-x-0 translate-y-0 rounded-l-lg rounded-r-none p-4 sm:p-5',
           )}
         >
           <DialogHeader className={isFullscreen ? 'shrink-0' : undefined}>
@@ -233,7 +233,8 @@ export function ResponsiveOverlay({
         style={{ marginBottom: 'var(--app-visual-viewport-offset, 0px)' }}
         className={cn(
           'h-auto max-h-[calc(var(--app-visual-viewport-height,100dvh)-1rem)] overflow-hidden',
-          isFullscreen && 'h-[calc(var(--app-visual-viewport-height,100dvh)-1rem)]',
+          isFullscreen &&
+            'h-[calc(var(--app-visual-viewport-height,100dvh)-1rem)]',
           className,
         )}
       >

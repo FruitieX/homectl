@@ -1,20 +1,15 @@
 import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
-import { toast } from 'sonner';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useGroupsState } from '@/hooks/useDevicesApi';
-import {
-  useCalibrationProfiles,
-  useAssignCalibrationProfile,
-} from '@/hooks/useConfig';
+import { BulkCalibrationAssignment } from '@/ui/settings/CalibrationAssignment';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { getDeviceKey } from '@/lib/device';
 import { canCalibrateDevice } from '@/lib/colorCalibration';
 import { isDimmableDevice } from '@/lib/brightnessCalibration';
 import { configItemHref } from '@/lib/configItemHref';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
-import { SearchablePicker } from '@/ui/SearchablePicker';
 import { Button } from '@/ui/primitives/button';
 import { ConfigPageHeader } from '../page-header';
 import {
@@ -37,13 +32,10 @@ function DeviceList() {
   const catalog = useSettingsDevices(),
     groups = useGroupsState();
   const { advanced } = useSettingsPreferences();
-  const profiles = useCalibrationProfiles(),
-    assign = useAssignCalibrationProfile();
   const [query, setQuery] = useSearchParams();
-  const [limit, setLimit] = useState(50),
-    [selectionMode, setSelectionMode] = useState(false);
-  const [selected, setSelected] = useState<string[]>([]),
-    [profileId, setProfileId] = useState('');
+  const [limit, setLimit] = useState(50);
+  const selectionMode = query.get('calibration') === 'bulk';
+  const [selected, setSelected] = useState<string[]>([]);
   useAssistantPageContext({ kind: 'device' });
   const search = query.get('q') ?? '',
     type = query.get('type') ?? 'all',
@@ -77,14 +69,6 @@ function DeviceList() {
   };
   const eligible = (device: (typeof catalog.devices)[number]) =>
     canCalibrateDevice(device) || isDimmableDevice(device);
-  async function apply(profile: string | null) {
-    try {
-      await assign.mutateAsync({ deviceKeys: selected, profileId: profile });
-      toast.success(`Updated calibration for ${selected.length} devices`);
-    } catch (error) {
-      toast.error((error as Error).message);
-    }
-  }
   return (
     <div className="mx-auto max-w-[1600px] space-y-4">
       <ConfigPageHeader
@@ -93,7 +77,9 @@ function DeviceList() {
         actions={
           <Button
             variant="outline"
-            onClick={() => setSelectionMode((value) => !value)}
+            onClick={() =>
+              patchQuery('calibration', selectionMode ? '' : 'bulk')
+            }
           >
             {selectionMode ? 'Close selection' : 'Select devices'}
           </Button>
@@ -310,36 +296,7 @@ function DeviceList() {
           <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
             Clear
           </Button>
-          <div className="min-w-0 max-w-xs flex-1">
-            <SearchablePicker
-              ariaLabel="Bulk calibration profile"
-              options={profiles.data.map((row) => ({
-                value: row.id,
-                label: row.name,
-              }))}
-              value={profileId}
-              onChange={setProfileId}
-              placeholder="Choose a profile"
-            />
-          </div>
-          <Button
-            disabled={!selected.length || !profileId || assign.isPending}
-            onClick={() => void apply(profileId)}
-          >
-            Assign profile
-          </Button>
-          <Button
-            variant="outline"
-            disabled={!selected.length || assign.isPending}
-            onClick={() => void apply(null)}
-          >
-            Remove calibration
-          </Button>
-          {profiles.error && (
-            <p role="alert" className="w-full text-xs text-destructive">
-              {profiles.error}
-            </p>
-          )}
+          <BulkCalibrationAssignment selected={selected} />
         </section>
       )}
     </div>

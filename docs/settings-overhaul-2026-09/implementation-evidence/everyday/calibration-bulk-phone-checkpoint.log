@@ -1,0 +1,17 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "Preparing bulk removal does not write",
+   "Navigation retains the exact captured scope",
+   "Discard clears the pending scope without changing assignments",
+   "Save removes only the selected assignments",
+   "Unselected assignments stay unchanged",
+   "Bulk Save assigns the selected profile to both lights",
+   "Bulk assignment preserves complete color and brightness profiles",
+   "Bulk controls fit the viewport"
+  ],
+  "width": 390
+ }
+}
+{"url":"http://127.0.0.1:3021/config/devices","viewport":{"width":390,"height":844},"problems":[]}

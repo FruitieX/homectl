@@ -1,5 +1,9 @@
 import { ArrowRight, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useSetAtom } from 'jotai';
+import { closeAssistantPanelAtom } from './state';
+import { configItemHref } from '@/lib/configItemHref';
 
 import type { AssistantOperation } from '@/bindings/AssistantOperation';
 import type { AssistantOpKind } from '@/bindings/AssistantOpKind';
@@ -44,7 +48,7 @@ function ChangedFieldRow({
   after: unknown;
 }) {
   return (
-    <li className="space-y-1 rounded-xl bg-background/70 px-3 py-2 text-xs">
+    <li className="space-y-1 rounded-md bg-background/70 px-3 py-2 text-xs">
       <div className="flex items-center gap-2">
         <span className="font-medium">{label}</span>
         <Badge variant="muted" className="px-1.5 py-0 text-[0.65rem]">
@@ -77,6 +81,7 @@ export function OperationDiff({
   operation: AssistantOperation;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const closePanel = useSetAtom(closeAssistantPanelAtom);
   const [showState, setShowState] = useState(false);
   const target = operationTarget(operation);
   const summary = operationChangeSummary(operation);
@@ -89,7 +94,7 @@ export function OperationDiff({
   const finalState = operation.after ?? operation.before;
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-muted/20">
+    <div className="rounded-lg border border-border/60 bg-muted/20">
       <button
         type="button"
         aria-expanded={expanded}
@@ -121,6 +126,22 @@ export function OperationDiff({
           </span>
         </span>
       </button>
+      {target && operation.op !== 'create' && (
+        <Link
+          className="mx-3 mb-2 inline-block text-xs text-primary underline"
+          onClick={closePanel}
+          to={
+            target.kind === 'floorplan'
+              ? `/config/floorplan?id=${encodeURIComponent(target.id)}`
+              : configItemHref(
+                  target.kind === 'computed_source' ? 'source' : target.kind,
+                  target.id,
+                )
+          }
+        >
+          Open {target.label}
+        </Link>
+      )}
 
       {expanded ? (
         <div className="space-y-3 border-t border-border/60 px-3 py-3">
@@ -138,7 +159,7 @@ export function OperationDiff({
           ) : null}
 
           {routineLines.length > 0 ? (
-            <div className="space-y-1 rounded-xl bg-background/70 px-3 py-2 text-xs">
+            <div className="space-y-1 rounded-md bg-background/70 px-3 py-2 text-xs">
               <div className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">
                 Routine summary
               </div>
@@ -180,7 +201,7 @@ export function OperationDiff({
               {showState ? 'Hide entity state' : 'Show entity state'}
             </Button>
             {showState ? (
-              <pre className="max-h-72 overflow-auto rounded-xl bg-background/80 p-3 font-mono text-[0.7rem] leading-relaxed">
+              <pre className="max-h-72 overflow-auto rounded-md bg-background/80 p-3 font-mono text-[0.7rem] leading-relaxed">
                 {formatJson(finalState)}
               </pre>
             ) : null}

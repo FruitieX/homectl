@@ -35,10 +35,43 @@ if (!fixtures[initial]) {
 let name = initial;
 let db = fixtures[initial]();
 
+// Match the runtime websocket contract, not the configuration row contract.
+// Deliberately excludes scripts: their execution is covered by the real server.
+function fixtureSceneStates(scene) {
+  const context = {
+    devices: Object.fromEntries(
+      db.devices.map((d) => [`${d.integration_id}/${d.id}`, d]),
+    ),
+    groups: db.config.groups ?? [],
+    scenes: db.config.scenes ?? [],
+  };
+  const result = {};
+  for (const kind of ['group', 'device']) {
+    const targets =
+      kind === 'group'
+        ? orderedSceneTargets(scene.group_states ?? {}, scene.group_state_order)
+        : Object.entries(scene.device_states ?? {});
+    for (const [key, config] of targets) {
+      for (const deviceKey of targetDeviceKeys(kind, key, context)) {
+        const state = resolveDraftTarget(config, deviceKey, context);
+        if (!state.reason)
+          result[deviceKey] = {
+            power: state.power ?? true,
+            brightness: state.brightness ?? null,
+            color: state.color ?? null,
+            transition: state.transition ?? null,
+          };
+      }
+    }
+  }
+  return result;
+}
+
 function reload(nextName) {
   if (!fixtures[nextName]) return false;
   name = nextName;
   db = fixtures[nextName]();
+  for (const publish of statePublishers) publish();
   return true;
 }
 
@@ -625,12 +658,241 @@ function reviewBackup(candidate) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const liveCommands = [];
+let rejectLiveCommands = false;
+let liveCommandDelay = 0;
+const statePublishers = new Set();
+const fixtureOverrides = new Map();
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
   const path = url.pathname;
   const method = req.method ?? 'GET';
 
   if (method === 'OPTIONS') return send(res, 204);
+
+  if (path === '/api/__fixture/assistant')
+    return send(res, 200, {
+      success: true,
+      data: db.assistantApplications ?? [],
+    });
+  if (path === '/api/v1/config/assistant/threads' && method === 'GET')
+    return send(res, 200, { success: true, data: [] });
+  if (path === '/api/v1/config/assistant/chat' && method === 'POST') {
+    await readBody(req);
+    const action = {
+      actionId: 'fixture-reviewed-action',
+      summary: 'Dim the living room lights',
+      model: 'fixture-model',
+      createdAtMs: Date.now(),
+      changes: db.devices
+        .filter(
+          (d) =>
+            d.integration_id === 'zigbee2mqtt' &&
+            ['living_room_lamp', 'living_room_floor_lamp'].includes(d.id),
+        )
+        .map((d) => ({
+          deviceKey: `${d.integration_id}/${d.id}`,
+          name: d.name,
+          power: true,
+          brightness: 0.42,
+          color: { h: 35, s: 0.6 },
+        })),
+    };
+    db.assistantAction = action;
+    db.assistantApplications = [];
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'x-homectl-fixture': 'true',
+    });
+    res.write(
+      'event: status\ndata: {"phase":"planning","message":"Reviewing the selected lights"}\n\n',
+    );
+    res.end(`event: action\ndata: ${JSON.stringify(action)}\n\n`);
+    return;
+  }
+  if (path.startsWith('/api/v1/config/assistant/actions/')) {
+    if (method === 'DELETE') {
+      db.assistantAction = null;
+      return send(res, 200, { success: true, data: {} });
+    }
+    if (method === 'POST' && path.endsWith('/apply')) {
+      const body = await readBody(req),
+        action = db.assistantAction;
+      if (!action)
+        return send(res, 404, { success: false, error: 'Action unavailable' });
+      const selected =
+        body.deviceKeys ?? action.changes.map((c) => c.deviceKey);
+      if (
+        selected.some((key) => !action.changes.some((c) => c.deviceKey === key))
+      )
+        return send(res, 400, {
+          success: false,
+          error: 'Target outside this proposal',
+        });
+      (db.assistantApplications ??= []).push(selected);
+      const results = action.changes
+        .filter((c) => selected.includes(c.deviceKey))
+        .map((change) => {
+          // A deterministic partial failure tests how the review reports it.
+          if (change.deviceKey.endsWith('/living_room_floor_lamp'))
+            return {
+              deviceKey: change.deviceKey,
+              ok: false,
+              error: 'Fixture integration rejected the command',
+            };
+          const device = db.devices.find(
+            (d) => `${d.integration_id}/${d.id}` === change.deviceKey,
+          );
+          Object.assign(device.data.Controllable.state, {
+            power: change.power,
+            brightness: change.brightness,
+            color: change.color,
+          });
+          return { deviceKey: change.deviceKey, ok: true, error: null };
+        });
+      for (const publish of statePublishers) publish();
+      return send(res, 200, {
+        success: true,
+        data: {
+          actionId: action.actionId,
+          results,
+          appliedCount: results.filter((r) => r.ok).length,
+        },
+      });
+    }
+  }
+
+  // Synthetic calibration lifecycle for UI journeys; server tests cover the
+  // real capability checks, database transaction and physical preview engine.
+  if (path === '/api/__fixture/live-controls') {
+    if (method === 'POST') {
+      const value = await readBody(req);
+      rejectLiveCommands = value.reject === true;
+      liveCommandDelay = Math.min(2000, Math.max(0, value.delay ?? 0));
+      if (value.clear) liveCommands.length = 0;
+    }
+    return send(res, 200, {
+      commands: liveCommands,
+      reject: rejectLiveCommands,
+    });
+  }
+  if (path === '/api/__fixture/calibration') {
+    if (method === 'POST') {
+      const body = await readBody(req);
+      if (body.seed) {
+        db.config['calibration-profiles'] = [
+          {
+            id: 'shared-color',
+            name: 'Shared color match',
+            brightness: 0.5,
+            reference_device_key: 'zigbee2mqtt/living_room_floor_lamp',
+            points: [
+              { reference: { u: 0.2, v: 0.47 }, output: { u: 0.21, v: 0.48 } },
+            ],
+            brightness_points: [],
+          },
+        ];
+        db.config['calibration-assignments'] = [
+          'zigbee2mqtt/living_room_lamp',
+          'zigbee2mqtt/living_room_floor_lamp',
+        ].map((device_key) => ({ device_key, profile_id: 'shared-color' }));
+        db.calibrationSessions = {};
+        db.calibrationEvents = [];
+      }
+      if (body.changeColor)
+        db.config['calibration-profiles'][0].points[0].output.u =
+          body.changeColor;
+      db.calibrationFailSave = Boolean(body.failSave);
+      db.calibrationFailStop = Boolean(body.failStop);
+      db.calibrationStartDelay = Number(body.startDelay ?? 0);
+    }
+    return send(res, 200, {
+      success: true,
+      data: {
+        events: db.calibrationEvents ?? [],
+        sessions: db.calibrationSessions ?? {},
+      },
+    });
+  }
+  if (path === '/api/v1/config/calibration-editor') {
+    const view = () => {
+      const data = {
+        profiles: db.config['calibration-profiles'] ?? [],
+        assignments: db.config['calibration-assignments'] ?? [],
+        legacy: db.config['device-color-calibrations'] ?? [],
+      };
+      return {
+        ...data,
+        revision_token: crypto
+          .createHash('sha256')
+          .update(JSON.stringify(data))
+          .digest('hex'),
+      };
+    };
+    if (method === 'GET')
+      return send(res, 200, { success: true, data: view() });
+    if (method === 'PUT') {
+      const body = await readBody(req);
+      (db.calibrationEvents ??= []).push({ method, path });
+      if (body.expected !== view().revision_token)
+        return send(res, 409, {
+          success: false,
+          error: 'Calibration changed elsewhere.',
+          current: view(),
+        });
+      if (db.calibrationFailSave)
+        return send(res, 500, {
+          success: false,
+          error: 'Fixture database write failed. No calibration was changed.',
+        });
+      if (Object.keys(db.calibrationSessions ?? {}).length)
+        return send(res, 400, {
+          success: false,
+          error: 'Stop the preview before saving calibration.',
+        });
+      if (body.profile)
+        db.config['calibration-profiles'] = [
+          ...view().profiles.filter((row) => row.id !== body.profile.id),
+          structuredClone(body.profile),
+        ];
+      db.config['calibration-assignments'] = [
+        ...view().assignments.filter(
+          (row) => !body.device_keys.includes(row.device_key),
+        ),
+        ...(body.profile_id
+          ? body.device_keys.map((device_key) => ({
+              device_key,
+              profile_id: body.profile_id,
+            }))
+          : []),
+      ];
+      db.config['device-color-calibrations'] = view().legacy.filter(
+        (row) => !body.device_keys.includes(row.device_key),
+      );
+      return send(res, 200, { success: true, data: view(), write: writeOk });
+    }
+  }
+  if (/^\/api\/v1\/config\/calibration(-brightness)?-sessions\//.test(path)) {
+    const id = path.split('/')[5];
+    (db.calibrationEvents ??= []).push({ method, path, id });
+    if (path.endsWith('/heartbeat'))
+      return send(res, 200, { success: true, data: null });
+    if (method === 'DELETE') {
+      if (db.calibrationFailStop)
+        return send(res, 503, {
+          success: false,
+          error: 'Fixture preview could not stop.',
+        });
+      delete (db.calibrationSessions ??= {})[id];
+    } else {
+      const body = await readBody(req);
+      if (method === 'POST' && db.calibrationStartDelay)
+        await sleep(db.calibrationStartDelay);
+      (db.calibrationSessions ??= {})[id] = body;
+    }
+    return send(res, 200, { success: true, data: null });
+  }
 
   if (path === '/api/__fixture/migration' && method === 'POST') {
     const body = await readBody(req);
@@ -1038,6 +1300,15 @@ const server = http.createServer(async (req, res) => {
     });
   }
   if (path === '/api/v1/config/floorplan/grid') {
+    const saved = db.config.floorplans?.find(
+      (row) => row.id === (url.searchParams.get('id') ?? 'default'),
+    );
+    if (saved && Object.hasOwn(saved, 'grid_data'))
+      return send(res, 200, {
+        success: true,
+        data: saved.grid_data,
+        write: writeOk,
+      });
     // A small two-room plan with a wall, a door, and a window so the editor
     // has real content to render.
     const width = 12;
@@ -1063,7 +1334,20 @@ const server = http.createServer(async (req, res) => {
       tileSize: 32,
       deviceScale: 1,
       labelMode: 'sensors',
-      devices: [],
+      devices: [
+        {
+          deviceKey: 'zigbee2mqtt/living_room_lamp',
+          deviceName: 'Living room lamp',
+          x: 3,
+          y: 2,
+        },
+        {
+          deviceKey: 'zigbee2mqtt/floor_lamp',
+          deviceName: 'Floor lamp',
+          x: 4,
+          y: 6,
+        },
+      ],
       groups: {
         living_room: [
           { x: 1, y: 1 },
@@ -1721,6 +2005,64 @@ const server = http.createServer(async (req, res) => {
         db.config['device-sensor-configs'].push(value.sensor);
       return send(res, 200, { success: true, data: value, write: writeOk });
     }
+    if (endpoint === 'timers') {
+      const current = (db.userTimers ??= { timers: [], legacy_migrated: true });
+      if (method === 'GET')
+        return send(res, 200, {
+          success: true,
+          data: current,
+          storage_available: true,
+        });
+      if (method === 'POST' && rest.endsWith('/stop')) {
+        const id = decodeURIComponent(rest.slice(0, -5));
+        const timer = current.timers.find((t) => t.definition.id === id);
+        if (!timer)
+          return send(res, 404, { success: false, error: 'Timer not found' });
+        timer.definition.enabled = false;
+        timer.runtime = {
+          next_start_ms: null,
+          finish_ms: null,
+          active: false,
+          pending: null,
+          last_message: 'Cancelled',
+          last_run_ms: null,
+        };
+        return send(res, 200, { success: true, data: current });
+      }
+      if (method === 'PUT') {
+        const body = await readBody(req);
+        if (
+          !isDeepStrictEqual(
+            body.expected,
+            current.timers.map((t) => t.definition),
+          )
+        )
+          return send(res, 409, {
+            success: false,
+            error: 'Timers changed elsewhere.',
+            current: { timers: current.timers.map((t) => t.definition) },
+          });
+        current.timers = body.timers.map(
+          (definition) =>
+            current.timers.find((t) =>
+              isDeepStrictEqual(t.definition, definition),
+            ) ?? {
+              definition,
+              runtime: {
+                next_start_ms: definition.enabled
+                  ? Date.now() + (definition.schedule.minutes ?? 30) * 60000
+                  : null,
+                finish_ms: null,
+                active: false,
+                pending: null,
+                last_message: null,
+                last_run_ms: null,
+              },
+            },
+        );
+        return send(res, 200, { success: true, data: current });
+      }
+    }
     if (endpoint === 'preferences') {
       const current = db.config.preferences ?? { show_advanced_details: true };
       if (method === 'GET')
@@ -2050,9 +2392,8 @@ server.on('upgrade', (req, socket) => {
             {
               name: scene.name,
               hidden: scene.hidden ?? false,
-              device_states: scene.device_states ?? {},
-              group_states: scene.group_states ?? {},
-              script: scene.script ?? null,
+              devices: fixtureSceneStates(scene),
+              active_overrides: fixtureOverrides.get(scene.id) ?? [],
             },
           ]),
         ),
@@ -2064,6 +2405,7 @@ server.on('upgrade', (req, socket) => {
             {
               name: group.name,
               hidden: group.hidden ?? false,
+              linked_groups: group.linked_groups ?? [],
               device_keys: (group.devices ?? []).map(
                 (member) => `${member.integration_id}/${member.device_id}`,
               ),
@@ -2078,6 +2420,8 @@ server.on('upgrade', (req, socket) => {
     };
     socket.write(encodeTextFrame(JSON.stringify(frame)));
   };
+  statePublishers.add(sendState);
+  socket.on('close', () => statePublishers.delete(sendState));
   socket.on('data', (chunk) => {
     buffered = Buffer.concat([buffered, chunk]);
     // Client frames are masked; read the opcode/length, unmask, and look for a
@@ -2121,6 +2465,99 @@ server.on('upgrade', (req, socket) => {
         if (message && typeof message === 'object' && 'Resync' in message) {
           sendState();
           console.log('  ws -> full state frame');
+        }
+        if (message.DeviceCommand || message.SceneCommand) {
+          const command = message.DeviceCommand ?? message.SceneCommand;
+          const kind = message.DeviceCommand
+            ? 'DeviceCommandResult'
+            : 'SceneCommandResult';
+          liveCommands.push(message);
+          let error = rejectLiveCommands
+            ? 'Fixture runtime rejected this command.'
+            : null;
+          let affected = 0;
+          if (!error && message.DeviceCommand) {
+            const device = db.devices.find(
+              (d) => `${d.integration_id}/${d.id}` === command.device_key,
+            );
+            if (
+              !device?.data.Controllable ||
+              device.data.Controllable.disabled ||
+              ['FullReadOnly', 'UnmanagedReadOnly'].includes(
+                device.data.Controllable.managed,
+              )
+            )
+              error = 'Device is unavailable or read-only.';
+            else {
+              for (const field of [
+                'power',
+                'brightness',
+                'color',
+                'transition',
+              ])
+                if (command[field] != null)
+                  device.data.Controllable.state[field] = command[field];
+              affected = 1;
+            }
+          } else if (!error) {
+            const scene = db.config.scenes.find(
+              (s) => s.id === command.scene_id,
+            );
+            if (!scene) error = 'Scene not found.';
+            else
+              for (const [key, value] of Object.entries(
+                fixtureSceneStates(scene),
+              )) {
+                if (command.device_keys && !command.device_keys.includes(key))
+                  continue;
+                const device = db.devices.find(
+                  (d) => `${d.integration_id}/${d.id}` === key,
+                );
+                if (
+                  device?.data.Controllable &&
+                  !device.data.Controllable.disabled &&
+                  !['FullReadOnly', 'UnmanagedReadOnly'].includes(
+                    device.data.Controllable.managed,
+                  )
+                ) {
+                  device.data.Controllable.state = value;
+                  device.data.Controllable.scene_id = command.scene_id;
+                  device.data.Controllable.scene_paused = false;
+                  affected++;
+                }
+              }
+          }
+          setTimeout(() => {
+            if (socket.destroyed) return;
+            socket.write(
+              encodeTextFrame(
+                JSON.stringify({
+                  [kind]: {
+                    request_id: command.request_id,
+                    applied: !error,
+                    error,
+                    affected_devices: affected,
+                  },
+                }),
+              ),
+            );
+            sendState();
+          }, liveCommandDelay);
+        }
+        const action = message.EventMessage?.Action;
+        if (action?.action === 'ToggleDeviceOverride') {
+          for (const key of action.device_keys ?? []) {
+            const device = db.devices.find(
+              (d) => `${d.integration_id}/${d.id}` === key,
+            );
+            const id = device?.data.Controllable?.scene_id;
+            if (!id) continue;
+            const keys = new Set(fixtureOverrides.get(id) ?? []);
+            if (action.override_state) keys.add(key);
+            else keys.delete(key);
+            fixtureOverrides.set(id, [...keys]);
+          }
+          sendState();
         }
       } catch {
         // ignore malformed frames

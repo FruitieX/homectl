@@ -24,12 +24,14 @@ export function EntitySaveBar<T extends object>({
   sensitivePaths = [],
   inline = false,
   disabled = false,
+  saveDisabled = false,
 }: {
   draft: EntityDraftApi<T>;
   createLabel?: string;
   sensitivePaths?: readonly string[];
   inline?: boolean;
   disabled?: boolean;
+  saveDisabled?: boolean;
 }) {
   const [review, setReview] = useState(false);
   const [keep, setKeep] = useState<string[]>([]);
@@ -99,7 +101,7 @@ export function EntitySaveBar<T extends object>({
         ) : (
           <Button
             type="button"
-            disabled={draft.saving || disabled}
+            disabled={draft.saving || disabled || saveDisabled}
             onClick={() => void draft.save()}
           >
             {draft.saving && <LoaderCircle className="size-4 animate-spin" />}

@@ -22,7 +22,7 @@ export default function WidgetSourcesPage() {
       ) : query.isPending ? (
         <p>Loading widget sources…</p>
       ) : (
-        <div className="divide-y rounded-lg border border-border">
+        <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
           {query.data?.map((source) => {
             const definition = sourceDefinitions[source.key];
             const configured =

@@ -1,0 +1,18 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "Widget types use visual cards",
+   "Preset updates draft preview",
+   "Preview prevents device commands and keyboard activation",
+   "Switching type retains its draft",
+   "Choosing, configuring and previewing creates no writes",
+   "Editor fits viewport",
+   "Create persists selected type, title and dimensions",
+   "Only explicit Create writes configuration"
+  ],
+  "width": 1440,
+  "widgetId": 7
+ }
+}
+{"url":"http://127.0.0.1:3021/config/dashboard/1/widgets/new","viewport":{"width":1440,"height":1080},"problems":[]}

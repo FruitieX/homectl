@@ -46,10 +46,14 @@ export function clampDashboardWidgetHeight(height: number) {
 export function getDashboardWidgetMinimumWidth(widgetType: string) {
   switch (widgetType) {
     case 'home_overview':
+    case 'rooms':
+    case 'scenes':
     case 'spot_price':
     case 'train_schedule':
       return 4;
     case 'sensors':
+    case 'indoor_climate':
+    case 'timers':
       return 3;
     case 'clock':
     case 'weather':

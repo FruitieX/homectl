@@ -1,1193 +1,295 @@
-import { DeviceColorMode } from '@/ui/DeviceColorMode';
-import { DeviceReportStatus } from '@/ui/DeviceReportStatus';
-import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
-import { useDeviceDisplayNames } from '@/hooks/useConfig';
-import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
-import {
-  useLiveDeviceControls,
-  DeviceQuickControls,
-} from '@/ui/DeviceControls';
-import { useConnectionStatus } from '@/hooks/websocket';
-import { ColorResult } from 'react-color';
-import Wheel from '@uiw/react-color-wheel';
-import Circle from '@uiw/react-color-circle';
-import Color, { type ColorInstance } from 'color';
-
-type Color = ColorInstance;
-import { getColorSync, getPaletteSync } from 'colorthief';
-import {
-  ChangeEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useUserTimers } from '@/hooks/useUserTimers';
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
-import { black, getBrightness, getColor, getPower } from '@/lib/colors';
-import { useThrottleCallback } from '@react-hook/throttle';
-import { useSetDeviceState } from '@/hooks/useSetDeviceColor';
 import {
   useDevicesState,
   useGroupsState,
   useScenesState,
+  useConnectionStatus,
   useWebsocket,
 } from '@/hooks/websocket';
-import { useNavigate } from 'react-router-dom';
-import { Clipboard, Dices, Settings, SquarePen } from 'lucide-react';
-import { usePastedImage } from '@/hooks/pastedImage';
+import { useDeviceDisplayNames } from '@/hooks/useConfig';
+import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
+import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
+import { useSelectedDevices } from '@/hooks/selectedDevices';
+import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
+import { resolveGroupDeviceKeys } from '@/lib/group-floorplan-preview';
+import { configItemHref } from '@/lib/configItemHref';
+import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
+import { DeviceQuickControls } from '@/ui/DeviceControls';
+import { DeviceReportStatus } from '@/ui/DeviceReportStatus';
+import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
 import { SceneList } from 'app/groups/[id]/SceneList';
-import { excludeUndefined } from 'utils/excludeUndefined';
-import { WebSocketRequest } from '@/bindings/WebSocketRequest';
-import { DeviceKey } from '@/bindings/DeviceKey';
-import { DevicesState } from '@/bindings/DevicesState';
-import { FlattenedScenesConfig } from '@/bindings/FlattenedScenesConfig';
-import { useToggle, useMediaQuery } from 'usehooks-ts';
-import { Button } from '@/ui/primitives/button';
-import { Checkbox } from '@/ui/primitives/checkbox';
-import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
-import { cn } from '@/lib/cn';
-import { ColorSlider } from '@/ui/ColorSlider';
-
-const colorToHsva = (color: Color) => {
-  const hsva = color.hsv();
-  return {
-    h: hsva.hue(),
-    s: hsva.saturationv(),
-    v: 100,
-    a: hsva.alpha(),
-  };
-};
-
-const setMaxColorValue = (color: Color): Color => color.value(100);
-type TabProps = {
-  color: Color;
-  brightness: number;
-  onChange?: (color: Color, brightness: number) => void;
-  onChangeComplete?: (color: Color, brightness: number) => void;
-  open: boolean;
-};
-
-const ColorWheelTab = ({
-  brightness,
-  color,
-  onChange,
-  onChangeComplete,
-  open,
-}: TabProps) => {
-  const wheelContainer = useRef<HTMLDivElement>(null);
-  const [wheelSize, setWheelSize] = useState(0);
-  useEffect(() => {
-    const container = wheelContainer.current;
-    if (!container) return;
-    const observer = new ResizeObserver(([entry]) => {
-      setWheelSize(
-        Math.max(
-          0,
-          Math.floor(
-            Math.min(entry.contentRect.width, entry.contentRect.height),
-          ),
-        ),
-      );
-    });
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
-  const [hsva, setHsva] = useState(colorToHsva(color));
-  const [bri, setBri] = useState(brightness);
-
-  const hsvaWithMaxValue = useMemo(() => {
-    const result = { ...hsva };
-    // Limit range to [50, 100]
-    result.v = (100 + bri * 100) / 2;
-    return result;
-  }, [bri, hsva]);
-
-  useEffect(() => {
-    setHsva(colorToHsva(color));
-    setBri(brightness);
-    latestColor.current = color;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  const latestColor = useRef<Color>(color);
-
-  const handleChange = useCallback(
-    (result: ColorResult) => {
-      const hsv = Color(result.rgb).hsv();
-      const color = Color({
-        h: hsv.hue(),
-        s: hsv.saturationv(),
-        v: 100,
-      });
-      latestColor.current = color;
-      setHsva(colorToHsva(color));
-      onChange?.(color, bri);
-    },
-    [bri, onChange],
-  );
-
-  const handleChangeComplete = useCallback(() => {
-    onChangeComplete?.(latestColor.current, bri);
-  }, [bri, onChangeComplete]);
-
-  const handleBrightnessChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const value = Number(event.currentTarget.value) / 100;
-      setBri(value);
-      onChange?.(latestColor.current, value);
-    },
-    [onChange],
-  );
-
-  return (
-    <>
-      <div
-        ref={wheelContainer}
-        className="flex min-h-0 flex-1 items-center justify-center overflow-hidden"
-      >
-        {wheelSize > 0 && (
-          <Wheel
-            color={hsvaWithMaxValue}
-            onChange={handleChange}
-            onTouchEnd={handleChangeComplete}
-            onMouseUp={handleChangeComplete}
-            width={wheelSize}
-            height={wheelSize}
-            className="mx-auto"
-          />
-        )}
-      </div>
-      <ColorSlider
-        label="Brightness"
-        channel="brightness"
-        color={Color.hsv(hsva.h, hsva.s, 100)}
-        onChange={handleBrightnessChange}
-        onTouchEnd={handleChangeComplete}
-        onMouseUp={handleChangeComplete}
-        min={0}
-        max={100}
-        value={bri * 100}
-      />
-    </>
-  );
-};
-
-const presetColors = [
-  '#f44336',
-  '#e91e63',
-  '#9c27b0',
-  '#673ab7',
-  '#3f51b5',
-  '#2196f3',
-  '#03a9f4',
-  '#00bcd4',
-  '#009688',
-  '#4caf50',
-  '#8bc34a',
-  '#cddc39',
-  '#ffeb3b',
-  '#ffc107',
-  '#ff9800',
-  '#ff5722',
-  '#795548',
-  '#607d8b',
-]
-  .map((hex) => Color(hex, 'rgb'))
-  .map(setMaxColorValue)
-  .map((color) => color.hex());
-
-const SwatchesTab = ({
-  brightness,
-  color,
-  onChange,
-  onChangeComplete,
-  open,
-}: TabProps) => {
-  const [hex, setHex] = useState(color.value(100).hex());
-  const [bri, setBri] = useState(brightness);
-
-  useEffect(() => {
-    setHex(color.value(100).hex());
-    setBri(brightness);
-    latestColor.current = color;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  const latestColor = useRef<Color>(color);
-
-  const handleChange = useCallback(
-    (result: ColorResult) => {
-      const hsv = Color(result.rgb).hsv();
-      const color = Color({
-        h: hsv.hue(),
-        s: hsv.saturationv(),
-        v: latestColor.current.value(),
-      });
-      latestColor.current = color;
-      setHex(color.value(100).hex());
-      onChange?.(color, bri);
-    },
-    [bri, onChange],
-  );
-
-  const handleChangeComplete = useCallback(() => {
-    onChangeComplete?.(latestColor.current, bri);
-  }, [bri, onChangeComplete]);
-
-  const handleBrightnessChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const value = Number(event.currentTarget.value) / 100;
-      setBri(value);
-      onChange?.(latestColor.current, value);
-    },
-    [onChange],
-  );
-
-  return (
-    <>
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        <Circle
-          colors={presetColors}
-          color={hex}
-          onChange={handleChange}
-          className="flex-1"
-        />
-      </div>
-      <ColorSlider
-        label="Brightness"
-        channel="brightness"
-        color={Color(hex)}
-        onChange={handleBrightnessChange}
-        onTouchEnd={handleChangeComplete}
-        onMouseUp={handleChangeComplete}
-        min={0}
-        max={100}
-        value={bri * 100}
-      />
-    </>
-  );
-};
-
-async function clipboardToImg(): Promise<HTMLImageElement | undefined> {
-  const items = await navigator.clipboard.read().catch((err) => {
-    console.error(err);
-  });
-
-  if (!items) return;
-
-  for (const item of items) {
-    for (const type of item.types) {
-      if (type.startsWith('image/')) {
-        const blob = await item.getType(type);
-        return new Promise((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = reject;
-          img.src = window.URL.createObjectURL(blob);
-        });
-      }
-    }
-  }
-}
-
-const SlidersTab = ({
-  brightness,
-  color,
-  onChange,
-  onChangeComplete,
-  open,
-}: TabProps) => {
-  const [hue, setHue] = useState(color.hue());
-  const [sat, setSat] = useState(color.saturationv());
-  const [bri, setBri] = useState(brightness);
-
-  const [inputFocused, setInputFocused] = useState(false);
-
-  useEffect(() => {
-    if (inputFocused) return;
-
-    setHue(color.hue());
-    setSat(color.saturationv());
-    setBri(brightness);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  const handleChangeComplete = useCallback(() => {
-    const color = Color({
-      h: hue,
-      s: sat,
-      v: 100,
-    });
-
-    onChangeComplete?.(color, bri);
-  }, [bri, hue, onChangeComplete, sat]);
-
-  const handleHueChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const hue = Number(event.currentTarget.value);
-      setHue(hue);
-
-      if (inputFocused) return;
-
-      const color = Color({
-        h: hue,
-        s: sat,
-        v: 100,
-      });
-
-      onChange?.(color, bri);
-    },
-    [bri, inputFocused, onChange, sat],
-  );
-
-  const handleSatChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const sat = Number(event.currentTarget.value);
-      setSat(sat);
-
-      if (inputFocused) return;
-
-      const color = Color({
-        h: hue,
-        s: sat,
-        v: 100,
-      });
-
-      onChange?.(color, bri);
-    },
-    [bri, hue, inputFocused, onChange],
-  );
-
-  const handleBriChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const bri = Number(event.currentTarget.value) / 100;
-      setBri(bri);
-
-      if (inputFocused) return;
-
-      const color = Color({
-        h: hue,
-        s: sat,
-        v: 100,
-      });
-
-      onChange?.(color, bri);
-    },
-    [hue, inputFocused, onChange, sat],
-  );
-
-  const focusInput = useCallback(() => {
-    setInputFocused(true);
-  }, []);
-
-  const blurInput = useCallback(() => {
-    setInputFocused(false);
-    handleChangeComplete();
-  }, [handleChangeComplete]);
-
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === 'Enter') {
-        handleChangeComplete();
-      } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-        let modifier = event.key === 'ArrowUp' ? 1 : -1;
-        if (event.shiftKey) modifier *= 10;
-        let newHue = hue;
-        let newSat = sat;
-        let newBri = bri;
-
-        if (event.currentTarget.name === 'hue-input') {
-          newHue = Math.max(Math.min(hue + modifier, 360), 0);
-          setHue(newHue);
-        } else if (event.currentTarget.name === 'sat-input') {
-          newSat = Math.max(Math.min(sat + modifier, 100), 0);
-          setSat(newSat);
-        } else if (event.currentTarget.name === 'bri-input') {
-          newBri = Math.max(Math.min(bri + modifier / 100, 1), 0);
-          setBri(newBri);
-        }
-
-        const color = Color({
-          h: newHue,
-          s: newSat,
-          v: 100,
-        });
-
-        onChange?.(color, newBri);
-      }
-    },
-    [bri, handleChangeComplete, hue, onChange, sat],
-  );
-
-  return (
-    <>
-      <div className="flex items-center">
-        <ColorSlider
-          label="Hue"
-          className="flex-1"
-          channel="hue"
-          color={Color.hsv(hue, sat, 100)}
-          onChange={handleHueChange}
-          onTouchEnd={handleChangeComplete}
-          onMouseUp={handleChangeComplete}
-          min={0}
-          max={360}
-          value={hue}
-        />
-        <Input
-          aria-label="Hue in degrees"
-          name="hue-input"
-          className="ml-3 w-24"
-          value={Math.round(hue)}
-          onChange={handleHueChange}
-          onKeyDown={handleKeyDown}
-          onFocus={focusInput}
-          onBlur={blurInput}
-        />
-      </div>
-      <div className="flex items-center">
-        <ColorSlider
-          label="Saturation"
-          className="flex-1"
-          channel="saturation"
-          color={Color.hsv(hue, sat, 100)}
-          onChange={handleSatChange}
-          onTouchEnd={handleChangeComplete}
-          onMouseUp={handleChangeComplete}
-          min={0}
-          max={100}
-          value={sat}
-        />
-        <Input
-          aria-label="Saturation percent"
-          name="sat-input"
-          className="ml-3 w-24"
-          value={Math.round(sat)}
-          onChange={handleSatChange}
-          onKeyDown={handleKeyDown}
-          onFocus={focusInput}
-          onBlur={blurInput}
-        />
-      </div>
-      <div className="flex items-center">
-        <ColorSlider
-          label="Brightness"
-          className="flex-1"
-          channel="brightness"
-          color={Color.hsv(hue, sat, 100)}
-          onChange={handleBriChange}
-          onTouchEnd={handleChangeComplete}
-          onMouseUp={handleChangeComplete}
-          min={0}
-          max={100}
-          value={bri * 100}
-        />
-        <Input
-          aria-label="Brightness percent"
-          name="bri-input"
-          className="ml-3 w-24"
-          value={Math.round(bri * 100)}
-          onChange={handleBriChange}
-          onKeyDown={handleKeyDown}
-          onFocus={focusInput}
-          onBlur={blurInput}
-        />
-      </div>
-    </>
-  );
-};
-
-const ImageTab = ({
-  brightness,
-  color,
-  onChange,
-  deviceKeys,
-}: TabProps & { deviceKeys: string[] }) => {
-  const pastedImageColors = useRef<string[]>([]);
-  const [computedColors, setComputedColors] = useState<Color[]>([]);
-  const [pastedImage, setPastedImage] = usePastedImage();
-  const pastedImageContainer = useRef<HTMLDivElement | null>(null);
-
-  const [hsva, setHsva] = useState(colorToHsva(color));
-  const [bri, setBri] = useState(brightness);
-  const [sat, setSat] = useState(0.5);
-
-  const recomputeColors = useCallback(
-    (currentBri: number | null, currentSat: number | null) => {
-      const computedColors = pastedImageColors.current.map((color) => {
-        const hsv = Color(color).hsv();
-        let saturated;
-
-        const saturationValue = currentSat ?? sat;
-        if (saturationValue > 0.5) {
-          saturated = hsv.saturate(saturationValue * 2 - 1);
-        } else {
-          saturated = hsv.desaturate(1 - saturationValue * 2);
-        }
-
-        return Color({
-          h: saturated.hue(),
-          s: saturated.saturationv(),
-          v: (currentBri ?? bri) * 100,
-        });
-      });
-
-      setComputedColors(computedColors);
-    },
-    [bri, pastedImageColors, sat],
-  );
-
-  const handlePastedImage = useCallback(() => {
-    if (pastedImage === null) return;
-
-    pastedImage.style.objectFit = 'contain';
-    pastedImage.style.width = '100%';
-    pastedImage.style.height = '100%';
-    pastedImage.style.marginLeft = 'auto';
-    pastedImage.style.marginRight = 'auto';
-
-    pastedImageContainer.current?.replaceChildren(pastedImage);
-    const dominant = getColorSync(pastedImage);
-    const palette = getPaletteSync(pastedImage) ?? [];
-    const colors = [dominant, ...palette]
-      .filter((color) => color !== null)
-      .map((color) => color.array())
-      .map((components) => Color(components, 'rgb'))
-      .map(setMaxColorValue)
-      .map((color) => color.hex());
-
-    pastedImageColors.current = colors;
-    recomputeColors(null, null);
-  }, [pastedImage, recomputeColors]);
-
-  useEffect(() => {
-    handlePastedImage();
-  }, [handlePastedImage]);
-
-  const handlePasteClick = useCallback(async () => {
-    const img = await clipboardToImg();
-
-    if (!img) {
-      return;
-    }
-
-    setPastedImage(img);
-    handlePastedImage();
-  }, [handlePastedImage, setPastedImage]);
-
-  useEffect(() => {
-    setHsva(colorToHsva(color));
-    setBri(brightness);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  const latestColor = useRef<Color>(color);
-  useEffect(() => {
-    latestColor.current = color;
-  }, [color]);
-
-  const handleChange = useCallback(
-    (result: ColorResult) => {
-      const hsv = Color(result.rgb).hsv();
-      const color = Color({
-        h: hsv.hue(),
-        s: hsv.saturationv(),
-        v: bri * 100,
-      });
-      latestColor.current = color;
-      setHsva(colorToHsva(color));
-      onChange?.(color, bri);
-    },
-    [bri, onChange],
-  );
-
-  const handleBrightnessChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const value = Number(event.currentTarget.value) / 100;
-      setBri(value);
-      recomputeColors(value, null);
-    },
-    [recomputeColors],
-  );
-
-  const handleSaturationChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const value = Number(event.currentTarget.value) / 100;
-      setSat(value);
-      recomputeColors(null, value);
-    },
-    [recomputeColors],
-  );
-
+import { Button } from '@/ui/primitives/button';
+
+/** One shared control composition for rooms, widgets and floorplan selections. */
+export function ColorPickerModal() {
+  const modal = useDeviceModalState();
   const devices = useDevicesState();
-  const scenes = useScenesState();
-  const setDeviceState = useSetDeviceState();
-  const handleApplyToDevices = useCallback(() => {
-    const randomizedDeviceKeyOrder = deviceKeys
-      ?.concat()
-      .sort(() => Math.random() - 0.5);
-
-    const randomizedColorOrder = computedColors
-      ?.concat()
-      .sort(() => Math.random() - 0.5);
-
-    randomizedDeviceKeyOrder?.forEach((deviceKey, index) => {
-      const match = devices?.[deviceKey];
-      const color = randomizedColorOrder[index % computedColors.length];
-
-      if (match) {
-        const persistEnabled = isDevicePersistEnabled(
-          devices,
-          scenes,
-          deviceKey,
-        );
-
-        setDeviceState(
-          match,
-          persistEnabled,
-          true,
-          Color(color, 'rgb'),
-          color.value() / 100,
-        );
-      }
-    });
-  }, [deviceKeys, computedColors, devices, scenes, setDeviceState]);
-
-  return (
-    <>
-      <div ref={pastedImageContainer} className="min-h-0 w-full flex-1 pb-4" />
-      <div className="flex w-full shrink-0 flex-wrap justify-center gap-2 [&>button]:px-2 [&>button]:text-xs">
-        <Button onClick={handlePasteClick}>
-          <Clipboard />
-          Paste image
-        </Button>
-        <Button onClick={handleApplyToDevices}>
-          <Dices />
-          Apply colors
-        </Button>
-      </div>
-      <Circle
-        colors={computedColors.map((color) => color.hex())}
-        color={hsva}
-        onChange={handleChange}
-        className="min-h-8 shrink-0 flex-nowrap! overflow-x-auto justify-center pt-1 *:shrink-0"
-      />
-      <div className="flex shrink-0 gap-2 text-xs [&>div]:min-w-0 [&>div]:flex-1">
-        <div>
-          <ColorSlider
-            label="Saturation"
-            channel="saturation"
-            color={Color.hsv(hsva.h, hsva.s, 100)}
-            onChange={handleSaturationChange}
-            min={0}
-            max={100}
-            value={sat * 100}
-          />
-        </div>
-        <div>
-          <ColorSlider
-            label="Brightness"
-            channel="brightness"
-            color={Color.hsv(hsva.h, hsva.s, 100)}
-            onChange={handleBrightnessChange}
-            min={0}
-            max={100}
-            value={bri * 100}
-          />
-        </div>
-      </div>
-    </>
-  );
-};
-
-const isDevicePersistEnabled = (
-  devices: DevicesState | null,
-  scenes: FlattenedScenesConfig | null,
-  deviceKey: DeviceKey,
-): boolean => {
-  const device = devices?.[deviceKey];
-  if (device && 'Controllable' in device?.data) {
-    const scene_id = device?.data?.Controllable?.scene_id;
-    if (!scene_id) return false;
-    const scene = scenes?.[scene_id];
-    if (!scene) return false;
-    return scene.active_overrides.includes(deviceKey);
-  }
-  return false;
-};
-
-const ScenesTab = (props: { deviceKeys: string[] }) => {
-  const ws = useWebsocket();
-  const devices = useDevicesState();
-  const scenes = useScenesState();
-  const persistEnabled = props.deviceKeys.every((deviceKey) => {
-    return isDevicePersistEnabled(devices, scenes, deviceKey);
-  });
-
-  const togglePersist = () => {
-    const msg: WebSocketRequest = {
-      EventMessage: {
-        Action: {
-          action: 'ToggleDeviceOverride',
-          device_keys: props.deviceKeys,
-          override_state: !persistEnabled,
-        },
-      },
-    };
-
-    const data = JSON.stringify(msg);
-    ws?.send(data);
-  };
-
-  const [showAll, toggleShowAll] = useToggle(false);
-  const [showSettings, toggleShowSettings] = useToggle(false);
-
-  return (
-    <>
-      <SceneList deviceKeys={props.deviceKeys} showAll={showAll} compact />
-
-      {showSettings ? (
-        <div className="flex gap-3">
-          <Button className="flex-1" onClick={toggleShowAll}>
-            Show all scenes
-            <Checkbox checked={showAll} tabIndex={-1} aria-hidden />
-          </Button>
-
-          <Button className="flex-1" onClick={togglePersist}>
-            Autosave scene state
-            <Checkbox checked={persistEnabled} tabIndex={-1} aria-hidden />
-          </Button>
-        </div>
-      ) : (
-        <Button
-          className="mt-2 px-2"
-          aria-label="Scene settings"
-          variant="ghost"
-          onClick={toggleShowSettings}
-        >
-          <Settings /> Scene settings
-        </Button>
-      )}
-    </>
-  );
-};
-
-const eqSet = <T,>(xs: Set<T>, ys: Set<T>) =>
-  xs.size === ys.size && [...xs].every((x) => ys.has(x));
-
-export const ColorPickerModal = () => {
-  const navigate = useNavigate();
-  const {
-    state: deviceModalState,
-    open: deviceModalOpen,
-    setOpen: setDeviceModalOpen,
-    presentation: deviceModalPresentation,
-    setState: setDeviceModalState,
-  } = useDeviceModalState();
-
-  const devices = useDevicesState();
-  const scenes = useScenesState();
+  const timers = useUserTimers({ enabled: modal.open });
   const groups = useGroupsState();
-
-  const { data: nameOverrides } = useDeviceDisplayNames();
-  const displayNames = Object.fromEntries(
-    nameOverrides.map((row) => [row.device_key, row.display_name]),
-  );
-  const firstDevice = devices?.[deviceModalState[0]];
+  const scenes = useScenesState();
   const connected = useConnectionStatus() === 'connected';
-  const selected = deviceModalState.flatMap((key) =>
+  const ws = useWebsocket();
+  const { advanced } = useSettingsPreferences();
+  const { data: overrides } = useDeviceDisplayNames();
+  const names = Object.fromEntries(
+    overrides.map((row) => [row.device_key, row.display_name]),
+  );
+  const capture = useSaveSceneModalState();
+  const [, setSelectedDevices] = useSelectedDevices();
+  const [showAll, setShowAll] = useState(false);
+  const [overridePending, setOverridePending] = useState<boolean | null>(null);
+  const [overrideError, setOverrideError] = useState('');
+  const initialSelection = useRef<string[]>([]);
+  useEffect(() => {
+    if (!modal.open) {
+      initialSelection.current = [];
+      setOverridePending(null);
+    } else if (modal.state.length > 1 && !initialSelection.current.length)
+      initialSelection.current = modal.state;
+  }, [modal.open, modal.state]);
+  const selected = modal.state.flatMap((key) =>
     devices?.[key] ? [devices[key]!] : [],
   );
-  const colorDevices = selected.filter((device) => {
-    if (!('Controllable' in device.data) || isDeviceReadOnly(device))
-      return false;
-    const capabilities = device.data.Controllable.capabilities;
+  const writable = selected.filter((device) => !isDeviceReadOnly(device));
+  const activeGroup = Object.entries(groups ?? {}).find(([id]) => {
+    const keys = resolveGroupDeviceKeys(id, groups ?? {});
     return (
-      capabilities.hs ||
-      capabilities.xy ||
-      capabilities.rgb ||
-      capabilities.ct !== null
+      keys.length === modal.state.length &&
+      keys.every((key) => modal.state.includes(key))
     );
   });
-  const groupConfigs = excludeUndefined(groups ?? undefined);
-
-  const selectedDevicesSet = new Set(deviceModalState);
-
-  // A group is active if the list of active devices == the devices contained in
-  // the group
-  const activeGroup = Object.values(groupConfigs).find((group) => {
-    const groupDevicesSet = new Set(group.device_keys);
-
-    return eqSet(selectedDevicesSet, groupDevicesSet);
-  });
-
-  let deviceModalTitle;
-
-  if (activeGroup !== undefined) {
-    deviceModalTitle = activeGroup.name;
-  } else {
-    deviceModalTitle =
-      deviceModalState.length === 1
-        ? firstDevice
-          ? getDeviceDisplayLabel(firstDevice, displayNames)
-          : 'Unavailable device'
-        : `${deviceModalState.length} devices`;
-  }
-  const deviceModalColor =
-    firstDevice?.data === undefined ? null : getColor(firstDevice.data);
-  const deviceModalBrightness =
-    firstDevice?.data === undefined ? null : getBrightness(firstDevice.data);
-
-  const setDeviceState = useSetDeviceState();
-
-  const partialSetDeviceColor = useCallback(
-    (color: Color, brightness: number) => {
-      if (deviceModalState !== null) {
-        deviceModalState.forEach((deviceKey) => {
-          const match = devices?.[deviceKey];
-
-          if (
-            match &&
-            'Controllable' in match.data &&
-            !isDeviceReadOnly(match) &&
-            (match.data.Controllable.capabilities.hs ||
-              match.data.Controllable.capabilities.xy ||
-              match.data.Controllable.capabilities.rgb ||
-              match.data.Controllable.capabilities.ct !== null)
-          ) {
-            const persistEnabled = isDevicePersistEnabled(
-              devices,
-              scenes,
-              deviceKey,
-            );
-            setDeviceState(
-              match,
-              persistEnabled,
-              true,
-              color,
-              brightness,
-              undefined,
-            );
-          }
-        });
-      }
-    },
-    [deviceModalState, devices, scenes, setDeviceState],
-  );
-
-  const throttledSetDeviceColor = useThrottleCallback(
-    partialSetDeviceColor,
-    4,
-    true,
-  );
-
-  const persistEnabled = deviceModalState.every((deviceKey) => {
-    return isDevicePersistEnabled(devices, scenes, deviceKey);
-  });
-
-  const closeDeviceModal = useCallback(() => {
-    setDeviceModalOpen(false);
-  }, [setDeviceModalOpen]);
-
-  const [tab, setTab] = useState('wheel');
-  const setLiveState = useLiveDeviceControls();
-  const temperatureDevices = colorDevices.filter(
-    (d) => 'Controllable' in d.data && d.data.Controllable.capabilities.ct,
-  );
-  const hasChromaticColor = colorDevices.some(
+  const title =
+    activeGroup?.[1]?.name ??
+    (modal.state.length === 1
+      ? selected[0]
+        ? getDeviceDisplayLabel(selected[0], names)
+        : 'Unavailable device'
+      : `${modal.state.length} devices`);
+  const withScenes = writable.filter(
     (d) =>
       'Controllable' in d.data &&
-      (d.data.Controllable.capabilities.hs ||
-        d.data.Controllable.capabilities.xy ||
-        d.data.Controllable.capabilities.rgb),
+      d.data.Controllable.scene_id &&
+      scenes?.[d.data.Controllable.scene_id],
   );
-  const colorTab =
-    !hasChromaticColor ||
-    (tab === 'temperature' && temperatureDevices.length === 0)
-      ? hasChromaticColor
-        ? 'wheel'
-        : 'temperature'
-      : tab;
-  const [floorplanSection, setFloorplanSection] = useState('controls');
-  const inFloorplan = deviceModalPresentation === 'floorplan';
-  const compactFloorplan = useMediaQuery('(max-width: 767px)') && inFloorplan;
-  const groupSelection = useRef<string[]>([]);
+  const persisted = withScenes.filter(
+    (d) =>
+      'Controllable' in d.data &&
+      scenes?.[d.data.Controllable.scene_id!]?.active_overrides.includes(
+        `${d.integration_id}/${d.id}`,
+      ),
+  );
+  const allPersist =
+    withScenes.length > 0 && persisted.length === withScenes.length;
   useEffect(() => {
-    if (!deviceModalOpen) groupSelection.current = [];
-    else if (deviceModalState.length > 1)
-      groupSelection.current = deviceModalState;
-  }, [deviceModalOpen, deviceModalState]);
-  useEffect(() => {
-    if (!deviceModalOpen) setFloorplanSection('controls');
-  }, [deviceModalOpen]);
-  const section =
-    floorplanSection === 'color' && colorDevices.length === 0
-      ? 'controls'
-      : floorplanSection;
-  const ColorSection = 'div';
+    if (overridePending === null) return;
+    if (!connected) {
+      setOverrideError(
+        'Connection lost. Check the scene autosave setting after reconnecting.',
+      );
+      setOverridePending(null);
+      return;
+    }
+    if (
+      (overridePending && allPersist) ||
+      (!overridePending && !persisted.length)
+    ) {
+      setOverridePending(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setOverridePending(null);
+      setOverrideError(
+        'No updated autosave setting received. Check before trying again.',
+      );
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [overridePending, allPersist, persisted.length, connected]);
+  function toggleAutosave() {
+    if (!connected || !ws || !withScenes.length) return;
+    setOverrideError('');
+    setOverridePending(!allPersist);
+    ws.send(
+      JSON.stringify({
+        EventMessage: {
+          Action: {
+            action: 'ToggleDeviceOverride',
+            device_keys: withScenes.map((d) => `${d.integration_id}/${d.id}`),
+            override_state: !allPersist,
+          },
+        },
+      }),
+    );
+  }
+  const close = () => modal.setOpen(false);
   return (
     <ResponsiveOverlay
-      open={deviceModalOpen}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
-          closeDeviceModal();
-        }
-      }}
-      title={
-        <span className="inline-flex min-w-0 items-center gap-2">
-          {deviceModalTitle ?? 'Device controls'}
+      open={modal.open}
+      onOpenChange={modal.setOpen}
+      title={title}
+      desktopPresentation={modal.presentation}
+      className="max-w-2xl"
+      description={`${modal.state.length} selected ${modal.state.length === 1 ? 'device' : 'devices'}. Controls apply immediately.`}
+    >
+      <div className="space-y-4 px-3 pb-3 md:px-0 md:pb-0">
+        <div className="flex items-center gap-3">
+          <LiveStatePreview
+            states={modal.state.map((key) =>
+              devices?.[key] ? devicePreviewState(devices[key]!) : undefined,
+            )}
+          />
+          <span className="flex-1 text-xs text-muted-foreground">
+            {persisted.length
+              ? `Scene autosave on for ${persisted.length} devices. Changes update their scene overrides.`
+              : 'Manual changes leave saved scene targets unchanged.'}
+          </span>
           <DeviceReportStatus devices={selected} />
-          {inFloorplan && deviceModalState.length === 1 && firstDevice && (
+        </div>
+        {!connected && (
+          <p role="status" className="text-sm text-destructive">
+            Disconnected. Controls will be available when the connection
+            returns.
+          </p>
+        )}
+        {modal.state.length > selected.length && (
+          <p role="status" className="text-sm text-muted-foreground">
+            {modal.state.length - selected.length} selected devices are
+            unavailable.
+          </p>
+        )}
+        {initialSelection.current.length > 1 && (
+          <label className="block text-xs text-muted-foreground">
+            Apply controls to
+            <select
+              aria-label="Apply controls to"
+              className="mt-1 h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+              value={modal.state.length === 1 ? modal.state[0] : 'selection'}
+              onChange={(e) =>
+                modal.setState(
+                  e.target.value === 'selection'
+                    ? initialSelection.current
+                    : [e.target.value],
+                )
+              }
+            >
+              <option value="selection">
+                All {initialSelection.current.length} selected devices
+              </option>
+              {initialSelection.current.map((key) => (
+                <option key={key} value={key}>
+                  {devices?.[key]
+                    ? getDeviceDisplayLabel(devices[key]!, names)
+                    : key + ' · unavailable'}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <DeviceQuickControls key={modal.state.join(',')} devices={selected} />
+        <section
+          className="space-y-2 border-t border-border pt-3"
+          aria-label="Scenes for selection"
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Scenes</h3>
             <Button
-              type="button"
+              size="sm"
               variant="ghost"
-              size="icon"
-              className="size-8 shrink-0"
-              aria-label={`Edit ${getDeviceDisplayLabel(firstDevice, displayNames)} device settings`}
-              title="Edit device settings"
+              disabled={!writable.length}
               onClick={() => {
-                closeDeviceModal();
-                navigate(
-                  `/config/devices?device=${encodeURIComponent(deviceModalState[0])}`,
-                );
+                setSelectedDevices(modal.state);
+                close();
+                capture.setOpen(true);
               }}
             >
-              <SquarePen />
+              Capture scene
             </Button>
-          )}
-        </span>
-      }
-      description={
-        persistEnabled
-          ? 'Scene autosave is enabled for this selection.'
-          : `${deviceModalState.length} selected ${
-              deviceModalState.length === 1 ? 'device' : 'devices'
-            }.`
-      }
-      className="max-w-3xl"
-      desktopPresentation={deviceModalPresentation}
-    >
-      <div
-        className={cn(
-          'px-3 pb-3 md:px-0 md:pb-0',
-          inFloorplan && section === 'color'
-            ? 'flex h-full min-h-0 flex-col [&>label]:shrink-0 [&>div:first-of-type]:shrink-0'
-            : '',
-          compactFloorplan ? 'space-y-2' : 'space-y-4',
-        )}
-      >
-        {deviceModalPresentation === 'floorplan' &&
-          deviceModalState.length > 1 && (
-            <label className="block space-y-1 text-xs text-muted-foreground">
-              <select
-                aria-label="Apply controls to"
-                className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground"
-                value=""
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setDeviceModalState(
-                    value === 'selection'
-                      ? groupSelection.current
-                      : value.startsWith('group:')
-                        ? (groups?.[value.slice(6)]?.device_keys ?? [])
-                        : [value.slice(7)],
-                  );
-                }}
-              >
-                <option value="" disabled>
-                  Apply to…
-                </option>
-                {groupSelection.current.length > 1 && (
-                  <option value="selection">
-                    All {groupSelection.current.length} devices
-                  </option>
-                )}
-                {Object.entries(groups ?? {})
-                  .filter(([, group]) =>
-                    group?.device_keys.some((key) =>
-                      deviceModalState.includes(key),
-                    ),
-                  )
-                  .map(([id, group]) => (
-                    <option key={id} value={`group:${id}`}>
-                      {group?.name ?? id}
-                    </option>
-                  ))}
-                {(groupSelection.current.length
-                  ? groupSelection.current
-                  : deviceModalState
-                ).flatMap((key) =>
-                  devices?.[key]
-                    ? [
-                        <option key={key} value={`device:${key}`}>
-                          {getDeviceDisplayLabel(devices[key]!, displayNames)}
-                        </option>,
-                      ]
-                    : [],
-                )}
-              </select>
+          </div>
+          <SceneList deviceKeys={modal.state} showAll={showAll} compact />
+          <label className="flex min-h-11 items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={showAll}
+              onChange={(e) => setShowAll(e.target.checked)}
+            />
+            Include hidden scenes
+          </label>
+          {withScenes.length > 0 && (
+            <label className="flex min-h-11 items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={allPersist}
+                disabled={!connected || overridePending !== null}
+                onChange={toggleAutosave}
+              />
+              Scene autosave
+              {overridePending !== null
+                ? ' · Updating…'
+                : persisted.length && !allPersist
+                  ? ' · Mixed'
+                  : ''}
             </label>
           )}
-        {deviceModalState.length > 0 && (
-          <Tabs value={section} onValueChange={setFloorplanSection}>
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="controls">Controls</TabsTrigger>
-              <TabsTrigger value="scenes">Scenes</TabsTrigger>
-              <TabsTrigger value="color" disabled={colorDevices.length === 0}>
-                Color
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        )}
-        {section === 'controls' && (
-          <DeviceQuickControls
-            key={deviceModalState.join(',')}
-            devices={selected}
-            showColorTabs={false}
-          />
-        )}
-        {section === 'scenes' && <ScenesTab deviceKeys={deviceModalState} />}
-        {colorDevices.length > 0 && section === 'color' && (
-          <ColorSection
-            className={
-              inFloorplan
-                ? 'flex min-h-0 min-w-0 flex-1 flex-col'
-                : 'rounded-xl border border-border p-4'
-            }
-          >
-            {colorDevices.length !== selected.length && (
-              <p className="my-2 text-sm text-muted-foreground">
-                Color changes apply to {colorDevices.length} compatible devices.
-              </p>
-            )}
-            <fieldset
-              disabled={!connected}
-              className={cn(
-                'flex min-h-0 min-w-0 flex-1 flex-col',
-                !inFloorplan && 'mt-3 h-[min(60dvh,28rem)]',
-              )}
+          {overrideError && (
+            <p role="alert" className="text-xs text-destructive">
+              {overrideError}
+            </p>
+          )}
+        </section>
+        {(timers.data?.timers ?? [])
+          .filter((t) =>
+            [t.definition.action, t.definition.finish_action].some(
+              (a) => a?.kind === 'device' && modal.state.includes(a.device_key),
+            ),
+          )
+          .map((t) => (
+            <Link
+              key={t.definition.id}
+              to={`/config/timers?timer=${encodeURIComponent(t.definition.id)}`}
+              onClick={close}
+              className="flex min-h-11 items-center text-sm text-primary underline"
             >
-              <Tabs
-                value={colorTab}
-                onValueChange={setTab}
-                orientation={compactFloorplan ? 'vertical' : 'horizontal'}
-                className={cn(
-                  'min-h-0 min-w-0 flex-1',
-                  compactFloorplan
-                    ? 'grid grid-rows-[minmax(0,1fr)] grid-cols-[auto_minmax(0,1fr)] items-stretch gap-2'
-                    : 'flex flex-col',
-                )}
-              >
-                <TabsList
-                  aria-label="Color controls"
-                  className={
-                    compactFloorplan
-                      ? 'h-auto min-h-0 flex-col items-stretch justify-start overflow-y-auto gap-0.5 [&>button]:min-h-8 [&>button]:justify-start [&>button]:px-1.5 [&>button]:text-xs'
-                      : 'mb-3 min-h-10 flex-nowrap! justify-start overflow-x-auto'
-                  }
-                >
-                  {hasChromaticColor && (
-                    <>
-                      <TabsTrigger value="wheel" className="shrink-0">
-                        Wheel
-                      </TabsTrigger>
-                      <TabsTrigger value="swatches" className="shrink-0">
-                        Swatches
-                      </TabsTrigger>
-                      <TabsTrigger value="image" className="shrink-0">
-                        Image
-                      </TabsTrigger>
-                      <TabsTrigger value="sliders" className="shrink-0">
-                        Sliders
-                      </TabsTrigger>
-                    </>
-                  )}
-                  {temperatureDevices.length > 0 && (
-                    <TabsTrigger value="temperature" className="shrink-0">
-                      Temperature
-                    </TabsTrigger>
-                  )}
-                </TabsList>
-
-                <div
-                  className={cn(
-                    compactFloorplan ? 'rounded-xl p-2' : 'rounded-2xl p-3',
-                    'min-h-0 min-w-0 flex-1 overflow-hidden border border-border/60',
-                  )}
-                >
-                  <TabsContent
-                    value="temperature"
-                    className="m-0 flex h-full min-h-0 flex-col overflow-y-auto"
-                  >
-                    <div className="my-auto">
-                      <DeviceColorMode
-                        key={deviceModalState.join(',')}
-                        devices={temperatureDevices}
-                        connected={connected}
-                        onChange={setLiveState}
-                        temperatureOnly
-                      />
-                    </div>
-                  </TabsContent>
-                  <TabsContent
-                    value="wheel"
-                    className="m-0 flex h-full min-h-0 flex-col gap-3"
-                  >
-                    <ColorWheelTab
-                      color={deviceModalColor ?? black}
-                      brightness={deviceModalBrightness ?? 1}
-                      onChange={throttledSetDeviceColor}
-                      onChangeComplete={throttledSetDeviceColor}
-                      open={deviceModalOpen}
-                    />
-                  </TabsContent>
-                  <TabsContent
-                    value="swatches"
-                    className="m-0 flex h-full min-h-0 flex-col"
-                  >
-                    <SwatchesTab
-                      color={deviceModalColor ?? black}
-                      brightness={deviceModalBrightness ?? 1}
-                      onChange={throttledSetDeviceColor}
-                      onChangeComplete={throttledSetDeviceColor}
-                      open={deviceModalOpen}
-                    />
-                  </TabsContent>
-                  <TabsContent
-                    value="image"
-                    className="m-0 flex h-full min-h-0 flex-col overflow-y-auto"
-                  >
-                    <ImageTab
-                      color={deviceModalColor ?? black}
-                      brightness={deviceModalBrightness ?? 1}
-                      onChange={throttledSetDeviceColor}
-                      open={deviceModalOpen}
-                      deviceKeys={deviceModalState}
-                    />
-                  </TabsContent>
-                  <TabsContent
-                    value="sliders"
-                    className="m-0 flex h-full min-h-0 flex-col overflow-y-auto [&_input[type=range]]:min-w-0 [&_input:not([type=range])]:w-16 [&_input:not([type=range])]:shrink-0"
-                  >
-                    <div className="my-auto flex shrink-0 flex-col gap-3">
-                      <SlidersTab
-                        color={deviceModalColor ?? black}
-                        brightness={deviceModalBrightness ?? 1}
-                        onChange={throttledSetDeviceColor}
-                        onChangeComplete={throttledSetDeviceColor}
-                        open={deviceModalOpen}
-                      />
-                    </div>
-                  </TabsContent>
-                </div>
-              </Tabs>
-            </fieldset>
-          </ColorSection>
+              Timer · {t.definition.name}
+            </Link>
+          ))}
+        <div className="flex flex-wrap gap-3 text-sm">
+          {modal.state.length === 1 && (
+            <Link
+              to={`/config/timers?device=${encodeURIComponent(modal.state[0])}`}
+              onClick={close}
+              className="text-primary underline"
+            >
+              Schedule a timer
+            </Link>
+          )}
+          {modal.state.length === 1 && (
+            <Link
+              className="text-primary underline"
+              to={configItemHref('device', modal.state[0])}
+              onClick={close}
+            >
+              Device settings
+            </Link>
+          )}
+          {activeGroup && (
+            <Link
+              className="text-primary underline"
+              to={`/groups/${encodeURIComponent(activeGroup[0])}`}
+              onClick={close}
+            >
+              Room controls
+            </Link>
+          )}
+        </div>
+        {advanced && (
+          <p className="break-all font-mono text-[10px] text-muted-foreground">
+            {modal.state.join(' · ')}
+          </p>
         )}
       </div>
     </ResponsiveOverlay>
   );
-};
+}

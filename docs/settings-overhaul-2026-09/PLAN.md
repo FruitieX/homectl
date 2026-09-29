@@ -27,9 +27,15 @@ This proposal supersedes the interaction recommendations in `../settings-ux-rede
 | Device attention | Integration reporting defaults, per-device overrides, and an Ignore option |
 | Consistency | Shared action placement, styles and spacing across pages; no promotional slogans |
 | New routine default | **Enable after creating is checked**; creation makes the routine ready to run |
+| Everyday room detail (Study 05) | **Controls first** is the default; retain the floorplan preview and full-map navigation |
+| Everyday dashboard (Study 05) | Keep the current widget system; add separate **Rooms**, **Scenes** and **Indoor climate** widgets using the mockup designs, configurable alongside existing widgets |
 | Work now | Implement the entire approved plan; verify against current schemas and the acceptance requirements |
 
 The user approved the desktop and phone prototype after study 02, explicitly endorsing the color circle and brightness ring. The baseline is settled. Study 03 now demonstrates complex editor behavior, creation and recoverable failures; see FINAL-PASS.md for behavior and source-backed corrections. The approved phone routine structure should not be replaced merely to make its page shorter.
+
+Study 05 extends the design to everyday views. Its confirmed choices and proposed
+widget option coverage are recorded in [EVERYDAY-REVIEW.md](EVERYDAY-REVIEW.md).
+These follow-up designs do not change the outstanding settings acceptance gates.
 
 ## Product thesis
 

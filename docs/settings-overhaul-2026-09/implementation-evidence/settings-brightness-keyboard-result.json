@@ -1,0 +1,12 @@
+{
+ "driven": {
+  "passed": 4,
+  "checks": [
+   "Native radio and numeric editing retain intermediate input",
+   "Tab/Enter operates brightness step controls",
+   "200% CSS enlargement keeps inputs in view",
+   "Keyboard Discard restores the draft without configuration writes"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/devices/detail/zigbee2mqtt/living_room_lamp?calibration=brightness","viewport":{"width":1280,"height":900},"problems":[]}

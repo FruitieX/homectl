@@ -33,7 +33,15 @@ import {
   useGroupsState,
   useScenesState,
 } from '@/hooks/websocket';
-import { useHelpers, useIntegrations, useRoutines } from '@/hooks/useConfig';
+import {
+  useDeviceDisplayNames,
+  useHelpers,
+  useIntegrations,
+  useRoutines,
+} from '@/hooks/useConfig';
+import { configItemHref } from '@/lib/configItemHref';
+import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
+import { getSensorDetails } from '@/lib/sensorInteraction';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { rankByPreference } from '@/lib/preferences';
 import { cn } from '@/lib/cn';
@@ -125,6 +133,14 @@ export function CommandPalette() {
   const openAssistant = useSetAtom(openAssistantPanelAtom);
 
   const devicesState = useDevicesState();
+  const { data: nameOverrides } = useDeviceDisplayNames();
+  const names = useMemo(
+    () =>
+      Object.fromEntries(
+        nameOverrides.map((row) => [row.device_key, row.display_name]),
+      ),
+    [nameOverrides],
+  );
   const scenesState = useScenesState();
   const groupsState = useGroupsState();
   const { data: routines } = useRoutines();
@@ -287,19 +303,25 @@ export function CommandPalette() {
 
     for (const [key, device] of Object.entries(devicesState ?? {})) {
       if (!device) continue;
-      const label = getDeviceDisplayLabel(device);
+      const label = getDeviceDisplayLabel(device, names);
+      const state = devicePreviewState(device);
+      const sensor = getSensorDetails(device);
       result.push({
         key: `device:${key}`,
         label,
-        description: `${device.integration_id} · ${device.id}`,
+        description: state
+          ? `${state.power ? 'On' : 'Off'}${state.power && state.brightness !== null ? ` · ${Math.round(state.brightness * 100)}%` : ''} · Device settings`
+          : sensor.kind !== 'unknown' && sensor.kind !== 'state'
+            ? `${String(sensor.value)} · Sensor settings`
+            : 'Device settings',
         keywords: `${key} ${device.id} ${device.integration_id} device`,
         group: 'Devices',
-        icon: <Lightbulb />,
-        run: () =>
-          go(
-            `device:${key}`,
-            `/config/devices/detail?key=${encodeURIComponent(key)}`,
-          ),
+        icon: state ? (
+          <LiveStatePreview states={[state]} size={24} />
+        ) : (
+          <Activity />
+        ),
+        run: () => go(`device:${key}`, configItemHref('device', key)),
       });
     }
 
@@ -382,6 +404,7 @@ export function CommandPalette() {
   }, [
     density,
     devicesState,
+    names,
     go,
     groupsState,
     helpers,

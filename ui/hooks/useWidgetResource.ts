@@ -4,6 +4,7 @@ export function useWidgetResource<T>(
   url: string,
   refreshMs = 60000,
   enabled = true,
+  parse?: (value: unknown) => T,
 ) {
   return useQuery<T>({
     queryKey: ['widget-resource', url],
@@ -17,7 +18,8 @@ export function useWidgetResource<T>(
         });
         if (!response.ok)
           throw new Error(`Data request failed (${response.status})`);
-        return (await response.json()) as T;
+        const value: unknown = await response.json();
+        return parse ? parse(value) : (value as T);
       } finally {
         clearTimeout(timer);
       }

@@ -121,6 +121,22 @@ const roundToHour = (date: Date) => {
   );
 };
 
+function parseWeatherResponse(value: unknown): WeatherResponse {
+  const response = value as WeatherResponse | null;
+  if (
+    !Array.isArray(response?.properties?.timeseries) ||
+    response.properties.timeseries.some(
+      (series) =>
+        !series ||
+        !Number.isFinite(parseTime(series.time).getTime()) ||
+        !Number.isFinite(series.data?.instant?.details?.air_temperature) ||
+        !Number.isFinite(series.data?.instant?.details?.wind_speed),
+    )
+  )
+    throw new Error('The weather source returned an invalid forecast.');
+  return response;
+}
+
 const getCurrentAndFutureSeries = (weather: WeatherResponse | null) => {
   const currentHour = roundToHour(new Date());
   return (
@@ -347,6 +363,8 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
   const weatherQuery = useWidgetResource<WeatherResponse>(
     weatherUrl,
     Math.max(30, refreshSeconds) * 1000,
+    true,
+    parseWeatherResponse,
   );
   const weather = weatherQuery.data ?? null;
   const showWidgetForecast = getDashboardWidgetOptionBoolean(
@@ -398,7 +416,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
           <CardContent className="flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
             <WidgetHeading
               icon={<CloudSun />}
-              label="Weather"
+              label={widget?.title || 'Weather'}
               compactValue={
                 currentTemperature !== undefined ? (
                   <span className="dashboard-weather-heading-value">
@@ -453,6 +471,13 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
                 Loading weather…
               </p>
             )}
+            {!weatherQuery.isPending &&
+              !weatherQuery.isError &&
+              !currentSeries && (
+                <p className="dashboard-widget-status text-xs text-muted-foreground">
+                  No upcoming forecast is available.
+                </p>
+              )}
           </CardContent>
         </Button>
       </WidgetCard>
@@ -468,7 +493,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
             value={String(activeTab)}
             onValueChange={(value) => setActiveTab(Number(value))}
           >
-            <TabsList className="grid h-11 w-full grid-cols-2 rounded-2xl bg-muted/60 p-1.5">
+            <TabsList className="grid h-11 w-full grid-cols-2 rounded-lg bg-muted/60 p-1.5">
               <TabsTrigger value="0">Table</TabsTrigger>
               <TabsTrigger value="1">Charts</TabsTrigger>
             </TabsList>
@@ -532,7 +557,7 @@ function WeatherHourlyPanel({
         return (
           <Fragment key={currentDate.toISOString()}>
             {index === 0 && (
-              <div className="sticky top-0 z-20 flex flex-row items-center gap-2 rounded-2xl border border-border/60 bg-popover/95 px-4 py-3 text-base shadow-md backdrop-blur">
+              <div className="sticky top-0 z-20 flex flex-row items-center gap-2 rounded-lg border border-border/60 bg-popover/95 px-4 py-3 text-base shadow-md backdrop-blur">
                 <span className="w-16 md:w-24 text-sm text-muted-foreground flex-shrink-0">
                   Time
                 </span>
@@ -559,7 +584,7 @@ function WeatherHourlyPanel({
               </div>
             )}
 
-            <div className="content-visibility-row flex flex-row items-center gap-3 rounded-2xl px-3 py-2 transition-colors hover:bg-muted/45">
+            <div className="content-visibility-row flex flex-row items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-muted/45">
               <div className="flex w-16 md:w-24 flex-col items-start text-xl md:text-2xl flex-shrink-0">
                 <span>
                   {currentDate.toLocaleTimeString('fi-FI', {
@@ -619,7 +644,7 @@ function WeatherLongTermPanel({
         <h3 className="mb-2 text-sm font-semibold">Temperature</h3>
         <ResponsiveChart
           height={250}
-          className="overflow-hidden rounded-2xl bg-muted/40"
+          className="overflow-hidden rounded-lg bg-muted/40"
         >
           {({ width, height }) => (
             <WeatherChart
@@ -637,7 +662,7 @@ function WeatherLongTermPanel({
         <h3 className="mb-2 text-sm font-semibold">Precipitation</h3>
         <ResponsiveChart
           height={250}
-          className="overflow-hidden rounded-2xl bg-muted/40"
+          className="overflow-hidden rounded-lg bg-muted/40"
         >
           {({ width, height }) => (
             <WeatherChart
@@ -655,7 +680,7 @@ function WeatherLongTermPanel({
         <h3 className="mb-2 text-sm font-semibold">Wind</h3>
         <ResponsiveChart
           height={250}
-          className="overflow-hidden rounded-2xl bg-muted/40"
+          className="overflow-hidden rounded-lg bg-muted/40"
         >
           {({ width, height }) => (
             <WeatherChart

@@ -106,14 +106,6 @@ const ColorWheelTab = ({
     },
     [bri, onChange],
   );
-  const handleBrightnessChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const value = Number(event.currentTarget.value) / 100;
-      setBri(value);
-      onChange?.(latestColor.current, value);
-    },
-    [onChange],
-  );
   const complete = useCallback(
     () => onChangeComplete?.(latestColor.current, bri),
     [bri, onChangeComplete],
@@ -123,7 +115,7 @@ const ColorWheelTab = ({
     <>
       <div
         ref={wheelContainer}
-        className="flex min-h-0 flex-1 items-center justify-center overflow-hidden"
+        className="flex min-h-48 flex-1 items-center justify-center overflow-hidden"
       >
         {wheelSize > 0 && (
           <Wheel
@@ -137,28 +129,11 @@ const ColorWheelTab = ({
           />
         )}
       </div>
-      <ColorSlider
-        label="Brightness"
-        channel="brightness"
-        color={Color.hsv(hsva.h, hsva.s, 100)}
-        onChange={handleBrightnessChange}
-        onTouchEnd={complete}
-        onMouseUp={complete}
-        min={0}
-        max={100}
-        value={bri * 100}
-      />
     </>
   );
 };
 
-const SwatchesTab = ({
-  brightness,
-  color,
-  onChange,
-  onChangeComplete,
-  open,
-}: ColorTabProps) => {
+const SwatchesTab = ({ brightness, color, onChange, open }: ColorTabProps) => {
   const [hex, setHex] = useState(color.value(100).hex());
   const [bri, setBri] = useState(brightness);
   const latestColor = useRef<Color>(color);
@@ -182,35 +157,12 @@ const SwatchesTab = ({
     },
     [bri, onChange],
   );
-  const handleBrightnessChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const value = Number(event.currentTarget.value) / 100;
-      setBri(value);
-      onChange?.(latestColor.current, value);
-    },
-    [onChange],
-  );
-  const complete = useCallback(
-    () => onChangeComplete?.(latestColor.current, bri),
-    [bri, onChangeComplete],
-  );
 
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         <Circle colors={presetColors} color={hex} onChange={handleChange} />
       </div>
-      <ColorSlider
-        label="Brightness"
-        channel="brightness"
-        color={Color(hex)}
-        onChange={handleBrightnessChange}
-        onTouchEnd={complete}
-        onMouseUp={complete}
-        min={0}
-        max={100}
-        value={bri * 100}
-      />
     </>
   );
 };
@@ -335,25 +287,6 @@ const SlidersTab = ({
         />
         {input('sat-input', 'Saturation percent', sat, (value) =>
           update(hue, value, bri),
-        )}
-      </div>
-      <div className="flex items-center">
-        <ColorSlider
-          label="Brightness"
-          className="flex-1"
-          channel="brightness"
-          color={Color.hsv(hue, sat, 100)}
-          onChange={(event) =>
-            update(hue, sat, Number(event.currentTarget.value) / 100)
-          }
-          onTouchEnd={complete}
-          onMouseUp={complete}
-          min={0}
-          max={100}
-          value={bri * 100}
-        />
-        {input('bri-input', 'Brightness percent', bri * 100, (value) =>
-          update(hue, sat, value / 100),
         )}
       </div>
     </>
@@ -573,21 +506,23 @@ export function DeviceColorTabs({
   const temperatureDevices = colorDevices.filter(
     (device) =>
       'Controllable' in device.data &&
-      device.data.Controllable.capabilities.ct !== null,
+      Boolean(device.data.Controllable.capabilities.ct),
   );
-  const hasChromaticColor = colorDevices.some(
+  const chromaticDevices = colorDevices.filter(
     (device) =>
       'Controllable' in device.data &&
       (device.data.Controllable.capabilities.hs ||
         device.data.Controllable.capabilities.xy ||
         device.data.Controllable.capabilities.rgb),
   );
-  const first = colorDevices[0];
+  const hasChromaticColor = chromaticDevices.length > 0;
+  const first = chromaticDevices[0] ?? colorDevices[0];
   const deviceColor = first ? getColor(first.data) : Color('black');
   const deviceBrightness = first ? getBrightness(first.data) : 1;
   const [tab, setTab] = useState(hasChromaticColor ? 'sliders' : 'temperature');
-  const colorTab =
-    tab === 'temperature' && temperatureDevices.length === 0
+  const colorTab = !hasChromaticColor
+    ? 'temperature'
+    : tab === 'temperature' && temperatureDevices.length === 0
       ? hasChromaticColor
         ? 'sliders'
         : ''
@@ -599,15 +534,33 @@ export function DeviceColorTabs({
   }, [colorTab, hasChromaticColor]);
 
   const setColor = useCallback(
-    (color: Color, brightness: number) => {
-      colorDevices.forEach((device) => onChange(device, color, brightness));
+    (color: Color) => {
+      if (!connected) return;
+      chromaticDevices.forEach((device) =>
+        onChange(device, color, getBrightness(device.data)),
+      );
     },
-    [colorDevices, onChange],
+    [chromaticDevices, onChange, connected],
   );
 
   if (!colorDevices.length) return null;
   return (
-    <div className="rounded-xl border border-border/60 p-3">
+    <fieldset
+      disabled={!connected}
+      className="min-w-0 space-y-2 border-t border-border pt-3"
+    >
+      <legend className="text-sm font-semibold">Color</legend>
+      {(colorTab === 'temperature' ? temperatureDevices : chromaticDevices)
+        .length !== devices.length && (
+        <p className="text-xs text-muted-foreground">
+          Applies to{' '}
+          {
+            (colorTab === 'temperature' ? temperatureDevices : chromaticDevices)
+              .length
+          }{' '}
+          compatible devices.
+        </p>
+      )}
       <Tabs value={colorTab} onValueChange={setTab} className="flex flex-col">
         <TabsList className="min-h-10 flex-nowrap! justify-start overflow-x-auto">
           {hasChromaticColor && (
@@ -632,7 +585,7 @@ export function DeviceColorTabs({
             </TabsTrigger>
           )}
         </TabsList>
-        <div className="mt-3 min-h-0 rounded-2xl border border-border/60 p-3">
+        <div className="mt-3 min-h-0">
           <TabsContent
             value="wheel"
             className="m-0 flex min-h-72 flex-col gap-3"
@@ -673,7 +626,7 @@ export function DeviceColorTabs({
             <ImageTab
               color={deviceColor}
               brightness={deviceBrightness}
-              devices={colorDevices}
+              devices={chromaticDevices}
               onChange={setColor}
               onApply={onChange}
               open={open}
@@ -689,7 +642,7 @@ export function DeviceColorTabs({
           </TabsContent>
         </div>
       </Tabs>
-    </div>
+    </fieldset>
   );
 }
 

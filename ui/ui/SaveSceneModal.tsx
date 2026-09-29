@@ -1,177 +1,141 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
-import { useDevicesState, useWebsocket } from '@/hooks/websocket';
-import { WebSocketRequest } from '@/bindings/WebSocketRequest';
-import { SceneConfig } from '@/bindings/SceneConfig';
-import { SceneDeviceState } from '@/bindings/SceneDeviceState';
+import { useDevicesState } from '@/hooks/websocket';
 import { useSelectedDevices } from '@/hooks/selectedDevices';
-import { SceneDevicesSearchConfig } from '@/bindings/SceneDevicesSearchConfig';
-import { ExcludeUndefined } from 'utils/excludeUndefined';
+import { useAppConfig } from '@/hooks/appConfig';
+import { useScenes, type Scene } from '@/hooks/useConfig';
+import { captureSceneDeviceState } from '@/lib/sceneCapture';
+import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
+import { entityDraftStore } from '@/lib/entityDraft';
+import { suggestId } from '@/lib/groupGraph';
+import { createUuid } from '@/lib/uuid';
+import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { Label } from '@/ui/primitives/label';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 
-type Props = {
-  visible: boolean;
-  close: () => void;
-};
-
-const Component = (props: Props) => {
-  const ws = useWebsocket();
+/** Capture is an unsaved canonical editor draft, never a fire-and-forget write. */
+export const SaveSceneModal = () => {
+  const { open, setOpen } = useSaveSceneModalState();
   const devices = useDevicesState();
-
-  const { setOpen: setSaveSceneModalOpen } = useSaveSceneModalState();
-
-  const [_selectedDevices, setSelectedDevices] = useSelectedDevices();
-  const selectedDevices = _selectedDevices.flatMap((d) => {
-    const device = devices?.[d];
-    if (device !== null && device !== undefined) {
-      return [device];
-    }
-    return [];
-  });
-
-  const { visible, close } = props;
-
-  const [value, setValue] = useState('');
-
+  const [selectedKeys] = useSelectedDevices();
+  const { apiEndpoint } = useAppConfig();
+  const scenes = useScenes();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [name, setName] = useState('');
   useEffect(() => {
-    if (visible) {
-      setValue('');
-    }
-  }, [visible]);
-
-  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setValue(event.currentTarget.value);
-  };
-
-  const submit = (event: FormEvent) => {
+    if (open) setName('');
+  }, [open]);
+  const selected = [...new Set(selectedKeys)].flatMap((key) => {
+    const device = devices?.[key];
+    return device && 'Controllable' in device.data && !isDeviceReadOnly(device)
+      ? [{ key, device, capture: captureSceneDeviceState(device) }]
+      : [];
+  });
+  const skipped = new Set(selectedKeys).size - selected.length;
+  function review(event: FormEvent) {
     event.preventDefault();
-
-    const sceneName = value.trim();
-    if (!sceneName) {
-      return;
-    }
-
-    const devicesByKey: (readonly [
-      { integrationId: string; name: string },
-      SceneDeviceState,
-    ])[] = selectedDevices.flatMap((device) => {
-      if ('Controllable' in device.data) {
-        const light = device.data.Controllable;
-        let color = { h: 0, s: 0 };
-
-        if (
-          light.state.color !== null &&
-          'h' in light.state.color &&
-          's' in light.state.color
-        ) {
-          color = light.state.color;
-        }
-
-        const state: SceneDeviceState = {
-          power: light.state.power,
-          color,
-          brightness: light.state.brightness,
-          transition: null,
-        };
-
-        return [
-          [
-            {
-              integrationId: device.integration_id,
-              name: device.name,
-            },
-            state,
-          ] as const,
-        ];
-      }
-
-      return [];
+    if (!name.trim() || !selected.length) return;
+    const capture = createUuid();
+    const params = new URLSearchParams({
+      capture,
+      returnTo: location.pathname + location.search,
     });
-
-    const devicesByIntegration: ExcludeUndefined<SceneDevicesSearchConfig> = {};
-
-    devicesByKey.forEach(([deviceKey, state]) => {
-      if (devicesByIntegration[deviceKey.integrationId] === undefined) {
-        devicesByIntegration[deviceKey.integrationId] = {};
-      }
-
-      devicesByIntegration[deviceKey.integrationId][deviceKey.name] = state;
-    });
-
-    const config: SceneConfig = {
-      name: sceneName,
-      devices: devicesByIntegration,
-      groups: null,
+    const href = `/config/scenes/new?${params}`;
+    const key = `${apiEndpoint}/scenes/$new/${capture}`;
+    const empty: Scene = {
+      id: '',
+      name: '',
       hidden: false,
-      script: null,
+      device_states: {},
+      group_states: {},
     };
-
-    const msg: WebSocketRequest = {
-      EventMessage: {
-        DbStoreScene: {
-          scene_id: sceneName,
-          config,
-        },
-      },
-    };
-
-    const data = JSON.stringify(msg);
-    ws?.send(data);
-    setSaveSceneModalOpen(false);
-    setSelectedDevices([]);
-  };
-
+    entityDraftStore.sync(key, empty, { label: 'New scene', href });
+    entityDraftStore.change(key, {
+      ...empty,
+      id: suggestId(
+        name.trim(),
+        scenes.data.map((s) => s.id),
+      ),
+      name: name.trim(),
+      device_states: Object.fromEntries(
+        selected.map(({ key, capture }) => [key, capture.state]),
+      ),
+    });
+    setOpen(false);
+    navigate(href);
+  }
   return (
     <ResponsiveOverlay
-      open={visible}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
-          close();
-        }
-      }}
-      title="Save new scene"
-      description="Create a scene from the currently selected controllable devices."
+      open={open}
+      onOpenChange={setOpen}
+      title="Capture scene"
+      description="Review the selected devices’ requested states before creating a scene. This does not change your lights."
     >
-      <form className="space-y-5 px-5 pb-5 md:px-0 md:pb-0" onSubmit={submit}>
+      <form className="space-y-4 px-5 pb-5 md:px-0 md:pb-0" onSubmit={review}>
         <div className="space-y-2">
-          <Label htmlFor="scene-name">Scene name</Label>
+          <Label htmlFor="capture-scene-name">Scene name</Label>
           <Input
-            id="scene-name"
+            id="capture-scene-name"
             autoFocus
-            onChange={handleChange}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             placeholder="Evening lights"
-            value={value}
           />
-          <p className="text-sm text-muted-foreground">
-            {selectedDevices.length} selected{' '}
-            {selectedDevices.length === 1 ? 'device' : 'devices'} will be saved.
-          </p>
         </div>
-
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="ghost" onClick={close}>
+        <div className="max-h-72 divide-y divide-border overflow-y-auto">
+          {selected.map(({ key, device, capture }) => (
+            <div key={key} className="flex items-start gap-3 py-2">
+              <LiveStatePreview states={[devicePreviewState(device)]} />
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{device.name}</p>
+                {capture.notes.map((note) => (
+                  <p key={note} className="text-xs text-muted-foreground">
+                    {note}
+                  </p>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {selected.length} controllable devices captured by stable device ID.
+          {skipped > 0
+            ? ` ${skipped} unavailable, sensor or read-only selections skipped.`
+            : ''}
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button type="submit" disabled={value.trim().length === 0}>
-            Save scene
+          <Button
+            type="submit"
+            disabled={
+              !name.trim() ||
+              !selected.length ||
+              scenes.loading ||
+              Boolean(scenes.error)
+            }
+          >
+            Review scene
           </Button>
         </div>
+        {scenes.error && (
+          <p role="alert" className="text-sm text-destructive">
+            Could not load existing scenes.{' '}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => void scenes.refetch()}
+            >
+              Retry
+            </button>
+          </p>
+        )}
       </form>
     </ResponsiveOverlay>
-  );
-};
-
-export const SaveSceneModal = () => {
-  const { open: saveSceneModalOpen, setOpen: setSaveSceneModalOpen } =
-    useSaveSceneModalState();
-
-  return (
-    <Component
-      visible={saveSceneModalOpen}
-      close={() => setSaveSceneModalOpen(false)}
-    />
   );
 };

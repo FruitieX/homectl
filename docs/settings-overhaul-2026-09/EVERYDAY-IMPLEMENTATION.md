@@ -47,6 +47,41 @@ the entire overhaul is finished.
 
 ## Work log
 
+### Everyday UI delivery checkpoint — 2026-09-29
+
+The working UI is now being delivered with its shared dependencies: controls-first
+rooms and embedded previews, Rooms/Scenes/Indoor climate widgets, the visual widget
+creator, generic timer UI, shared live controls/scene capture, sensor ordering,
+map inspector/placement changes, retained calibration editors and recovery surfaces.
+This is a delivery checkpoint; unchecked cross-view acceptance gates above remain
+required and are prioritized in WORK-QUEUE.md.
+
+Fresh evidence under `implementation-evidence/everyday/`:
+
+- 21 native keyboard/preview checks at 1440px and 390px cover all 17 widget types,
+  finite previews while dimensions are incomplete, blocked invalid creation,
+  inert controls and sandboxed embedded-page previews. Weather and timetable
+  source shape failures become unavailable states rather than rendering crashes.
+- Eight widget creation checks at each size cover retained type drafts, no early
+  writes and the exact created record's title, type and dimensions. Headings honor
+  configured titles; private source metadata is retained for existing previews.
+- Eight bulk calibration checks at each size verify captured scope across
+  navigation, Discard, exact removal/assignment and unchanged profile data.
+  Selection follows the URL even when entering from the same Devices route.
+- Ten phone color-calibration checks include incomplete input retention and
+  Reset clearing that point's raw edits. Earlier brightness lifecycle/keyboard
+  evidence remains in IMPLEMENTATION.md.
+- Five native phone chart checks cover dated readings, Home/End navigation,
+  dismissal without closing details, touch persistence and 200% zoom.
+- Type checking, lint and production build pass. All 214 UI unit tests pass.
+  Screenshot comparisons are browseable from
+  `implementation-evidence/comparison/index.html`.
+
+Still open: room/dashboard variant review, map placement/undo and inspector
+acceptance, remaining sensor/re-enable checks, timer mode/target review, chart
+empty/error visuals, and final shared navigation/recovery acceptance. No physical
+household device was changed by these fixture journeys.
+
 ### Server checkpoint — 2026-09-29
 
 Generic server timers (countdown, scheduled, ready-by; Helsinki migration),

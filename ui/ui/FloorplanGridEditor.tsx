@@ -2,6 +2,7 @@ import {
   getFloorplanGroupFill,
   getFloorplanGroupStroke,
 } from '@/lib/floorplanGroupColor';
+import { Lightbulb, MapPin, Radio, X } from 'lucide-react';
 import {
   getFloorplanCellBounds,
   getFloorplanCellIndex,
@@ -782,6 +783,23 @@ export function FloorplanGridEditor({
   >('all');
   const [deviceGroupFilter, setDeviceGroupFilter] = useState('all');
   const [viewZoom, setViewZoom] = useState(1);
+  const [placementTab, setPlacementTab] = useState<'unplaced' | 'placed'>(
+    'unplaced',
+  );
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [viewportSize, setViewportSize] = useState({ width: 800, height: 500 });
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const observer = new ResizeObserver(() =>
+      setViewportSize({
+        width: Math.max(1, viewport.clientWidth - 16),
+        height: Math.max(1, viewport.clientHeight - 16),
+      }),
+    );
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
   const [panning, setPanning] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const panGesture = useRef<{
@@ -861,10 +879,21 @@ export function FloorplanGridEditor({
       updateLineAnchor(null);
     }
   }, [height, updateLineAnchor, width]);
+  const baseMetrics = getFloorplanRenderMetrics(grid, backgroundImage);
+  const fitScale = Math.min(
+    viewportSize.width / baseMetrics.width,
+    viewportSize.height / baseMetrics.height,
+  );
+  const displayWidth = baseMetrics.width * fitScale * viewZoom;
+  const displayHeight = baseMetrics.height * fitScale * viewZoom;
   const renderMetrics = useMemo(() => {
     const metrics = getFloorplanRenderMetrics(grid, backgroundImage);
     const scale = Math.min(
-      Math.max(1, 1280 / Math.max(metrics.width, metrics.height)),
+      Math.max(
+        1,
+        1280 / Math.max(metrics.width, metrics.height),
+        fitScale * viewZoom * (window.devicePixelRatio || 1),
+      ),
       4096 / Math.max(metrics.width, metrics.height),
       Math.sqrt(8_000_000 / (metrics.width * metrics.height)),
     );
@@ -874,7 +903,7 @@ export function FloorplanGridEditor({
       tileWidth: metrics.tileWidth * scale,
       tileHeight: metrics.tileHeight * scale,
     };
-  }, [grid, backgroundImage]);
+  }, [grid, backgroundImage, fitScale, viewZoom]);
   const canvasWidth = Math.round(renderMetrics.width);
   const canvasHeight = Math.round(renderMetrics.height);
   const columnBounds = useMemo(
@@ -1945,85 +1974,131 @@ export function FloorplanGridEditor({
             )}
           </div>
 
-          <div className="text-sm text-muted-foreground">
-            Matching devices: {filteredAvailableDevices.length} total ·{' '}
-            {unplacedDevices.length} unplaced · {placedDevices.length} placed
-          </div>
-
-          <div className="max-h-56 overflow-y-auto rounded-2xl border border-border bg-muted/30 p-2">
-            <div className="flex flex-wrap gap-2">
-              {unplacedDevices.map((device) => (
-                <Button
-                  key={device.key}
-                  variant={
-                    selectedDevice === device.key ? 'default' : 'outline'
-                  }
-                  size="sm"
-                  onClick={() => setSelectedDevice(device.key)}
-                >
-                  {device.name}
-                </Button>
-              ))}
-              {unplacedDevices.length === 0 && availableDevices.length > 0 && (
-                <span className="px-1 py-2 text-sm text-muted-foreground">
-                  {filteredAvailableDevices.length === 0
-                    ? 'No devices match the current filters.'
-                    : 'All matching devices are already placed.'}
+          <div className="overflow-hidden rounded-lg border border-border bg-card">
+            <div
+              className="flex gap-1 border-b border-border bg-muted/30 p-1"
+              role="group"
+              aria-label="Device placements"
+            >
+              <Button
+                variant={placementTab === 'unplaced' ? 'secondary' : 'ghost'}
+                size="sm"
+                aria-pressed={placementTab === 'unplaced'}
+                onClick={() => setPlacementTab('unplaced')}
+              >
+                To place{' '}
+                <span className="text-muted-foreground">
+                  {unplacedDevices.length}
                 </span>
-              )}
-              {availableDevices.length === 0 && (
-                <span className="px-1 py-2 text-sm text-muted-foreground">
-                  No devices available.
+              </Button>
+              <Button
+                variant={placementTab === 'placed' ? 'secondary' : 'ghost'}
+                size="sm"
+                aria-pressed={placementTab === 'placed'}
+                onClick={() => setPlacementTab('placed')}
+              >
+                Placed{' '}
+                <span className="text-muted-foreground">
+                  {placedDevices.length}
                 </span>
+              </Button>
+            </div>
+            <div className="grid max-h-48 gap-1 overflow-y-auto p-1 sm:grid-cols-2 lg:grid-cols-3">
+              {(placementTab === 'unplaced'
+                ? unplacedDevices.map((d) => ({
+                    deviceKey: d.key,
+                    deviceName: d.name,
+                  }))
+                : placedDevices
+              ).map((d) => {
+                const placement = devices.find(
+                  (p) => p.deviceKey === d.deviceKey,
+                );
+                const info = availableDeviceByKey[d.deviceKey];
+                return (
+                  <div
+                    key={d.deviceKey}
+                    className={`flex min-w-0 items-center rounded-md border ${selectedDevice === d.deviceKey ? 'border-primary bg-primary/10' : 'border-transparent hover:bg-muted/50'}`}
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={selectedDevice === d.deviceKey}
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md p-2 text-left focus-visible:outline-2 focus-visible:outline-ring"
+                      onClick={() => {
+                        setSelectedDevice(d.deviceKey);
+                        if (placement)
+                          setHoveredCell({ x: placement.x, y: placement.y });
+                      }}
+                    >
+                      {info?.type === 'sensor' ? (
+                        <Radio className="size-4 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <Lightbulb className="size-4 shrink-0 text-muted-foreground" />
+                      )}
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">
+                          {d.deviceName}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {placement
+                            ? `Column ${placement.x + 1} · Row ${placement.y + 1}`
+                            : 'Select, then place on canvas'}
+                        </span>
+                      </span>
+                    </button>
+                    {placement && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-11 shrink-0 rounded-md"
+                        aria-label={`Remove placement for ${d.deviceName}`}
+                        onClick={() => {
+                          const currentGrid = cloneGrid(gridRef.current);
+                          if (
+                            applyDiscreteChange(
+                              removeDeviceFromGrid(currentGrid, d.deviceKey),
+                              currentGrid,
+                            ) &&
+                            selectedDevice === d.deviceKey
+                          )
+                            setSelectedDevice(null);
+                        }}
+                      >
+                        <X className="size-4" />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+              {!(placementTab === 'unplaced' ? unplacedDevices : placedDevices)
+                .length && (
+                <p className="p-3 text-sm text-muted-foreground sm:col-span-2 lg:col-span-3">
+                  {deviceSearch
+                    ? 'No matching devices.'
+                    : placementTab === 'unplaced'
+                      ? 'All available devices are placed.'
+                      : 'No devices placed yet.'}
+                </p>
               )}
             </div>
           </div>
-          {devices.length > 0 && (
-            <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
-              <span className="text-sm text-muted-foreground">Placed:</span>
-              {placedDevices.map((d) => (
-                <div
-                  key={d.deviceKey}
-                  className="inline-flex rounded-lg border border-border"
-                >
-                  <Button
-                    variant={
-                      selectedDevice === d.deviceKey ? 'secondary' : 'ghost'
-                    }
-                    size="sm"
-                    aria-pressed={selectedDevice === d.deviceKey}
-                    onClick={() => setSelectedDevice(d.deviceKey)}
-                  >
-                    {d.deviceName}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Remove placement for ${d.deviceName}`}
-                    onClick={() => {
-                      const currentGrid = cloneGrid(gridRef.current);
-                      const nextGrid = removeDeviceFromGrid(
-                        currentGrid,
-                        d.deviceKey,
-                      );
-                      if (
-                        applyDiscreteChange(nextGrid, currentGrid) &&
-                        selectedDevice === d.deviceKey
-                      ) {
-                        setSelectedDevice(null);
-                      }
-                    }}
-                  >
-                    ✕
-                  </Button>
-                </div>
-              ))}
-              {placedDevices.length === 0 && (
-                <span className="text-sm text-muted-foreground">
-                  No placed devices match the current filters.
-                </span>
-              )}
-            </div>
+          {selectedDevice && (
+            <p className="flex items-center gap-2 text-sm" role="status">
+              <MapPin className="size-4 text-primary" />
+              <span>
+                <strong>
+                  {availableDeviceByKey[selectedDevice]?.name ?? selectedDevice}
+                </strong>{' '}
+                · Tap a position on the canvas, or use arrow keys and Enter.
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedDevice(null)}
+              >
+                Cancel
+              </Button>
+            </p>
           )}
         </div>
       )}
@@ -2033,14 +2108,21 @@ export function FloorplanGridEditor({
         className="flex flex-wrap items-center gap-2"
         aria-label="Canvas view controls"
       >
-        <Button variant="outline" size="sm" onClick={() => setViewZoom(1)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setViewZoom(1);
+            viewportRef.current?.scrollTo({ left: 0, top: 0 });
+          }}
+        >
           Fit
         </Button>
         <Button
           variant="outline"
           size="sm"
-          disabled={viewZoom <= 1}
-          onClick={() => setViewZoom((zoom) => Math.max(1, zoom - 0.5))}
+          disabled={viewZoom <= 0.5}
+          onClick={() => setViewZoom((zoom) => Math.max(0.5, zoom - 0.25))}
         >
           Zoom out
         </Button>
@@ -2064,7 +2146,10 @@ export function FloorplanGridEditor({
           Pan canvas
         </Button>
       </div>
-      <div className="max-h-[70vh] overflow-auto rounded-2xl border border-border bg-muted/40 p-2">
+      <div
+        ref={viewportRef}
+        className="h-[clamp(280px,65dvh,760px)] overflow-auto rounded-lg border border-border bg-muted/40 p-2"
+      >
         <canvas
           ref={canvasRef}
           width={canvasWidth}
@@ -2076,8 +2161,9 @@ export function FloorplanGridEditor({
           aria-describedby="floorplan-canvas-help"
           style={{
             maxWidth: 'none',
-            width: `${viewZoom * 100}%`,
-            height: 'auto',
+            width: displayWidth,
+            height: displayHeight,
+            marginInline: 'auto',
             touchAction: panning ? 'pan-x pan-y' : 'none',
           }}
           onContextMenu={(e) => e.preventDefault()}

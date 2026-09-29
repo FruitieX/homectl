@@ -4,6 +4,10 @@ import { useAppConfig } from './appConfig';
 // Widget type definitions
 export type WidgetType =
   | 'home_overview'
+  | 'timers'
+  | 'rooms'
+  | 'scenes'
+  | 'indoor_climate'
   | 'clock'
   | 'weather'
   | 'sensors'
@@ -19,6 +23,8 @@ export type WidgetType =
 
 export interface DashboardWidget {
   id: string;
+  layoutId?: string;
+  unsupportedType?: string;
   widget_type: WidgetType;
   title: string;
   position: number;
@@ -144,6 +150,43 @@ export const widgetRegistry: Record<
   WidgetType,
   { name: string; description: string; defaultOptions: Record<string, unknown> }
 > = {
+  timers: {
+    name: 'Timers',
+    description: 'Server countdowns, schedules and ready-by times',
+    defaultOptions: { timerSelection: 'all', timerIds: [] },
+  },
+  rooms: {
+    name: 'Rooms',
+    description: 'Room states, attention and direct room controls',
+    defaultOptions: {
+      roomSelection: 'all',
+      groupIds: [],
+      showPower: true,
+      showAttention: true,
+      showFloorplan: true,
+    },
+  },
+  scenes: {
+    name: 'Scenes',
+    description: 'Scene previews and activation with an explicit target scope',
+    defaultOptions: {
+      sceneSelection: 'all',
+      sceneIds: [],
+      scope: 'home',
+      groupId: '',
+      deviceKeys: [],
+    },
+  },
+  indoor_climate: {
+    name: 'Indoor climate',
+    description:
+      'Temperature, humidity and a trend from selected sensor sources',
+    defaultOptions: {
+      temperatureSensorId: '',
+      humiditySensorId: '',
+      range: '-24h',
+    },
+  },
   home_overview: {
     name: 'Home overview',
     description: 'Summary, scenes, and room status cards from the home view',
@@ -360,6 +403,9 @@ function toDashboardWidget(row: DashboardWidgetRow): DashboardWidget {
 
   return {
     id: String(row.id),
+    layoutId: String(row.layout_id),
+    unsupportedType:
+      row.widget_type in widgetRegistry ? undefined : row.widget_type,
     widget_type: widgetType,
     title,
     position: row.sort_order,
@@ -391,7 +437,7 @@ function toDashboardWidgetRow(
   return {
     id: widget.id ? Number(widget.id) : (existingRow?.id ?? 0),
     layout_id: Number(layoutId),
-    widget_type: widgetType,
+    widget_type: widget.unsupportedType ?? widgetType,
     config: {
       ...existingConfig,
       title:

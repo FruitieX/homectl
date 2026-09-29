@@ -11,7 +11,6 @@ import {
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
-import { Card, CardContent } from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
 import { Textarea } from '@/ui/primitives/textarea';
 import { useEffect, useState } from 'react';
@@ -57,7 +56,7 @@ const sendSensorPayload = async (
   }
 };
 
-const controlButtonClass = 'h-16 min-h-16 rounded-2xl text-sm font-semibold';
+const controlButtonClass = 'h-11 min-h-11 rounded-md text-sm font-medium';
 
 export function SensorActionPanel({ device, sensorConfig }: Props) {
   const { apiEndpoint } = useAppConfig();
@@ -155,7 +154,7 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 text-xs uppercase tracking-wide opacity-70">
+      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
         <Badge variant="outline">
           {getSensorInteractionLabel(resolvedInteraction.kind)}
         </Badge>
@@ -172,14 +171,14 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
         </Alert>
       )}
 
-      <Card>
-        <CardContent className="pt-5 text-sm">
-          <div className="font-medium">Current sensor payload</div>
-          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-muted-foreground">
-            {sensorPayloadJson}
-          </pre>
-        </CardContent>
-      </Card>
+      <details className="rounded-md border border-border p-3 text-sm">
+        <summary className="cursor-pointer font-medium">
+          Current sensor payload
+        </summary>
+        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-muted-foreground">
+          {sensorPayloadJson}
+        </pre>
+      </details>
 
       {resolvedInteraction.kind === 'on_off_buttons' && (
         <div className="space-y-2">
