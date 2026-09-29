@@ -38,9 +38,9 @@ rows marked **open** are not acceptance sign-off. Paths below are relative to
 | Timer `capture_target_intents` | `ProgramBuilder` schedule/replace timer controls with target picker | Optional captured scope | `dev/routine-selection-review.mjs` adds/removes scope members, retains the edited scope through off/on, saves every member and extension, then saves capture disabled as omission. Empty capture is rejected by the compiler (`compile.rs` timer validation test); existing stale-intent tests cover execution separately. |
 | Source `aliases[]` | `app/config/sources/detail.tsx`: repeatable text rows, add/remove, validation of unique full keys | Preserve array; aliases have no execution sequence | `dev/settings-source-journey.js` creates two aliases and checks the API result. **Open:** empty/removal and malformed alias repair. |
 | Helper enum `options[]` | `app/config/helpers/fields.tsx`: direct rows, add/remove/up/down; invalid initial selection must be repaired explicitly | Display order retained | `dev/settings-helper-journey.js` creates three options, reorders, switches type away/back and verifies saved order. **Open:** empty/duplicate validation and removal of selected current/initial values. |
-| MQTT `sensor_value_fields[]`, `disabled_device_ids[]` | `app/config/integrations/fields.tsx` `StringEntries`: repeatable rows, add/remove/up/down; malformed values use typed JSON fallback | Preserve configured order | Integration journey edits/saves multiple sensor paths; `lib/integrationDraft.test.ts` checks every pointer. **Open:** edited disabled-device collection and empty/removal fixtures. |
+| MQTT `sensor_value_fields[]`, `disabled_device_ids[]` | `app/config/integrations/fields.tsx` `StringEntries`: repeatable rows, add/remove/up/down; malformed values use typed JSON fallback | Preserve configured order | `dev/mqtt-editor-review.mjs` edits both collections, adds/removes/reorders entries, blocks invalid pointers/blank device IDs, saves empty arrays and reloads. `lib/integrationDraft.test.ts` checks every pointer. Malformed non-list repair remains a separate open case. |
 | Legacy cron schedules map | `app/config/integrations/detail.tsx`: visible read-only definition and current-format destination/offline conversion guidance | Preserved until explicit conversion | Deliberately not editable. **Open:** identify conversion round-trip test for multi-schedule legacy input. |
-| Dummy `devices` map | `app/config/integrations/fields.tsx` `DummyDevices`: keyed add/remove, direct initial-state and capability fields | Keyed identity; no semantic order | **Open:** typed multi-device save/reload across default/controllable/sensor/unknown states. Removed device now clears its numeric/type editor metadata. |
+| Dummy `devices` map | `app/config/integrations/fields.tsx` `DummyDevices`: keyed add/remove, direct initial-state and capability fields | Keyed identity; no semantic order | `dev/dummy-editor-review.mjs` saves/reloads multiple default/controllable/sensor devices, all four sensor variants and empty maps; remove/recreate clears metadata. Rust tests confirm shapes and null defaults. **Open:** browser repair of unknown/malformed states. |
 | Sensor catalog `sensors[]`, `groups[]`, group `sensor_ids[]` | `app/config/sensors/page.tsx`: catalog/group/member row controls, empty selections supported | Three independent presentation orders | `dev/sensor-order-input.mjs` verifies saved orders, independent memberships, widgets and group charts; catalog journey covers configuration editing. |
 | Dashboard layouts/widgets and per-widget selections | `app/config/dashboard/widget.tsx` and designer: type gallery, sources, size/order, retained per-type options | Layout order, sizes and explicit selection order | `dev/widget-design-journey.js`, `widget-preview-input.mjs`, `sensor-order-input.mjs`. **Open:** reconcile every widget option with export/import evidence and missing-source repair. |
 | Calibration profile assignments | Calibration configuration and bulk selection flows | Keyed device assignment; profile data preserved | `dev/calibration-bulk-journey.js` checks exact assignment/removal and unchanged profiles. **Open:** remaining capability/missing-catalog fixtures from implementation ledger. |
@@ -139,3 +139,39 @@ All 225 UI tests, type checking, lint and production build pass. Remaining
 integration cases include MQTT collection editing/profile switches, secrets,
 management variants, optional-field resets and reload failures. Helper/source
 and remaining routine variants are still open.
+
+### MQTT collections and recovery checkpoint
+
+`dev/mqtt-editor-review.mjs` passes 21 checks at 1440/390 px: edited sensor paths
+and disabled-device lists, add/remove/reorder, invalid entries, explicit empty
+arrays, profile switches and retained navigation drafts, partial management,
+null/false/omitted booleans, capability reset after an unfinished number, password
+preserve/replace/clear, Discard, reload and retained new-connection type drafts.
+Only its own disabled fixture integration is created, changed and removed.
+
+`dev/mqtt-recovery-review.mjs` passes 9 checks at each size. A deliberately injected
+HTTP 500 leaves the input and error visible; Retry commits the retained draft and
+reload shows the acknowledged value. Its console HTTP 500 is expected evidence.
+The shared reporting selector retains a custom interval and saves custom, ignore
+and inherited modes. This is UI response handling, not a real broker failure.
+The actual server rollback is covered separately by
+`core::integrations::tests::invalid_reload_preserves_existing_integration`.
+Four `api::config::integrations::tests` pass for credential masking, omitted-secret
+preservation, stale/duplicate requests, redacted backup imports and reporting
+baselines. Type checking, lint and production build pass.
+
+The schema-backed selects and new-connection type picker now use SettingsSelect.
+Switching away from partial management retains its nested flag and extension
+fields. Resetting an optional field clears its raw-input and variant metadata,
+so a hidden incomplete number cannot keep Save blocked. Stored null booleans are
+shown explicitly; selecting their stored value cannot coerce it into false.
+
+Remaining integration audit cases include the complete ESPHome/profile-specific
+field inventory, malformed collection repair, and explicit legacy conversion
+coverage. The broader helper/source and routine variant gates remain open.
+
+The existing phone health journey was adapted to the shared policy selector and
+passes all 10 checks: integration inheritance, device override, retained interval,
+deduplicated attention, Ignore preserving explicit offline evidence, and related
+log navigation. It uses the normal isolated household fixture and synthetic health
+evidence. Log: `implementation-evidence/collections/mqtt-health-390.log`.

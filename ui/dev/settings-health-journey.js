@@ -38,6 +38,27 @@
       }),
     );
   };
+  const policy = async (mode) => {
+    const control = document.querySelector('[data-field=reporting_policy]');
+    control.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    await until(
+      () => document.querySelector('[role=option]'),
+      'Policy choices',
+    );
+    const label = {
+      custom: 'Expect regular reports',
+      ignore: 'Ignore missing reports',
+      inherit: 'Use integration default',
+    }[mode];
+    [...document.querySelectorAll('[role=option]')]
+      .find((el) => el.textContent.trim() === label)
+      .dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+      );
+    await pause();
+  };
   const saved = async () =>
     (
       await (
@@ -69,7 +90,7 @@
     () => document.querySelector('[data-field=reporting_policy]'),
     'Integration policy ready',
   );
-  input(document.querySelector('[data-field=reporting_policy]'), 'custom');
+  await policy('custom');
   await pause();
   input(
     document.querySelector(
@@ -90,10 +111,12 @@
     'Device ready',
   );
   assert(
-    document.querySelector('[data-field=reporting_policy]').value === 'inherit',
+    document
+      .querySelector('[data-field=reporting_policy]')
+      .textContent.includes('Use integration default'),
     'Device shows inheritance directly',
   );
-  input(document.querySelector('[data-field=reporting_policy]'), 'custom');
+  await policy('custom');
   await pause();
   input(
     document.querySelector(
@@ -106,9 +129,9 @@
     (await saved()).reporting_policy.mode === 'inherit',
     'Editing a reporting policy does not save implicitly',
   );
-  input(document.querySelector('[data-field=reporting_policy]'), 'ignore');
+  await policy('ignore');
   await pause();
-  input(document.querySelector('[data-field=reporting_policy]'), 'custom');
+  await policy('custom');
   await pause();
   assert(
     document.querySelector(
@@ -144,7 +167,7 @@
         ?.innerText.includes('was reported offline'),
     'Health polling displays synthetic evidence',
   );
-  input(document.querySelector('[data-field=reporting_policy]'), 'ignore');
+  await policy('ignore');
   await save();
   await until(
     () =>
@@ -197,7 +220,9 @@
   deviceLink.click();
   await until(() => document.querySelector('#live'), 'Returned to device');
   assert(
-    document.querySelector('[data-field=reporting_policy]').value === 'ignore',
+    document
+      .querySelector('[data-field=reporting_policy]')
+      .textContent.includes('Ignore missing reports'),
     'Related-log navigation returns to the saved device policy',
   );
   document.querySelector('#reporting').scrollIntoView({ block: 'start' });

@@ -449,6 +449,36 @@ function buildIntegrationSchemas() {
           visible_when: { key: 'mode', equals: 'generic' },
         }),
         field({
+          key: 'managed',
+          label: 'Management mode',
+          kind: 'select',
+          section: 'Advanced settings',
+          advanced: true,
+          options: [
+            'Full',
+            'Unmanaged',
+            'FullReadOnly',
+            'UnmanagedReadOnly',
+          ].map((value) => ({
+            value,
+            label: {
+              Full: 'Full',
+              Unmanaged: 'Unmanaged',
+              FullReadOnly: 'Full read-only',
+              UnmanagedReadOnly: 'Unmanaged read-only',
+            }[value],
+            description: null,
+          })),
+        }),
+        field({
+          key: 'retain_commands',
+          label: 'Retain generic commands',
+          kind: 'boolean',
+          section: 'Advanced settings',
+          advanced: true,
+          visible_when: { key: 'mode', equals: 'generic' },
+        }),
+        field({
           key: 'disabled_device_ids',
           label: 'Disabled devices',
           kind: 'json',

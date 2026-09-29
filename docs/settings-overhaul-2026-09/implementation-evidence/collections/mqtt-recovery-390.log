@@ -1,0 +1,47 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Reporting selector retains the custom interval",
+    "passed": true
+   },
+   {
+    "name": "Rejected save keeps the edited field and explicit error",
+    "passed": true
+   },
+   {
+    "name": "Failed save does not change the stored integration",
+    "passed": true
+   },
+   {
+    "name": "Retry saves the retained draft",
+    "passed": true
+   },
+   {
+    "name": "Successful retry clears the error",
+    "passed": true
+   },
+   {
+    "name": "Reporting policy is saved with the retry",
+    "passed": true
+   },
+   {
+    "name": "Ignore policy persists explicitly",
+    "passed": true
+   },
+   {
+    "name": "Integration behavior restores inheritance",
+    "passed": true
+   },
+   {
+    "name": "Acknowledged retry survives page reload",
+    "passed": true
+   }
+  ],
+  "expectedHttpErrors": [
+   500
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/integrations","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 500 (Internal Server Error)"]}

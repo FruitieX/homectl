@@ -1,6 +1,7 @@
 import type { ReportingPolicy } from '@/bindings/ReportingPolicy';
 import { entityDraftStore } from '@/lib/entityDraft';
 import { Input } from '@/ui/primitives/input';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 export function ReportingPolicyField({
   value,
   onChange,
@@ -16,13 +17,12 @@ export function ReportingPolicyField({
     <div className="space-y-3">
       <label className="grid gap-2 text-xs">
         Missing-report warnings
-        <select
+        <SettingsSelect
           data-field="reporting_policy"
           aria-label="Missing-report warnings"
-          className="settings-select"
           value={value.mode}
-          onChange={(event) => {
-            const mode = event.target.value as ReportingPolicy['mode'];
+          onValueChange={(next) => {
+            const mode = next as ReportingPolicy['mode'];
             const fallback: ReportingPolicy =
               mode === 'custom'
                 ? { mode, expected_interval_seconds: 1800 }
@@ -38,15 +38,18 @@ export function ReportingPolicyField({
               ),
             );
           }}
-        >
-          <option value="inherit">
-            {scope === 'device'
-              ? 'Use integration default'
-              : 'Use integration behavior'}
-          </option>
-          <option value="custom">Expect regular reports</option>
-          <option value="ignore">Ignore missing reports</option>
-        </select>
+          options={[
+            {
+              value: 'inherit',
+              label:
+                scope === 'device'
+                  ? 'Use integration default'
+                  : 'Use integration behavior',
+            },
+            { value: 'custom', label: 'Expect regular reports' },
+            { value: 'ignore', label: 'Ignore missing reports' },
+          ]}
+        />
       </label>
       {value.mode === 'custom' && (
         <label className="grid gap-2 text-xs">

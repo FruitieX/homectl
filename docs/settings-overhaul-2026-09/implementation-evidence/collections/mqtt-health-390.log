@@ -1,0 +1,18 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "Saved integration default reaches inheriting devices",
+   "Device shows inheritance directly",
+   "Editing a reporting policy does not save implicitly",
+   "Switching policy modes retains the custom interval",
+   "Saved device override wins over the integration default",
+   "Multiple issues on one device count once",
+   "Ignore suppresses silence while keeping explicit offline evidence visible",
+   "Structured log details link back to the affected device",
+   "Log event links fit the viewport",
+   "Related-log navigation returns to the saved device policy"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/integrations/zigbee2mqtt","viewport":{"width":390,"height":844},"problems":[]}

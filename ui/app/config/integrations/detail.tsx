@@ -23,6 +23,7 @@ import { SettingsSection } from '@/ui/settings/SettingsSection';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { JsonValueEditor } from '@/ui/settings/JsonValueEditor';
 import { Input } from '@/ui/primitives/input';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { Button } from '@/ui/primitives/button';
 import { confirmDialog } from '@/ui/primitives/confirm-dialog';
 import { IntegrationField } from './fields';
@@ -219,12 +220,11 @@ export default function IntegrationDetailPage() {
                 </label>
                 <label className="grid gap-2 text-xs">
                   Connection type
-                  <select
-                    className="settings-select"
+                  <SettingsSelect
+                    aria-label="Connection type"
                     data-field="plugin"
                     value={value.plugin}
-                    onChange={(event) => {
-                      const plugin = event.target.value;
+                    onValueChange={(plugin) => {
                       draft.patch({
                         plugin,
                         config: entityDraftStore.switchVariant(
@@ -241,15 +241,13 @@ export default function IntegrationDetailPage() {
                         ),
                       });
                     }}
-                  >
-                    {schemas.data
+                    options={schemas.data
                       .filter((schema) => !legacyIntegration(schema.plugin))
-                      .map((schema) => (
-                        <option key={schema.plugin} value={schema.plugin}>
-                          {schema.name}
-                        </option>
-                      ))}
-                  </select>
+                      .map((schema) => ({
+                        value: schema.plugin,
+                        label: schema.name,
+                      }))}
+                  />
                 </label>
               </div>
             ) : (

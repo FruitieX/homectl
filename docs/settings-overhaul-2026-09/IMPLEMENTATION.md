@@ -426,3 +426,23 @@ disabled records on the marked fixture and cleaned up. Actual database durabilit
 and integration reload failures are not claimed by this browser fixture.
 Screenshots were inspected at both sizes and added to the comparison gallery.
 The full remaining field and acceptance gates stay open.
+
+## MQTT controls, collections and recovery — 2026-09-30
+
+Integration schema selects, booleans, new connection type and shared reporting
+policy now use the same selector as the other settings pages. Partial management
+retains its flag and extension fields when switching modes. Optional-field Reset
+clears editor metadata as well as the stored field, fixing a hidden unfinished
+Kelvin input that could otherwise block Save. Stored null booleans remain explicit.
+
+The isolated MQTT journey passes 21 checks at both 1440/390 px, including ordered
+sensor/disabled lists, validation, profile and creation drafts, password lifecycle,
+reset, empty arrays and reload. A separate 9-check journey at each size verifies
+HTTP rejection/Retry and all reporting-policy modes. The injected HTTP 500 appears
+in the probe console by design. No actual household configuration or broker was
+changed. Four integration API tests and one runtime rollback test pass separately.
+Type checking, lint and production build pass. Screenshots were inspected and
+added to the comparison gallery; FIELD-COVERAGE.md names the remaining variants.
+The phone health journey also passes 10 checks after adapting its selector
+interaction: inheritance/override, attention deduplication, Ignore versus offline
+evidence and related log navigation remain correct on the isolated fixture.

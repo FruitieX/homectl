@@ -1,0 +1,92 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Null boolean is shown explicitly",
+    "passed": true
+   },
+   {
+    "name": "Management mode retains the partial-management flag",
+    "passed": true
+   },
+   {
+    "name": "Blank disabled device blocks saving",
+    "passed": true
+   },
+   {
+    "name": "Every sensor pointer is validated before writing",
+    "passed": true
+   },
+   {
+    "name": "Profile switch and navigation retain all collection entries",
+    "passed": true
+   },
+   {
+    "name": "Profile changes and navigation have no implicit write",
+    "passed": true
+   },
+   {
+    "name": "Edited ordered lists, partial settings and false persist",
+    "passed": true
+   },
+   {
+    "name": "Unrelated values and stored secret are preserved",
+    "passed": true
+   },
+   {
+    "name": "Unfinished capability range is visibly invalid",
+    "passed": true
+   },
+   {
+    "name": "Reset clears the hidden numeric error",
+    "passed": true
+   },
+   {
+    "name": "Use default omits the entire capability override",
+    "passed": true
+   },
+   {
+    "name": "Explicit password replacement is sent once",
+    "passed": true
+   },
+   {
+    "name": "Clearing a secret is staged, not immediate",
+    "passed": true
+   },
+   {
+    "name": "Confirmed clear removes the stored secret after Save",
+    "passed": true
+   },
+   {
+    "name": "Boolean default remains omitted rather than false",
+    "passed": true
+   },
+   {
+    "name": "Discard restores the saved lists",
+    "passed": true
+   },
+   {
+    "name": "Collection controls fit the viewport",
+    "passed": true
+   },
+   {
+    "name": "Empty lists survive reload as explicit arrays",
+    "passed": true
+   },
+   {
+    "name": "Connection-type change retains the MQTT creation draft",
+    "passed": true
+   },
+   {
+    "name": "Connection-type change retains the dummy creation draft",
+    "passed": true
+   },
+   {
+    "name": "New connection preview and Discard issue no create",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/integrations","viewport":{"width":390,"height":844},"problems":[]}

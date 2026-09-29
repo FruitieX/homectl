@@ -807,48 +807,72 @@ export function IntegrationField({
     const index = options.findIndex(
       (option) => JSON.stringify(option.value) === JSON.stringify(effective),
     );
+    const selected =
+      effective === undefined
+        ? 'unset'
+        : field.key === 'managed' &&
+            effective !== null &&
+            typeof effective === 'object' &&
+            Object.hasOwn(effective, 'Partial')
+          ? 'partial'
+          : index < 0
+            ? 'unknown'
+            : String(index);
     control = (
       <>
-        <select
-          className="settings-select"
+        <SettingsSelect
           aria-label={field.label}
-          value={
-            effective === undefined
-              ? 'unset'
-              : field.key === 'managed' &&
-                  effective !== null &&
-                  typeof effective === 'object' &&
-                  'Partial' in effective
-                ? 'partial'
-                : index < 0
-                  ? 'unknown'
-                  : String(index)
-          }
-          onChange={(event) => {
-            if (event.target.value === 'unset') update(undefined);
-            else if (event.target.value === 'partial')
-              update({ Partial: { prev_change_committed: true } });
-            else update(options[Number(event.target.value)].value);
+          value={selected}
+          options={[
+            ...(!field.required || effective === undefined
+              ? [
+                  {
+                    value: 'unset',
+                    label: field.required ? 'Choose…' : 'Use default',
+                  },
+                ]
+              : []),
+            ...options.map((option, index) => ({
+              value: String(index),
+              label: option.label,
+            })),
+            ...(field.key === 'managed'
+              ? [{ value: 'partial', label: 'Partial management' }]
+              : []),
+            ...(selected === 'unknown'
+              ? [
+                  {
+                    value: 'unknown',
+                    label:
+                      typeof effective === 'string'
+                        ? effective
+                        : 'Custom setting',
+                  },
+                ]
+              : []),
+          ]}
+          onValueChange={(next) => {
+            if (next === 'unknown') return;
+            const replacement =
+              next === 'unset'
+                ? undefined
+                : next === 'partial'
+                  ? { Partial: { prev_change_committed: true } }
+                  : options[Number(next)].value;
+            update(
+              field.key === 'managed'
+                ? entityDraftStore.switchVariant(
+                    draftKey,
+                    'config/' + field.key,
+                    selected,
+                    value,
+                    next,
+                    replacement,
+                  )
+                : replacement,
+            );
           }}
-        >
-          {!field.required && <option value="unset">Use default</option>}
-          {field.required && effective === undefined && (
-            <option value="unset">Choose…</option>
-          )}
-          {options.map((option, index) => (
-            <option key={index} value={index}>
-              {option.label}
-            </option>
-          ))}
-          {field.key === 'managed' && (
-            <option value="partial">Partial management</option>
-          )}
-          {effective !== undefined && index < 0 && (
-            <option value="unknown">
-              {typeof effective === 'string' ? effective : 'Custom setting'}
-            </option>
-          )}
-        </select>
+        />
         {field.key === 'managed' &&
           typeof value === 'object' &&
           value !== null &&
@@ -876,34 +900,48 @@ export function IntegrationField({
     );
   } else if (field.kind === 'boolean')
     control = (
-      <select
+      <SettingsSelect
         aria-label={field.label}
-        className="settings-select"
         value={
           value === undefined
             ? 'unset'
             : value === null
               ? 'null'
-              : String(value)
+              : typeof value === 'boolean'
+                ? String(value)
+                : 'unknown'
         }
-        onChange={(event) =>
+        onValueChange={(next) => {
+          if (next === 'unknown') return;
           update(
-            event.target.value === 'unset'
+            next === 'unset'
               ? undefined
-              : event.target.value === 'true',
-          )
-        }
-      >
-        <option value="unset">
-          Use default
-          {field.default_value != null
-            ? ` (${field.default_value ? 'on' : 'off'})`
-            : ''}
-        </option>
-        {value === null && <option value="null">None (stored)</option>}
-        <option value="true">On</option>
-        <option value="false">Off</option>
-      </select>
+              : next === 'null'
+                ? null
+                : next === 'true',
+          );
+        }}
+        options={[
+          {
+            value: 'unset',
+            label:
+              'Use default' +
+              (field.default_value != null
+                ? field.default_value
+                  ? ' (on)'
+                  : ' (off)'
+                : ''),
+          },
+          ...(value === null
+            ? [{ value: 'null', label: 'None (stored)' }]
+            : []),
+          { value: 'true', label: 'On' },
+          { value: 'false', label: 'Off' },
+          ...(value != null && typeof value !== 'boolean'
+            ? [{ value: 'unknown', label: 'Stored value needs repair' }]
+            : []),
+        ]}
+      />
     );
   else if (field.kind === 'password')
     control = (
@@ -991,7 +1029,13 @@ export function IntegrationField({
               className="ml-auto h-7 px-2 text-xs"
               size="sm"
               variant="ghost"
-              onClick={() => update(undefined)}
+              onClick={() => {
+                const root = 'config/' + field.key;
+                entityDraftStore.remapEditorPaths(draftKey, (path) =>
+                  path === root || path.startsWith(root + '/') ? null : path,
+                );
+                update(undefined);
+              }}
             >
               Use default
             </Button>

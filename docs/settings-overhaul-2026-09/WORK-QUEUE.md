@@ -253,6 +253,13 @@ FIELD-COVERAGE.md for the distinction between preservation and repair evidence.
 Next: MQTT collections/profile and optional resets, helper/source cases and
 remaining routine variants. The overall acceptance gate remains open.
 
+MQTT checkpoint, 2026-09-30: 21 collection/profile/secret/draft checks and 9
+recovery/reporting checks pass at each 1440/390 px. Selectors are consistent;
+partial-management drafts survive switches and optional resets clear hidden
+numeric errors. Four integration API tests and one rollback test pass. Evidence
+is recorded in FIELD-COVERAGE.md and the screenshot gallery. Next: helper/source
+variants, remaining routine contracts and the wider accessibility/recovery audit.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before
