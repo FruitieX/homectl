@@ -808,6 +808,83 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn mixed_blocks_keep_independent_memory_and_declared_context() {
+        use super::super::plan::{PlannedStep, PlannedStepBody, RoutinePlan};
+        use crate::types::automation_definition::NodeId;
+
+        let mut scripts = ScriptExecution::default();
+        let mut worker = std::env::current_exe().unwrap();
+        worker.pop();
+        worker.pop();
+        scripts.worker_binary = Some(worker.join("script-worker"));
+        let owner = ScriptOwnerId::routine("mixed");
+        scripts.coordinator_mut().load_owner(&owner, 1, Value::Null);
+        let devices = states(vec![lamp("first", false), lamp("second", true)]);
+        let groups = Groups::new(Default::default());
+        let frame = FrameContext {
+            mutations: &[],
+            before: &devices,
+            after: &devices,
+            groups: &groups,
+            helpers: None,
+            fired_timers: &[],
+            predicate_fires: &[],
+            schedule_fires: &[],
+        };
+        let steps = [("first", "first", 1), ("__proto__", "second", 10)]
+            .into_iter().map(|(id, device, increment)| {
+                let mut block = spec(vec![ScriptDeclaration::Device {
+                    device: DeviceRef::from(&key(device)),
+                }]);
+                block.source_body = format!(
+                    "const keys = Object.keys(ctx.after.devices); if (keys.length !== 1 || keys[0] !== 'dummy/{device}') throw new Error('wrong block context'); return {{actions: [], next_state: {{count: ((ctx.state.memory || {{}}).count || 0) + {increment}}}}};"
+                );
+                PlannedStep { action_id: NodeId(id.into()), kind: "run_script",
+                    body: PlannedStepBody::Script { spec: block }, intent_guard: vec![], timer_capture: None }
+            }).collect::<Vec<_>>();
+        let pool = scripts.ensure_pool().await.unwrap();
+        for run_id in 1..=2 {
+            let plan = RoutinePlan {
+                routine_id: RoutineId("mixed".into()),
+                definition_revision: 1,
+                run_id,
+                steps: steps.clone(),
+                suppressions: vec![],
+            };
+            let run = scripts
+                .prepare_native_script_blocks(
+                    plan,
+                    ExecutionMode::Single,
+                    &frame,
+                    EventId::default(),
+                    EventOrigin::Report,
+                    EventCausation::default(),
+                    1000,
+                    None,
+                )
+                .unwrap();
+            let output = pool.execute(&run.source_body, run.context).await.unwrap();
+            assert!(matches!(
+                scripts
+                    .coordinator_mut()
+                    .complete_handler(&run.token, &output),
+                CompleteResult::Applied { .. }
+            ));
+            assert!(scripts.take_native_plan(run.token.request_id).is_some());
+            let memory = scripts.coordinator().memory(&owner).unwrap();
+            assert_eq!(
+                memory["__homectl_script_steps"]["first"]["count"],
+                json!(run_id)
+            );
+            assert_eq!(
+                memory["__homectl_script_steps"]["__proto__"]["count"],
+                json!(run_id * 10)
+            );
+            assert_eq!(scripts.coordinator().pending_count(&owner), 0);
+        }
+    }
+
     // Plan §4.2: routine execution modes map onto the coordinator's per-owner
     // queue behavior.
     #[test]
@@ -1357,7 +1434,7 @@ impl ScriptExecution {
         }
         let owner = ScriptOwnerId::routine(plan.routine_id.0.clone());
         let mut contexts = Vec::new();
-        let mut source = String::from("const __actions = []; const __memory = Object.assign({}, (ctx.state.memory || {}).__homectl_script_steps || {});\n");
+        let mut source = String::from("const __actions = []; const __memory = Object.assign(Object.create(null), (ctx.state.memory || {}).__homectl_script_steps || {});\n");
         for step in &plan.steps {
             let super::plan::PlannedStepBody::Script { spec } = &step.body else {
                 continue;

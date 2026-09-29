@@ -1,0 +1,29 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "New routines enable after creation by default",
+   "Scene creation is linked directly from its action",
+   "Creating a scene retains the originating routine draft",
+   "Created scene is selected in the original action",
+   "Returning preserves stable action identity",
+   "Cross-page creation does not save the routine",
+   "Code editor loads without a remote Monaco CDN",
+   "Switching between plain text and code keeps the script body",
+   "Script and native controls coexist inside a branch",
+   "Nested routine controls need no Edit buttons",
+   "Creation saves the enabled routine with its selected scene",
+   "Nested branch timer settings survive save",
+   "Mixed script body persists without replacing the native program",
+   "Duplicating script action allocates a separate stable identity",
+   "Deleting the duplicate preserves the original script action",
+   "Reordering saves existing IDs without renumbering",
+   "Reordering preserves the complete branch subtree",
+   "Switching action types and back restores script details and identity",
+   "Each action type retains its own unsaved controls",
+   "Discard restores the saved script and leaves persisted configuration unchanged",
+   "No horizontal overflow"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/routines/new","viewport":{"width":1440,"height":1080},"problems":[]}

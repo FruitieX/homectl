@@ -1577,20 +1577,9 @@ function ScriptProgramEditor({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <ConfigField
-          label="API version"
-          description="Only version 1 is supported by this server."
-        >
-          <Input className="font-mono" value={spec.api_version} readOnly />
-        </ConfigField>
-        <ConfigField
-          label="Limits profile"
-          description="Only 'default' is supported by this server."
-        >
-          <Input className="font-mono" value={spec.limits_profile} readOnly />
-        </ConfigField>
-      </div>
+      <p className="text-xs text-muted-foreground">
+        JavaScript · API {spec.api_version} · {spec.limits_profile} limits
+      </p>
 
       <ConfigField
         label="Function body"
@@ -1606,9 +1595,9 @@ function ScriptProgramEditor({
         <div>
           <h5 className="text-sm font-medium">Declarations</h5>
           <p className="text-sm text-muted-foreground">
-            Declarations decide when the script runs and which state it may
-            read. Undeclared reads are absent; devices and groups may be
-            declared before they are discovered.
+            Declarations choose additional state the script may read. Triggers
+            and conditions decide when it runs. Undeclared reads are absent;
+            devices and groups may be declared before they are discovered.
           </p>
         </div>
 

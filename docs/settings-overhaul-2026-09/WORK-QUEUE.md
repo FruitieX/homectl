@@ -25,9 +25,22 @@ library and mixed-script execution checks pass.
       control types. Preserve stable IDs, unknown fields and related-page drafts.
 - [ ] Verify adding/editing/persisting a script among ordinary actions, including
       a branch. Keep whole-program legacy script conversion available.
-- [ ] Close remaining mixed-script runtime cases where needed: selected branch
+- [x] Close remaining mixed-script runtime cases where needed: selected branch
       semantics, per-block state/context and stale/manual-intent protection.
 - [ ] Refresh final paired screenshots after the last visual changes.
+
+Routine checkpoint, 2026-09-29: the expanded browser journey passes 21 checks
+on desktop and phone, including a script inside a branch, actual local Monaco
+rendering, plain-text/code switching, persistence, duplicate/remove/move,
+per-type draft restoration and Discard. The editor and its workers are bundled
+locally, follow the selected theme and offer a plain-text fallback. API/limits
+metadata no longer looks editable, and script examples use the shared picker.
+The starter handles empty initial memory. Backend regressions cover independent
+block memory and declared contexts across two runs, selected branches, failed
+worker slot cleanup, definition changes and newer manual intent suppressing
+frozen native steps. Whole-program conversion and final complex visual review
+remain open. Evidence: `implementation-evidence/routine-editor-*-checkpoint.log`
+and `routine-script-*-checkpoint.log`; UI type/lint/build pass.
 
 ## 2. New widget and widget editing
 
@@ -121,8 +134,6 @@ kiosk detection, explicit exit and reload guards; do not claim hardware testing.
 
 ## Goal tracking
 
-The existing overhaul goal remains unfinished. The tracker currently reports it
-as paused and rejected a duplicate goal; available goal tools cannot resume it.
-The user's request authorizes continuing this queue. Resume the existing goal
-in the host UI to enable automatic goal continuations. Do not falsely complete
-the existing goal to work around the tracker restriction.
+The user cleared the previous paused goal. A new goal covering this entire
+queue is now active, with no requested token budget. Continue autonomously and
+mark it complete only when the required work and acceptance gates are finished.

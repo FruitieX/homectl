@@ -3,6 +3,10 @@ import type * as MonacoEditor from 'monaco-editor';
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { Button } from '@/ui/primitives/button';
+import { Textarea } from '@/ui/primitives/textarea';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
+import { useTheme } from '@/hooks/theme';
+import { useMediaQuery } from 'usehooks-ts';
 
 type MonacoApi = typeof MonacoEditor;
 
@@ -73,7 +77,7 @@ declare const ctx: {
   before: { devices: Record<string, unknown> };
   after: { devices: Record<string, unknown> };
   values: { helpers: Record<string, { kind: string; value: unknown }> };
-  state: { memory: Record<string, unknown>; revision: number };
+  state: { memory: Record<string, unknown> | null; revision: number };
 };
 
 declare const api: {
@@ -242,7 +246,7 @@ function completionContext(line: string): CompletionEntry[] | null {
 
 export const ROUTINE_SCRIPT_STARTER = `// ctx is frozen: ctx.now_ms, ctx.state.memory, ctx.state.revision.
 // api is pure: api.now, api.random(), api.actions.*.
-const memory = ctx.state.memory;
+const memory = ctx.state.memory ?? {};
 return {
   actions: [],
   next_state: { runs: (memory.runs ?? 0) + 1 },
@@ -324,9 +328,28 @@ export default function RoutineScriptEditor({
   const editorId = useId().replace(/:/g, '-');
   const [monaco, setMonaco] = useState<MonacoApi | null>(null);
   const [fixtureId, setFixtureId] = useState(ROUTINE_SCRIPT_FIXTURES[0].id);
+  const [localReady, setLocalReady] = useState(false);
+  const [plainText, setPlainText] = useState(false);
+  const [theme] = useTheme();
+  const systemDark = useMediaQuery('(prefers-color-scheme: dark)');
+  const dark = theme === 'dark' || (theme === 'auto' && systemDark);
   const editorRef = useRef<MonacoEditor.editor.IStandaloneCodeEditor | null>(
     null,
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    import('@/lib/localMonaco')
+      .then(() => {
+        if (!cancelled) setLocalReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setPlainText(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!monaco) {
@@ -400,6 +423,10 @@ export default function RoutineScriptEditor({
       (candidate) => candidate.id === fixtureId,
     );
     const editor = editorRef.current;
+    if (fixture && (plainText || !localReady)) {
+      onChange(value + (value ? '\n' : '') + fixture.body);
+      return;
+    }
     if (!fixture || !editor) {
       return;
     }
@@ -415,43 +442,69 @@ export default function RoutineScriptEditor({
 
   return (
     <div className="space-y-3">
-      <div className="overflow-hidden rounded-xl border border-border bg-card/70">
-        <Editor
-          defaultLanguage="javascript"
-          height={height}
-          language="javascript"
-          onMount={(editor, mountedMonaco) => {
-            editorRef.current = editor;
-            setMonaco(mountedMonaco as MonacoApi);
-          }}
-          options={{
-            automaticLayout: true,
-            fontSize: 13,
-            lineNumbersMinChars: 3,
-            minimap: { enabled: false },
-            padding: { top: 16, bottom: 16 },
-            readOnly,
-            scrollBeyondLastLine: false,
-            tabSize: 2,
-            wordWrap: 'on',
-          }}
-          theme="vs-dark"
-          value={wrapBody(value)}
-          onChange={(nextValue) => onChange(unwrapBody(nextValue ?? ''))}
-        />
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-pressed={plainText}
+          onClick={() => setPlainText((current) => !current)}
+        >
+          {plainText ? 'Code editor' : 'Plain text'}
+        </Button>
+      </div>
+      <div className="overflow-hidden rounded-md border border-border bg-card">
+        {plainText || !localReady ? (
+          <Textarea
+            aria-label="Script body"
+            value={value}
+            readOnly={readOnly}
+            spellCheck={false}
+            className="rounded-none border-0 font-mono text-xs"
+            style={{ height }}
+            onChange={(event) => {
+              // Keep focus if someone starts typing before the code editor loads.
+              if (!localReady) setPlainText(true);
+              onChange(event.target.value);
+            }}
+          />
+        ) : (
+          <Editor
+            defaultLanguage="javascript"
+            height={height}
+            language="javascript"
+            onMount={(editor, mountedMonaco) => {
+              editorRef.current = editor;
+              setMonaco(mountedMonaco as MonacoApi);
+            }}
+            options={{
+              automaticLayout: true,
+              fontSize: 13,
+              lineNumbersMinChars: 3,
+              minimap: { enabled: false },
+              padding: { top: 16, bottom: 16 },
+              readOnly,
+              scrollBeyondLastLine: false,
+              tabSize: 2,
+              wordWrap: 'on',
+            }}
+            theme={dark ? 'vs-dark' : 'light'}
+            value={wrapBody(value)}
+            onChange={(nextValue) => onChange(unwrapBody(nextValue ?? ''))}
+          />
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          className="h-9 rounded-xl border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        <SettingsSelect
+          aria-label="Script example"
+          className="w-full min-w-0 sm:w-auto sm:max-w-full"
           value={fixtureId}
-          onChange={(event) => setFixtureId(event.target.value)}
-        >
-          {ROUTINE_SCRIPT_FIXTURES.map((fixture) => (
-            <option key={fixture.id} value={fixture.id}>
-              {fixture.label}
-            </option>
-          ))}
-        </select>
+          onValueChange={setFixtureId}
+          options={ROUTINE_SCRIPT_FIXTURES.map(({ id, label }) => ({
+            value: id,
+            label,
+          }))}
+        />
         <Button
           type="button"
           variant="outline"
@@ -463,7 +516,10 @@ export default function RoutineScriptEditor({
         </Button>
         <span className="text-xs text-muted-foreground">
           The editor wraps the body in a function so `return` is valid; only the
-          body is saved. Examples insert at the cursor.
+          body is saved.{' '}
+          {plainText || !localReady
+            ? 'Examples append to the body.'
+            : 'Examples insert at the cursor.'}
         </span>
       </div>
     </div>

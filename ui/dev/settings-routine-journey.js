@@ -28,7 +28,9 @@
     Object.getOwnPropertyDescriptor(
       el.tagName === 'SELECT'
         ? HTMLSelectElement.prototype
-        : HTMLInputElement.prototype,
+        : el.tagName === 'TEXTAREA'
+          ? HTMLTextAreaElement.prototype
+          : HTMLInputElement.prototype,
       'value',
     ).set.call(el, value);
     el.dispatchEvent(
@@ -120,6 +122,52 @@
   const timerInput = document.querySelector('.flow-branch-actions input');
   set(timerInput, 'journey_timer');
   await pause();
+  await choose('Add branch action', 'Sandboxed script');
+  const scriptNode = [
+    ...document.querySelectorAll('.flow-branch-actions [data-node-id]'),
+  ].at(-1);
+  await until(
+    () => scriptNode.querySelector('.monaco-editor'),
+    'Locally bundled code editor renders',
+  );
+  assert(
+    !performance
+      .getEntriesByType('resource')
+      .some((entry) =>
+        /cdn\.jsdelivr\.net.*monaco|cdnjs.*monaco/.test(entry.name),
+      ),
+    'Code editor loads without a remote Monaco CDN',
+  );
+  const plain = [...scriptNode.querySelectorAll('button')].find(
+    (el) => el.textContent.trim() === 'Plain text',
+  );
+  if (plain) {
+    plain.click();
+    await pause();
+  }
+  const body =
+    'return { actions: [api.actions.cancelTimer({key: "from_script"})], next_state: {visits: 1} };';
+  set(scriptNode.querySelector('textarea[aria-label="Script body"]'), body);
+  await pause();
+  [...scriptNode.querySelectorAll('button')]
+    .find((el) => el.textContent.trim() === 'Code editor')
+    .click();
+  await until(
+    () =>
+      scriptNode
+        .querySelector('.view-lines')
+        ?.textContent.includes('from_script'),
+    'Plain text changes reach the code editor',
+  );
+  assert(true, 'Switching between plain text and code keeps the script body');
+  const scriptId = scriptNode.dataset.nodeId;
+  assert(
+    !!scriptNode &&
+      !!document.querySelector(
+        '.flow-branch-actions input[value="journey_timer"]',
+      ),
+    'Script and native controls coexist inside a branch',
+  );
   assert(
     ![...document.querySelectorAll('button')].some(
       (el) => el.textContent.trim() === 'Edit',
@@ -144,17 +192,53 @@
       'journey_timer',
     'Nested branch timer settings survive save',
   );
-  const first = document.querySelector('#then [data-node-id]');
-  first.querySelector('button[aria-label^="Actions for"]').dispatchEvent(
-    new PointerEvent('pointerdown', {
-      bubbles: true,
-      button: 0,
-      pointerType: 'mouse',
-    }),
+  assert(
+    saved.definition_v2.program.steps[1].branches[0].steps[1].spec
+      .source_body === body,
+    'Mixed script body persists without replacing the native program',
   );
-  await pause();
+  const scriptSaved = document.querySelector(`[data-node-id="${scriptId}"]`);
+  const openActions = async (node) => {
+    node.querySelector('button[aria-label^="Actions for"]').dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        pointerType: 'mouse',
+      }),
+    );
+    await until(
+      () => document.querySelector('[role="menu"]'),
+      'Action menu opened',
+    );
+  };
+  await openActions(scriptSaved);
   [...document.querySelectorAll('[role="menuitem"]')]
-    .find((el) => el.textContent.trim() === 'Move later')
+    .find((el) => el.textContent.trim() === 'Duplicate')
+    .click();
+  await pause();
+  const scriptNodes = [
+    ...document.querySelectorAll('.flow-branch-actions [data-node-id]'),
+  ].filter((node) => node.textContent.includes('Sandboxed script'));
+  assert(
+    scriptNodes.length === 2 &&
+      scriptNodes[0].dataset.nodeId !== scriptNodes[1].dataset.nodeId,
+    'Duplicating script action allocates a separate stable identity',
+  );
+  await openActions(scriptNodes[1]);
+  [...document.querySelectorAll('[role="menuitem"]')]
+    .find((el) => el.textContent.trim() === 'Remove')
+    .click();
+  await pause();
+  assert(
+    [
+      ...document.querySelectorAll('.flow-branch-actions [data-node-id]'),
+    ].filter((node) => node.textContent.includes('Sandboxed script')).length ===
+      1,
+    'Deleting the duplicate preserves the original script action',
+  );
+  const first = document.querySelector('#then [data-node-id]');
+  first
+    .querySelector('button[aria-label^="Move "][aria-label$=" down"]')
     .click();
   await pause();
   button('Save changes').click();
@@ -168,6 +252,58 @@
     JSON.stringify(reordered.definition_v2.program.steps[0]) ===
       JSON.stringify(saved.definition_v2.program.steps[1]),
     'Reordering preserves the complete branch subtree',
+  );
+  const switchType = async (label) => {
+    document
+      .querySelector(`[data-node-id="${scriptId}"] [aria-label="Step type"]`)
+      .dispatchEvent(
+        new PointerEvent('pointerdown', {
+          bubbles: true,
+          button: 0,
+          pointerType: 'mouse',
+        }),
+      );
+    await until(
+      () => document.querySelector('[role="option"]'),
+      'Types opened',
+    );
+    [...document.querySelectorAll('[role="option"]')]
+      .find((el) => el.textContent.trim() === label)
+      .click();
+    await pause();
+  };
+  await switchType('Cancel named timer');
+  set(
+    document.querySelector(`[data-node-id="${scriptId}"] input`),
+    'temporary_type',
+  );
+  await pause();
+  await switchType('Sandboxed script');
+  const restoredNode = document.querySelector(`[data-node-id="${scriptId}"]`);
+  [...restoredNode.querySelectorAll('button')]
+    .find((el) => el.textContent.trim() === 'Plain text')
+    .click();
+  await pause();
+  assert(
+    restoredNode.querySelector('textarea[aria-label="Script body"]').value ===
+      body,
+    'Switching action types and back restores script details and identity',
+  );
+  await switchType('Cancel named timer');
+  assert(
+    document.querySelector(`[data-node-id="${scriptId}"] input`).value ===
+      'temporary_type',
+    'Each action type retains its own unsaved controls',
+  );
+  button('Discard').click();
+  await until(() => !button('Save changes'), 'Draft discarded');
+  assert(
+    document
+      .querySelector(`[data-node-id="${scriptId}"]`)
+      .textContent.includes('Sandboxed script') &&
+      JSON.stringify((await rows()).find((row) => row.id === routineId)) ===
+        JSON.stringify(reordered),
+    'Discard restores the saved script and leaves persisted configuration unchanged',
   );
   assert(
     document.documentElement.scrollWidth <= innerWidth,

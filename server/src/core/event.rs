@@ -1357,13 +1357,14 @@ fn apply_script_result(
 ) {
     let native_plan = state.scripts.take_native_plan(token.request_id);
     if let Some(message) = error {
-        state.rules.record_v2_script_failure(
-            routine_id,
-            format!(
+        let reason = match state.scripts.coordinator_mut().abandon(token) {
+            Ok(()) => format!(
                 "script_worker_error: {}",
                 super::automation::bounded_text(&message)
             ),
-        );
+            Err(reason) => format!("script_result_stale: {}", reason.as_str()),
+        };
+        state.rules.record_v2_script_failure(routine_id, reason);
         state.refresh_routine_statuses();
         return;
     }
@@ -3799,11 +3800,12 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn sandboxed_action_blocks_preserve_native_order_and_reject_failed_runs() {
         use crate::types::automation_trace::StepDisposition;
-        for (source, expected_success, edit_while_running) in [
-            ("return {actions:[api.actions.setPower({device:{integration_id:'mqtt',device_id:'lamp'},power:true})]};", true, false),
-            ("throw new Error('block failed');", false, false),
-            ("return {actions:[{action:'run_script',id:'recursive',spec:{api_version:1,source_body:'return {actions:[]}',declarations:[],limits_profile:'default'}}]};", false, false),
-            ("return {actions:[]};", false, true),
+        for (source, expected_success, edit_while_running, newer_manual_intent) in [
+            ("return {actions:[api.actions.setPower({device:{integration_id:'mqtt',device_id:'lamp'},power:true})]};", true, false, false),
+            ("throw new Error('block failed');", false, false, false),
+            ("return {actions:[{action:'run_script',id:'recursive',spec:{api_version:1,source_body:'return {actions:[]}',declarations:[],limits_profile:'default'}}]};", false, false, false),
+            ("return {actions:[]};", false, true, false),
+            ("return {actions:[]};", true, false, true),
         ] {
             let (mut state, mut event_rx) = test_state();
             state.scripts.worker_binary = Some(script_worker_binary());
@@ -3833,8 +3835,12 @@ pub(crate) mod tests {
                 state.runtime_config.routines[0].revision += 1;
                 state.apply_runtime_routines();
             }
+            if newer_manual_intent {
+                state.intents.bump_device(&bulb.get_device_key());
+            }
             handle_event(&mut state, &result).await.unwrap();
             let routine_id = crate::types::rule::RoutineId("scripted".into());
+            assert_eq!(state.scripts.coordinator().pending_count(&crate::core::automation::ScriptOwnerId::routine("scripted")), 0, "failed and completed script runs must release their pending slot");
             let statuses = state.rules.get_runtime_statuses();
             let run = statuses.0[&routine_id].v2.as_ref().unwrap().last_run.as_ref().unwrap();
             assert_eq!(run.accepted, expected_success, "{run:?}");
@@ -3842,7 +3848,11 @@ pub(crate) mod tests {
             while let Ok(event) = event_rx.try_recv() {
                 if let Event::RoutineAction { action: Action::SetDeviceState(device), .. } = event { powers.push(device.get_controllable_state().unwrap().power); }
             }
-            if expected_success {
+            if newer_manual_intent {
+                assert!(powers.is_empty(), "new manual intent suppresses the frozen native prefix and suffix");
+                assert_eq!(run.steps.len(), 2);
+                assert!(run.steps.iter().all(|step| step.disposition == StepDisposition::Suppressed));
+            } else if expected_success {
                 assert_eq!(powers, vec![false, true, false]);
                 assert_eq!(run.steps.iter().map(|step| step.action_id.0.as_str()).collect::<Vec<_>>(), vec!["before", "block/0", "after"]);
                 assert!(run.steps.iter().all(|step| step.disposition == StepDisposition::Dispatched));
