@@ -311,3 +311,16 @@ cannot overlap breadcrumbs; room inspector padding matches device inspectors.
 Study 05 room-map comparisons and the new failure-state captures are in the
 gallery. Type checking, lint and production build pass. These simulated GPU-loss
 checks exercise the browser event path; they do not claim physical GPU testing.
+
+### Timer acceptance — 2026-09-30
+
+Timer acceptance, 2026-09-30: 19 checks pass on desktop and phone. The new
+interaction journey saves and reloads a countdown scene action, a scheduled room
+action with a scene end action, and a ready-by device on/off pair. It verifies
+Helsinki defaults, names/icons, exact durations and date/time, no writes before
+Save, related links, retained navigation drafts, Discard and page reload. All
+timer selectors now use the shared control. The old native-select test is
+replaced by `ui/dev/timer-modes-review.mjs`, which cleans up its own fixture
+records. Existing server execution/restart and timer-widget command evidence
+remain applicable. Fresh screenshots include all modes and phone action sections;
+type checking, lint and production build pass.

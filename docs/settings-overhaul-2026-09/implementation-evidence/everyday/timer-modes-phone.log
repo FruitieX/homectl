@@ -1,0 +1,85 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "countdown: draft does not write before Save",
+    "passed": true
+   },
+   {
+    "name": "countdown: unsaved indicator and related target link",
+    "passed": true
+   },
+   {
+    "name": "countdown: navigation retains mode",
+    "passed": true
+   },
+   {
+    "name": "countdown: exact schedule and targets persist",
+    "passed": true
+   },
+   {
+    "name": "countdown: Discard restores saved value",
+    "passed": true
+   },
+   {
+    "name": "scheduled: Helsinki default",
+    "passed": true
+   },
+   {
+    "name": "scheduled: draft does not write before Save",
+    "passed": true
+   },
+   {
+    "name": "scheduled: unsaved indicator and related target link",
+    "passed": true
+   },
+   {
+    "name": "scheduled: navigation retains mode",
+    "passed": true
+   },
+   {
+    "name": "scheduled: exact schedule and targets persist",
+    "passed": true
+   },
+   {
+    "name": "scheduled: Discard restores saved value",
+    "passed": true
+   },
+   {
+    "name": "ready_by: Helsinki default",
+    "passed": true
+   },
+   {
+    "name": "ready_by: draft does not write before Save",
+    "passed": true
+   },
+   {
+    "name": "ready_by: unsaved indicator and related target link",
+    "passed": true
+   },
+   {
+    "name": "ready_by: navigation retains mode",
+    "passed": true
+   },
+   {
+    "name": "ready_by: exact schedule and targets persist",
+    "passed": true
+   },
+   {
+    "name": "ready_by: Discard restores saved value",
+    "passed": true
+   },
+   {
+    "name": "All three saved timers survive page reload",
+    "passed": true
+   },
+   {
+    "name": "No horizontal overflow",
+    "passed": true
+   }
+  ],
+  "width": 390
+ }
+}
+{"url":"http://127.0.0.1:3021/config/timers","viewport":{"width":390,"height":844},"problems":[]}

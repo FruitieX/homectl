@@ -16,6 +16,7 @@ import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 import { configItemHref } from '@/lib/configItemHref';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { TimerIcon, timerIcons } from '@/ui/TimerIcon';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { TimerSummary } from '../../dashboard/TimersCard';
@@ -270,27 +271,25 @@ export default function TimersPage() {
                     />
                   </Field>
                   <Field label="Icon">
-                    <select
-                      className="settings-select"
+                    <SettingsSelect
+                      aria-label="Icon"
                       value={selected.icon}
-                      onChange={(e) =>
-                        change({ ...selected, icon: e.target.value })
+                      onValueChange={(value) =>
+                        change({ ...selected, icon: value })
                       }
-                    >
-                      {Object.keys(timerIcons).map((i) => (
-                        <option key={i} value={i}>
-                          {i[0].toUpperCase() + i.slice(1)}
-                        </option>
-                      ))}
-                    </select>
+                      options={Object.keys(timerIcons).map((icon) => ({
+                        value: icon,
+                        label: icon[0].toUpperCase() + icon.slice(1),
+                      }))}
+                    />
                   </Field>
                 </div>
                 <Field label="Timer mode">
-                  <select
-                    className="settings-select"
+                  <SettingsSelect
+                    aria-label="Timer mode"
                     value={selected.schedule.kind}
-                    onChange={(e) => {
-                      const kind = e.target.value as UserTimerSchedule['kind'];
+                    onValueChange={(value) => {
+                      const kind = value as UserTimerSchedule['kind'];
                       change({
                         ...selected,
                         schedule:
@@ -317,11 +316,12 @@ export default function TimersPage() {
                             : null,
                       });
                     }}
-                  >
-                    <option value="countdown">Countdown</option>
-                    <option value="scheduled">Scheduled</option>
-                    <option value="ready_by">Ready by</option>
-                  </select>
+                    options={[
+                      { value: 'countdown', label: 'Countdown' },
+                      { value: 'scheduled', label: 'Scheduled' },
+                      { value: 'ready_by', label: 'Ready by' },
+                    ]}
+                  />
                 </Field>
                 <ScheduleFields
                   schedule={selected.schedule}
@@ -493,23 +493,24 @@ function ScheduleFields({
         </Field>
       )}
       <Field label="Repeat">
-        <select
-          className="settings-select"
+        <SettingsSelect
+          aria-label="Repeat"
           value={s.date !== null ? 'once' : 'days'}
-          onChange={(e) =>
+          onValueChange={(value) =>
             change({
               ...s,
               date:
-                e.target.value === 'once'
+                value === 'once'
                   ? new Date(Date.now() + 86400000).toLocaleDateString('en-CA')
                   : null,
-              weekdays: e.target.value === 'once' ? [] : [1, 2, 3, 4, 5],
+              weekdays: value === 'once' ? [] : [1, 2, 3, 4, 5],
             })
           }
-        >
-          <option value="days">On selected days</option>
-          <option value="once">Once, on a date</option>
-        </select>
+          options={[
+            { value: 'days', label: 'On selected days' },
+            { value: 'once', label: 'Once, on a date' },
+          ]}
+        />
       </Field>
       {s.date !== null ? (
         <Field label="Date">
@@ -583,59 +584,58 @@ function ActionFields({
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label="Target type">
-        <select
-          className="settings-select"
+        <SettingsSelect
+          aria-label="Target type"
           value={a.kind}
-          onChange={(e) =>
+          onValueChange={(value) =>
             change(
-              e.target.value === 'device'
+              value === 'device'
                 ? { kind: 'device', device_key: '', power: true }
-                : e.target.value === 'group'
+                : value === 'group'
                   ? { kind: 'group', group_id: '', power: true }
                   : { kind: 'scene', scene_id: '' },
             )
           }
-        >
-          <option value="device">Device</option>
-          <option value="group">Room or group</option>
-          <option value="scene">Scene</option>
-        </select>
+          options={[
+            { value: 'device', label: 'Device' },
+            { value: 'group', label: 'Room or group' },
+            { value: 'scene', label: 'Scene' },
+          ]}
+        />
       </Field>
       <Field label="Target">
-        <select
-          className="settings-select"
+        <SettingsSelect
+          aria-label="Target"
           value={selected}
-          onChange={(e) =>
+          onValueChange={(value) =>
             change(
               a.kind === 'device'
-                ? { ...a, device_key: e.target.value }
+                ? { ...a, device_key: value }
                 : a.kind === 'group'
-                  ? { ...a, group_id: e.target.value }
-                  : { ...a, scene_id: e.target.value },
+                  ? { ...a, group_id: value }
+                  : { ...a, scene_id: value },
             )
           }
-        >
-          <option value="">Choose a target</option>
-          {selected && !options.some((o) => o.id === selected) && (
-            <option value={selected}>Unavailable · {selected}</option>
-          )}
-          {options.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name}
-            </option>
-          ))}
-        </select>
+          options={[
+            ...(selected && !options.some((o) => o.id === selected)
+              ? [{ value: selected, label: `Unavailable · ${selected}` }]
+              : []),
+            ...options.map((o) => ({ value: o.id, label: o.name })),
+          ]}
+          placeholder="Choose a target"
+        />
       </Field>
       {a.kind !== 'scene' && (
         <Field label="Action">
-          <select
-            className="settings-select"
+          <SettingsSelect
+            aria-label="Action"
             value={a.power ? 'on' : 'off'}
-            onChange={(e) => change({ ...a, power: e.target.value === 'on' })}
-          >
-            <option value="on">Turn on</option>
-            <option value="off">Turn off</option>
-          </select>
+            onValueChange={(value) => change({ ...a, power: value === 'on' })}
+            options={[
+              { value: 'on', label: 'Turn on' },
+              { value: 'off', label: 'Turn off' },
+            ]}
+          />
         </Field>
       )}
       {href && (
