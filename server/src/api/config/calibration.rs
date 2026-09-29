@@ -3,7 +3,7 @@ use crate::core::{
     calibration_session::{BrightnessPreview, CalibrationPreview},
     color_calibration::ColorCalibrationProfile,
 };
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::hash::BuildHasher;
 
 #[derive(Clone, Serialize)]
 struct EditorView {
@@ -26,9 +26,10 @@ fn editor_view(config: &config_queries::ConfigExport) -> EditorView {
     view.assignments
         .sort_by(|a, b| a.device_key.cmp(&b.device_key));
     view.legacy.sort_by(|a, b| a.device_key.cmp(&b.device_key));
-    let mut hasher = HASHER.build_hasher();
-    serde_json::to_string(&view).unwrap().hash(&mut hasher);
-    view.revision_token = format!("{:016x}", hasher.finish());
+    view.revision_token = format!(
+        "{:016x}",
+        HASHER.hash_one(serde_json::to_string(&view).unwrap())
+    );
     view
 }
 

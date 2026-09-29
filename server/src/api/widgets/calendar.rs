@@ -91,7 +91,11 @@ async fn handle(
     sync_writes = "by_key"
 )]
 async fn fetch_calendar(url: String, http: reqwest::Client) -> Result<Value, String> {
-    let res = http.get(&url).send().await.map_err(|e| e.without_url().to_string())?;
+    let res = http
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| e.without_url().to_string())?;
     if !res.status().is_success() {
         return Err(format!("Failed to fetch ICS: {}", res.status()));
     }

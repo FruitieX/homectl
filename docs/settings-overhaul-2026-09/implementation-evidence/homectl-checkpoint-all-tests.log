@@ -1,0 +1,1298 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+   Compiling homectl-server v0.9.5 (/home/rasse/homectl/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.07s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (target/debug/deps/homectl-5aadd6deda489b90)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/homectl_server-deb79e13f06b027d)
+
+running 788 tests
+test api::config::assistant::restore_proposals_tests::reopening_a_thread_makes_its_proposal_applyable_again ... ok
+test api::config::assistant::tests::accepts_valid_draft_and_rejects_unknown_entities ... ok
+test api::config::assistant::tests::apply_order_runs_creates_then_updates_then_reversed_deletes ... ok
+test api::config::assistant::tests::assistant_settings_save_preserves_omitted_secrets_and_rejects_stale_secret_changes ... ok
+test api::config::assistant::tests::catalog_contains_entities_and_inferred_timezone ... ok
+test api::config::assistant::tests::chat_envelope_infers_kind_from_content ... ok
+test api::config::assistant::tests::chat_outcome_accepts_answers_and_truncates_them ... ok
+test api::config::assistant::tests::chat_system_prompt_routes_actions_plans_and_answers ... ok
+test api::config::assistant::tests::config_prefers_stored_settings ... ok
+test api::config::assistant::tests::control_catalog_lists_controllable_devices_and_groups ... ok
+test api::config::assistant::tests::control_catalog_scope_limits_devices ... ok
+test api::config::assistant::tests::device_ref_serializes_with_integration_and_device_ids ... ok
+test api::config::assistant::tests::extracts_json_from_fenced_and_prose_wrapped_output ... ok
+test api::config::assistant::tests::flags_script_programs ... ok
+test api::config::assistant::tests::history_keeps_newest_turns_and_truncates_long_messages ... ok
+test api::config::assistant::tests::integration_updates_keep_omitted_secrets ... ok
+test api::config::assistant::tests::live_state_lists_devices_and_bounds_recent_logs ... ok
+test api::config::assistant::tests::parse_apply_envelope_validates_the_contract ... ok
+test api::config::assistant::tests::plan_store_evicts_the_oldest_plan ... ok
+test api::config::assistant::tests::plan_store_keeps_plans_without_a_timer ... ok
+test api::config::assistant::tests::plan_system_prompt_documents_contract_and_context ... ok
+test api::config::assistant::tests::plan_validation_accepts_device_and_helper_writes ... ok
+test api::config::assistant::tests::plan_validation_accepts_floorplan_and_computed_source_writes ... ok
+test api::config::assistant::tests::plan_validation_accepts_group_and_scene_creates ... ok
+test api::config::assistant::tests::plan_validation_builds_operations_and_merges_updates ... ok
+test api::config::assistant::tests::plan_validation_compiles_routine_definitions ... ok
+test api::config::assistant::tests::plan_validation_masks_integration_secrets ... ok
+test api::config::assistant::tests::plan_validation_rejects_device_creates_and_malformed_shapes ... ok
+test api::config::assistant::tests::plan_validation_rejects_group_with_unknown_device ... ok
+test api::config::assistant::tests::plan_validation_rejects_recreating_an_id_in_one_plan ... ok
+test api::config::assistant::tests::plan_validation_rejects_unknown_integration_plugins ... ok
+test api::config::assistant::tests::plan_validation_rejects_unknown_targets ... ok
+test api::config::assistant::tests::plan_validation_stages_created_entities_for_later_operations ... ok
+test api::config::assistant::tests::plan_validation_stages_created_groups_for_later_references ... ok
+test api::config::assistant::tests::plan_validation_validates_scene_references ... ok
+test api::config::assistant::tests::plan_validation_warns_about_referenced_deletes ... ok
+test api::config::assistant::tests::prompt_search_merges_tokens_across_kinds ... ok
+test api::config::assistant::tests::request_body_includes_reasoning_effort_and_limits ... ok
+test api::config::assistant::tests::search_caps_results ... ok
+test api::config::assistant::tests::search_ignores_entities_without_a_match ... ok
+test api::config::assistant::tests::search_ranks_exact_above_prefix_and_substring ... ok
+test api::config::assistant::tests::settings_patch_rejects_invalid_values ... ok
+test api::config::assistant::tests::settings_patch_sets_and_clears_fields ... ok
+test api::config::assistant::tests::settings_view_masks_api_key ... ok
+test api::config::assistant::tests::sse_frames_split_deltas_usage_and_done ... ok
+test api::config::assistant::tests::stored_settings_disable_assistant_when_cleared ... ok
+test api::config::assistant::tests::system_prompt_documents_the_schema_and_catalog ... ok
+test api::config::assistant::tests::usage_falls_back_to_a_character_estimate ... ok
+test api::config::assistant::tests::usage_prefers_provider_counts ... ok
+test api::config::backups::tests::backup_review_is_read_only_secret_safe_and_rejects_stale_restore ... ok
+test api::config::backups::tests::backup_review_rejects_unsupported_sections_versions_duplicates_and_broken_links ... ok
+test api::config::calibration::editor_tests::calibration_editor_rejects_stale_or_invalid_writes_without_mutation ... ok
+test api::config::dashboard::tests::dashboard_arrangement_batches_geometry_and_explicit_removal_with_preconditions ... ok
+test api::config::dashboard::tests::dashboard_edits_preserve_credentials_extensions_and_reject_stale_writes ... ok
+test api::config::device_settings::tests::device_settings_reject_stale_scope_and_keep_unrecognized_sensor_fields ... ok
+test api::config::floorplan_editor::tests::floorplan_editor_saves_one_scope_preserves_unknown_grid_and_checks_image_conflicts ... ok
+test api::config::floorplan_editor::tests::floorplan_editor_validates_placement_without_dropping_extensions ... ok
+test api::config::groups::tests::concurrent_edits_return_current_without_changing_state ... ok
+test api::config::groups::tests::validates_transitive_nesting_and_keeps_missing_references ... ok
+test api::config::integrations::tests::credentials_are_omitted_and_secret_changes_invalidate_tokens ... ok
+test api::config::integrations::tests::integration_writes_preserve_omitted_passwords_and_reject_stale_and_duplicate_requests ... ok
+test api::config::integrations::tests::redacted_backup_import_restores_only_omitted_matching_secrets ... ok
+test api::config::integrations::tests::reporting_policy_changes_invalidate_baselines_and_omission_preserves_them ... ok
+test api::config::migration_review::tests::migration_review_is_read_only_binds_file_and_state_and_keeps_other_entries ... ok
+test api::config::migration_review::tests::migration_review_preserves_omitted_connection_credentials_and_rejects_invalid_input ... ok
+test api::config::migration_review::tests::migration_review_token_changes_when_discovery_resolves_a_skipped_reference ... ok
+test api::config::migration_review::tests::migration_skips_require_acknowledgment_and_disable_affected_routines ... ok
+test api::config::preferences::tests::older_exports_have_useful_defaults_and_unknown_fields_survive ... ok
+test api::config::routines::tests::conversion_preview_reuses_converter_without_changing_saved_routine ... ok
+test api::config::routines::tests::racing_routine_saves_only_accept_one_baseline_and_increment_revision ... ok
+test api::config::routines::tests::routine_creation_cannot_overwrite_an_existing_id ... ok
+test api::config::routines::tests::stale_routine_write_returns_current_without_losing_raw_definition ... ok
+test api::config::scenes::tests::draft_preview_uses_actual_links_order_and_does_not_change_runtime ... ok
+test api::config::scenes::tests::script_preview_executes_isolated_worker_and_preserves_runtime ... ignored, requires cargo build --bin script-worker; run explicitly with --ignored
+test api::config::scenes::tests::stale_scene_save_returns_current_and_preserves_configuration ... ok
+test api::config::sources::tests::source_edits_compare_the_baseline_and_increment_revision_atomically ... ok
+test api::config::sources::tests::valid_definitions_pass_and_ambiguous_ones_are_reported ... ok
+test api::config::tests::canonicalize_migration_preview_reports_all_name_resolution_errors ... ok
+test api::config::tests::canonicalize_migration_preview_resolves_legacy_name_refs ... ok
+test api::config::tests::config_write_reports_durability_separately_from_runtime_success ... ok
+test api::config::tests::core_patch_preserves_omitted_settings_and_unrelated_fields ... ok
+test api::config::tests::core_settings_compare_saved_values_and_distinguish_null_from_omission ... ok
+test api::config::tests::derive_migrated_mqtt_sensor_devices_seeds_id_based_sensor_rules ... ok
+test api::config::tests::derive_migrated_mqtt_sensor_devices_skips_non_canonical_sensor_rules ... ok
+test api::config::tests::explicit_import_values_win_over_stored_secrets ... ok
+test api::config::tests::helper_definition_writes_reject_stale_and_duplicate_but_allow_live_value_changes ... ok
+test api::config::tests::import_only_preserves_secrets_for_present_rows ... ok
+test api::config::tests::integration_commit_preserves_changes_made_during_reload ... ok
+test api::config::tests::integrations_only_preview_skips_unresolved_later_sections ... ok
+test api::config::tests::merge_selected_migration_config_preserves_unselected_sections ... ok
+test api::config::tests::non_matching_sensor_state_avoids_matching_number_text_and_color_rules ... ok
+test api::config::tests::parse_config_backup_accepts_json_export ... ok
+test api::config::tests::parse_config_backup_rejects_legacy_toml ... ok
+test api::config::tests::redacted_export_round_trips_through_import_with_stored_secrets ... ok
+test api::config::tests::redacted_exports_drop_only_secret_widget_fields ... ok
+test api::config::tests::replacement_display_name_prefers_override_then_source_name ... ok
+test api::config::tests::sensor_catalog_preserves_collections_and_extensions_and_rejects_stale_or_invalid_saves ... ok
+test api::config::tests::what_if_preview_changes_only_its_isolated_device_copy ... ok
+test api::config::widget_sources::tests::widget_source_updates_are_scoped_preserve_secrets_and_detect_secret_conflicts ... ok
+test api::origin::tests::allowed_cross_origin_responses_echo_the_origin ... ok
+test api::origin::tests::denied_origin_gets_a_forbidden_response ... ok
+test api::origin::tests::denied_preflight_gets_a_forbidden_response ... ok
+test api::origin::tests::explicit_allowlist_entries_are_allowed ... ok
+test api::origin::tests::loopback_origins_are_allowed_for_development ... ok
+test api::origin::tests::preflight_gets_cors_headers ... ok
+test api::origin::tests::requests_without_origin_pass_through ... ok
+test api::origin::tests::same_authority_is_allowed ... ok
+test api::widgets::calendar::tests::unescapes_ical_text_sequences ... ok
+test api::widgets::tests::widget_source_explicit_empty_suppresses_environment_fallback ... ok
+test api::widgets::train_schedule::tests::cached_response_recalculates_and_preserves_cancellations ... ok
+test api::widgets::train_schedule::tests::filters_and_sorts_before_limiting ... ok
+test api::widgets::train_schedule::tests::overdue_limit_uses_leave_home_countdown_before_limiting_results ... ok
+test api::widgets::train_schedule::tests::service_day_handles_midnight_and_scheduled_departures ... ok
+test core::automation::calendar::tests::daily_civil_time_resolves_in_the_stored_zone ... ok
+test core::automation::calendar::tests::fall_back_repeated_local_runs_once_at_the_earlier_instant ... ok
+test core::automation::calendar::tests::fixed_offsets_resolve_without_dst ... ok
+test core::automation::calendar::tests::seconds_are_required_and_bad_grammar_is_an_error ... ok
+test core::automation::calendar::tests::spring_forward_missing_local_is_skipped ... ok
+test core::automation::compile::tests::all_state_declaration_compiles_as_broad_compatibility_mode ... ok
+test core::automation::compile::tests::compiled_metadata_lists_subscriptions_dependencies_and_write_capabilities ... ok
+test core::automation::compile::tests::cycle_scenes_validation_requires_scenes_and_resolves_references ... ok
+test core::automation::compile::tests::k01_calendar_grammar_and_policy_are_validated ... ok
+test core::automation::compile::tests::missing_script_declaration_entities_are_tracked_for_discovery ... ok
+test core::automation::compile::tests::p11_computed_source_references_resolve_and_validate ... ok
+test core::automation::compile::tests::randomize_color_validation_requires_targets_and_positive_transition ... ok
+test core::automation::compile::tests::referenced_devices_collects_trigger_and_action_references ... ok
+test core::automation::compile::tests::rollout_validation_bounds_duration_and_resolves_sources ... ok
+test core::automation::compile::tests::unknown_trigger_device_is_still_rejected ... ok
+test core::automation::compile::tests::v01_malformed_definition_reports_a_path_without_fallback ... ok
+test core::automation::compile::tests::v01_unknown_semantics_version_is_rejected_and_never_interpreted_as_v1 ... ok
+test core::automation::compile::tests::v02_invalid_script_syntax_fails_validation ... ok
+test core::automation::compile::tests::v02_script_validation_parses_without_executing_top_level_effects ... ok
+test core::automation::compile::tests::v03_empty_stored_all_condition_is_rejected_and_omitted_condition_defaults_true ... ok
+test core::automation::compile::tests::v03_range_duration_and_capability_errors_are_rejected ... ok
+test core::automation::compile::tests::v04_invalid_disabled_draft_remains_in_the_reference_inventory ... ok
+test core::automation::compile::tests::v06_group_cycle_is_rejected_with_a_useful_path ... ok
+test core::automation::compile::tests::v06_routine_self_invocation_is_rejected ... ok
+test core::automation::compile::tests::v07_compiler_output_is_identical_across_entry_points ... ok
+test core::automation::compile::tests::v08_legacy_write_preserves_v2_definition_and_rejects_version_changes ... ok
+test core::automation::convert::tests::activate_scene_mirror_maps_to_group_active_selection ... ok
+test core::automation::convert::tests::activate_scene_rollout_maps_with_fixed_device_source ... ok
+test core::automation::convert::tests::activate_scene_rollout_maps_with_triggering_device_source ... ok
+test core::automation::convert::tests::activate_scene_transition_seconds_map_to_milliseconds ... ok
+test core::automation::convert::tests::activate_scene_with_explicit_targets_maps_to_targets ... ok
+test core::automation::convert::tests::activate_scene_with_source_groups_needs_manual ... ok
+test core::automation::convert::tests::any_of_edge_leaves_maps_to_predicate_transitions ... ok
+test core::automation::convert::tests::any_of_event_leaves_maps_to_multiple_triggers_and_any_condition ... ok
+test core::automation::convert::tests::any_of_events_plus_another_event_rule_needs_manual ... ok
+test core::automation::convert::tests::any_of_level_rules_maps_to_any_condition ... ok
+test core::automation::convert::tests::any_with_a_level_child_contributes_only_its_condition ... ok
+test core::automation::convert::tests::conversion_is_deterministic ... ok
+test core::automation::convert::tests::converted_definition_carries_the_compiler_fingerprint ... ok
+test core::automation::convert::tests::cron_config_parses_schedules_with_init_enabled_default_true ... ok
+test core::automation::convert::tests::cron_disabled_flag_survives_conversion ... ok
+test core::automation::convert::tests::cron_routine_id_collision_is_unsupported ... ok
+test core::automation::convert::tests::cron_schedule_converts_with_seconds_and_explicit_timezone ... ok
+test core::automation::convert::tests::cron_schedule_needs_timezone_before_conversion ... ok
+test core::automation::convert::tests::custom_action_on_other_integration_stays_manual ... ok
+test core::automation::convert::tests::custom_action_on_timer_integration_maps_to_replace_timer ... ok
+test core::automation::convert::tests::custom_timer_payload_must_be_numeric ... ok
+test core::automation::convert::tests::cycle_scenes_maps_entries_detection_and_rollout ... ok
+test core::automation::convert::tests::cycle_scenes_with_mirror_entry_needs_manual ... ok
+test core::automation::convert::tests::cycle_scenes_with_source_groups_needs_manual ... ok
+test core::automation::convert::tests::device_power_pulse_and_edge_map_to_state_change_modes ... ok
+test core::automation::convert::tests::device_scene_and_power_constraints_combine ... ok
+test core::automation::convert::tests::device_scene_level_guard_maps_to_scene_id_condition ... ok
+test core::automation::convert::tests::device_scene_pulse_and_edge_map_to_event_triggers ... ok
+test core::automation::convert::tests::dim_maps_targets_and_default_step ... ok
+test core::automation::convert::tests::dim_without_targets_needs_manual ... ok
+test core::automation::convert::tests::edge_sensor_and_level_guard_map_to_predicate_transition_and_all_condition ... ok
+test core::automation::convert::tests::group_level_guard_maps_to_group_condition ... ok
+test core::automation::convert::tests::level_only_routine_needs_manual ... ok
+test core::automation::convert::tests::malformed_cron_config_reports_unsupported ... ok
+test core::automation::convert::tests::malformed_rule_json_is_unsupported ... ok
+test core::automation::convert::tests::multiple_event_leaves_need_manual ... ok
+test core::automation::convert::tests::numeric_sensor_rule_is_unsupported ... ok
+test core::automation::convert::tests::pulse_sensor_maps_to_report_trigger_with_value_condition ... ok
+test core::automation::convert::tests::randomize_color_maps_targets_saturation_and_transition ... ok
+test core::automation::convert::tests::raw_rules_are_unsupported ... ok
+test core::automation::convert::tests::rule_without_state_or_power_is_unsupported ... ok
+test core::automation::convert::tests::script_rules_are_unsupported ... ok
+test core::automation::convert::tests::single_child_any_unwraps_to_the_child ... ok
+test core::automation::convert::tests::six_field_cron_expressions_are_kept ... ok
+test core::automation::convert::tests::text_sensor_state_maps_to_string_equality ... ok
+test core::automation::convert::tests::timer_device_sensor_rule_reports_precise_reason ... ok
+test core::automation::convert::tests::unknown_scene_is_reported_by_the_compiler ... ok
+test core::automation::convert::tests::v2_rows_are_never_rewritten ... ok
+test core::automation::evaluate::tests::c01_all_truth_table_including_unknown ... ok
+test core::automation::evaluate::tests::c02_any_truth_table_including_unknown ... ok
+test core::automation::evaluate::tests::c03_not_truth_table_including_unknown ... ok
+test core::automation::evaluate::tests::c04_evaluation_error_dominates_not_all_and_any ... ok
+test core::automation::evaluate::tests::c05_omitted_condition_normalizes_to_literal_true ... ok
+test core::automation::evaluate::tests::c06_missing_entity_and_field_are_structured_unknowns ... ok
+test core::automation::evaluate::tests::c07_offline_observed_is_unknown_but_requested_intent_stays_known ... ok
+test core::automation::evaluate::tests::c08_fresh_report_without_availability_metadata_is_known ... ok
+test core::automation::evaluate::tests::c09_no_global_freshness_timeout_is_invented ... ok
+test core::automation::evaluate::tests::c10_preview_uses_isolated_trigger_memory ... ok
+test core::automation::evaluate::tests::g01_missing_configured_member_counts_as_unknown ... ok
+test core::automation::evaluate::tests::g02_nested_groups_dedupe_and_preserve_missing_references ... ok
+test core::automation::evaluate::tests::g03_empty_group_is_unknown_even_under_not ... ok
+test core::automation::evaluate::tests::g04_partial_requires_known_disagreement ... ok
+test core::automation::evaluate::tests::g05_mixed_scene_assignments_stay_mixed ... ok
+test core::automation::evaluate::tests::g06_group_definition_revision_changes_when_membership_changes ... ok
+test core::automation::evaluate::tests::g07_native_group_result_matches_condition_trace ... ok
+test core::automation::evaluate::tests::p11_computed_source_references_resolve_through_the_synthetic_device ... ok
+test core::automation::evaluate::tests::report_trigger_can_require_a_payload_field ... ok
+test core::automation::evaluate::tests::t01_one_event_matching_two_triggers_invokes_once_with_both_ids ... ok
+test core::automation::evaluate::tests::t02_condition_only_changes_do_not_trigger_event_routines ... ok
+test core::automation::evaluate::tests::t03_transition_fires_once_and_rearms_on_false ... ok
+test core::automation::evaluate::tests::t04_unknown_to_true_does_not_fire_by_default ... ok
+test core::automation::evaluate::tests::t05_two_triggers_keep_independent_memory ... ok
+test core::automation::evaluate::tests::t06_memory_advances_even_when_condition_is_false ... ok
+test core::automation::plan::tests::captured_group_members_are_frozen_against_new_members ... ok
+test core::automation::plan::tests::cycle_scenes_plans_entries_detection_and_rollout ... ok
+test core::automation::plan::tests::duplicate_targets_are_deduplicated ... ok
+test core::automation::plan::tests::helper_scene_selection_is_frozen_at_plan_time ... ok
+test core::automation::plan::tests::missing_helper_definition_suppresses_set_helper ... ok
+test core::automation::plan::tests::mixed_group_mirror_uses_fallback_or_suppresses ... ok
+test core::automation::plan::tests::newer_manual_intent_suppresses_stale_plan ... ok
+test core::automation::plan::tests::randomize_color_expands_groups_and_carries_transition ... ok
+test core::automation::plan::tests::recorded_step_references_preserve_target_kinds_and_old_history ... ok
+test core::automation::plan::tests::rollout_resolves_the_triggering_device_and_keeps_activation_options ... ok
+test core::automation::plan::tests::rollout_without_a_triggering_device_plans_without_a_source ... ok
+test core::automation::plan::tests::script_and_native_actions_plan_equivalently ... ok
+test core::automation::plan::tests::script_plan_guards_only_relevant_targets ... ok
+test core::automation::plan::tests::script_scene_rollout_uses_frozen_triggering_device ... ok
+test core::automation::plan::tests::timer_actions_plan_as_timer_operations ... ok
+test core::automation::runtime::tests::group_membership_change_clears_transition_memory ... ok
+test core::automation::runtime::tests::min_interval_gate_rejects_until_the_spacing_elapses ... ok
+test core::automation::runtime::tests::reload_invalidates_changed_revision_and_keeps_unrelated_memory ... ok
+test core::automation::runtime::tests::startup_seeding_does_not_fire_and_status_is_visible ... ok
+test core::automation::runtime::tests::status_refresh_does_not_touch_memory ... ok
+test core::automation::schedules::tests::calendar_occurrences_are_strictly_after_the_reference_instant ... ok
+test core::automation::schedules::tests::calendar_occurrences_resolve_in_the_stored_zone ... ok
+test core::automation::schedules::tests::empty_schedule_yields_no_occurrences ... ok
+test core::automation::schedules::tests::intervals_step_forward_from_the_reference_instant ... ok
+test core::automation::schedules::tests::previews_are_clamped_to_the_maximum ... ok
+test core::automation::schedules::tests::unknown_timezones_and_bad_cron_are_rejected ... ok
+test core::automation::script_contract::tests::handler_contract_accepts_randomize_color_actions ... ok
+test core::automation::script_contract::tests::handler_contract_bounds_script_scene_rollout ... ok
+test core::automation::script_contract::tests::handler_contract_normalizes_actions ... ok
+test core::automation::script_contract::tests::handler_contract_rejects_wrong_shapes ... ok
+test core::automation::script_contract::tests::nested_choose_nodes_are_counted ... ok
+test core::automation::script_contract::tests::s10_condition_contract_is_strict ... ok
+test core::automation::script_contract::tests::scene_and_source_contracts_validate_shapes ... ok
+test core::automation::script_coordinator::tests::coalescing_drops_superseded_results_visibly ... ok
+test core::automation::script_coordinator::tests::contract_errors_do_not_advance_memory ... ok
+test core::automation::script_coordinator::tests::queue_policy_keeps_every_invocation_and_enforces_the_bound ... ok
+test core::automation::script_coordinator::tests::reject_if_busy_refuses_while_an_invocation_is_pending ... ok
+test core::automation::script_coordinator::tests::s12_memory_applies_only_for_the_current_revision ... ok
+test core::automation::script_coordinator::tests::s16_edit_and_disable_invalidate_pending_results ... ok
+test core::automation::script_coordinator::tests::unknown_and_wrong_revision_submissions_are_rejected ... ok
+test core::automation::script_runtime::tests::all_state_declaration_opens_the_whole_frame ... ok
+test core::automation::script_runtime::tests::context_clock_and_seed_are_injected ... ok
+test core::automation::script_runtime::tests::context_exposes_declared_and_mutated_devices_only ... ok
+test core::automation::script_runtime::tests::context_scope_never_inherits_previous_branch_reads ... ok
+test core::automation::script_runtime::tests::declared_missing_entity_enters_the_context_once_present ... ok
+test core::automation::script_runtime::tests::execution_mode_maps_to_coordinator_queue_behavior ... ok
+test core::automation::script_runtime::tests::legacy_owners_reload_and_bump_generation ... ok
+test core::automation::script_runtime::tests::scene_owners_track_revisions_and_reject_edited_scripts ... ok
+test core::automation::script_runtime::tests::sync_owners_tracks_revisions_and_removals ... ok
+test core::automation::sources::circadian_compat::tests::d01_legacy_fade_golden_samples ... ok
+test core::automation::sources::circadian_compat::tests::d02_color_and_brightness_mapping ... ok
+test core::automation::sources::circadian_compat::tests::d02_hs_pair_mixes_in_hsv ... ok
+test core::automation::sources::circadian_compat::tests::d03_invalid_params_are_reported ... ok
+test core::automation::sources::presets::tests::p11_preset_bodies_resolve_and_defaults_are_valid ... ok
+test core::automation::sources::presets::tests::p11_preset_params_are_validated_strictly ... ok
+test core::automation::sources::presets::tests::p11_preset_pinning_is_strict ... ok
+test core::automation::sources::preview::tests::preview_samples_one_local_day_and_matches_the_runtime_curve ... ok
+test core::automation::sources::preview::tests::sample_bounds_timezone_and_params_are_reported ... ok
+test core::automation::sources::preview::tests::script_preset_previews_with_a_note_and_custom_bodies_are_unsupported ... ok
+test core::automation::sources::registry::tests::d04_due_sources_follow_the_refresh_cadence ... ok
+test core::automation::sources::registry::tests::d06_failures_retain_last_good_output_as_stale ... ok
+test core::automation::sources::registry::tests::d09_synthetic_device_is_read_only_and_aliases_resolve_to_it ... ok
+test core::automation::sources::registry::tests::evaluation_uses_the_source_timezone ... ok
+test core::automation::sources::registry::tests::unknown_timezone_is_reported_not_guessed ... ok
+test core::automation::timers::tests::cancel_is_idempotent_and_blocks_obsolete_wakeups ... ok
+test core::automation::timers::tests::edited_owner_revision_drops_its_jobs ... ok
+test core::automation::timers::tests::named_job_snapshots_include_only_named_timers ... ok
+test core::automation::timers::tests::predicate_deadlines_are_idempotent_and_generation_checked ... ok
+test core::automation::timers::tests::predicate_jobs_stay_out_of_the_named_projection ... ok
+test core::automation::timers::tests::relative_deadlines_ignore_wall_clock_jumps ... ok
+test core::automation::timers::tests::replace_bumps_the_generation_and_old_wakeups_are_stale ... ok
+test core::automation::timers::tests::restore_rejects_past_due_and_oversized_jobs ... ok
+test core::automation::timers::tests::restored_jobs_keep_their_generation_and_reconstruct_the_deadline ... ok
+test core::automation::timers::tests::same_timer_key_in_two_routines_does_not_collide ... ok
+test core::automation::timers::tests::schedule_occurrences_arm_consume_and_rearm ... ok
+test core::automation::timers::tests::schedule_rejects_a_second_live_generation ... ok
+test core::automation::timers::tests::stale_schedule_revision_never_fires ... ok
+test core::automation::timers::tests::zero_delay_timers_queue_at_the_current_instant ... ok
+test core::calibration_session::tests::a_brightness_preview_maps_the_reference_and_leaves_colour_alone ... ok
+test core::calibration_session::tests::a_brightness_session_refuses_a_second_light_and_a_channel_switch ... ok
+test core::calibration_session::tests::a_dimmer_without_color_can_be_calibrated_for_brightness ... ok
+test core::calibration_session::tests::invalid_or_overlapping_sessions_do_not_change_lights_and_idle_sessions_expire ... ok
+test core::calibration_session::tests::previews_ignore_existing_target_calibration_and_restore_current_runtime_state ... ok
+test core::calibration_session::tests::rgb_only_lights_are_calibratable ... ok
+test core::clock::tests::manual_clock_advances_wall_and_monotonic_independently ... ok
+test core::clock::tests::system_clock_is_monotonic_across_wall_changes ... ok
+test core::color_calibration::export_bindings_brightnesscalibrationpoint ... ok
+test core::color_calibration::export_bindings_colorcalibrationassignment ... ok
+test core::color_calibration::export_bindings_colorcalibrationpoint ... ok
+test core::color_calibration::export_bindings_colorcalibrationprofile ... ok
+test core::color_calibration::export_bindings_devicecolorcalibration ... ok
+test core::color_calibration::export_bindings_uv ... ok
+test core::color_calibration::tests::assignment_eligibility_follows_the_channels_in_the_profile ... ok
+test core::color_calibration::tests::brightness_curve_validation_accepts_identity_and_rejects_bad_curves ... ok
+test core::color_calibration::tests::brightness_maps_back_from_a_report_deterministically ... ok
+test core::color_calibration::tests::brightness_maps_forward_with_identity_zero_and_clamps ... ok
+test core::color_calibration::tests::calibrated_device_maps_brightness_without_turning_anything_on ... ok
+test core::color_calibration::tests::calibrated_output_uses_each_devices_supported_transport ... ok
+test core::color_calibration::tests::composition_keeps_the_other_channel_and_leaves_the_source_alone ... ok
+test core::color_calibration::tests::empty_and_other_modes_are_identity ... ok
+test core::color_calibration::tests::extreme_interpolation_is_projected_to_valid_chromaticity ... ok
+test core::color_calibration::tests::identity_calibration_keeps_neutral_white_neutral ... ok
+test core::color_calibration::tests::legacy_json_deserializes_and_new_exports_round_trip ... ok
+test core::color_calibration::tests::matching_anchors_are_exact ... ok
+test core::color_calibration::tests::rejects_invalid_and_duplicate_anchors ... ok
+test core::color_calibration::tests::report_inverse_recovers_anchors_and_intermediate_colors ... ok
+test core::config_diagnostics::tests::cycles_include_only_members_not_parents_and_traversal_terminates ... ok
+test core::config_diagnostics::tests::empty_groups_are_informational_and_missing_links_are_warnings ... ok
+test core::config_diagnostics::tests::malformed_link_does_not_fall_back_to_an_empty_state ... ok
+test core::config_diagnostics::tests::missing_scene_and_device_sources_are_reported_and_legacy_links_normalize ... ok
+test core::config_diagnostics::tests::source_aliases_satisfy_links_groups_and_scene_targets ... ok
+test core::config_diagnostics::tests::stale_scene_assignment_and_readonly_target_are_reported_without_mutation ... ok
+test core::config_diagnostics::tests::warmup_defers_device_availability_checks_but_not_structural_checks ... ok
+test core::deferred::tests::blocked_persistence_does_not_block_dispatch_and_each_lane_is_fifo ... ok
+test core::device_commands::tests::capability_and_readonly_updates_apply_even_when_state_is_unchanged ... ok
+test core::device_commands::tests::command_confirmation_follows_snapshot_publication ... ok
+test core::device_commands::tests::command_patch_preserves_current_state_and_metadata ... ok
+test core::device_commands::tests::command_rejects_readonly_and_unsupported_or_invalid_dimming ... ok
+test core::device_commands::tests::device_command_broadcasts_a_targeted_patch ... ok
+test core::device_commands::tests::manual_command_keeps_the_scene_association_for_server_side_pause ... ok
+test core::device_commands::tests::off_color_lights_keep_dimming_capability_and_explicit_false_wins ... ok
+test core::device_commands::tests::unchanged_device_command_sends_no_patch ... ok
+test core::device_health::tests::event_only_defaults_do_not_invent_timeouts_and_device_override_wins ... ok
+test core::device_health::tests::identical_sensor_reports_refresh_evidence_without_changing_sensor_value ... ok
+test core::device_health::tests::ignore_suppresses_silence_but_not_offline_and_fresh_receipt_recovers ... ok
+test core::device_health::tests::resumed_monitoring_gets_grace_without_losing_receipt_history ... ok
+test core::device_health::tests::retained_reports_and_wall_clock_jumps_do_not_postpone_deadlines ... ok
+test core::device_health::tests::warmup_and_first_observation_get_grace_and_multiple_issues_count_once ... ok
+test core::devices::tests::activate_scene_applies_to_unmanaged_device ... ok
+test core::devices::tests::activate_scene_applies_transition_override ... ok
+test core::devices::tests::activate_scene_can_preserve_linked_device_transition ... ok
+test core::devices::tests::activate_scene_clears_linked_device_transition_by_default ... ok
+test core::devices::tests::activate_scene_falls_back_to_default_transition ... ok
+test core::devices::tests::cached_replays_preserve_live_evidence_even_when_powered_off ... ok
+test core::devices::tests::calibrated_reports_do_not_trigger_correction_or_overwrite_logical_color ... ok
+test core::devices::tests::controllable_update_replaces_placeholder_sensor ... ok
+test core::devices::tests::in_flight_transition_defers_drift_correction ... ok
+test core::devices::tests::managed_reports_preserve_requested_state_and_refresh_capabilities ... ok
+test core::devices::tests::placeholder_sensor_does_not_overwrite_known_device ... ok
+test core::devices::tests::placeholder_sensor_update_does_not_emit_internal_state_update ... ok
+test core::devices::tests::reports_preserve_server_owned_scene_pause_and_association ... ok
+test core::devices::tests::scene_stored_transition_wins_over_default_transition ... ok
+test core::devices::tests::source_aliases_resolve_to_canonical_device ... ok
+test core::devices::tests::spatial_invalidation_order_prefers_nearest_positioned_targets ... ok
+test core::devices::tests::spatial_rollout_plan_makes_same_position_targets_immediate ... ok
+test core::devices::tests::spatial_rollout_plan_returns_none_when_source_has_no_position ... ok
+test core::devices::tests::spatial_rollout_plan_scales_delays_and_keeps_unpositioned_targets_immediate ... ok
+test core::devices::tests::spatial_rollout_plan_treats_source_as_affected_device_when_targeted ... ok
+test core::devices::tests::unmanaged_reports_show_the_logical_brightness_behind_the_curve ... ok
+test core::event::tests::b05_mirror_from_group_falls_back_when_not_unanimous ... ok
+test core::event::tests::db_scene_events_keep_runtime_state_without_database ... ok
+test core::event::tests::e03_frames_distinguish_report_command_and_derived_origins ... ok
+test core::event::tests::e04_scene_activation_collects_one_coherent_multi_device_frame ... ok
+test core::event::tests::e05_delayed_rollout_batches_preserve_cause_metadata ... ok
+test core::event::tests::e06_seeded_edge_predicates_do_not_fire_on_stale_true_state ... ok
+test core::event::tests::e07_superseded_integration_epoch_events_are_rejected ... ok
+test core::event::tests::e08_causation_bound_terminates_self_triggering_routine_loop ... ok
+test core::event::tests::execution_policy_max_actions_rejects_oversized_plans ... ok
+test core::event::tests::execution_policy_min_interval_rejects_rapid_reinvocations ... ok
+test core::event::tests::p05_helper_mode_selects_scene_through_the_actor ... ok
+test core::event::tests::p07_edited_script_owner_rejects_late_result_visibly ... ok
+test core::event::tests::p07_legacy_leaf_result_after_reload_is_rejected ... ok
+test core::event::tests::p07_legacy_rule_script_executes_off_actor_and_dispatches_frozen_actions ... ok
+test core::event::tests::p07_missing_worker_is_visible_and_does_not_block ... ok
+test core::event::tests::p07_script_program_executes_off_actor_and_dispatches_typed_actions ... ok
+test core::event::tests::p09_actor_routed_cancellation_reaches_the_authoritative_store ... ok
+test core::event::tests::p09_admin_cancellation_is_generation_checked ... ok
+test core::event::tests::p09_captured_target_intents_suppress_superseded_delayed_actions ... ok
+test core::event::tests::p09_late_catch_up_occurrence_is_dropped_and_rearms ... ok
+test core::event::tests::p09_named_timer_fires_current_generation_against_current_state ... ok
+test core::event::tests::p09_predicate_expiry_rechecks_state_and_latches ... ok
+test core::event::tests::p09_predicate_for_arms_cancels_and_rearms ... ok
+test core::event::tests::p09_predicate_wakeup_is_validated_against_the_store ... ok
+test core::event::tests::p09_schedule_occurrences_fire_and_rearm ... ok
+test core::event::tests::p09_schedule_wakeups_are_validated_by_the_store ... ok
+test core::event::tests::p09_timer_conflicts_reject_the_plan_before_effects ... ok
+test core::event::tests::p09_timer_projection_publishes_lifecycle_changes ... ok
+test core::event::tests::p10_admin_cancel_queues_the_row_delete ... ok
+test core::event::tests::p10_definition_edit_deletes_dropped_job_rows ... ok
+test core::event::tests::p10_named_timer_write_through_queues_persist_and_delete ... ok
+test core::event::tests::p10_startup_restore_keeps_future_jobs_and_drops_past_due ... ok
+test core::event::tests::p11_script_source_results_publish_and_reject_stale_or_invalid ... ok
+test core::event::tests::p11_source_devices_seed_before_routine_compile ... ok
+test core::event::tests::p11_source_refresh_publishes_canonical_device_and_alias ... ok
+test core::event::tests::set_external_state_is_deferred ... ok
+test core::event::tests::startup_seeding_registers_configured_helpers ... ok
+test core::groups::eval_group_config_device_links_tests::test_eval_group_config_device_links ... ok
+test core::groups::eval_group_config_device_links_tests::test_eval_group_device_links_with_devices ... ok
+test core::groups::eval_group_config_device_links_tests::test_eval_group_device_links_with_linked_groups ... ok
+test core::groups::groups_runtime_tests::group_scene_id_is_none_when_mixed ... ok
+test core::groups::groups_runtime_tests::group_scene_id_returns_unanimous_scene ... ok
+test core::groups::groups_runtime_tests::groups_containing_device_returns_all_memberships ... ok
+test core::integrations::actor::tests::disabled_devices_never_enter_the_actor_command_queue ... ok
+test core::integrations::actor::tests::first_rate_limited_update_is_ready_immediately ... ok
+test core::integrations::actor::tests::rate_limited_updates_are_coalesced_by_device_with_latest_state_winning ... ok
+test core::integrations::actor::tests::updates_stay_immediate_when_rate_limit_is_disabled ... ok
+test core::integrations::tests::circadian_schema_uses_color_fields ... ok
+test core::integrations::tests::disabled_device_policy_round_trips_in_database_config_exports ... ok
+test core::integrations::tests::every_schema_includes_common_outbound_pacing_field ... ok
+test core::integrations::tests::invalid_reload_preserves_existing_integration ... ok
+test core::integrations::tests::mqtt_schema_exposes_core_required_fields ... ok
+test core::integrations::tests::random_schema_exposes_random_config_fields ... ok
+test core::integrations::tests::reload_stop_failure_restarts_previous_integration_and_returns_error ... ok
+test core::integrations::tests::schemas_cover_all_builtin_plugins ... ok
+test core::js_worker::engine::tests::enforces_result_size_cap ... ok
+test core::js_worker::engine::tests::executes_function_bodies_and_serializes_results ... ok
+test core::js_worker::engine::tests::exposes_immutable_context_as_ctx ... ok
+test core::js_worker::engine::tests::fresh_realm_prevents_global_and_prototype_leaks ... ok
+test core::js_worker::engine::tests::legacy_rule_scripts_keep_truthiness_and_globals ... ok
+test core::js_worker::engine::tests::legacy_rule_scripts_reject_errors_and_runaway_loops ... ok
+test core::js_worker::engine::tests::legacy_scene_scripts_reject_errors_and_v2_body_syntax ... ok
+test core::js_worker::engine::tests::legacy_scene_scripts_return_raw_json_with_helpers_and_globals ... ok
+test core::js_worker::engine::tests::rejects_non_json_results ... ok
+test core::js_worker::engine::tests::rejects_syntax_and_runtime_errors ... ok
+test core::js_worker::engine::tests::terminates_runaway_loops_and_recursion ... ok
+test core::js_worker::engine::tests::validation_never_executes ... ok
+test core::js_worker::protocol::tests::legacy_requests_validate_against_the_legacy_api_version ... ok
+test core::js_worker::protocol::tests::legacy_scene_requests_validate_against_the_legacy_scene_api_version ... ok
+test core::js_worker::protocol::tests::rejects_oversized_and_empty_frames_before_reading ... ok
+test core::js_worker::protocol::tests::reports_truncated_frames ... ok
+test core::js_worker::protocol::tests::response_shape_is_strict ... ok
+test core::js_worker::protocol::tests::round_trips_async_frames ... ok
+test core::js_worker::protocol::tests::round_trips_blocking_frames ... ok
+test core::js_worker::protocol::tests::validates_request_limits ... ok
+test core::js_worker::supervisor::tests::config_validation_rejects_unbounded_settings ... ok
+test core::js_worker::supervisor::tests::default_config_is_bounded ... ok
+test core::js_worker::supervisor::tests::diagnostics_ring_keeps_the_tail ... ok
+test core::js_worker::supervisor::tests::worker_error_classifies_faults ... ok
+test core::logs::tests::blank_log_filters_fall_back_to_default ... ok
+test core::logs::tests::default_log_filters_enable_homectl_info_logs ... ok
+test core::logs::tests::explicit_log_filters_override_default ... ok
+test core::logs::tests::log_level_mapping_matches_log_crate_levels ... ok
+test core::logs::tests::recent_logs_drop_oldest_entries_when_buffer_is_full ... ok
+test core::routine_history::tests::a_blocked_entry_never_carries_a_previous_run ... ok
+test core::routine_history::tests::a_changed_reason_or_window_starts_a_new_entry ... ok
+test core::routine_history::tests::hydrate_into_keeps_only_the_ring_bound ... ok
+test core::routine_history::tests::hydrate_into_restores_order_and_continues_the_id_counter ... ok
+test core::routine_history::tests::recent_routine_history_drops_oldest_entries_when_buffer_is_full ... ok
+test core::routine_history::tests::records_force_trigger_without_event_source ... ok
+test core::routine_history::tests::records_v2_run_with_evaluation_snapshot_and_dispatched_step_count ... ok
+test core::routine_history::tests::repeated_blocked_attempts_coalesce_inside_the_window ... ok
+test core::routine_validation::tests::v01_empty_rule_list_is_rejected ... ok
+test core::routine_validation::tests::v01_legacy_evalexpr_rule_is_rejected_with_a_path ... ok
+test core::routine_validation::tests::v01_malformed_rules_report_a_path_specific_error ... ok
+test core::routine_validation::tests::v02_invalid_script_syntax_is_reported_without_execution ... ok
+test core::routine_validation::tests::v03_nonfinite_action_values_are_rejected ... ok
+test core::routine_validation::tests::valid_definition_passes_both_checks ... ok
+test core::routines::tests::expand_action_source_context_merges_memberships_into_activate_scene ... ok
+test core::routines::tests::expand_action_source_context_noop_without_flag ... ok
+test core::routines::tests::expand_action_source_context_resolves_triggering_device_rollout_source ... ok
+test core::routines::tests::legacy_script_leaf_defers_and_combines_with_captured_native_leaves ... ok
+test core::routines::tests::missing_device_lookup_wakes_when_the_device_is_discovered ... ok
+test core::routines::tests::nested_any_script_leaves_combine_with_interspersed_native_leaves ... ok
+test core::routines::tests::p03_v2_rows_compile_quarantine_and_never_run_as_v1 ... ok
+test core::routines::tests::p04_v2_frames_evaluate_triggers_and_conditions ... ok
+test core::routines::tests::raw_edge_rules_rearm_after_state_leaves_match ... ok
+test core::routines::tests::raw_rule_matches_numeric_thresholds ... ok
+test core::routines::tests::raw_rule_supports_string_regex ... ok
+test core::routines::tests::refresh_passes_leave_script_leaves_pending_without_submission ... ok
+test core::routines::tests::reload_rejects_in_flight_legacy_leaf_results ... ok
+test core::routines::tests::shared_device_edge_memory_applies_at_capture_not_finalize ... ok
+test core::routines::tests::v01_enabled_invalid_routine_is_quarantined_and_visible ... ok
+test core::routines::tests::v04_disabled_invalid_row_is_left_untouched ... ok
+test core::routines::tests::v05_status_refresh_does_not_record_history_or_edges ... ok
+test core::routines::tests::v1_script_rule_rows_load_and_register_legacy_owners ... ok
+test core::routines::tests::v2_status_refresh_populates_trigger_rows_and_arms ... ok
+test core::scenario::tests::command_comparison_ignores_inter_target_order_but_preserves_target_order ... ok
+test core::scenario::tests::integration_action_diagnostics_redact_payloads ... ok
+test core::scenario::tests::light_command_comparison_includes_brightness_and_power ... ok
+test core::scenario::tests::sensor_values_convert_without_loss ... ok
+test core::scene_commands::tests::actor_confirms_after_publishing_all_affected_devices ... ok
+test core::scene_commands::tests::group_scope_excludes_readonly_and_outside_devices ... ok
+test core::scene_commands::tests::invalid_explicit_selection_rejects_before_any_state_changes ... ok
+test core::scene_commands::tests::transition_and_scene_validation_preserve_runtime ... ok
+test core::scenes::tests::extract_bracket_string_refs_finds_static_device_and_group_refs ... ok
+test core::scenes::tests::later_group_targets_override_earlier_targets_in_saved_order ... ok
+test core::scenes::tests::load_config_rows_accepts_legacy_scene_target_shapes ... ok
+test core::scenes::tests::normalize_scene_script_config_flattens_wrapped_color_variants ... ok
+test core::scenes::tests::normalize_scene_script_config_renames_legacy_id_field ... ok
+test core::scenes::tests::scene_invalidation_queues_only_dependent_scenes ... ok
+test core::scenes::tests::scene_link_transition_override_replaces_nested_scene_transition ... ok
+test core::scenes::tests::scene_materialization_sets_provenance_for_direct_device_state ... ok
+test core::scenes::tests::scene_materialization_sets_provenance_for_group_device_link ... ok
+test core::scenes::tests::scene_materialization_sets_provenance_for_scene_link ... ok
+test core::scenes::tests::scene_script_failures_keep_last_good_and_edits_drop_it ... ok
+test core::scenes::tests::scene_script_materialization_populates_last_good_and_rejects_stale_revisions ... ok
+test core::scenes::tests::script_revisions_bump_only_when_the_script_changes ... ok
+test core::scheduler::tests::due_wakeups_are_emitted_once_per_generation ... ok
+test core::scripting::tests::rejects_oversized_input_and_output ... ok
+test core::scripting::tests::rejects_unbounded_loops_and_recursion ... ok
+test core::scripting::tests::test_eval_boolean ... ok
+test core::scripting::tests::test_eval_json ... ok
+test core::scripting::tests::test_global_var_access ... ok
+test core::scripting::tests::test_register_complex_global ... ok
+test core::scripting::tests::test_scene_script_helpers ... ok
+test core::simulate::tests::export_from_config_file_accepts_json_backup ... ok
+test core::simulate::tests::export_from_config_file_rejects_legacy_toml ... ok
+test core::state::native_color_tests::full_and_partial_updates_preserve_xy ... ok
+test core::state::native_color_tests::schedule_due_resolves_intervals_and_calendar ... ok
+test core::state::native_color_tests::schedule_lateness_policy_is_bounded_only_for_catch_up ... ok
+test core::state::websocket_timer_tests::helpers_are_published_in_state_and_helper_patches ... ok
+test core::state::websocket_timer_tests::timers_are_published_in_state_and_timer_patches ... ok
+test core::state::websocket_timer_tests::unrelated_patches_omit_helpers ... ok
+test core::state::websocket_timer_tests::unrelated_patches_omit_timers ... ok
+test db::config_queries::calibration::tests::calibration_editor_profile_and_assignment_commit_or_roll_back_together ... ok
+test db::config_queries::calibration::tests::profiles_and_assignments_round_trip_and_failed_batch_rolls_back ... ok
+test db::config_queries::consistency_tests::backup_restore_replaces_absent_rows_and_rolls_back_the_entire_snapshot ... ok
+test db::config_queries::consistency_tests::color_calibration_database_export_import_round_trip ... ok
+test db::config_queries::consistency_tests::dashboard_arrangement_transaction_rolls_back_sizes_order_and_removals ... ok
+test db::config_queries::consistency_tests::dashboard_assigned_ids_and_widget_selections_round_trip ... ok
+test db::config_queries::consistency_tests::device_settings_save_is_atomic_and_preserves_sensor_payload ... ok
+test db::config_queries::consistency_tests::helper_definitions_and_durable_values_round_trip ... ok
+test db::config_queries::consistency_tests::integration_reporting_policy_failure_rolls_back_connection_settings ... ok
+test db::config_queries::consistency_tests::reporting_policy_database_export_import_round_trip_and_validation ... ok
+test db::config_queries::consistency_tests::routine_history_round_trips_and_prunes_to_newest_entries ... ok
+test db::config_queries::consistency_tests::routine_rename_failure_rolls_back_new_row_and_references ... ok
+test db::config_queries::consistency_tests::scenario_suite_database_export_import_round_trip ... ok
+test db::config_queries::consistency_tests::service_setting_failure_rolls_back_core_and_prior_settings ... ok
+test db::config_queries::consistency_tests::shared_settings_preferences_database_export_import_round_trip ... ok
+test db::config_queries::consistency_tests::timer_jobs_upsert_delete_and_import_clears ... ok
+test db::config_queries::value_history_tests::stores_only_changes_and_keeps_the_latest_hundred_per_field ... ok
+test db::migrations::tests::routine_v2_columns_are_additive_and_preserve_legacy_rows ... ok
+test db::migrations::tests::uv_migration_removes_incompatible_hsv_calibration_data ... ok
+test integrations::circadian::tests::b06_circadian_device_matches_shared_curve ... ok
+test integrations::cron::tests::b06_cron_parser_next_occurrence_is_pinned ... ok
+test integrations::cron::tests::b06_cron_register_respects_init_enabled ... ok
+test integrations::mqtt::esphome::tests::availability_accepts_retained_style_status_payloads ... ok
+test integrations::mqtt::esphome::tests::cached_availability_is_attached_when_state_arrives_first ... ok
+test integrations::mqtt::esphome::tests::cwww_ratio_is_independent_of_absolute_brightness ... ok
+test integrations::mqtt::esphome::tests::decodes_cwww_state_without_inventing_zero_channel_ct ... ok
+test integrations::mqtt::esphome::tests::decodes_esphome_unknown_mode_snapshot_as_off ... ok
+test integrations::mqtt::esphome::tests::decodes_rgb_state_and_infers_rgb_capability ... ok
+test integrations::mqtt::esphome::tests::discovery_prefers_the_node_name_over_a_placeholder_light_name ... ok
+test integrations::mqtt::esphome::tests::discovery_replays_state_and_applies_capabilities ... ok
+test integrations::mqtt::esphome::tests::malformed_messages_are_ignored ... ok
+test integrations::mqtt::esphome::tests::outbound_hs_white_for_rgb_only_light_is_neutral_rgb ... ok
+test integrations::mqtt::esphome::tests::outbound_rgb_and_ct_commands_use_esphome_json ... ok
+test integrations::mqtt::esphome::tests::transition_encoding_preserves_milliseconds_and_stock_compatibility ... ok
+test integrations::mqtt::packet_tests::bridge_sized_packets_decode_but_incoming_size_remains_bounded ... ok
+test integrations::mqtt::packet_tests::esphome_profile_applies_defaults_and_derives_topics ... ok
+test integrations::mqtt::packet_tests::explicit_zigbee_profile_matches_legacy_derived_topics ... ok
+test integrations::mqtt::packet_tests::generic_retain_default_is_backward_compatible_and_overrideable ... ok
+test integrations::mqtt::packet_tests::legacy_zigbee_config_infers_the_zigbee_profile ... ok
+test integrations::mqtt::packet_tests::profile_validation_reports_bad_esphome_ranges ... ok
+test integrations::mqtt::polling::tests::commands_coalesce_and_wait_for_latest_transition ... ok
+test integrations::mqtt::polling::tests::dry_run_generic_and_disabled_profiles_never_poll ... ok
+test integrations::mqtt::polling::tests::fleet_is_paced_and_only_one_request_is_outstanding ... ok
+test integrations::mqtt::polling::tests::full_mqtt_queue_does_not_block_or_lose_pending_readback ... ok
+test integrations::mqtt::polling::tests::reports_defer_refresh_and_offline_devices_are_skipped ... ok
+test integrations::mqtt::polling::tests::timeouts_back_off_even_when_more_commands_arrive ... ok
+test integrations::mqtt::utils::tests::test_homectl_to_mqtt ... ok
+test integrations::mqtt::utils::tests::test_integration ... ok
+test integrations::mqtt::utils::tests::test_mqtt_to_homectl ... ok
+test integrations::mqtt::utils::tests::test_mqtt_to_homectl_metadata_only_message_creates_placeholder_sensor ... ok
+test integrations::mqtt::utils::tests::test_mqtt_to_homectl_name_falls_back_to_id ... ok
+test integrations::mqtt::utils::tests::topic_id_takes_precedence_over_the_legacy_json_id ... ok
+test integrations::mqtt::utils::tests::topic_template_extracts_id_from_a_literal_template ... ok
+test integrations::mqtt::utils::tests::topic_template_extracts_id_with_plus_wildcards ... ok
+test integrations::mqtt::utils::tests::topic_template_rejects_mismatches_and_malformed_patterns ... ok
+test integrations::mqtt::utils::tests::topic_template_supports_a_final_multi_level_wildcard ... ok
+test integrations::mqtt::utils::tests::topic_without_id_uses_the_legacy_json_id_fallback ... ok
+test integrations::mqtt::zigbee2mqtt::tests::configured_sensor_mappings_survive_profile_selection ... ok
+test integrations::mqtt::zigbee2mqtt::tests::discovery_order_mode_and_round_trip ... ok
+test integrations::mqtt::zigbee2mqtt::tests::hs_reports_are_scaled_and_encoded_as_xy_when_supported ... ok
+test integrations::mqtt::zigbee2mqtt::tests::mode_wins_over_alternate_color_and_metadata_is_not_state ... ok
+test integrations::mqtt::zigbee2mqtt::tests::polling_deduplicates_aliases_and_only_reads_get_capable_enabled_lights ... ok
+test integrations::timer::tests::b06_timer_synthetic_device_shape ... ok
+test integrations::timer::tests::dropping_timer_cancels_expiration ... ok
+test integrations::timer::tests::stop_cancels_timer_expiration ... ok
+test types::action::export_bindings_action ... ok
+test types::action::export_bindings_randomizecoloractiondescriptor ... ok
+test types::assistant::export_bindings_applyassistantactionresponse ... ok
+test types::assistant::export_bindings_applyassistantplanrequest ... ok
+test types::assistant::export_bindings_applyassistantplanresponse ... ok
+test types::assistant::export_bindings_assistantaction ... ok
+test types::assistant::export_bindings_assistantactionchange ... ok
+test types::assistant::export_bindings_assistantactionchangeresult ... ok
+test types::assistant::export_bindings_assistantactioncolor ... ok
+test types::assistant::export_bindings_assistantattachment ... ok
+test types::assistant::export_bindings_assistantchatrequest ... ok
+test types::assistant::export_bindings_assistantentitykind ... ok
+test types::assistant::export_bindings_assistanthistorymessage ... ok
+test types::assistant::export_bindings_assistantmessagerole ... ok
+test types::assistant::export_bindings_assistantoperation ... ok
+test types::assistant::export_bindings_assistantoperationresult ... ok
+test types::assistant::export_bindings_assistantopkind ... ok
+test types::assistant::export_bindings_assistantplan ... ok
+test types::assistant::export_bindings_assistantplanrequest ... ok
+test types::assistant::export_bindings_assistantsearchresult ... ok
+test types::assistant::export_bindings_assistantthread ... ok
+test types::assistant::export_bindings_assistantthreadoutcome ... ok
+test types::assistant::export_bindings_assistantthreadoutcomerequest ... ok
+test types::assistant::export_bindings_assistantthreadproposal ... ok
+test types::assistant::export_bindings_assistantthreadsummary ... ok
+test types::assistant::export_bindings_assistantusage ... ok
+test types::automation_definition::export_bindings_backlogpolicy ... ok
+test types::automation_definition::export_bindings_choosebranch ... ok
+test types::automation_definition::export_bindings_conditionexpr ... ok
+test types::automation_definition::export_bindings_cyclescenespec ... ok
+test types::automation_definition::export_bindings_executionmode ... ok
+test types::automation_definition::export_bindings_executionpolicy ... ok
+test types::automation_definition::export_bindings_frozengroupmembers ... ok
+test types::automation_definition::export_bindings_helperid ... ok
+test types::automation_definition::export_bindings_invokemode ... ok
+test types::automation_definition::export_bindings_nativeaction ... ok
+test types::automation_definition::export_bindings_nativeprogram ... ok
+test types::automation_definition::export_bindings_nodeid ... ok
+test types::automation_definition::export_bindings_program ... ok
+test types::automation_definition::export_bindings_quantifier ... ok
+test types::automation_definition::export_bindings_rolloutsource ... ok
+test types::automation_definition::export_bindings_rolloutspec ... ok
+test types::automation_definition::export_bindings_routinedefinitionv2 ... ok
+test types::automation_definition::export_bindings_sceneselection ... ok
+test types::automation_definition::export_bindings_schedulespec ... ok
+test types::automation_definition::export_bindings_scriptdeclaration ... ok
+test types::automation_definition::export_bindings_scriptprogram ... ok
+test types::automation_definition::export_bindings_scriptspec ... ok
+test types::automation_definition::export_bindings_sourceid ... ok
+test types::automation_definition::export_bindings_statechangemode ... ok
+test types::automation_definition::export_bindings_targetspec ... ok
+test types::automation_definition::export_bindings_timerid ... ok
+test types::automation_definition::export_bindings_timerintentcapture ... ok
+test types::automation_definition::export_bindings_timerintenttarget ... ok
+test types::automation_definition::export_bindings_timeroperation ... ok
+test types::automation_definition::export_bindings_triggerspec ... ok
+test types::automation_definition::export_bindings_valuesource ... ok
+test types::automation_event::export_bindings_eventcausation ... ok
+test types::automation_event::export_bindings_eventid ... ok
+test types::automation_event::export_bindings_eventorigin ... ok
+test types::automation_source::export_bindings_lightprofile ... ok
+test types::automation_source::export_bindings_sourcecompute ... ok
+test types::automation_source::export_bindings_sourcedefinition ... ok
+test types::automation_source::export_bindings_sourceoutput ... ok
+test types::automation_source::export_bindings_sourcepresetinfo ... ok
+test types::automation_source::export_bindings_sourcepresetref ... ok
+test types::automation_source::export_bindings_sourcepreview ... ok
+test types::automation_source::export_bindings_sourcepreviewrequest ... ok
+test types::automation_source::export_bindings_sourcepreviewsample ... ok
+test types::automation_source::export_bindings_sourcequality ... ok
+test types::automation_trace::export_bindings_conditionevaluation ... ok
+test types::automation_trace::export_bindings_conditiontracenode ... ok
+test types::automation_trace::export_bindings_groupevaluation ... ok
+test types::automation_trace::export_bindings_groupmemberevaluation ... ok
+test types::automation_trace::export_bindings_groupscenesummary ... ok
+test types::automation_trace::export_bindings_groupscenesummarykind ... ok
+test types::automation_trace::export_bindings_plannedrunstatus ... ok
+test types::automation_trace::export_bindings_plannedstepstatus ... ok
+test types::automation_trace::export_bindings_routinev2runtimestatus ... ok
+test types::automation_trace::export_bindings_stepdisposition ... ok
+test types::automation_trace::export_bindings_triggerruntimestatus ... ok
+test types::automation_trace::export_bindings_truthvalue ... ok
+test types::automation_trace::export_bindings_unknownreason ... ok
+test types::automation_value::export_bindings_helperdefinition ... ok
+test types::automation_value::export_bindings_helperkind ... ok
+test types::automation_value::export_bindings_helperpersistence ... ok
+test types::automation_value::export_bindings_helperruntimestatus ... ok
+test types::color::export_bindings_capabilities ... ok
+test types::color::export_bindings_colormode ... ok
+test types::color::export_bindings_ct ... ok
+test types::color::export_bindings_devicecolor ... ok
+test types::color::export_bindings_hs ... ok
+test types::color::export_bindings_rgb ... ok
+test types::color::export_bindings_xy ... ok
+test types::color::tests::hs_rgb_xy_round_trips_are_sensible ... ok
+test types::color::tests::uv_distance_is_small_for_rounding_and_large_for_different_colors ... ok
+test types::color::tests::zero_saturation_is_neutral_rgb_at_every_hue ... ok
+test types::config_authoring::export_bindings_previewstep ... ok
+test types::config_authoring::export_bindings_previewvalidationerror ... ok
+test types::config_authoring::export_bindings_routinepreviewoverride ... ok
+test types::config_authoring::export_bindings_routinepreviewrequest ... ok
+test types::config_authoring::export_bindings_routinepreviewresponse ... ok
+test types::config_authoring::export_bindings_valuefieldinfo ... ok
+test types::config_authoring::export_bindings_valuehistoryentry ... ok
+test types::config_diagnostics::export_bindings_configdiagnostic ... ok
+test types::config_diagnostics::export_bindings_configdiagnostics ... ok
+test types::config_diagnostics::export_bindings_diagnosticentity ... ok
+test types::config_diagnostics::export_bindings_diagnosticseverity ... ok
+test types::config_write::export_bindings_configwritestatus ... ok
+test types::config_write::export_bindings_persistencestatus ... ok
+test types::device::export_bindings_controllabledevice ... ok
+test types::device::export_bindings_controllablestate ... ok
+test types::device::export_bindings_device ... ok
+test types::device::export_bindings_deviceavailability ... ok
+test types::device::export_bindings_devicedata ... ok
+test types::device::export_bindings_deviceid ... ok
+test types::device::export_bindings_deviceidref ... ok
+test types::device::export_bindings_deviceref ... ok
+test types::device::export_bindings_devicereport ... ok
+test types::device::export_bindings_devicesstate ... ok
+test types::device::export_bindings_devicestatesource ... ok
+test types::device::export_bindings_devicestatesourcekind ... ok
+test types::device::export_bindings_devicestatesourcescope ... ok
+test types::device::export_bindings_managekind ... ok
+test types::device::export_bindings_sensordevice ... ok
+test types::device::tests::perceptual_uv_fallback_absorbs_rounding_but_rejects_visible_drift ... ok
+test types::device::tests::report_and_scene_comparison_share_tolerance_and_reported_mode ... ok
+test types::device::tests::scene_pause_round_trips_and_defaults_for_legacy_device_json ... ok
+test types::device::tests::sparse_off_reports_do_not_require_unreported_color ... ok
+test types::device::tests::test_sensor_device_deserialization ... ok
+test types::device::tests::test_sensor_device_serialization ... ok
+test types::device_command::export_bindings_devicecommand ... ok
+test types::device_command::export_bindings_devicecommandresult ... ok
+test types::device_health::export_bindings_devicehealth ... ok
+test types::device_health::export_bindings_devicehealthissue ... ok
+test types::device_health::export_bindings_devicehealthsnapshot ... ok
+test types::device_health::export_bindings_effectivereportingpolicy ... ok
+test types::device_health::export_bindings_reportingpolicy ... ok
+test types::dim::export_bindings_dimconfig ... ok
+test types::dim::export_bindings_dimdescriptor ... ok
+test types::dim::export_bindings_dimdeviceconfig ... ok
+test types::dim::export_bindings_dimdevicelink ... ok
+test types::dim::export_bindings_dimdevicessearchconfig ... ok
+test types::dim::export_bindings_dimdevicestate ... ok
+test types::dim::export_bindings_dimdevicestates ... ok
+test types::dim::export_bindings_dimgroupsconfig ... ok
+test types::dim::export_bindings_flatteneddimconfig ... ok
+test types::event::export_bindings_event ... ok
+test types::event::export_bindings_timerwakeupjob ... ok
+test types::group::export_bindings_flattenedgroupconfig ... ok
+test types::group::export_bindings_flattenedgroupsconfig ... ok
+test types::group::export_bindings_groupid ... ok
+test types::integration::export_bindings_customactiondescriptor ... ok
+test types::integration::export_bindings_integrationactionpayload ... ok
+test types::integration::export_bindings_integrationconfigfieldkind ... ok
+test types::integration::export_bindings_integrationconfigfieldoption ... ok
+test types::integration::export_bindings_integrationconfigfieldschema ... ok
+test types::integration::export_bindings_integrationconfigfieldvisibility ... ok
+test types::integration::export_bindings_integrationconfigschema ... ok
+test types::integration::export_bindings_integrationid ... ok
+test types::logs::export_bindings_logentityreference ... ok
+test types::logs::export_bindings_loglevel ... ok
+test types::logs::export_bindings_uilogentry ... ok
+test types::routine_history::export_bindings_routinehistoryentry ... ok
+test types::routine_history::export_bindings_routinehistorytriggerkind ... ok
+test types::routine_status::export_bindings_routineruntimestatus ... ok
+test types::routine_status::export_bindings_routinestatuses ... ok
+test types::routine_status::export_bindings_ruleruntimestatus ... ok
+test types::rule::export_bindings_anyrule ... ok
+test types::rule::export_bindings_devicerule ... ok
+test types::rule::export_bindings_forcetriggerroutinedescriptor ... ok
+test types::rule::export_bindings_grouprule ... ok
+test types::rule::export_bindings_rawrule ... ok
+test types::rule::export_bindings_rawruleoperator ... ok
+test types::rule::export_bindings_routine ... ok
+test types::rule::export_bindings_routineid ... ok
+test types::rule::export_bindings_rule ... ok
+test types::rule::export_bindings_scriptrule ... ok
+test types::rule::export_bindings_sensorrule ... ok
+test types::rule::export_bindings_triggermode ... ok
+test types::scene::export_bindings_activatesceneactiondescriptor ... ok
+test types::scene::export_bindings_activatescenedescriptor ... ok
+test types::scene::export_bindings_cyclescenesdescriptor ... ok
+test types::scene::export_bindings_flattenedsceneconfig ... ok
+test types::scene::export_bindings_flattenedscenesconfig ... ok
+test types::scene::export_bindings_rolloutstyle ... ok
+test types::scene::export_bindings_sceneconfig ... ok
+test types::scene::export_bindings_scenedeviceconfig ... ok
+test types::scene::export_bindings_scenedevicelink ... ok
+test types::scene::export_bindings_scenedevicessearchconfig ... ok
+test types::scene::export_bindings_scenedevicestate ... ok
+test types::scene::export_bindings_scenedevicestates ... ok
+test types::scene::export_bindings_scenegroupsconfig ... ok
+test types::scene::export_bindings_sceneid ... ok
+test types::scene_command::export_bindings_scenecommand ... ok
+test types::scene_command::export_bindings_scenecommandresult ... ok
+test types::timer_status::export_bindings_timerjobstatus ... ok
+test types::timer_status::export_bindings_timerpersistence ... ok
+test types::timer_status::export_bindings_timerruntimestatus ... ok
+test types::ui::export_bindings_uiactiondescriptor ... ok
+test types::websockets::export_bindings_devicespatch ... ok
+test types::websockets::export_bindings_resyncrequest ... ok
+test types::websockets::export_bindings_routinestatusespatch ... ok
+test types::websockets::export_bindings_statepatch ... ok
+test types::websockets::export_bindings_stateupdate ... ok
+test types::websockets::export_bindings_websocketrequest ... ok
+test types::websockets::export_bindings_websocketresponse ... ok
+
+test result: ok. 787 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 6.02s
+
+     Running unittests src/main.rs (target/debug/deps/homectl_server-baae39f8e037ef7a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/script-worker.rs (target/debug/deps/script_worker-727ced089917cddc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/assistant_api.rs (target/debug/deps/assistant_api-84bf5e8989cd448d)
+
+running 39 tests
+test assistant_applies_light_state_changes ... ok
+test assistant_apply_is_disabled_without_configuration ... ok
+test assistant_apply_rejects_invalid_provider_output ... ok
+test assistant_apply_rejects_unknown_devices_and_reports_them ... ok
+test assistant_apply_respects_the_requested_scope ... ok
+test assistant_chat_and_plan_forward_history ... ok
+test assistant_chat_caps_history_server_side ... ok
+test assistant_chat_discards_stored_actions_and_enforces_scope ... ok
+test assistant_chat_falls_back_when_the_provider_rejects_streaming ... ok
+test assistant_chat_is_disabled_without_configuration ... ok
+test assistant_chat_persists_threads_for_continue_and_delete ... ok
+test assistant_chat_routes_light_state_requests_to_a_stored_action ... ok
+test assistant_chat_streams_deltas_and_returns_a_plan ... ok
+test assistant_drafts_a_validated_definition ... ok
+test assistant_drops_reasoning_effort_when_rejected ... ok
+test assistant_fails_after_exhausting_repairs ... ok
+test assistant_is_disabled_without_configuration ... ok
+test assistant_plan_apply_executes_operations_in_dependency_order ... ok
+test assistant_plan_apply_is_not_found_for_unknown_plans ... ok
+test assistant_plan_apply_rejects_empty_acceptance ... ok
+test assistant_plan_apply_reports_revalidation_failures_per_operation ... ok
+test assistant_plan_apply_skips_unaccepted_operations ... ok
+test assistant_plan_discard_removes_the_plan ... ok
+test assistant_plan_is_disabled_without_configuration ... ok
+test assistant_plan_masks_integration_secrets_and_keeps_them_on_apply ... ok
+test assistant_plan_produces_a_validated_plan ... ok
+test assistant_plan_rejects_malformed_provider_output ... ok
+test assistant_plan_rejects_unknown_attachments_without_calling_the_provider ... ok
+test assistant_plan_rejects_unknown_targets ... ok
+test assistant_plan_repairs_invalid_output ... ok
+test assistant_plan_stays_reviewable_without_a_timer ... ok
+test assistant_rejects_an_empty_prompt_when_enabled ... ok
+test assistant_rejects_invalid_settings ... ok
+test assistant_repairs_an_invalid_draft ... ok
+test assistant_reports_provider_failures ... ok
+test assistant_retries_without_json_mode_when_rejected ... ok
+test assistant_search_ranks_configured_entities ... ok
+test assistant_settings_round_trip_masks_api_key ... ok
+test assistant_stored_settings_override_environment ... ok
+
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 43.99s
+
+     Running tests/automation_baseline.rs (target/debug/deps/automation_baseline-00e19741d7f7c6db)
+
+running 10 tests
+test b01_legacy_trigger_mode_defaults ... ok
+test b02_level_rule_retriggers_on_unrelated_update ... ok
+test b03_mixed_any_combines_event_leaf_and_state_leaf_bits ... ok
+test b04_malformed_rows_are_quarantined_not_silently_empty ... ok
+test b04_script_rule_is_present_in_legacy_contract ... ok
+test b04_script_truthiness_is_plain_javascript ... ok
+test b05_group_scene_is_unanimous_or_unknown ... ok
+test e01_queued_pulse_reports_keep_their_own_frame ... ok
+test e02_repeated_identical_reports_have_distinct_ids_and_pulses ... ok
+test fixture_format_round_trips_and_replays ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/config_api.rs (target/debug/deps/config_api-88b16727676cc197)
+
+running 15 tests
+test config_export_import::test_export_import_roundtrip ... ok
+test config_export_import::test_full_export_structure ... ok
+test config_export_import::test_import_validates_required_fields ... ok
+test config_serialization::test_complex_routine_with_rules ... ok
+test config_serialization::test_group_config_structure ... ok
+test config_serialization::test_integration_config_structure ... ok
+test config_serialization::test_routine_config_structure ... ok
+test config_serialization::test_scene_config_structure ... ok
+test config_serialization::test_scene_with_script ... ok
+test dashboard_config::test_dashboard_layout_structure ... ok
+test dashboard_config::test_widget_structure ... ok
+test dashboard_config::test_widget_types ... ok
+test floorplan_config::test_device_position_bounds ... ok
+test floorplan_config::test_floorplan_grid_structure ... ok
+test floorplan_config::test_tile_types ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/config_api_integration.rs (target/debug/deps/config_api_integration-b0af4d87f6ffddde)
+
+running 45 tests
+test actions_api_rejects_invalid_spatial_rollout_actions ... ok
+test activate_scene_spatial_rollout_updates_near_devices_before_far_devices ... ok
+test calibration_profiles_assign_atomically_and_previews_preserve_runtime ... ok
+test color_calibration_crud_validation_and_export_import ... ok
+test config_api_concurrent_integration_writes_preserve_all_changes ... ok
+test config_api_delete_floorplan_image_preserves_grid ... ok
+test config_api_deletes_device_references_and_removes_source_device ... ok
+test config_api_deletes_device_with_key_in_body_and_legacy_segments ... ok
+test config_api_device_display_name_overrides_accept_key_in_json_body ... ok
+test config_api_device_display_name_overrides_roundtrip ... ok
+test config_api_device_sensor_configs_roundtrip ... ok
+test config_api_executes_scene_scripts_against_live_device_state ... ok
+test config_api_hot_reloads_groups_and_scenes_for_runtime_actions ... ok
+test config_api_hot_reloads_integrations_without_restart ... ok
+test config_api_hot_reloads_routines_for_sensor_triggers ... ok
+test config_api_logs_returns_buffered_server_logs ... ok
+test config_api_memory_only_write_returns_warning_and_applies_change ... ok
+test config_api_multiple_floorplans_store_independent_grids ... FAILED
+test config_api_rejects_invalid_spatial_rollout_routines ... ok
+test config_api_replaces_device_references_and_removes_source_device ... ok
+test config_api_starts_from_json_backup_with_default_sqlite_database ... ok
+test config_api_updates_routine_id_and_force_trigger_references ... ok
+test config_export_import_roundtrip_preserves_config ... ok
+test config_exports_redact_widget_secrets_by_default ... ok
+test cross_origin_allowlist_honors_configured_origins ... ok
+test cross_origin_requests_are_restricted ... ok
+test cycle_scenes_spatial_rollout_reuses_rollout_behavior ... ok
+test dashboard_fractional_dimensions_round_trip_through_database ... ok
+test default_sqlite_database_persists_config_across_restarts ... ok
+test device_command_api_applies_patch_and_rejects_unsupported_controls ... ok
+test durable_named_timers_survive_restart_and_cancelled_ones_do_not ... ok
+test explicit_sqlite_database_url_creates_database_and_persists_config ... ok
+test helper_api_validates_and_persists_values ... ok
+test migration_apply_allows_preview_with_warnings_by_dropping_invalid_entries ... FAILED
+test migration_apply_preserves_existing_integrations_when_importing_later_sections ... ok
+test migration_preview_allows_integrations_only_before_device_discovery ... ok
+test migration_preview_reports_validation_errors_without_blocking_import ... FAILED
+test mixed_semantics_config_round_trips_through_sqlite_database ... ok
+test persisted_cycle_scenes_spatial_rollout_reuses_rollout_behavior ... ok
+test script_source_publishes_after_worker_computation ... ok
+test script_source_validation_pins_presets_and_accepts_forks ... ok
+test source_crud_validation_and_export_import ... ok
+test source_preview_is_stateless_and_validates_the_draft ... ok
+test source_refresh_publishes_read_only_synthetic_device ... ok
+test v2_routines_validate_quarantine_drafts_and_preserve_definitions ... ok
+
+failures:
+
+---- config_api_multiple_floorplans_store_independent_grids stdout ----
+[test] Waiting for server at http://127.0.0.1:37545/health/ready
+[test] Connection error: error sending request for url (http://127.0.0.1:37545/health/ready) (elapsed: 12.125578ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:37545/health/ready) (elapsed: 124.588173ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:37545/health/ready) (elapsed: 236.859089ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:37545/health/ready) (elapsed: 349.449323ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:37545/health/ready) (elapsed: 461.576299ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:37545/health/ready) (elapsed: 573.799615ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:37545/health/ready) (elapsed: 686.17539ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:37545/health/ready) (elapsed: 798.532655ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:37545/health/ready) (elapsed: 911.044489ms)
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Server ready!
+
+thread 'config_api_multiple_floorplans_store_independent_grids' (2331380) panicked at server/tests/config_api_integration.rs:2543:5:
+assertion failed: initial_floorplans["data"].as_array().expect("floorplans should be an array").iter().any(|floorplan|
+        floorplan["id"] == "default")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- migration_apply_allows_preview_with_warnings_by_dropping_invalid_entries stdout ----
+[test] Waiting for server at http://127.0.0.1:35123/health/ready
+[test] Connection error: error sending request for url (http://127.0.0.1:35123/health/ready) (elapsed: 12.105864ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:35123/health/ready) (elapsed: 124.727404ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:35123/health/ready) (elapsed: 236.874561ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:35123/health/ready) (elapsed: 349.229712ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:35123/health/ready) (elapsed: 461.286395ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:35123/health/ready) (elapsed: 573.294901ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:35123/health/ready) (elapsed: 685.814642ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:35123/health/ready) (elapsed: 797.924474ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:35123/health/ready) (elapsed: 910.492225ms)
+[test] Server ready!
+
+thread 'migration_apply_allows_preview_with_warnings_by_dropping_invalid_entries' (2332495) panicked at server/tests/config_api_integration.rs:2991:5:
+assertion `left == right` failed
+  left: Some(4)
+ right: Some(3)
+
+---- migration_preview_reports_validation_errors_without_blocking_import stdout ----
+[test] Waiting for server at http://127.0.0.1:38827/health/ready
+[test] Connection error: error sending request for url (http://127.0.0.1:38827/health/ready) (elapsed: 12.397688ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:38827/health/ready) (elapsed: 126.704221ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:38827/health/ready) (elapsed: 239.597195ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:38827/health/ready) (elapsed: 351.863141ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:38827/health/ready) (elapsed: 464.604721ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:38827/health/ready) (elapsed: 577.528049ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:38827/health/ready) (elapsed: 689.832966ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:38827/health/ready) (elapsed: 802.289606ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:38827/health/ready) (elapsed: 914.847141ms)
+[test] Server ready!
+
+thread 'migration_preview_reports_validation_errors_without_blocking_import' (2332590) panicked at server/tests/config_api_integration.rs:2861:5:
+assertion `left == right` failed
+  left: 4
+ right: 3
+
+
+failures:
+    config_api_multiple_floorplans_store_independent_grids
+    migration_apply_allows_preview_with_warnings_by_dropping_invalid_entries
+    migration_preview_reports_validation_errors_without_blocking_import
+
+test result: FAILED. 42 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 120.23s
+
+error: test failed, to rerun pass `-p homectl-server --test config_api_integration`
+     Running tests/convert.rs (target/debug/deps/convert-36913d6be3b19c20)
+
+running 1 test
+test conversion_applies_convertible_rows_and_archive_restores_them ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.07s
+
+     Running tests/device_persistence.rs (target/debug/deps/device_persistence-264736ed08293c6e)
+
+running 1 test
+test disabled_integration_devices_do_not_resurrect_on_restart ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.07s
+
+     Running tests/export_bindings.rs (target/debug/deps/export_bindings-5e8a76f21f88fcfc)
+
+running 1 test
+test export_ts_bindings ... ignored, Run manually to regenerate TypeScript bindings
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/integration.rs (target/debug/deps/integration-9e387237bd884481)
+
+running 7 tests
+test run_hurl_test::config-api.hurl          ... [test] Waiting for server at http://127.0.0.1:41607/health/ready
+[test] Connection error: error sending request for url (http://127.0.0.1:41607/health/ready) (elapsed: 12.529572ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41607/health/ready) (elapsed: 124.836579ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41607/health/ready) (elapsed: 236.901077ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41607/health/ready) (elapsed: 349.265293ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41607/health/ready) (elapsed: 461.66214ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41607/health/ready) (elapsed: 573.771277ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41607/health/ready) (elapsed: 686.061519ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41607/health/ready) (elapsed: 798.443281ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41607/health/ready) (elapsed: 910.998041ms)
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Server ready!
+ok
+test run_hurl_test::device-state.hurl        ... [test] Waiting for server at http://127.0.0.1:41751/health/ready
+[test] Connection error: error sending request for url (http://127.0.0.1:41751/health/ready) (elapsed: 12.03205ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41751/health/ready) (elapsed: 124.081703ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41751/health/ready) (elapsed: 236.210345ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41751/health/ready) (elapsed: 348.468042ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41751/health/ready) (elapsed: 460.435476ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41751/health/ready) (elapsed: 572.649978ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41751/health/ready) (elapsed: 684.720791ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41751/health/ready) (elapsed: 797.064677ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41751/health/ready) (elapsed: 909.141265ms)
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Server ready!
+ok
+test run_hurl_test::group-any-rules.hurl     ... [test] Waiting for server at http://127.0.0.1:41919/health/ready
+[test] Connection error: error sending request for url (http://127.0.0.1:41919/health/ready) (elapsed: 12.151438ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41919/health/ready) (elapsed: 124.028722ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41919/health/ready) (elapsed: 236.07052ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41919/health/ready) (elapsed: 348.533396ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41919/health/ready) (elapsed: 460.564079ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41919/health/ready) (elapsed: 572.512648ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41919/health/ready) (elapsed: 684.514296ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41919/health/ready) (elapsed: 796.688338ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:41919/health/ready) (elapsed: 909.03184ms)
+[test] Server ready!
+ok
+test run_hurl_test::health.hurl              ... [test] Waiting for server at http://127.0.0.1:43341/health/ready
+[test] Connection error: error sending request for url (http://127.0.0.1:43341/health/ready) (elapsed: 12.375458ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:43341/health/ready) (elapsed: 125.204433ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:43341/health/ready) (elapsed: 237.366905ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:43341/health/ready) (elapsed: 349.666622ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:43341/health/ready) (elapsed: 461.744715ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:43341/health/ready) (elapsed: 574.121439ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:43341/health/ready) (elapsed: 686.020247ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:43341/health/ready) (elapsed: 798.302179ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:43341/health/ready) (elapsed: 910.295288ms)
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Got response status: 503 Service Unavailable
+[test] Server ready!
+ok
+test run_hurl_test::scene-cycling-mixed.hurl ... [test] Waiting for server at http://127.0.0.1:39993/health/ready
+[test] Connection error: error sending request for url (http://127.0.0.1:39993/health/ready) (elapsed: 12.186653ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:39993/health/ready) (elapsed: 124.830248ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:39993/health/ready) (elapsed: 237.008852ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:39993/health/ready) (elapsed: 349.142984ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:39993/health/ready) (elapsed: 461.116513ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:39993/health/ready) (elapsed: 573.375014ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:39993/health/ready) (elapsed: 685.393607ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:39993/health/ready) (elapsed: 798.100633ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:39993/health/ready) (elapsed: 910.327915ms)
+[test] Server ready!
+ok
+test run_hurl_test::staircase-motion.hurl    ... [test] Waiting for server at http://127.0.0.1:44791/health/ready
+[test] Connection error: error sending request for url (http://127.0.0.1:44791/health/ready) (elapsed: 11.979015ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:44791/health/ready) (elapsed: 124.068763ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:44791/health/ready) (elapsed: 236.055691ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:44791/health/ready) (elapsed: 348.250578ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:44791/health/ready) (elapsed: 460.442071ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:44791/health/ready) (elapsed: 572.412989ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:44791/health/ready) (elapsed: 684.699096ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:44791/health/ready) (elapsed: 797.083813ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:44791/health/ready) (elapsed: 910.057592ms)
+[test] Server ready!
+ok
+test run_hurl_test::trigger-modes.hurl       ... [test] Waiting for server at http://127.0.0.1:33669/health/ready
+[test] Connection error: error sending request for url (http://127.0.0.1:33669/health/ready) (elapsed: 11.94056ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:33669/health/ready) (elapsed: 124.002558ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:33669/health/ready) (elapsed: 236.208165ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:33669/health/ready) (elapsed: 348.109249ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:33669/health/ready) (elapsed: 459.966957ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:33669/health/ready) (elapsed: 572.066545ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:33669/health/ready) (elapsed: 684.664192ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:33669/health/ready) (elapsed: 796.510115ms)
+[test] Connection error: error sending request for url (http://127.0.0.1:33669/health/ready) (elapsed: 908.562892ms)
+[test] Server ready!
+ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.69s
+
+     Running tests/postgres_runtime.rs (target/debug/deps/postgres_runtime-c6c8d92cdd4b46cd)
+
+running 6 tests
+test postgres_runtime_creates_missing_database_automatically ... ok
+test postgres_runtime_ignores_external_config_changes_while_running ... ok
+test postgres_runtime_persists_config_across_restarts ... ok
+test postgres_runtime_reconnects_and_backfills_memory_state ... ok
+test postgres_runtime_stores_mixed_semantics_routines ... ok
+test simulation_prepare_config_accepts_postgres_source_database ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 27.52s
+
+     Running tests/prod_config.rs (target/debug/deps/prod_config-61f653b138c04276)
+
+running 9 tests
+test prod_config_arrive_home_routine ... ignored, requires the private prod-config.toml fixture
+test prod_config_group_scoped_activation ... ignored, requires the private prod-config.toml fixture
+test prod_config_has_expected_config ... ignored, requires the private prod-config.toml fixture
+test prod_config_leave_home_routine ... ignored, requires the private prod-config.toml fixture
+test prod_config_night_scene ... ignored, requires the private prod-config.toml fixture
+test prod_config_nightlight_cycle ... ignored, requires the private prod-config.toml fixture
+test prod_config_scene_activation ... ignored, requires the private prod-config.toml fixture
+test prod_config_server_boots ... ignored, requires the private prod-config.toml fixture
+test prod_config_staircase_motion_upstairs ... ignored, requires the private prod-config.toml fixture
+
+test result: ok. 0 passed; 0 failed; 9 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/routine_rules.rs (target/debug/deps/routine_rules-8a214774261e0c28)
+
+running 11 tests
+test test_complex_rule_logic ... ok
+test test_scene_script_color_calculation ... ok
+test test_scene_script_dynamic_brightness ... ok
+test test_scene_script_returns_state ... ok
+test test_script_error_handling ... ok
+test test_script_no_side_effects ... ok
+test test_script_rule_array_operations ... ok
+test test_script_rule_comparison ... ok
+test test_script_rule_device_state_access ... ok
+test test_script_rule_null_safety ... ok
+test test_script_rule_time_logic ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/scenario_runner.rs (target/debug/deps/scenario_runner-f8a15d8465bc8735)
+
+running 8 tests
+test scenario_can_skip_dispatch_shape_while_still_checking_final_state ... ok
+test scenario_executes_other_enabled_routines_that_share_an_event ... ok
+test scenario_failures_name_devices_instead_of_internal_keys ... ok
+test scenario_rejects_sensor_events_with_a_different_value_type ... ok
+test scenario_runner_executes_arrival_home_and_dimmer_scenarios ... ok
+test scenario_runner_executes_compiled_routines_and_checks_commands_and_state ... ok
+test scenario_seeds_a_color_source_used_by_a_linked_scene ... ok
+test scenario_seeds_a_light_scene_for_group_conditions ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/scene_cycling.rs (target/debug/deps/scene_cycling-6402d9598103ac95)
+
+running 6 tests
+test test_is_state_eq_compares_scene_id ... ok
+test test_manual_device_adjustment ... ok
+test test_power_state_change_detected ... ok
+test test_scene_id_comparison_basic ... ok
+test test_state_source_change_detected ... ok
+test test_visual_state_change_detected ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/script_abi.rs (target/debug/deps/script_abi-206244b968bb013a)
+
+running 6 tests
+test prelude_builders_fail_fast_on_malformed_input ... ok
+test s10_condition_contract_is_strict_through_the_worker ... ok
+test s11_clock_randomness_and_context_are_deterministic_and_frozen ... ok
+test s12_owner_memory_advances_only_for_the_current_result ... ok
+test s16_edited_or_disabled_owners_cannot_publish_late_results ... ok
+test scripted_scene_action_exposes_spatial_rollout ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+     Running tests/script_worker.rs (target/debug/deps/script_worker-49888691c4b3786b)
+
+running 22 tests
+test cancelled_invocation_releases_its_pool_slot ... ok
+test default_budget_serves_trivial_scripts ... ok
+test executes_and_validates_scripts_through_the_worker ... ok
+test legacy_rule_scripts_keep_v1_semantics_through_the_worker ... ok
+test legacy_scene_scripts_keep_v1_json_semantics_through_the_worker ... ok
+test queue_bound_is_visible_and_bounded ... ok
+test request_limits_are_enforced_before_workers ... ok
+test s01_hang_does_not_stall_async_progress ... ok
+test s01_hanging_worker_times_out_and_is_replaced ... ok
+test s02_deep_recursion_terminates_without_blocking ... ok
+test s03_long_computation_terminates_and_pool_stays_fair ... ok
+test s04_allocation_abuse_is_contained_by_the_address_space_limit ... ok
+test s04_output_abuse_is_bounded_and_keeps_the_worker ... ok
+test s05_crash_truncation_and_garbage_replace_the_worker ... ok
+test s06_globals_and_prototypes_do_not_leak_between_invocations ... ok
+test s07_no_ambient_capabilities_and_allowlisted_environment ... ok
+test s08_timed_out_worker_is_killed_and_reaped ... ok
+test s09_validation_and_preview_work_uses_the_same_limits ... ok
+test script_errors_keep_the_worker_healthy ... ok
+test script_worker_forwards_only_timezone_allowlisted_environment ... ok
+test script_worker_uses_parent_timezone_environment ... ok
+test stderr_flood_is_capped_and_drained ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.30s
+
+     Running tests/scripting.rs (target/debug/deps/scripting-6468df38ec24b567)
+
+running 4 tests
+test test_complex_expressions ... ok
+test test_json_evaluation ... ok
+test test_simple_boolean_evaluation ... ok
+test test_string_comparison ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/source_presets.rs (target/debug/deps/source_presets-e310ad7c077d58de)
+
+running 3 tests
+test p11_forked_inline_body_runs_through_the_source_context ... ok
+test p11_scripted_preset_hs_arc_and_optional_brightness_are_pinned ... ok
+test p11_scripted_preset_matches_the_frozen_oracle_within_rounding ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+
+   Doc-tests homectl_server
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 1 target failed:
+    `-p homectl-server --test config_api_integration`

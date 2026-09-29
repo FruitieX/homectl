@@ -164,6 +164,9 @@ impl HealthMonitor {
             self.dirty = true;
         }
     }
+    // Keep observation inputs and both clocks explicit so clock jumps, startup
+    // grace and scheduled/forced refreshes can be exercised independently.
+    #[allow(clippy::too_many_arguments)]
     pub fn evaluate(
         &mut self,
         config: &ConfigExport,

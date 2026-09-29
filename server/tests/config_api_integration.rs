@@ -2540,11 +2540,13 @@ fn config_api_multiple_floorplans_store_independent_grids() {
 
     let initial_floorplans = get_json(&server.base_url, "/api/v1/config/floorplans");
     assert_eq!(initial_floorplans["success"], true);
-    assert!(initial_floorplans["data"]
-        .as_array()
-        .expect("floorplans should be an array")
-        .iter()
-        .any(|floorplan| floorplan["id"] == "default"));
+    assert_eq!(initial_floorplans["data"], json!([]));
+    let create_default = post_json(
+        &server.base_url,
+        "/api/v1/config/floorplans",
+        &json!({"id":"default", "name":"Default"}),
+    );
+    assert_eq!(create_default.status(), StatusCode::CREATED);
 
     let create_response = post_json(
         &server.base_url,
@@ -2858,7 +2860,11 @@ rules = [
     let preview = &result["data"]["preview"];
 
     assert_eq!(result["success"], Value::Bool(true));
-    assert_eq!(warnings.len(), 3);
+    assert_eq!(warnings.len(), 4);
+    assert_eq!(preview["routines"][0]["enabled"], false);
+    assert!(warnings.iter().any(|warning| warning
+        .as_str()
+        .is_some_and(|warning| warning.contains("disabled"))));
     assert!(warnings.iter().any(|warning| warning
         .as_str()
         .is_some_and(|warning| warning.contains("group 'kitchen' device 'Missing group light'"))));
@@ -2992,7 +2998,7 @@ rules = [
         preview_result["data"]["validation_errors"]
             .as_array()
             .map(Vec::len),
-        Some(3)
+        Some(4)
     );
 
     let apply_response = post_json(
@@ -3044,6 +3050,10 @@ rules = [
         Some(0)
     );
     assert_eq!(motion["rules"].as_array().map(Vec::len), Some(0));
+    assert_eq!(
+        motion["enabled"], false,
+        "a routine with removed guards must stay disabled"
+    );
 }
 
 #[test]

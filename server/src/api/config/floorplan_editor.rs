@@ -1,14 +1,12 @@
 use super::*;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::Value;
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::hash::{BuildHasher, Hash};
 
 static HASHER: once_cell::sync::Lazy<std::collections::hash_map::RandomState> =
     once_cell::sync::Lazy::new(std::collections::hash_map::RandomState::new);
 fn token(value: impl Hash) -> String {
-    let mut hasher = HASHER.build_hasher();
-    value.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
+    format!("{:016x}", HASHER.hash_one(value))
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]

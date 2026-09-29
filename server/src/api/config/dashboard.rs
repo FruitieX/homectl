@@ -1,6 +1,6 @@
 use super::*;
 use serde_json::{json, Value};
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::hash::BuildHasher;
 
 #[cfg(test)]
 mod tests {
@@ -204,9 +204,10 @@ pub(crate) fn secret_fields(kind: &str) -> &'static [&'static str] {
 fn token<T: Serialize>(value: &T) -> String {
     static HASHER: once_cell::sync::Lazy<std::collections::hash_map::RandomState> =
         once_cell::sync::Lazy::new(std::collections::hash_map::RandomState::new);
-    let mut hasher = HASHER.build_hasher();
-    serde_json::to_string(value).unwrap().hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
+    format!(
+        "{:016x}",
+        HASHER.hash_one(serde_json::to_string(value).unwrap())
+    )
 }
 pub(super) fn redact(widget: &mut DashboardWidgetRow) {
     let fields = secret_fields(&widget.widget_type);

@@ -1046,6 +1046,20 @@ fn assistant_search_ranks_configured_entities() {
     let floorplans: Value = search(base, &client, "kind=floorplan&q=default")
         .json()
         .unwrap();
+    assert_eq!(
+        floorplans["data"],
+        json!([]),
+        "empty homes have no invented floorplan"
+    );
+    let response = client
+        .post(format!("{base}/api/v1/config/floorplans"))
+        .json(&json!({"id":"default", "name":"Default", "width":null, "height":null}))
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let floorplans: Value = search(base, &client, "kind=floorplan&q=default")
+        .json()
+        .unwrap();
     assert_eq!(floorplans["data"][0]["id"], "default");
 
     let response = search(base, &client, "kind=bogus&q=hall");
@@ -1438,9 +1452,26 @@ fn assistant_plan_masks_integration_secrets_and_keeps_them_on_apply() {
         .unwrap()
         .json()
         .unwrap();
-    assert_eq!(integration["data"]["config"]["password"], "hunter2");
+    assert!(integration["data"]["config"].get("password").is_none());
+    assert!(!integration.to_string().contains("hunter2"));
+    assert_eq!(integration["data"]["secret_fields"], json!(["password"]));
     assert_eq!(integration["data"]["config"]["host"], "mqtt.example.org");
     assert_eq!(integration["data"]["config"]["port"], 1883);
+
+    // Only an explicitly secret-inclusive backup may expose the fixture secret.
+    let backup: Value = client
+        .get(format!("{base}/api/v1/config/export?include_secrets=true"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    let stored = backup["data"]["integrations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == "mqtt_main")
+        .unwrap();
+    assert_eq!(stored["config"]["password"], "hunter2");
 }
 
 #[test]
