@@ -1,0 +1,61 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Nested group inspector shows scope and unavailable member",
+    "passed": true
+   },
+   {
+    "name": "Related room controls and settings links preserve group identity",
+    "passed": true
+   },
+   {
+    "name": "Group inspector has no unrelated kitchen controls",
+    "passed": true
+   },
+   {
+    "name": "Floorplan tabs do not overlap the room breadcrumb",
+    "passed": true
+   },
+   {
+    "name": "Group command remains pending until acknowledged",
+    "passed": true
+   },
+   {
+    "name": "Group commands deduplicate nested members and exclude unavailable, disabled and read-only devices",
+    "passed": true
+   },
+   {
+    "name": "Room inspector closes without leaving map",
+    "passed": true
+   },
+   {
+    "name": "Fallback preserves room scope and disabled controls",
+    "passed": true
+   },
+   {
+    "name": "Rejected fallback command retains reported state",
+    "passed": true
+   },
+   {
+    "name": "Fallback command targets only the selected device",
+    "passed": true
+   },
+   {
+    "name": "Fallback command visibly waits for acknowledgment",
+    "passed": true
+   },
+   {
+    "name": "Retry restores the map without navigating away",
+    "passed": true
+   },
+   {
+    "name": "No horizontal overflow",
+    "passed": true
+   }
+  ],
+  "width": 390
+ }
+}
+{"url":"http://127.0.0.1:3021/map","viewport":{"width":390,"height":844},"problems":[]}

@@ -121,6 +121,7 @@ interface SceneRenderState {
   lightEntries: Map<string, LightRenderEntry>;
   lightMarkerEntries: Map<string, Graphics>;
   labelTextureScale: number;
+  labelViewScale: number;
   sensorMarkerEntries: Map<string, Graphics>;
   sensorLabelEntries: Map<string, SensorLabelRenderEntry>;
 }
@@ -387,6 +388,7 @@ function createSceneRenderState(world: Container): SceneRenderState {
     lightEntries: new Map(),
     lightMarkerEntries: new Map(),
     labelTextureScale: 1,
+    labelViewScale: 1,
     sensorMarkerEntries: new Map(),
     sensorLabelEntries: new Map(),
   };
@@ -797,11 +799,14 @@ function syncSensorLabel(
   entry: SensorLabelRenderEntry,
   sensor: FloorplanScene['sensors'][number],
   textureScale: number,
+  viewScale: number,
 ) {
+  // Labels describe the map; keep their screen size stable while it zooms.
+  const labelScale = 1 / (textureScale * Math.max(viewScale, 0.0001));
   entry.label.text = sensor.label;
   entry.label.style.fontSize = 11 * sensor.scale * textureScale;
-  entry.label.style.stroke = { color: 0x0f172a, width: 3 * textureScale };
-  entry.label.scale.set(1 / textureScale);
+  entry.label.style.stroke = { color: 0x0f172a, width: 2 * textureScale };
+  entry.label.scale.set(labelScale);
   entry.label.position.set(sensor.x, sensor.y + 22 * sensor.scale);
 
   if (!sensor.statusLabel) {
@@ -830,7 +835,7 @@ function syncSensorLabel(
 
   entry.status.text = sensor.statusLabel;
   entry.status.style.fontSize = 9 * sensor.scale * textureScale;
-  entry.status.scale.set(1 / textureScale);
+  entry.status.scale.set(labelScale);
   entry.status.position.set(sensor.x, sensor.y);
 }
 
@@ -867,6 +872,7 @@ function syncSensorLabels(
 
   const textureScale = getLabelTextureScale(viewScale);
   renderState.labelTextureScale = textureScale;
+  renderState.labelViewScale = viewScale;
   const seenDeviceKeys = new Set<string>();
 
   for (const sensor of sceneLabels(scene)) {
@@ -878,7 +884,7 @@ function syncSensorLabels(
       renderState.labelLayer.addChild(entry.container);
     }
 
-    syncSensorLabel(entry, sensor, textureScale);
+    syncSensorLabel(entry, sensor, textureScale, viewScale);
   }
 
   for (const [deviceKey, entry] of renderState.sensorLabelEntries) {
@@ -903,15 +909,19 @@ function syncLabelTextureScale(
   }
 
   const textureScale = getLabelTextureScale(viewScale);
-  if (renderState.labelTextureScale === textureScale) {
+  if (
+    renderState.labelTextureScale === textureScale &&
+    renderState.labelViewScale === viewScale
+  ) {
     return;
   }
 
   renderState.labelTextureScale = textureScale;
+  renderState.labelViewScale = viewScale;
   for (const sensor of sceneLabels(scene)) {
     const entry = renderState.sensorLabelEntries.get(sensor.deviceKey);
     if (entry) {
-      syncSensorLabel(entry, sensor, textureScale);
+      syncSensorLabel(entry, sensor, textureScale, viewScale);
     }
   }
 }

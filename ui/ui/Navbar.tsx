@@ -20,6 +20,8 @@ export const Navbar = () => {
   const isRoomMap =
     isRoom && new URLSearchParams(location.search).get('view') === 'floorplan';
 
+  const isMap = pathname === '/map' || isRoomMap;
+
   let title = 'homectl';
   // Named at sm and up; a phone shows one location signal at a time.
   let sectionSuffix: string | null = null;
@@ -91,19 +93,30 @@ export const Navbar = () => {
   }
 
   return (
-    <header className="relative z-20 flex h-16 shrink-0 items-center gap-1 border-b border-border/40 bg-background px-3 pt-[env(safe-area-inset-top)]  sm:px-5 lg:h-16 lg:px-8">
-      <div className="flex min-w-0 flex-1 items-center gap-3 px-1">
+    <header
+      className={`relative z-20 flex shrink-0 items-center gap-1 border-b border-border/40 bg-background px-3 pt-[env(safe-area-inset-top)] sm:px-5 lg:px-8 ${isMap ? 'min-h-16 flex-wrap md:h-16 md:flex-nowrap' : 'h-16'}`}
+    >
+      <div className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-1">
         {isRoom ? (
           <nav
             aria-label="Breadcrumb"
-            className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground"
+            className="flex min-w-0 items-center gap-2 whitespace-nowrap text-sm text-muted-foreground"
           >
-            <Link to="/groups" className="hover:text-foreground">
+            <Link
+              to="/groups"
+              className={
+                isRoomMap
+                  ? 'hidden hover:text-foreground sm:inline'
+                  : 'hover:text-foreground'
+              }
+            >
               Rooms &amp; groups
             </Link>
             {isRoomMap && (
               <>
-                <span aria-hidden="true">/</span>
+                <span aria-hidden="true" className="hidden sm:inline">
+                  /
+                </span>
                 <Link
                   to={`/groups/${encodeURIComponent(groupMatch!.params.id!)}`}
                   className="hover:text-foreground"
@@ -127,7 +140,10 @@ export const Navbar = () => {
         )}
       </div>
       {(pathname === '/map' || isRoomMap) && (
-        <div id="floorplan-tabs" className="flex min-w-0 items-center gap-1" />
+        <div
+          id="floorplan-tabs"
+          className="order-last flex w-full min-w-0 items-center gap-1 pb-1 empty:hidden md:order-none md:w-auto md:max-w-[40%] md:pb-0"
+        />
       )}
       <AssistantButton
         variant="ghost"

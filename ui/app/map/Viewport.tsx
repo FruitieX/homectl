@@ -465,6 +465,11 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
               setActiveSensorKey(null);
               toggleGroup(id);
             }}
+            onContextLost={() =>
+              setPixiFallbackReason(
+                'The graphics connection was lost. Device controls are still available.',
+              )
+            }
             onUnavailable={() =>
               setPixiFallbackReason(
                 'The floorplan could not be displayed. Try a browser with WebGL support.',

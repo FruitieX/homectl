@@ -31,7 +31,7 @@ export function GroupPanel({
   const controls = devices.filter((d) => 'Controllable' in d.data);
   return (
     <FloorplanInspector title={group.name} onClose={onClose}>
-      <div className="space-y-4">
+      <div className="space-y-4 px-3 pb-3 md:px-0 md:pb-0">
         <div className="flex items-center gap-3">
           <LiveStatePreview
             states={[

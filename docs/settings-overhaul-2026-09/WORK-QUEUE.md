@@ -108,9 +108,9 @@ Desktop Fit check passes; further interaction acceptance remains.
 
 - [x] Verify Fit, zoom, resize and placement coordinates on desktop and phone.
 - [x] Verify placing, moving, removing and undoing device placement.
-- [ ] Review map device/group inspectors, shared previews, scope, related links,
+- [x] Review map device/group inspectors, shared previews, scope, related links,
       dismissal and fallback controls against the mockups.
-- [ ] Check marker readability, brightness/off/attention states and rendering
+- [x] Check marker readability, brightness/off/attention states and rendering
       sharpness with representative floorplans.
 
 Floorplan checkpoint: ten desktop and eleven phone checks cover native placement
@@ -134,6 +134,17 @@ inspector, fallback command scope and representative health/label review remain
 open; this checkpoint does not close those broader gates. The phone capture
 shows labels shrinking too far at Fit: give labels a readable minimum screen
 size during the remaining marker review. UI type/lint/build pass.
+
+Map acceptance, 2026-09-30: 13 additional checks at each viewport cover nested
+room scope, related room/settings links, deduplicated commands, disabled/read-only/
+unavailable exclusions, pending acknowledgments, rejection without optimistic
+state changes, context-loss fallback and successful map retry. Labels retain
+their screen size through zoom; captures show on/off rings, an offline warning
+and a disabled marker. Phone floorplan tabs now occupy their own row so they
+cannot overlap breadcrumbs; room inspector padding matches device inspectors.
+Study 05 room-map comparisons and the new failure-state captures are in the
+gallery. Type checking, lint and production build pass. These simulated GPU-loss
+checks exercise the browser event path; they do not claim physical GPU testing.
 
 ## 5. Earlier refinements
 
