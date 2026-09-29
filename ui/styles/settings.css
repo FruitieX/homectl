@@ -317,37 +317,10 @@
   -webkit-line-clamp: unset;
   text-align: left;
 }
-.settings-workspace
-  .routine-flow
-  .flow-lane
-  .condition-value-type[role='combobox'] {
-  min-height: 16px;
-  height: 16px;
-  width: auto;
-  border: 0;
-  padding: 0;
-  font-size: 10px;
-  background: transparent;
-  color: hsl(var(--muted-foreground));
-}
 @container (min-width: 290px) {
   .condition-comparison,
   .condition-source {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-}
-@media (max-width: 767px) {
-  .settings-workspace
-    .routine-flow
-    .flow-lane
-    .condition-value-type[role='combobox'] {
-    height: 44px;
-    min-height: 44px;
-  }
-  .condition-comparison > .config-field > span:first-child {
-    min-height: 44px;
-    display: flex;
-    align-items: center;
   }
 }
 .flow-lane :is(input, select, button, [role='combobox']) {
@@ -433,6 +406,55 @@
 }
 .flow-condition > .flow-conditions {
   margin-left: 2px;
+}
+/* Conditions are compact rows; actions remain distinct cards along the flow. */
+.flow-lane .flow-condition-node {
+  background: transparent;
+  border: 0;
+  border-left: 2px solid hsl(var(--flow-color) / 0.35);
+  border-radius: 0;
+  padding: 0 0 0 10px;
+  gap: 6px;
+}
+.flow-condition-node > .flow-block-heading {
+  border: 0;
+  padding-bottom: 0;
+  gap: 6px;
+}
+.flow-condition-node > .flow-block-heading .flow-node-icon {
+  width: 20px;
+  height: 20px;
+  background: transparent;
+}
+.settings-workspace
+  .routine-flow
+  .flow-lane
+  button.condition-value-type[role='combobox'] {
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  width: auto;
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+}
+.condition-comparison > .config-field > span:first-child,
+.condition-value-heading {
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+}
+@media (max-width: 767px) {
+  .settings-workspace
+    .routine-flow
+    .flow-lane
+    button.condition-value-type[role='combobox'],
+  .condition-comparison > .config-field > span:first-child,
+  .condition-value-heading {
+    min-height: 44px;
+    height: 44px;
+  }
 }
 .flow-add {
   background: hsl(var(--card) / 0.85);

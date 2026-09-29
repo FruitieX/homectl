@@ -20,7 +20,6 @@ import {
   conditionWords,
   fieldLabel,
 } from '@/lib/conditionWords';
-import { selectClassName } from '@/ui/builder-fields';
 import {
   ReferenceField,
   GroupSelect,
@@ -196,8 +195,8 @@ function ComparisonValueEditor({
           : 'text';
 
   return (
-    <div className="grid content-start gap-2">
-      <div className="flex min-h-4 items-center justify-between gap-2">
+    <div className="condition-value grid content-start gap-2">
+      <div className="condition-value-heading flex min-h-4 items-center justify-between gap-2">
         <span className="text-xs font-medium">Value</span>
         <SettingsSelect
           aria-label="Value type"
@@ -470,19 +469,14 @@ export function ConditionEditor({
   )
     return <UnknownFlowValue value={condition} />;
   const kindSelect = (
-    <select
-      className={selectClassName}
+    <SettingsSelect
+      aria-label="Condition type"
       value={condition.kind}
-      onChange={(event) =>
-        onChange(defaultCondition(event.target.value as ConditionKind))
+      onValueChange={(kind) =>
+        onChange(defaultCondition(kind as ConditionKind))
       }
-    >
-      {conditionKindOptions.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+      options={conditionKindOptions}
+    />
   );
 
   const renderChildren = (
@@ -496,6 +490,7 @@ export function ConditionEditor({
         ) : (
           <FlowBlock
             key={index}
+            className="flow-condition-node"
             title={
               <SettingsSelect
                 className="w-full"
@@ -554,20 +549,21 @@ export function ConditionEditor({
 
       {condition.kind === 'literal' ? (
         <ConfigField label="Result">
-          <select
-            className={selectClassName}
+          <SettingsSelect
+            aria-label="Condition result"
             value={condition.value ? 'true' : 'false'}
-            onChange={(event) =>
+            onValueChange={(value) =>
               onChange({
                 ...condition,
                 kind: 'literal',
-                value: event.target.value === 'true',
+                value: value === 'true',
               })
             }
-          >
-            <option value="true">Always true</option>
-            <option value="false">Always false</option>
-          </select>
+            options={[
+              { value: 'true', label: 'Always true' },
+              { value: 'false', label: 'Always false' },
+            ]}
+          />
         </ConfigField>
       ) : null}
 
@@ -609,22 +605,17 @@ export function ConditionEditor({
           />
           <div className="condition-comparison grid gap-3">
             <ConfigField label="Operator">
-              <select
-                className={selectClassName}
+              <SettingsSelect
+                aria-label="Comparison operator"
                 value={condition.operator}
-                onChange={(event) =>
+                onValueChange={(operator) =>
                   onChange({
                     ...condition,
-                    operator: event.target.value as RawRuleOperator,
+                    operator: operator as RawRuleOperator,
                   })
                 }
-              >
-                {operatorOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                options={operatorOptions}
+              />
             </ConfigField>
             <ComparisonValueEditor
               operator={condition.operator}
@@ -650,25 +641,26 @@ export function ConditionEditor({
             />
           </ConfigField>
           <ConfigField label="Quantifier">
-            <select
-              className={selectClassName}
+            <SettingsSelect
+              aria-label="Group match"
               value={condition.quantifier}
-              onChange={(event) =>
+              onValueChange={(quantifier) =>
                 onChange({
                   ...condition,
-                  quantifier: event.target.value as typeof condition.quantifier,
+                  quantifier: quantifier as typeof condition.quantifier,
                 })
               }
-            >
-              <option value="all">All members</option>
-              <option value="any">Any member</option>
-              <option value="none">No member</option>
-              <option value="partial">Partially (a mix)</option>
-            </select>
+              options={[
+                { value: 'all', label: 'All members' },
+                { value: 'any', label: 'Any member' },
+                { value: 'none', label: 'No member' },
+                { value: 'partial', label: 'Partially (a mix)' },
+              ]}
+            />
           </ConfigField>
           <ConfigField label="Power">
-            <select
-              className={selectClassName}
+            <SettingsSelect
+              aria-label="Group power"
               value={
                 condition.power === undefined
                   ? 'any'
@@ -676,37 +668,41 @@ export function ConditionEditor({
                     ? 'on'
                     : 'off'
               }
-              onChange={(event) => {
-                const next = event.target.value;
+              onValueChange={(next) => {
                 onChange({
                   ...condition,
                   power: next === 'any' ? undefined : next === 'on',
                 });
               }}
-            >
-              <option value="any">Any</option>
-              <option value="on">On</option>
-              <option value="off">Off</option>
-            </select>
+              options={[
+                { value: 'any', label: 'Any' },
+                { value: 'on', label: 'On' },
+                { value: 'off', label: 'Off' },
+              ]}
+            />
           </ConfigField>
           <ConfigField label="Scene">
-            <select
-              className={selectClassName}
-              value={condition.scene ?? ''}
-              onChange={(event) =>
+            <SettingsSelect
+              aria-label="Group scene"
+              value={
+                condition.scene === undefined
+                  ? 'any'
+                  : `scene:${condition.scene}`
+              }
+              onValueChange={(scene) =>
                 onChange({
                   ...condition,
-                  scene: event.target.value || undefined,
+                  scene: scene === 'any' ? undefined : scene.slice(6),
                 })
               }
-            >
-              <option value="">Any scene</option>
-              {scenes.map((scene) => (
-                <option key={scene.id} value={scene.id}>
-                  {scene.name}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: 'any', label: 'Any scene' },
+                ...scenes.map((scene) => ({
+                  value: `scene:${scene.id}`,
+                  label: scene.name,
+                })),
+              ]}
+            />
           </ConfigField>
         </div>
       ) : null}

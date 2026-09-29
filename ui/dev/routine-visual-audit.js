@@ -159,6 +159,16 @@
     ),
     'Scene action links to its details',
   );
+  for (const row of document.querySelectorAll('.condition-comparison')) {
+    const operator = row.querySelector('[aria-label="Comparison operator"]');
+    const value = row.querySelector('[aria-label="Expected value"]');
+    if (!operator || !value) continue;
+    const a = operator.getBoundingClientRect(),
+      b = value.getBoundingClientRect();
+    if (b.x > a.x + 20 && Math.abs(a.y - b.y) > 2)
+      throw Error(`Comparison controls are misaligned: ${a.y} / ${b.y}`);
+  }
+  checks.push('Side-by-side comparison controls align vertically');
   document.querySelector('.routine-flow').scrollIntoView({ block: 'start' });
   return { passed: true, checks, lanes, width: innerWidth };
 })();

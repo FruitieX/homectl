@@ -19,15 +19,15 @@ source picker, quieter optional scene controls, and sandboxed scripts as native
 action blocks. Six structural browser checks pass at both sizes. Automation
 library and mixed-script execution checks pass.
 
-- [ ] Finish visual review of complex nested conditions and branches, including
+- [x] Finish visual review of complex nested conditions and branches, including
       control alignment, readable titles, sensible density and narrow screens.
-- [ ] Exercise editing, move, duplicate, delete and Save/Discard after changing
+- [x] Exercise editing, move, duplicate, delete and Save/Discard after changing
       control types. Preserve stable IDs, unknown fields and related-page drafts.
-- [ ] Verify adding/editing/persisting a script among ordinary actions, including
+- [x] Verify adding/editing/persisting a script among ordinary actions, including
       a branch. Keep whole-program legacy script conversion available.
 - [x] Close remaining mixed-script runtime cases where needed: selected branch
       semantics, per-block state/context and stale/manual-intent protection.
-- [ ] Refresh final paired screenshots after the last visual changes.
+- [x] Refresh final paired screenshots after the last visual changes.
 
 Routine checkpoint, 2026-09-29: the expanded browser journey passes 21 checks
 on desktop and phone, including a script inside a branch, actual local Monaco
@@ -38,8 +38,13 @@ metadata no longer looks editable, and script examples use the shared picker.
 The starter handles empty initial memory. Backend regressions cover independent
 block memory and declared contexts across two runs, selected branches, failed
 worker slot cleanup, definition changes and newer manual intent suppressing
-frozen native steps. Whole-program conversion and final complex visual review
-remain open. Evidence: `implementation-evidence/routine-editor-*-checkpoint.log`
+frozen native steps. Whole-program conversion now passes five browser checks:
+no early write, stable action identity, Discard, and complete script/declaration
+preservation on Save. Final desktop/phone review uses compact condition rows
+with colored nesting rails and consistent selectors; seven structural checks
+include aligned side-by-side comparison controls. Updated screenshots are in
+the [comparison gallery](implementation-evidence/comparison/index.html).
+Evidence: `implementation-evidence/routine-editor-*-checkpoint.log`
 and `routine-script-*-checkpoint.log`; UI type/lint/build pass.
 
 ## 2. New widget and widget editing

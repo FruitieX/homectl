@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>homectl · implementation comparison</title>
+<style>
+  :root { color-scheme: light dark; font: 15px/1.5 system-ui,sans-serif; background:#f4f6f7; color:#25323b }
+  body { max-width:1600px; margin:auto; padding:32px }
+  a { color:#277059 } h1,h2 { line-height:1.2 } p { max-width:90ch; color:#5a6871 }
+  nav { display:flex; gap:24px; flex-wrap:wrap; margin:24px 0 }
+  section { margin-top:48px; scroll-margin-top:24px }
+  .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px }
+  .phones { display:flex; flex-wrap:wrap; gap:20px } .phones figure { width:300px }
+  figure { margin:0; border:1px solid #d6dfdf; border-radius:8px; overflow:hidden; background:white }
+  figcaption { padding:12px; font-weight:600 } img { width:100%; height:auto; display:block }
+  .note { padding:12px 16px; border-left:3px solid #277059; background:#e9f2ed }
+  @media(max-width:800px) { body{padding:16px} .grid{grid-template-columns:1fr} }
+  @media(prefers-color-scheme:dark) { :root{background:#17201f;color:#e1e8e6} p{color:#b1c0bc} figure{background:#202a29;border-color:#40514c}.note{background:#223a30} a{color:#8ac6ae} }
+</style>
+<header>
+  <h1>Implementation compared with the approved studies</h1>
+  <p>Updated 29 September 2026. Click a screenshot to inspect the full image.
+  The fixture uses different entities and the selected sky accent; the approved
+  direction is Compact. These comparisons assess structure, controls and density.</p>
+  <nav><a href="#routine">Routines</a><a href="#rooms">Rooms</a><a href="#widgets">Widget creator</a><a href="../../VISUAL-AUDIT.md">Acceptance ledger</a></nav>
+</header>
+<section id="routine">
+  <h2>Routine editor · Study 04</h2>
+  <p class="note">Reviewed: three desktop lanes, vertical phone flow, dotted canvas,
+  colored sections, directly editable controls, compact nested condition rows,
+  visible ordering and related scene links. The current view is scrolled to the
+  board; the mockup also shows its page header. The fixture has additional real
+  schema fields and an unavailable helper, so its flow is longer.</p>
+  <div class="grid">
+    <figure><figcaption>Approved mockup · desktop</figcaption><a href="routine-desktop-mockup.png"><img src="routine-desktop-mockup.png" alt="Approved three-lane routine mockup"></a></figure>
+    <figure><figcaption>Before this visual pass</figcaption><a href="routine-desktop-before.png"><img loading="lazy" src="routine-desktop-before.png" alt="Routine implementation before alignment to Study 04"></a></figure>
+    <figure><figcaption>Current implementation · desktop</figcaption><a href="routine-desktop-after.png"><img src="routine-desktop-after.png" alt="Current three-lane routine editor with connected condition rows"></a></figure>
+  </div>
+  <h3>Phone</h3>
+  <div class="phones">
+    <figure><figcaption>Approved mockup</figcaption><a href="routine-phone-mockup.png"><img loading="lazy" src="routine-phone-mockup.png" alt="Approved routine phone mockup"></a></figure>
+    <figure><figcaption>Current · starting events</figcaption><a href="routine-phone-after.png"><img loading="lazy" src="routine-phone-after.png" alt="Current routine starting events on phone"></a></figure>
+    <figure><figcaption>Current · nested branch</figcaption><a href="routine-phone-branches.png"><img loading="lazy" src="routine-phone-branches.png" alt="Nested branch conditions on phone"></a></figure>
+  </div>
+</section>
+<section id="rooms">
+  <h2>Controls-first room details</h2>
+  <p>Interim comparison. The controls-first composition, embedded map, scene strip
+  and desktop brightness controls are implemented. Full room variant acceptance
+  is still tracked in the work queue.</p>
+  <div class="grid">
+    <figure><figcaption>Approved mockup</figcaption><a href="room-desktop-mockup.png"><img loading="lazy" src="room-desktop-mockup.png" alt="Approved room detail mockup"></a></figure>
+    <figure><figcaption>Before this visual pass</figcaption><a href="room-desktop-before.png"><img loading="lazy" src="room-desktop-before.png" alt="Earlier room detail implementation"></a></figure>
+    <figure><figcaption>Current working implementation</figcaption><a href="room-desktop-after.png"><img loading="lazy" src="room-desktop-after.png" alt="Room detail with compact scenes and brightness controls"></a></figure>
+  </div>
+</section>
+<section id="widgets">
+  <h2>Visual widget creator</h2>
+  <p>Interim captures of the gallery, visual size controls and real read-only
+  preview. Final creation-state captures and all-family acceptance are in progress.</p>
+  <div class="grid">
+    <figure><figcaption>Desktop</figcaption><a href="widget-desktop-after.png"><img loading="lazy" src="widget-desktop-after.png" alt="Widget designer on desktop"></a></figure>
+    <figure><figcaption>Phone</figcaption><a href="widget-phone-after.png"><img loading="lazy" src="widget-phone-after.png" alt="Widget designer on phone"></a></figure>
+  </div>
+</section>
+</html>

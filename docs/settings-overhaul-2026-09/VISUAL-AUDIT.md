@@ -32,6 +32,18 @@ The ordered remaining tasks and completion criteria are in
 
 ## Evidence
 
+Open the [screenshot comparison gallery](implementation-evidence/comparison/index.html)
+for mockup/before/current views. Routine captures were refreshed after replacing
+nested condition cards with compact rows and correcting control alignment.
+The desktop fixture includes additional real schema fields and an unavailable
+helper, so it is longer than the illustrative mockup. Phone retains full touch
+targets and stacks fields when a nested branch becomes too narrow.
+
+Routine verification: seven structural checks at desktop and phone sizes,
+21 editing checks at both sizes, five whole-script conversion checks, and
+214 UI unit tests pass. The custom condition selectors preserve the same model;
+group scene values use prefixed options so “Any scene” cannot collide with an ID.
+
 Original paired screenshots are in `implementation-evidence/comparison/`:
 
 - `routine-desktop-mockup.png` / `routine-desktop-before.png`
@@ -43,7 +55,7 @@ Add final screenshots and results only after reviewing the rendered output.
 
 ## Completion gate
 
-- [ ] Routine desktop and phone match the approved structure, including a complex definition.
+- [x] Routine desktop and phone match the approved structure, including a complex definition.
 - [ ] New widget can be chosen, configured, previewed and created without raw layout fields.
 - [ ] Floorplan previews appear consistently for placed rooms in all intended locations.
 - [ ] Room controls, scenes, map inspectors and dashboard have been compared.

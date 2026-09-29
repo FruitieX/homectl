@@ -1,0 +1,33 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "Routine flow follows approved desktop/phone arrangement",
+   "Complex flow fits the viewport",
+   "Both complex branches render",
+   "Action reordering stays visible",
+   "Dotted canvas is restored",
+   "Scene action links to its details",
+   "Side-by-side comparison controls align vertically"
+  ],
+  "lanes": [
+   {
+    "x": 254,
+    "y": 391.25,
+    "width": 300.828125
+   },
+   {
+    "x": 578.828125,
+    "y": 391.25,
+    "width": 300.828125
+   },
+   {
+    "x": 903.65625,
+    "y": 391.25,
+    "width": 481.34375
+   }
+  ],
+  "width": 1440
+ }
+}
+{"url":"http://127.0.0.1:3021/config/routines/visual_complex","viewport":{"width":1440,"height":1080},"problems":[]}
