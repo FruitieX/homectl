@@ -9,7 +9,7 @@ import { configItemHref } from '@/lib/configItemHref';
 import { LiveSensorRow } from '@/ui/LiveSensorRow';
 import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
 import { TimeSeriesPlot } from '@/ui/charts/TimeSeriesPlot';
-import { Button } from '@/ui/primitives/button';
+import { SensorReadingsStatus } from '@/ui/SensorReadingsStatus';
 
 /** Match history by its full source identity; numeric sensor values have no unit. */
 function useRoomReadings(deviceKeys: string[]) {
@@ -58,7 +58,7 @@ export function RoomClimateSummary({ deviceKeys }: { deviceKeys: string[] }) {
   return (
     <p
       className="text-xs text-muted-foreground"
-      title={`Last sample: ${latest._time.toLocaleString()}${resource.isError ? ' · Could not refresh' : ''}`}
+      title={`Last sample: ${latest._time.toLocaleString()}${resource.isError || resource.isShowingPreviousRows ? ' · Last available' : ''}`}
     >
       {[
         latestTemp ? `${latestTemp._value.toFixed(1)} °C` : '',
@@ -66,7 +66,8 @@ export function RoomClimateSummary({ deviceKeys }: { deviceKeys: string[] }) {
       ]
         .filter(Boolean)
         .join(' · ')}
-      {resource.isError && ' · Last available'}
+      {(resource.isError || resource.isShowingPreviousRows) &&
+        ' · Last available'}
       <span className="ml-2 text-[10px]">
         Sample{' '}
         <time dateTime={latest._time.toISOString()}>
@@ -206,18 +207,10 @@ export function RoomConditions({
           </div>
         );
       })}
-      {readings.length > 0 && resource.isError && (
-        <p role="status" className="text-xs text-muted-foreground">
-          Readings could not be refreshed. Showing the last available samples.{' '}
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => void resource.refetch()}
-          >
-            Retry readings
-          </Button>
-        </p>
-      )}
+      {deviceKeys.length > 0 &&
+        (resource.isError ||
+          resource.isShowingPreviousRows ||
+          resource.isPending) && <SensorReadingsStatus resource={resource} />}
       {otherSensors.length > 0 && (
         <div className="space-y-2">
           {otherSensors.map((device) => (

@@ -1,3 +1,4 @@
+import { SensorReadingsStatus } from '@/ui/SensorReadingsStatus';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { GroupFloorplanPreview } from '@/ui/floorplan/GroupFloorplanPreview';
 import { Link } from 'react-router-dom';
@@ -342,15 +343,11 @@ export function IndoorClimateCard({ widget }: { widget: DashboardWidget }) {
       </p>
     );
   const status = (
-    <p role="status" className="text-xs text-muted-foreground">
-      {resource.isError
-        ? 'Readings could not be refreshed. Showing available samples.'
-        : resource.isPending
-          ? 'Loading readings…'
-          : updated
-            ? `Temperature updated ${age === 0 ? 'just now' : `${age} min ago`}`
-            : 'No temperature readings.'}
-    </p>
+    <SensorReadingsStatus resource={resource}>
+      {updated
+        ? `Temperature updated ${age === 0 ? 'just now' : `${age} min ago`}`
+        : 'No temperature readings.'}
+    </SensorReadingsStatus>
   );
   return (
     <>

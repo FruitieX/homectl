@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
+import { useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { configItemHref } from '@/lib/configItemHref';
 import { Copy, Pause, Play, RefreshCw } from 'lucide-react';
@@ -28,6 +29,7 @@ const shortTime = (timestamp: string) => {
       });
 };
 export default function LogsPage() {
+  const opener = useRef<HTMLButtonElement | null>(null);
   const [paused, setPaused] = useState(false),
     [frozen, setFrozen] = useState<UiLogEntry[]>([]);
   const { data, loading, error, refetch, lastUpdated } = useLogs(5000, paused);
@@ -114,35 +116,37 @@ export default function LogsPage() {
           value={search}
           onChange={(event) => patch('q', event.target.value)}
         />
-        <select
+        <SettingsSelect
           aria-label="Log level"
-          className="settings-select"
-          value={level}
-          onChange={(event) => patch('level', event.target.value)}
-        >
-          <option value="">All levels</option>
-          {levels.map((value) => (
-            <option key={value}>{value}</option>
-          ))}
-        </select>
-        <select
+          className="w-auto min-w-32"
+          value={level || 'all'}
+          onValueChange={(value) =>
+            patch('level', value === 'all' ? '' : value)
+          }
+          options={[
+            { value: 'all', label: 'All levels' },
+            ...levels.map((value) => ({ value, label: value })),
+          ]}
+        />
+        <SettingsSelect
           aria-label="Log source"
-          className="settings-select max-w-full sm:max-w-64"
-          value={target}
-          onChange={(event) => patch('source', event.target.value)}
-        >
-          <option value="">All sources</option>
-          {[
-            ...new Set([
-              ...rows.map((row) => row.target),
-              ...(target ? [target] : []),
-            ]),
-          ]
-            .sort()
-            .map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-        </select>
+          className="w-auto max-w-full sm:max-w-64"
+          value={target ? `source:${target}` : 'all'}
+          onValueChange={(value) =>
+            patch('source', value === 'all' ? '' : value.slice(7))
+          }
+          options={[
+            { value: 'all', label: 'All sources' },
+            ...[
+              ...new Set([
+                ...rows.map((row) => row.target),
+                ...(target ? [target] : []),
+              ]),
+            ]
+              .sort()
+              .map((value) => ({ value: `source:${value}`, label: value })),
+          ]}
+        />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>
@@ -184,7 +188,10 @@ export default function LogsPage() {
               key={`${entry.timestamp}-${entry.target}-${index}`}
               type="button"
               className="settings-log-row"
-              onClick={() => setSelected(entry)}
+              onClick={(event) => {
+                opener.current = event.currentTarget;
+                setSelected(entry);
+              }}
               aria-label={`${shortTime(entry.timestamp)} ${entry.level}: ${entry.message}`}
             >
               <time
@@ -221,7 +228,15 @@ export default function LogsPage() {
           if (!open) setSelected(null);
         }}
       >
-        <DialogContent className="max-w-3xl">
+        <DialogContent
+          className="max-w-3xl"
+          onCloseAutoFocus={(event) => {
+            if (opener.current?.isConnected) {
+              event.preventDefault();
+              opener.current.focus();
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Event details</DialogTitle>
             <DialogDescription>

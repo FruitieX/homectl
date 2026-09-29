@@ -136,7 +136,11 @@ export const useTempSensorsResource = (
     // sample set visible until a non-empty response arrives.
     return previousRows.current;
   }, [rows]);
-  return { ...query, rows: stableRows };
+  return {
+    ...query,
+    rows: stableRows,
+    isShowingPreviousRows: rows.length === 0 && stableRows.length > 0,
+  };
 };
 
 export const useTempSensorsQuery = (

@@ -1,3 +1,4 @@
+import { SensorReadingsStatus } from '@/ui/SensorReadingsStatus';
 import { useState } from 'react';
 import { useDashboardSpacing } from '@/hooks/dashboardSpacing';
 import { cn } from '@/lib/cn';
@@ -155,7 +156,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
           </div>
           <div
             className={cn(
-              'dashboard-sensors-preview pointer-events-auto min-h-0 flex-1 overflow-hidden',
+              'dashboard-sensors-preview pointer-events-none [&>*]:pointer-events-auto min-h-0 flex-1 overflow-hidden',
               getDashboardWidgetOptionBoolean(widget, 'wrapPreview', true)
                 ? spacing === 'compact'
                   ? 'grid grid-cols-2 gap-2 min-[600px]:grid-cols-4'
@@ -173,24 +174,18 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
               />
             ))}
           </div>
-          {(resource.isPending ||
-            resource.isError ||
-            resource.rows.length === 0 ||
-            preview.length === 0) && (
-            <p
-              role="status"
-              className="dashboard-widget-status pointer-events-none pt-3 text-xs text-muted-foreground"
-            >
-              {widget?.options.sensorSelection === 'selected' &&
-              sensorIds.length === 0
-                ? 'No sensors selected.'
-                : resource.isPending
-                  ? 'Loading sensor readings…'
-                  : resource.isError
-                    ? 'Sensor readings could not be refreshed.'
-                    : 'No sensor readings available.'}
-            </p>
-          )}
+          <div className="dashboard-widget-status pointer-events-none pt-3">
+            {widget?.options.sensorSelection === 'selected' &&
+            sensorIds.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No sensors selected.
+              </p>
+            ) : (
+              <SensorReadingsStatus resource={resource}>
+                {preview.length === 0 ? 'No sensor readings available.' : null}
+              </SensorReadingsStatus>
+            )}
+          </div>
         </div>
       </WidgetCard>
       <ResponsiveOverlay
@@ -201,6 +196,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
         className="max-w-5xl"
       >
         <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
+          <SensorReadingsStatus resource={resource} />
           <div className="flex flex-wrap gap-2 p-1">
             <Select value={activeId} onValueChange={setActiveId}>
               <SelectTrigger aria-label="Sensor" className="w-52">

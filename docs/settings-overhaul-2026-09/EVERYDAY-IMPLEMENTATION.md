@@ -324,3 +324,20 @@ replaced by `ui/dev/timer-modes-review.mjs`, which cleans up its own fixture
 records. Existing server execution/restart and timer-widget command evidence
 remain applicable. Fresh screenshots include all modes and phone action sections;
 type checking, lint and production build pass.
+
+### Chart recovery and log acceptance — 2026-09-30
+
+Chart/log checkpoint, 2026-09-30: 11 chart checks pass at 1440 px and
+390 px. Empty history, initial failures, explicit retry, cached failures and
+successful empty refreshes remain distinct. Shared status identifies retained
+samples in widgets, sensor details and room conditions. Empty sensor cards remain
+clickable. Axis labels have enforced screen spacing; phone drawer headers and
+Close controls stay visible after a retry. Earlier native chart keyboard/touch
+and 200% zoom checks remain recorded in the chart-input checkpoint.
+
+8 log checks pass at 1440, 360 and 430 px, using a synthetic 500-entry
+buffer. Desktop rows meet the original 32 px maximum; phone rows wrap naturally.
+Shared source/level selectors update URL filters, including a source named
+`all`; 200-row pagination, complete messages, canonical links and keyboard
+focus restoration are verified. Type checking, lint and production build pass.
+Full cross-family acceptance remains open in [ACCEPTANCE-AUDIT.md](ACCEPTANCE-AUDIT.md).

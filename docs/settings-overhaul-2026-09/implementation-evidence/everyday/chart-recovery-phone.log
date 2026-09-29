@@ -1,0 +1,53 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Empty history has no fabricated plot or zero measurement",
+    "passed": true
+   },
+   {
+    "name": "Empty sensor card remains clickable across its surface",
+    "passed": true
+   },
+   {
+    "name": "Initial read failure offers retry and preserves honest missing values",
+    "passed": true
+   },
+   {
+    "name": "Retry displays sourced temperature without inventing humidity",
+    "passed": true
+   },
+   {
+    "name": "Empty refresh retains chart with explicit last-sample status",
+    "passed": true
+   },
+   {
+    "name": "Time-axis labels do not overlap",
+    "passed": true
+   },
+   {
+    "name": "Overlay title and close control remain visible after retry",
+    "passed": true
+   },
+   {
+    "name": "Failed refresh retains samples and offers retry",
+    "passed": true
+   },
+   {
+    "name": "Sensor detail shares failure status and retained chart",
+    "passed": true
+   },
+   {
+    "name": "Recovered sensor detail clears failure status",
+    "passed": true
+   },
+   {
+    "name": "Detail stays within viewport",
+    "passed": true
+   }
+  ],
+  "width": 390
+ }
+}
+{"url":"http://127.0.0.1:3021/","viewport":{"width":390,"height":844},"problems":[]}

@@ -334,3 +334,24 @@ Verified:
 - A real-server integration test proves active-preview save rejection without mutation, combined persisted writes, both channels preserved, stale rejection, isolation of another assignment, and profile/assignment survival across a SQLite restart. TypeScript, targeted lint and production UI build pass. Evidence is in `implementation-evidence/settings-brightness-*` and `homectl-calibration-editor-api.log`.
 
 Remaining calibration work: connect the color wizard and profile assignment controls to the shared draft/save contract; preserve original unedited color anchors; provide equivalent conflict/navigation/session coverage; complete capability, missing-device and failure acceptance. Calibration as a whole and the full settings goal remain incomplete. No live household configuration was changed.
+
+### Acceptance reconciliation — 2026-09-30
+
+See [ACCEPTANCE-AUDIT.md](ACCEPTANCE-AUDIT.md) for the current reconciliation.
+Earlier “remaining” paragraphs are historical checkpoints; later evidence closes
+only its verified requirement, not the entire family.
+
+Chart/log checkpoint, 2026-09-30: 11 chart checks pass at 1440 px and
+390 px. Empty history, initial failures, explicit retry, cached failures and
+successful empty refreshes remain distinct. Shared status identifies retained
+samples in widgets, sensor details and room conditions. Empty sensor cards remain
+clickable. Axis labels have enforced screen spacing; phone drawer headers and
+Close controls stay visible after a retry. Earlier native chart keyboard/touch
+and 200% zoom checks remain recorded in the chart-input checkpoint.
+
+8 log checks pass at 1440, 360 and 430 px, using a synthetic 500-entry
+buffer. Desktop rows meet the original 32 px maximum; phone rows wrap naturally.
+Shared source/level selectors update URL filters, including a source named
+`all`; 200-row pagination, complete messages, canonical links and keyboard
+focus restoration are verified. Type checking, lint and production build pass.
+Full cross-family acceptance remains open in [ACCEPTANCE-AUDIT.md](ACCEPTANCE-AUDIT.md).

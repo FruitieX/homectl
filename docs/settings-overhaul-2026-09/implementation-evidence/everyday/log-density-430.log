@@ -1,0 +1,41 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Initial 500-entry buffer renders only 200 rows",
+    "passed": true
+   },
+   {
+    "name": "Phone log rows wrap without horizontal overflow",
+    "passed": true
+   },
+   {
+    "name": "Keyboard opens complete message and canonical device link",
+    "passed": true
+   },
+   {
+    "name": "Escape restores focus to the original row",
+    "passed": true
+   },
+   {
+    "name": "A source named all remains a distinct URL filter",
+    "passed": true
+   },
+   {
+    "name": "Level filter updates URL and rows",
+    "passed": true
+   },
+   {
+    "name": "Show more adds the next bounded page",
+    "passed": true
+   },
+   {
+    "name": "Final page stops at the available buffer",
+    "passed": true
+   }
+  ],
+  "width": 430
+ }
+}
+{"url":"http://127.0.0.1:3021/config/logs","viewport":{"width":430,"height":932},"problems":[]}

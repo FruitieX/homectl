@@ -1,0 +1,41 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Initial 500-entry buffer renders only 200 rows",
+    "passed": true
+   },
+   {
+    "name": "Desktop log rows are at most 32px high",
+    "passed": true
+   },
+   {
+    "name": "Keyboard opens complete message and canonical device link",
+    "passed": true
+   },
+   {
+    "name": "Escape restores focus to the original row",
+    "passed": true
+   },
+   {
+    "name": "A source named all remains a distinct URL filter",
+    "passed": true
+   },
+   {
+    "name": "Level filter updates URL and rows",
+    "passed": true
+   },
+   {
+    "name": "Show more adds the next bounded page",
+    "passed": true
+   },
+   {
+    "name": "Final page stops at the available buffer",
+    "passed": true
+   }
+  ],
+  "width": 1440
+ }
+}
+{"url":"http://127.0.0.1:3021/config/logs","viewport":{"width":1440,"height":1080},"problems":[]}

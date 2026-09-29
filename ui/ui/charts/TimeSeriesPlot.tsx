@@ -144,6 +144,15 @@ export function TimeSeriesPlot({
     domain: [new Date(minTime), new Date(maxTime)],
     range: [left, left + plotWidth],
   });
+  // Time-scale tick counts are approximate; enforce spacing in screen pixels.
+  const xTicks = x
+    .ticks(Math.max(2, Math.floor(plotWidth / 58)))
+    .reduce<Date[]>((ticks, tick) => {
+      const previous = ticks.at(-1);
+      if ((!previous || x(tick) - x(previous) >= 58) && x(tick) <= width - 24)
+        ticks.push(tick);
+      return ticks;
+    }, []);
   const y = scaleLinear({
     domain: enforceMinimumSpan(
       Number.isFinite(low) ? (zero && low >= 0 ? 0 : low - padding) : 0,
@@ -348,7 +357,7 @@ export function TimeSeriesPlot({
             </text>
           </g>
         ))}
-        {x.ticks(Math.max(3, Math.floor(plotWidth / 58))).map((tick) => (
+        {xTicks.map((tick) => (
           <text
             key={tick.getTime()}
             x={x(tick)}

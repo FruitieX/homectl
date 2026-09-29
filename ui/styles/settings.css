@@ -535,7 +535,7 @@
   grid-template-columns: 82px 48px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
-  padding: 9px 12px;
+  padding: 6px 12px;
   width: 100%;
   text-align: left;
   font-size: 12px;

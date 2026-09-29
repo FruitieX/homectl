@@ -170,7 +170,7 @@ pass. Shared autocomplete insets and source-list dividers are checked in the bro
       flows. Server execution, restart and Helsinki migration API tests pass.
 - [x] Calibration: finish bulk assignment, reset of raw numeric edits and required
       keyboard/phone acceptance without losing retained drafts or color modes.
-- [ ] Charts: finish phone/touch checks and retain precise inspection, keyboard
+- [x] Charts: finish phone/touch checks and retain precise inspection, keyboard
       dismissal and readable empty/error states.
 
 Timer acceptance, 2026-09-30: 19 checks pass on desktop and phone. The new
@@ -195,6 +195,21 @@ empty/error visual review remains in the outstanding acceptance gate.
       the two implementation ledgers; remove superseded surfaces safely.
 - [ ] Run only the remaining meaningful type/lint/build, integration and browser
       gates; resolve failures before marking delivery complete.
+
+Chart/log checkpoint, 2026-09-30: 11 chart checks pass at 1440 px and
+390 px. Empty history, initial failures, explicit retry, cached failures and
+successful empty refreshes remain distinct. Shared status identifies retained
+samples in widgets, sensor details and room conditions. Empty sensor cards remain
+clickable. Axis labels have enforced screen spacing; phone drawer headers and
+Close controls stay visible after a retry. Earlier native chart keyboard/touch
+and 200% zoom checks remain recorded in the chart-input checkpoint.
+
+8 log checks pass at 1440, 360 and 430 px, using a synthetic 500-entry
+buffer. Desktop rows meet the original 32 px maximum; phone rows wrap naturally.
+Shared source/level selectors update URL filters, including a source named
+`all`; 200-row pagination, complete messages, canonical links and keyboard
+focus restoration are verified. Type checking, lint and production build pass.
+Full cross-family acceptance remains open in [ACCEPTANCE-AUDIT.md](ACCEPTANCE-AUDIT.md).
 
 ## 7. Delivery and durable evidence
 

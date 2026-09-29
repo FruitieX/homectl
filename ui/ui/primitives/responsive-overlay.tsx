@@ -232,7 +232,7 @@ export function ResponsiveOverlay({
         // the software keyboard covers to keep it above the keyboard.
         style={{ marginBottom: 'var(--app-visual-viewport-offset, 0px)' }}
         className={cn(
-          'h-auto max-h-[calc(var(--app-visual-viewport-height,100dvh)-1rem)] overflow-hidden',
+          'h-auto max-h-[calc(var(--app-visual-viewport-height,100dvh)-1rem)] overflow-clip',
           isFullscreen &&
             'h-[calc(var(--app-visual-viewport-height,100dvh)-1rem)]',
           className,
