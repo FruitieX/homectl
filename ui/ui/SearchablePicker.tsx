@@ -50,7 +50,12 @@ export function SearchablePicker({
   const triggerLabel =
     selected?.label ?? (value ? `${value} (unavailable)` : placeholder);
   const list = (
-    <Command shouldFilter={false}>
+    <Command
+      shouldFilter={false}
+      // Inline phone results may sit inside a field label. Selecting a div-based
+      // result must not activate the label's trigger and reopen the picker.
+      onClick={(event) => event.preventDefault()}
+    >
       <CommandInput
         autoFocus
         placeholder="Search by name or ID…"

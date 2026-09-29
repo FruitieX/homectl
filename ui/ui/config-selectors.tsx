@@ -15,7 +15,7 @@ export function ReferenceField({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-1">
+    <div className="flex min-w-0 items-start gap-1">
       <div className="min-w-0 flex-1">{children}</div>
       {value && (
         <Button
@@ -176,12 +176,14 @@ export function SceneSelect({
   onChange,
   placeholder = 'Select scene...',
   createReturnTo,
+  ariaLabel,
 }: {
   scenes: IdNameOption[];
   value: string;
   onChange: (sceneId: string) => void;
   placeholder?: string;
   createReturnTo?: string;
+  ariaLabel?: string;
 }) {
   const state = useScenesState()?.[value];
   const resolved = Object.values(state?.devices ?? {});
@@ -192,16 +194,18 @@ export function SceneSelect({
   return (
     <div className="space-y-2">
       <ReferenceField kind="scene" value={value}>
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-start gap-2">
           {value && (
-            <StatePreview
-              {...first}
-              certainty={!first ? 'unresolved' : mixed ? 'mixed' : 'known'}
-              samples={resolved.flatMap((item) =>
-                item.color ? [item.color] : [],
-              )}
-              source="Saved scene"
-            />
+            <div className="flex h-11 shrink-0 items-center md:h-9">
+              <StatePreview
+                {...first}
+                certainty={!first ? 'unresolved' : mixed ? 'mixed' : 'known'}
+                samples={resolved.flatMap((item) =>
+                  item.color ? [item.color] : [],
+                )}
+                source="Saved scene"
+              />
+            </div>
           )}
           <div className="min-w-0 flex-1">
             <SearchablePicker
@@ -213,6 +217,7 @@ export function SceneSelect({
               value={value}
               onChange={onChange}
               placeholder={placeholder}
+              ariaLabel={ariaLabel}
             />
           </div>
         </div>

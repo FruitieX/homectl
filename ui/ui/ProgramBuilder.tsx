@@ -15,7 +15,11 @@ import {
   useRoutineAuthoring,
 } from '@/ui/settings/FlowBlock';
 import { createUuid } from '@/lib/uuid';
-import { moveSibling, duplicateRoutineNode } from '@/lib/routineDraft';
+import {
+  moveSibling,
+  duplicateRoutineNode,
+  isEditableSceneSelection,
+} from '@/lib/routineDraft';
 import { entityDraftStore } from '@/lib/entityDraft';
 import type { ChooseBranch } from '@/bindings/ChooseBranch';
 import type { DevicesState } from '@/bindings/DevicesState';
@@ -39,6 +43,7 @@ import {
   GroupSelect,
   RoutineSelect,
   SceneSelect,
+  ReferenceField,
   splitDeviceKey,
 } from '@/ui/config-selectors';
 import { ConfigField } from '@/ui/config-form';
@@ -563,6 +568,7 @@ function defaultSceneSelection(
 }
 
 function SceneSelectionEditor({
+  slot,
   selection,
   scenes,
   groups,
@@ -570,6 +576,7 @@ function SceneSelectionEditor({
   onChange,
   onClear,
 }: {
+  slot: string;
   selection: SceneSelection;
   scenes: Array<{ id: string; name: string }>;
   groups: FlattenedGroupsConfig;
@@ -577,6 +584,7 @@ function SceneSelectionEditor({
   onChange: (selection: SceneSelection) => void;
   onClear: () => void;
 }) {
+  const { draftKey } = useRoutineAuthoring();
   const enumHelpers = helpers.filter((item) => item.kind.kind === 'enum');
   const selectedHelper = enumHelpers.find(
     (item) => selection.kind === 'helper_enum' && item.id === selection.helper,
@@ -594,10 +602,21 @@ function SceneSelectionEditor({
 
   const switchKind = (kind: SceneSelection['kind']) => {
     if (kind === selection.kind) return;
-    onChange(
+    const fallback: SceneSelection =
       kind === 'helper_enum'
         ? { kind, helper: enumHelpers[0]?.id ?? '', mapping: {} }
-        : { kind, group_id: Object.keys(groups)[0] ?? '' },
+        : { kind, group_id: Object.keys(groups)[0] ?? '' };
+    onChange(
+      draftKey
+        ? entityDraftStore.switchVariant(
+            draftKey,
+            slot,
+            selection.kind,
+            selection,
+            kind,
+            fallback,
+          )
+        : fallback,
     );
   };
 
@@ -607,18 +626,15 @@ function SceneSelectionEditor({
         label="Dynamic selection"
         description="Resolved once when the step runs and frozen into the plan."
       >
-        <select
-          className={selectClassName}
+        <SettingsSelect
+          aria-label="Dynamic scene selection"
           value={selection.kind}
-          onChange={(event) =>
-            switchKind(event.target.value as SceneSelection['kind'])
-          }
-        >
-          <option value="helper_enum">Map a helper value to a scene</option>
-          <option value="group_active">
-            Mirror a group&apos;s active scene
-          </option>
-        </select>
+          onValueChange={(value) => switchKind(value as SceneSelection['kind'])}
+          options={[
+            { value: 'helper_enum', label: 'Map a helper value to a scene' },
+            { value: 'group_active', label: "Mirror a group's active scene" },
+          ]}
+        />
       </ConfigField>
       {selection.kind === 'helper_enum' ? (
         <>
@@ -626,16 +642,19 @@ function SceneSelectionEditor({
             label="Helper"
             description="Enum helper whose current value picks the scene."
           >
-            <SearchablePicker
-              options={enumHelpers.map((helper) => ({
-                value: helper.id,
-                label: helper.name,
-                detail: helper.id,
-              }))}
-              value={selection.helper}
-              onChange={(helper) => onChange({ ...selection, helper })}
-              placeholder="Select helper…"
-            />
+            <ReferenceField kind="helper" value={selection.helper}>
+              <SearchablePicker
+                options={enumHelpers.map((helper) => ({
+                  value: helper.id,
+                  label: helper.name,
+                  detail: helper.id,
+                }))}
+                value={selection.helper}
+                onChange={(helper) => onChange({ ...selection, helper })}
+                placeholder="Select helper…"
+                ariaLabel="Scene selection helper"
+              />
+            </ReferenceField>
           </ConfigField>
           <ConfigField
             label="Value mapping"
@@ -652,20 +671,33 @@ function SceneSelectionEditor({
                 optionList.map((option) => (
                   <div
                     key={option}
-                    className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2"
+                    className="grid grid-cols-1 items-start gap-2 sm:grid-cols-[minmax(5rem,0.65fr)_minmax(0,1.35fr)]"
                   >
-                    <span className="truncate font-mono text-xs">{option}</span>
+                    <div className="min-w-0 text-xs sm:pt-2.5">
+                      <span className="break-words font-mono">{option}</span>
+                      {!helperOptions.includes(option) && (
+                        <p className="mt-1 text-muted-foreground">
+                          Not in the helper's current options
+                        </p>
+                      )}
+                    </div>
                     <SceneSelect
                       scenes={scenes}
-                      value={selection.mapping[option] ?? ''}
+                      value={
+                        Object.hasOwn(selection.mapping, option)
+                          ? selection.mapping[option]
+                          : ''
+                      }
                       placeholder="No mapping"
+                      ariaLabel={`Scene for ${option}`}
                       onChange={(sceneId) => {
-                        const mapping = { ...selection.mapping };
-                        if (sceneId) {
-                          mapping[option] = sceneId;
-                        } else {
-                          delete mapping[option];
-                        }
+                        const mapping = sceneId
+                          ? { ...selection.mapping, [option]: sceneId }
+                          : Object.fromEntries(
+                              Object.entries(selection.mapping).filter(
+                                ([key]) => key !== option,
+                              ),
+                            );
                         onChange({ ...selection, mapping });
                       }}
                     />
@@ -695,6 +727,7 @@ function SceneSelectionEditor({
           scenes={scenes}
           value={selection.fallback_scene_id ?? ''}
           placeholder="No fallback"
+          ariaLabel="Fallback scene"
           onChange={(sceneId) =>
             onChange({ ...selection, fallback_scene_id: sceneId || undefined })
           }
@@ -726,7 +759,30 @@ function StepFields({
   helpers: HelperRuntimeStatus[];
   existingIds: string[];
 }) {
-  const { returnHref } = useRoutineAuthoring();
+  const { returnHref, draftKey } = useRoutineAuthoring();
+  const sceneSlot = 'scene-choice/' + encodeURIComponent(step.id);
+  const switchSceneMode = (mode: 'fixed' | 'dynamic') => {
+    if (step.action !== 'activate_scene') return;
+    type Choice = Pick<typeof step, 'scene_id' | 'select'>;
+    const fallback: Choice =
+      mode === 'fixed'
+        ? { scene_id: '', select: undefined }
+        : {
+            scene_id: undefined,
+            select: defaultSceneSelection(helpers, groups),
+          };
+    const choice = draftKey
+      ? entityDraftStore.switchVariant<Choice>(
+          draftKey,
+          sceneSlot,
+          step.select ? 'dynamic' : 'fixed',
+          { scene_id: step.scene_id, select: step.select },
+          mode,
+          fallback,
+        )
+      : fallback;
+    onChange({ ...step, ...choice });
+  };
   const sceneReturn = returnHref
     ? returnHref +
       (returnHref.includes('?') ? '&' : '?') +
@@ -755,14 +811,13 @@ function StepFields({
         <div className="space-y-3">
           {step.select ? (
             <SceneSelectionEditor
+              slot={sceneSlot + '/kind'}
               selection={step.select}
               scenes={scenes}
               groups={groups}
               helpers={helpers}
               onChange={(select) => onChange({ ...step, select })}
-              onClear={() =>
-                onChange({ ...step, select: undefined, scene_id: '' })
-              }
+              onClear={() => switchSceneMode('fixed')}
             />
           ) : (
             <ConfigField label="Scene">
@@ -771,6 +826,7 @@ function StepFields({
                   scenes={scenes}
                   value={step.scene_id ?? ''}
                   createReturnTo={sceneReturn}
+                  ariaLabel="Scene to activate"
                   onChange={(scene_id) => onChange({ ...step, scene_id })}
                 />
               </div>
@@ -797,13 +853,7 @@ function StepFields({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() =>
-                    onChange({
-                      ...step,
-                      scene_id: undefined,
-                      select: defaultSceneSelection(helpers, groups),
-                    })
-                  }
+                  onClick={() => switchSceneMode('dynamic')}
                 >
                   Use a dynamic selection
                 </Button>
@@ -1267,7 +1317,20 @@ function StepFields({
               onChange={(event) =>
                 onChange({
                   ...step,
-                  capture_target_intents: event.target.checked ? {} : undefined,
+                  capture_target_intents: draftKey
+                    ? entityDraftStore.switchVariant<TargetSpec | undefined>(
+                        draftKey,
+                        'timer-capture/' + encodeURIComponent(step.id),
+                        step.capture_target_intents === undefined
+                          ? 'disabled'
+                          : 'enabled',
+                        step.capture_target_intents,
+                        event.target.checked ? 'enabled' : 'disabled',
+                        event.target.checked ? {} : undefined,
+                      )
+                    : event.target.checked
+                      ? {}
+                      : undefined,
                 } as unknown as NativeAction)
               }
             />
@@ -1441,6 +1504,9 @@ function StepEditor({
     return <UnknownFlowValue value={step} />;
   const known =
     stepKindOptions.some((option) => option.value === step.action) &&
+    (step.action !== 'activate_scene' ||
+      step.select == null ||
+      isEditableSceneSelection(step.select)) &&
     (step.action !== 'set_power' || Boolean(step.device)) &&
     (step.action !== 'run_script' || Boolean(step.spec)) &&
     (step.action !== 'cycle_scenes' || Array.isArray(step.scenes)) &&
@@ -1460,7 +1526,7 @@ function StepEditor({
           <Power className="size-4" />
         ) : step.action === 'choose' ? (
           <GitBranch className="size-4" />
-        ) : step.action.includes('timer') ? (
+        ) : typeof step.action === 'string' && step.action.includes('timer') ? (
           <Timer className="size-4" />
         ) : step.action === 'invoke_routine' ? (
           <Play className="size-4" />

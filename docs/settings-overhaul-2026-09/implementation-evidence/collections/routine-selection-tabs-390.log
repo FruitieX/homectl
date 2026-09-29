@@ -1,0 +1,14 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   "Assistant → Appearance → Assistant stays selected across 30 frames",
+   "Assistant → Behavior → Assistant stays selected across 30 frames",
+   "Assistant → About → Assistant stays selected across 30 frames",
+   "Appearance uses shared switches",
+   "No horizontal overflow"
+  ],
+  "width": 390
+ }
+}
+{"url":"http://127.0.0.1:3021/config/settings","viewport":{"width":390,"height":844},"problems":[]}

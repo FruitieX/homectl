@@ -231,6 +231,19 @@ with related-page links aligned on phones. The existing scene/color journey and
 are recorded in FIELD-COVERAGE.md and the gallery. Next: routine target collections
 and the confirmed loss of dynamic-selection mappings when changing selection mode.
 
+Routine selection checkpoint, 2026-09-30: dynamic/fixed and helper/group choices
+retain their mapping and fallback drafts. Timer capture retains its edited scope
+through off/on. Mapping controls have clear names, phone wrapping and helper links.
+Sixteen browser checks pass at 1440/390 px, including keyboard selection, related
+navigation, multiple activation/cycle/timer targets, Discard and repeated saves.
+The journey also exposed and fixed phone picker reopening through a field label,
+and a query-cache merge losing an own `__proto__` key and causing later conflicts.
+All 222 UI unit tests, type/lint/build, settings-tab checks at both sizes and the
+targeted server duration/capture validation test pass. Evidence is under
+`implementation-evidence/collections/routine-selection-*`. Next are typed
+integration/helper/source cases and the remaining routine variants in the field
+matrix; overall acceptance remains open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

@@ -70,8 +70,11 @@ Confirmed by 11 chart checks at 1440/390 px and 8 log checks at
    Scene collections now have 18 edited browser checks at both sizes: full link
    scopes, missing references, replacement, empty maps and reload. Stored scene
    activation scopes do not alter target-link resolution; the ledger distinguishes
-   those contracts. Dynamic routine selection currently drops its nested draft
-   when switching modes; fix and verify that before closing the routine row.
+   those contracts. Dynamic routine selection now retains its nested drafts;
+   16 checks at each viewport cover selection modes, mappings/fallbacks, activation
+   scopes, edited timer captures, cycle entries/detection, Save/Discard and reload.
+   Continue with typed integration/helper/source cases and the remaining routine
+   variants; these checks do not close the full routine schema gate.
 3. Use those gaps to select additional browser/backend checks. Do not rerun
    whole passing suites merely to increase test counts.
 4. Complete remaining everyday widget/assistant/navigation evidence, then the

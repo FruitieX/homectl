@@ -1,0 +1,72 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Obsolete helper mappings stay visible for repair",
+    "passed": true
+   },
+   {
+    "name": "Keyboard search selects a mapping and closes the picker",
+    "passed": true
+   },
+   {
+    "name": "Dynamic/fixed switching restores the previous group selection and fallback",
+    "passed": true
+   },
+   {
+    "name": "Helper/group switching restores every mapping and its independent fallback",
+    "passed": true
+   },
+   {
+    "name": "Related helper navigation retains the draft without writing configuration",
+    "passed": true
+   },
+   {
+    "name": "Turning timer capture off and back on restores every selected target",
+    "passed": true
+   },
+   {
+    "name": "Save preserves all edited mappings, arbitrary option keys, fallback and unknown fields",
+    "passed": true
+   },
+   {
+    "name": "Multiple target devices and groups save without truncation or loss of extensions",
+    "passed": true
+   },
+   {
+    "name": "Selection state is isolated by node and edited timer targets persist completely",
+    "passed": true
+   },
+   {
+    "name": "Discard restores the saved selection mode and mappings",
+    "passed": true
+   },
+   {
+    "name": "Saving capture disabled omits the optional target scope",
+    "passed": true
+   },
+   {
+    "name": "Cycle detection scope saves multiple devices and groups independently of entry targets",
+    "passed": true
+   },
+   {
+    "name": "Cycle reorder carries each scene scope, transition and unknown fields together",
+    "passed": true
+   },
+   {
+    "name": "Cycle remove/add saves the full replacement collection",
+    "passed": true
+   },
+   {
+    "name": "Routine collection controls fit the viewport",
+    "passed": true
+   },
+   {
+    "name": "Saved mappings and omitted timer scope survive reload",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/routines","viewport":{"width":1440,"height":1080},"problems":[]}

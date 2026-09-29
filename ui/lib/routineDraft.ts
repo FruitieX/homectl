@@ -1,6 +1,30 @@
 import type { Routine } from '../hooks/useConfig';
 import type { FieldError } from './configSection.ts';
 import { createUuid } from './uuid.ts';
+import type { SceneSelection } from '../bindings/SceneSelection';
+
+/** Future or malformed selection definitions stay visible without being coerced. */
+export function isEditableSceneSelection(
+  value: unknown,
+): value is SceneSelection {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const selection = value as Record<string, unknown>;
+  if (
+    selection.fallback_scene_id != null &&
+    typeof selection.fallback_scene_id !== 'string'
+  )
+    return false;
+  if (selection.kind === 'group_active')
+    return typeof selection.group_id === 'string';
+  return (
+    selection.kind === 'helper_enum' &&
+    typeof selection.helper === 'string' &&
+    selection.mapping !== null &&
+    typeof selection.mapping === 'object' &&
+    !Array.isArray(selection.mapping) &&
+    Object.values(selection.mapping).every((scene) => typeof scene === 'string')
+  );
+}
 /** These are JSON numbers on the wire. Never silently round a u64 into an unsafe JS integer. */
 export function stringifyConfig(value: unknown): string {
   return JSON.stringify(value, (key, entry) => {

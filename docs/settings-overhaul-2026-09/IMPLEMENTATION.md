@@ -374,3 +374,35 @@ journey still passes; 25 scene/target/entity-draft unit checks and UI type/lint/
 pass. Captures/logs are under `implementation-evidence/collections/scene-collections-*`.
 No household configuration was changed. Full schema/variant acceptance stays open
 in FIELD-COVERAGE.md, with routine dynamic-selection draft loss next to resolve.
+
+### Routine selection and shared cache acceptance — 2026-09-30
+
+Dynamic/fixed selection and helper/group selection now retain separate session
+variants without reverting unrelated action fields. Timer capture retains its
+edited scope when switched off and back on. Mapping rows wrap on phones, preserve
+arbitrary enum keys, distinguish stale options and link to helper details. Shared
+scene controls have specific accessible names; related links and preview rings
+stay aligned with their triggers when phone search results expand. Unsupported
+or malformed selection objects remain visible in the read-only fallback.
+
+`routine-selection-review.mjs` passes 16 checks at 1440/390 px: pointer/keyboard
+selection; helper/group/fixed mode restoration; stale mapping repair; multiple
+mappings and fallbacks; related navigation; activation targets; edited timer
+capture and omission; cycle entry order/removal/addition and detection scope;
+Save/Discard, repeated saves and reload. Only its own isolated fixture records
+are written. The helper includes a synthetic `__proto__` enum option deliberately.
+
+That option exposed a real cache defect: TanStack's installed structural merge
+assigned to `copy[key]`, losing the own JSON key on refresh. The next expected-value
+save could then conflict. `shareQueryData` preserves own keys with safe record
+construction and reuses unchanged branches. The failing-before/passing-after
+QueryClient regression is recorded. Inline phone command results also needed to
+prevent their enclosing label's default activation, which reopened a picker after
+selection. The native browser journey verifies it stays closed.
+
+222 UI unit tests, type checking, lint and build pass. Settings-tab regression
+checks pass at both sizes after the shared cache change. The targeted Rust test
+`v03_range_duration_and_capability_errors_are_rejected` passes, including the
+nonempty-capture contract. Logs/captures are under `implementation-evidence/collections/`.
+Remaining schema and accessibility gates are tracked in FIELD-COVERAGE.md and
+ACCEPTANCE-AUDIT.md; this checkpoint does not declare the overhaul complete.

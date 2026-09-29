@@ -32,10 +32,10 @@ rows marked **open** are not acceptance sign-off. Paths below are relative to
 | Routine `triggers[]` | `ui/TriggerBuilder.tsx`: add/change/duplicate/remove start blocks, preserve IDs; empty definition subject to compiler validation | Retained authoring order; multiple subscriptions | `dev/settings-routine-journey.js`, `lib/routineDraft.test.ts`. **Open:** edited fixture for each of eight trigger variants and optional report field. |
 | Nested condition `all.conditions[]`, `any.conditions[]`, `not.condition` | `ui/ConditionBuilder.tsx`: recursive condition rows; All/Any require a child; Not remains unary | Preserve nesting and sibling order | `lib/routineDraft.test.ts` rejects empty logic groups; current visual audit covers nested layout. **Open:** save/reload multi-child All/Any/Not edits and unknown-value semantics. |
 | Native `steps[]` and `choose.branches[].steps[]` | `ui/ProgramBuilder.tsx`: direct fields, add/remove/duplicate/move; empty native sequence shown honestly | Sequential; first matching branch, stable IDs | Routine journey edits/moves/duplicates/saves branch subtrees, including a script. `lib/routineDraft.test.ts` checks identity and opaque payload preservation. **Open:** variant matrix below. |
-| `cycle_scenes.scenes[]` | `ProgramBuilder` cycle rows: add/remove/move scenes, per-entry fields | Explicit cycle order | **Open:** round-trip several entries with different scope and transition settings; clear/re-add an entry. |
-| `TargetSpec.devices[]`, `groups[]` | `ProgramBuilder.TargetSpecEditor`: independent device and group multiselects; empty means the action's documented default, not invented “all” behavior | Scope membership | Used by activate, dim, random color, cycle detection/entries and timer capture. **Open:** named fixture for each consumer, with multiple devices/groups and omitted/empty distinction. |
-| `SceneSelection.mapping` and optional fallback | `ProgramBuilder.SceneSelectionEditor`: helper-option-to-scene rows and fallback selector | Keyed mapping | **Open:** edit several mappings, clear one, preserve obsolete/missing helper options, save/reload fallback. |
-| Timer `capture_target_intents` | `ProgramBuilder` schedule/replace timer controls with target picker | Optional captured scope | **Open:** omitted vs explicit empty vs multi-target editing; backend stale-intent tests are execution evidence only. |
+| `cycle_scenes.scenes[]` | `ProgramBuilder` cycle rows: add/remove/move scenes, per-entry fields | Explicit cycle order | `dev/routine-selection-review.mjs` edits, reorders, removes/adds and saves entries with independent targets/transitions/extensions. **Open:** explicitly empty cycle validation against the compiler; remaining optional rollout fields. |
+| `TargetSpec.devices[]`, `groups[]` | `ProgramBuilder.TargetSpecEditor`: independent device and group multiselects; empty means the action's documented default, not invented “all” behavior | Scope membership | `dev/routine-selection-review.mjs` edits multiple activation targets, cycle detection targets, entry scopes and timer capture. **Open:** dim/random-color consumers and empty/default targets; do not infer their semantics from activation. |
+| `SceneSelection.mapping` and optional fallback | `ProgramBuilder.SceneSelectionEditor`: helper-option-to-scene rows and fallback selector | Keyed mapping | `dev/routine-selection-review.mjs` edits several mappings (including `__proto__`), removes an obsolete option, switches helper/group/fixed modes, retains independent fallbacks, navigates to the helper, saves/discards and reloads. **Open:** unavailable helper/scene recovery and empty mapping compiler validation. |
+| Timer `capture_target_intents` | `ProgramBuilder` schedule/replace timer controls with target picker | Optional captured scope | `dev/routine-selection-review.mjs` adds/removes scope members, retains the edited scope through off/on, saves every member and extension, then saves capture disabled as omission. Empty capture is rejected by the compiler (`compile.rs` timer validation test); existing stale-intent tests cover execution separately. |
 | Source `aliases[]` | `app/config/sources/detail.tsx`: repeatable text rows, add/remove, validation of unique full keys | Preserve array; aliases have no execution sequence | `dev/settings-source-journey.js` creates two aliases and checks the API result. **Open:** empty/removal and malformed alias repair. |
 | Helper enum `options[]` | `app/config/helpers/fields.tsx`: direct rows, add/remove/up/down; invalid initial selection must be repaired explicitly | Display order retained | `dev/settings-helper-journey.js` creates three options, reorders, switches type away/back and verifies saved order. **Open:** empty/duplicate validation and removal of selected current/initial values. |
 | MQTT `sensor_value_fields[]`, `disabled_device_ids[]` | `app/config/integrations/fields.tsx` `StringEntries`: repeatable rows, add/remove/up/down; malformed values use typed JSON fallback | Preserve configured order | Integration journey edits/saves multiple sensor paths; `lib/integrationDraft.test.ts` checks every pointer. **Open:** edited disabled-device collection and empty/removal fixtures. |
@@ -57,7 +57,7 @@ schema; server compiler/resolver behavior remains authoritative.
 | `TriggerSpec`, `StateChangeMode`, `ScheduleSpec` | `TriggerBuilder`: report, state change, predicate transition/held, schedule, timer fired, startup, manual; schedule/timezone/backlog controls | Each trigger edited; report field omitted/present; change modes; cron/interval; explicit Helsinki timezone; catch-up lateness required only for catch-up. |
 | `ConditionExpr`, `ValueSource`, comparison operators, group quantifiers | `ConditionBuilder`: literal, All/Any/Not, comparison, group; device/helper/source values | Every source/quantifier/operator family; valueless operators; false/zero/null/missing distinctions; optional group power/scene. |
 | `NativeAction` | `ProgramBuilder`: script, activate/cycle, power, dim, random color, choose, schedule/replace/cancel timer, helper write, routine invocation | Each variant edited through Save/reload, including singular SetPower device; no false multi-target claim. |
-| Scene selection, cycle entry, rollout | `ProgramBuilder` scene/target/transition/selection/rollout controls | Direct scene vs helper mapping; entry scopes and transitions; rollout fields and optional defaults; stale mapping keys. |
+| Scene selection, cycle entry, rollout | `ProgramBuilder` scene/target/transition/selection/rollout controls | Direct/helper/group modes, independent fallbacks, stale-key removal and cycle scope/order are edited in the routine selection journey. **Open:** rollout fields/defaults and unavailable references. |
 | `ProgramBody`, `ScriptSpec` declarations | `ProgramBuilder`, `RoutineScriptEditor`: native/mixed scripts; explicit whole-script conversion; declaration rows | Mixed script and whole-program conversion journeys already pass. Still name each declaration collection and persistence/limits default fixture. |
 | Scene explicit/device-link/scene-link state | `app/config/scenes/target-row.tsx`, shared color controls | Scene collection journey edits explicit/device-link/scene-link modes, source and multiplier, default power, zero brightness/fade, full stored scopes, missing-target replacement, and retained inactive variants. Nullable transition and unknown siblings survive. Color variants/capture and creation-return still need ledger reconciliation. |
 | Helper boolean/enum/number/string and initial value | Helper definition fields plus separate current-value control | Boolean false, number zero/optional bounds, string empty, enum options/invalid values; initial configuration save must never become a current-value command. |
@@ -89,8 +89,26 @@ entries remain removable. Target removal clears cached variants; replacement
 moves them to the replacement target without prefix collisions. Captures/logs
 are in `implementation-evidence/collections/scene-collections-*`.
 
-Next: close routine collection rows with edited fixtures, then typed
-integration/helper/source cases. Code inspection found that switching dynamic
-scene-selection kinds, or dynamic/fixed selection, discards the nested mapping
-and fallback draft in `ProgramBuilder`; fix and verify this next. Continue to expand this matrix to
-individual persisted fields before closing PLAN.md's coverage gate.
+Routine follow-up: dynamic/fixed and helper/group choices now retain their own
+session drafts, including mappings and fallbacks. Timer capture retains edited
+targets through an off/on switch. Mapping rows wrap on phones, have named controls,
+and link to helper details. Future or malformed selection shapes remain read-only.
+The native interaction journey passes 16 checks at 1440/390 px for selection,
+target and cycle entry/detection collections, Save/Discard, repeated saves and
+reload. A unit guard verifies unsupported/malformed selection shapes. All 222 UI
+unit tests, type/lint/build and the settings-tab regression checks pass. The
+server's `v03_range_duration_and_capability_errors_are_rejected` test passes,
+including explicit empty capture rejection. Logs/captures are under
+`implementation-evidence/collections/routine-selection-*`.
+
+Two shared defects were found during this journey: inline picker result clicks
+could activate their enclosing label and reopen the picker on phones, and the
+installed query-cache merge dropped an own `__proto__` JSON key on refresh,
+causing subsequent expected-value conflicts. Picker result clicks now suppress
+that extra label activation. The query cache preserves own keys while retaining
+unchanged branch identities. A failing-before/passing-after cache regression
+records the actual loss; no household configuration was changed.
+
+Next: typed integration/helper/source cases and the remaining trigger/condition/
+policy/action variants. Continue to expand the individual-field and backend
+round-trip evidence before closing PLAN.md's coverage gate.

@@ -5,7 +5,46 @@ import {
   duplicateRoutineNode,
   stringifyConfig,
   validateRoutineDraft,
+  isEditableSceneSelection,
 } from './routineDraft.ts';
+test('future and malformed dynamic selections remain outside the editable renderer', () => {
+  for (const selection of [
+    null,
+    [],
+    { kind: 'future_selection', group_id: 'room' },
+    { kind: 'helper_enum', helper: 'mode', mapping: null },
+    { kind: 'helper_enum', helper: 'mode', mapping: { on: 2 } },
+    { kind: 'group_active', group_id: ['room'] },
+  ]) {
+    assert.equal(isEditableSceneSelection(selection), false);
+  }
+  assert.equal(
+    isEditableSceneSelection({
+      kind: 'helper_enum',
+      helper: '',
+      mapping: {},
+      fallback_scene_id: null,
+      future: 42,
+    }),
+    true,
+  );
+  assert.equal(
+    isEditableSceneSelection({
+      kind: 'group_active',
+      group_id: 'room',
+      fallback_scene_id: 'scene',
+    }),
+    true,
+  );
+  assert.equal(
+    isEditableSceneSelection(
+      JSON.parse(
+        '{"kind":"helper_enum","helper":"mode","mapping":{"__proto__":"night"}}',
+      ),
+    ),
+    true,
+  );
+});
 const steps = [
   {
     id: 'one',
