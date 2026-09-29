@@ -67,6 +67,7 @@ impl RuntimeConfigSnapshot {
                 groups: Vec::new(),
                 scenes: Vec::new(),
                 routines: Vec::new(),
+                scenario_suite: None,
                 helpers: Vec::new(),
                 helper_values: Vec::new(),
                 sources: Vec::new(),

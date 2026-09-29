@@ -11,6 +11,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::core::automation::{self, ConfigCatalog};
+use crate::core::scenario::ScenarioSuite;
 use crate::core::snapshot::SnapshotChanges;
 use crate::core::state::{PendingWsUpdate, StateHandle};
 use crate::core::{
@@ -1634,6 +1635,7 @@ pub fn config(
             .or(floorplans_routes(snapshot, handle))
             .or(floorplan_routes(snapshot, handle))
             .or(dashboard_routes(snapshot, handle))
+            .or(scenario_suite_routes(snapshot, handle))
             .or(export_import_routes(snapshot, handle))
             .or(migrate_routes(snapshot, handle)),
     )
@@ -3982,6 +3984,71 @@ fn export_import_routes(
     export.or(import)
 }
 
+fn scenario_suite_routes(
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    let get = warp::path("scenarios")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(with_snapshot(snapshot))
+        .map(|snapshot: SnapshotHandle| {
+            ApiResponse::success(snapshot.load().runtime_config.scenario_suite.clone())
+        });
+    let put = warp::path("scenarios")
+        .and(warp::path::end())
+        .and(warp::put())
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(update_scenario_suite);
+    get.or(put)
+}
+
+async fn update_scenario_suite(
+    suite: serde_json::Value,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    let parsed: ScenarioSuite = match serde_json::from_value(suite.clone()) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            return Ok(error_response(
+                &format!("Invalid scenario suite: {error}"),
+                StatusCode::BAD_REQUEST,
+            ))
+        }
+    };
+    if parsed.version != 1 || parsed.scenarios.is_empty() {
+        return Ok(error_response(
+            "Scenario suite must use version 1 and contain at least one scenario",
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    let runtime_suite = suite.clone();
+    if handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.runtime_config.scenario_suite = Some(runtime_suite);
+            })
+        })
+        .await
+        .is_err()
+    {
+        return Ok(actor_unavailable());
+    }
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_set_scenario_suite(Some(&suite)).await;
+    Ok(config_write_response(
+        suite,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
+}
+
 async fn export_config(
     query: ExportQuery,
     snapshot: SnapshotHandle,
@@ -3999,6 +4066,23 @@ async fn import_config(
     mut config: ConfigExport,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    if let Some(suite) = &config.scenario_suite {
+        let parsed: ScenarioSuite = match serde_json::from_value(suite.clone()) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                return Ok(error_response(
+                    &format!("Invalid scenario suite: {error}"),
+                    StatusCode::BAD_REQUEST,
+                ))
+            }
+        };
+        if parsed.version != 1 || parsed.scenarios.is_empty() {
+            return Ok(error_response(
+                "Scenario suite must use version 1 and contain at least one scenario",
+                StatusCode::BAD_REQUEST,
+            ));
+        }
+    }
     let write_guard = match config_write_lock(&handle).await {
         Ok(guard) => guard,
         Err(_) => return Ok(actor_unavailable()),
@@ -4125,6 +4209,7 @@ impl MigratePreviewResult {
             groups: self.groups.clone(),
             scenes: self.scenes.clone(),
             routines: self.routines.clone(),
+            scenario_suite: None,
             helpers: Vec::new(),
             helper_values: Vec::new(),
             sources: Vec::new(),
@@ -5576,6 +5661,7 @@ devices = [
             groups: Vec::new(),
             scenes: Vec::new(),
             routines: Vec::new(),
+            scenario_suite: None,
             helpers: Vec::new(),
             helper_values: Vec::new(),
             sources: Vec::new(),

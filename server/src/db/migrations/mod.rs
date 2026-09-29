@@ -3,8 +3,8 @@ use crate::db::schema::{
     AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets,
     DeviceColorCalibrations, DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans,
     GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, RoutineHistory, Routines,
-    SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, UiState, ValueHistory,
-    WidgetSettings,
+    ScenarioSuites, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, UiState,
+    ValueHistory, WidgetSettings,
 };
 use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm_migration::prelude::*;
@@ -31,7 +31,43 @@ impl MigratorTrait for Migrator {
             Box::new(M20260922000001AssistantThreads),
             Box::new(M20260922000002RoutineHistory),
             Box::new(M20260923000000ValueHistory),
+            Box::new(M20260929000000ScenarioSuites),
         ]
+    }
+}
+
+struct M20260929000000ScenarioSuites;
+
+impl MigrationName for M20260929000000ScenarioSuites {
+    fn name(&self) -> &str {
+        "m20260929000000_scenario_suites"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260929000000ScenarioSuites {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(ScenarioSuites::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(ScenarioSuites::Id)
+                            .text()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(ScenarioSuites::Document).text().not_null())
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(ScenarioSuites::Table).to_owned())
+            .await
     }
 }
 

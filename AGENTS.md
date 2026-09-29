@@ -386,6 +386,17 @@ Uses GitHub Actions with:
 cargo test                          # Unit + integration tests
 ```
 
+### Live configuration scenarios
+After changing live routines, scenes, groups, or other configuration that affects
+household automations, run `TZ=Europe/Helsinki homectl --url
+https://homectl.fruitiex.org config test --server`. This fetches the current
+configuration and its stored scenario suite in one snapshot. Run it again after
+the final live edit, report the result, and say explicitly if the suite or live
+server was unavailable. The runner simulates effects; it does not command
+devices or write live configuration. See
+[docs/scenario-testing.md](docs/scenario-testing.md) for file and database
+options. A previously saved export does not verify a live configuration change.
+
 ### Development Testing
 The `dummy` integration allows testing without physical hardware. Use HTTP to toggle virtual sensor states:
 ```bash

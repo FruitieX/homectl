@@ -12,8 +12,8 @@ use super::schema::{
     AssistantThreads, AutomationSources, AutomationTimerJobs, AutomationValueState,
     AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets,
     DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks,
-    GroupPositions, Groups, Integrations, RoutineHistory, Routines, SceneDeviceStates,
-    SceneGroupStates, SceneOverrides, Scenes, ValueHistory, WidgetSettings,
+    GroupPositions, Groups, Integrations, RoutineHistory, Routines, ScenarioSuites,
+    SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, ValueHistory, WidgetSettings,
 };
 use crate::core::color_calibration::DeviceColorCalibration;
 use crate::types::assistant::{AssistantHistoryMessage, AssistantThread, AssistantThreadSummary};
@@ -287,6 +287,8 @@ pub struct ConfigExport {
     pub groups: Vec<GroupRow>,
     pub scenes: Vec<SceneRow>,
     pub routines: Vec<RoutineRow>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scenario_suite: Option<serde_json::Value>,
     #[serde(default)]
     pub helpers: Vec<crate::types::automation_value::HelperDefinition>,
     #[serde(default)]
@@ -2117,6 +2119,55 @@ pub async fn db_replace_widget_settings(settings: &[WidgetSettingRow]) -> Result
     Ok(())
 }
 
+pub async fn db_set_scenario_suite(suite: Option<&serde_json::Value>) -> Result<()> {
+    set_scenario_suite_on(get_db_connection()?, suite).await
+}
+
+async fn set_scenario_suite_on<C: ConnectionTrait + TransactionTrait>(
+    db: &C,
+    suite: Option<&serde_json::Value>,
+) -> Result<()> {
+    let txn = db.begin().await?;
+    execute(
+        &txn,
+        Query::delete().from_table(ScenarioSuites::Table).to_owned(),
+    )
+    .await?;
+    if let Some(suite) = suite {
+        execute(
+            &txn,
+            Query::insert()
+                .into_table(ScenarioSuites::Table)
+                .columns([ScenarioSuites::Id, ScenarioSuites::Document])
+                .values_panic([
+                    Expr::value("default"),
+                    Expr::value(serde_json::to_string(suite)?),
+                ])
+                .to_owned(),
+        )
+        .await?;
+    }
+    txn.commit().await?;
+    Ok(())
+}
+
+async fn scenario_suite_on<C: ConnectionTrait>(db: &C) -> Result<Option<serde_json::Value>> {
+    let row = one(
+        db,
+        Query::select()
+            .column(ScenarioSuites::Document)
+            .from(ScenarioSuites::Table)
+            .and_where(Expr::col(ScenarioSuites::Id).eq("default"))
+            .to_owned(),
+    )
+    .await?;
+    row.map(|row| {
+        let document: String = row.try_get("", "document")?;
+        Ok(serde_json::from_str(&document)?)
+    })
+    .transpose()
+}
+
 // ============================================================================
 // Config Import/Export
 // ============================================================================
@@ -2195,6 +2246,7 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
     .collect::<Result<Vec<_>>>()?;
 
     let helpers = helpers_on(db).await?;
+    let scenario_suite = scenario_suite_on(db).await?;
     let helper_values = helper_states_on(db, &helpers).await?;
 
     let sources = sources_on(db).await?;
@@ -2355,6 +2407,7 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
         groups,
         scenes,
         routines,
+        scenario_suite,
         helpers,
         helper_values,
         sources,
@@ -2382,6 +2435,7 @@ pub async fn db_import_config(config: &ConfigExport) -> Result<()> {
     calibration::import(get_db_connection()?, config).await?;
     db_update_core_config(&config.core).await?;
     db_replace_widget_settings(&config.widget_settings).await?;
+    db_set_scenario_suite(config.scenario_suite.as_ref()).await?;
 
     for integration in &config.integrations {
         db_upsert_integration(integration).await?;
@@ -2534,6 +2588,7 @@ pub async fn db_has_config() -> Result<bool> {
         || !db_get_device_color_calibrations().await?.is_empty()
         || !db_get_device_sensor_configs().await?.is_empty()
         || !db_get_widget_settings().await?.is_empty()
+        || scenario_suite_on(get_db_connection()?).await?.is_some()
     {
         return Ok(true);
     }
@@ -3952,6 +4007,82 @@ mod consistency_tests {
         let ids: Vec<&str> = listed.iter().map(|entry| entry.id.as_str()).collect();
         assert_eq!(ids, vec!["4", "3", "2"]);
         assert!(!prune_routine_history_on(&db, 3).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn scenario_suite_database_export_import_round_trip() {
+        let source = database().await;
+        let suite = json!({
+            "version": 1,
+            "scenarios": [{
+                "name": "guard",
+                "routines": [],
+                "initial_state": [{"kind": "sensor", "device": "sim/motion", "name": "Motion", "value": false}],
+                "events": [],
+                "expect": {"commands": [], "final_state": [], "unchanged": ["sim/motion"]}
+            }]
+        });
+        set_scenario_suite_on(&source, Some(&suite)).await.unwrap();
+
+        let exported = db_export_config_from_connection(&source).await.unwrap();
+        assert_eq!(exported.scenario_suite.as_ref(), Some(&suite));
+        let decoded: ConfigExport =
+            serde_json::from_value(serde_json::to_value(&exported).unwrap()).unwrap();
+        let target = database().await;
+        set_scenario_suite_on(&target, decoded.scenario_suite.as_ref())
+            .await
+            .unwrap();
+        let restored = db_export_config_from_connection(&target).await.unwrap();
+        assert_eq!(restored.scenario_suite, Some(suite));
+        let parsed: crate::core::scenario::ScenarioSuite =
+            serde_json::from_value(restored.scenario_suite.clone().unwrap()).unwrap();
+        assert_eq!(parsed.scenarios.len(), 1);
+
+        set_scenario_suite_on(&target, None).await.unwrap();
+        assert!(db_export_config_from_connection(&target)
+            .await
+            .unwrap()
+            .scenario_suite
+            .is_none());
+
+        let mut legacy = serde_json::to_value(exported).unwrap();
+        legacy.as_object_mut().unwrap().remove("scenario_suite");
+        let legacy: ConfigExport = serde_json::from_value(legacy).unwrap();
+        assert!(legacy.scenario_suite.is_none());
+    }
+
+    #[tokio::test]
+    async fn shared_settings_preferences_database_export_import_round_trip() {
+        let source = database().await;
+        let row = WidgetSettingRow {
+            key: "settings_ui".into(),
+            config: json!({ "show_advanced_details": false, "future": { "preserved": true } }),
+        };
+        upsert_widget_setting_on(&source, &row).await.unwrap();
+        let exported = db_export_config_from_connection(&source).await.unwrap();
+        let decoded: ConfigExport =
+            serde_json::from_value(serde_json::to_value(exported).unwrap()).unwrap();
+        let target = database().await;
+        for setting in &decoded.widget_settings {
+            upsert_widget_setting_on(&target, setting).await.unwrap();
+        }
+        let restored = db_export_config_from_connection(&target).await.unwrap();
+        assert_eq!(
+            restored
+                .widget_settings
+                .iter()
+                .find(|entry| entry.key == row.key)
+                .unwrap()
+                .config,
+            row.config
+        );
+        let empty = db_export_config_from_connection(&database().await)
+            .await
+            .unwrap();
+        assert!(!empty
+            .widget_settings
+            .iter()
+            .any(|entry| entry.key == row.key));
     }
 
     #[tokio::test]
