@@ -45,16 +45,16 @@ function brightnessPath(samples: SourcePreviewSample[]) {
 function hourTicks(samples: SourcePreviewSample[]) {
   const ticks: Array<{ x: number; label: string }> = [];
   const plotWidth = CHART_WIDTH - CHART_PADDING_X * 2;
-  const seen = new Set<string>();
+  const seen = new Set<number>();
   samples.forEach((sample, index) => {
     const [hour] = sample.local_time.split(':');
     const hourNumber = Number(hour);
     if (
       Number.isFinite(hourNumber) &&
       hourNumber % 6 === 0 &&
-      !seen.has(sample.local_time)
+      !seen.has(hourNumber)
     ) {
-      seen.add(sample.local_time);
+      seen.add(hourNumber);
       ticks.push({
         x:
           CHART_PADDING_X +
@@ -75,61 +75,64 @@ function SourcePreviewChart({ samples }: { samples: SourcePreviewSample[] }) {
 
   return (
     <div className="space-y-2">
-      <svg
-        className="w-full rounded-2xl border border-border bg-muted/20"
-        viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-        role="img"
-        aria-label="Light profile preview"
-      >
-        {[0.25, 0.5, 0.75].map((fraction) => (
-          <line
-            key={fraction}
-            x1={CHART_PADDING_X}
-            x2={CHART_WIDTH - CHART_PADDING_X}
-            y1={
-              CHART_PADDING_Y + fraction * (CHART_HEIGHT - CHART_PADDING_Y * 2)
-            }
-            y2={
-              CHART_PADDING_Y + fraction * (CHART_HEIGHT - CHART_PADDING_Y * 2)
-            }
-            stroke="currentColor"
-            strokeDasharray="4 6"
-            className="text-border"
-            strokeWidth={1}
-          />
-        ))}
-        {hasBrightness ? (
-          <polyline
-            fill="none"
-            points={path}
-            stroke="currentColor"
-            className="text-primary"
-            strokeWidth={3}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-        ) : (
-          <text
-            x={CHART_WIDTH / 2}
-            y={CHART_HEIGHT / 2}
-            textAnchor="middle"
-            className="fill-muted-foreground text-sm"
-          >
+      <div className="relative pb-5">
+        <svg
+          className="h-36 min-h-[144px] w-full rounded-2xl border border-border bg-muted/20 sm:h-56"
+          viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+          preserveAspectRatio="none"
+          role="img"
+          aria-label="Light profile preview"
+        >
+          {[0.25, 0.5, 0.75].map((fraction) => (
+            <line
+              key={fraction}
+              x1={CHART_PADDING_X}
+              x2={CHART_WIDTH - CHART_PADDING_X}
+              y1={
+                CHART_PADDING_Y +
+                fraction * (CHART_HEIGHT - CHART_PADDING_Y * 2)
+              }
+              y2={
+                CHART_PADDING_Y +
+                fraction * (CHART_HEIGHT - CHART_PADDING_Y * 2)
+              }
+              stroke="currentColor"
+              strokeDasharray="4 6"
+              className="text-border"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+          {hasBrightness && (
+            <polyline
+              fill="none"
+              points={path}
+              stroke="currentColor"
+              className="text-primary"
+              strokeWidth={2}
+              vectorEffect="non-scaling-stroke"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          )}
+        </svg>
+        {!hasBrightness && (
+          <p className="absolute inset-x-4 top-1/2 -translate-y-1/2 text-center text-sm text-muted-foreground">
             This profile has no brightness values
-          </text>
+          </p>
         )}
         {ticks.map((tick) => (
-          <text
+          <span
             key={tick.label}
-            x={tick.x}
-            y={CHART_HEIGHT - 2}
-            textAnchor="middle"
-            className="fill-muted-foreground text-xs"
+            style={{
+              left: `clamp(1.25rem, ${(tick.x / CHART_WIDTH) * 100}%, calc(100% - 1.25rem))`,
+            }}
+            className="absolute bottom-0 -translate-x-1/2 text-[12px] text-muted-foreground"
           >
             {tick.label}
-          </text>
+          </span>
         ))}
-      </svg>
+      </div>
       <div className="flex overflow-hidden rounded-lg border border-border">
         {samples.map((sample, index) => (
           <div
@@ -158,15 +161,17 @@ function SourcePreviewChart({ samples }: { samples: SourcePreviewSample[] }) {
 export function SourcePreviewPanel({
   timezone,
   compute,
+  blockedReason,
 }: {
   timezone: string;
   compute: SourceComputeConfig;
+  blockedReason?: string;
 }) {
   const { preview, data, loading, error } = useSourcePreview();
   const [samples, setSamples] = useState(48);
   const [requested, setRequested] = useState('');
   const current = JSON.stringify({ timezone, compute, samples });
-  const stale = requested !== current;
+  const stale = requested !== current || Boolean(blockedReason);
 
   const runPreview = (sampleCount: number) => {
     setRequested(JSON.stringify({ timezone, compute, samples: sampleCount }));
@@ -196,7 +201,7 @@ export function SourcePreviewPanel({
           type="button"
           variant="outline"
           size="sm"
-          disabled={loading}
+          disabled={loading || Boolean(blockedReason)}
           onClick={() => runPreview(samples)}
         >
           {loading
@@ -217,6 +222,11 @@ export function SourcePreviewPanel({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
+      {blockedReason && (
+        <p role="alert" className="text-sm text-destructive">
+          {blockedReason}
+        </p>
+      )}
       {data && stale && (
         <p role="status" className="text-sm text-amber-700">
           Draft changed. These results are from the previous inputs; refresh the

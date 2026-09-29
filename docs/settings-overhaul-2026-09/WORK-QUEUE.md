@@ -276,6 +276,14 @@ previews are distinct. All 228 UI tests, eight targeted Rust tests and type/lint
 build pass. FIELD-COVERAGE.md records remaining timing, reference and persistence
 checks. Remaining routine/module variants and overall acceptance are still open.
 
+Source timing checkpoint, 2026-09-30: 19 checks pass at both 1440/390 px.
+Unfinished numeric drafts remain editable; invalid timing focuses the correct
+field and blocks Save/preview without changing the stored profile. Exact
+millisecond refresh values and zero/omitted brightness survive reload. Phone
+chart labels keep a readable size in Compact mode. All 230 UI tests, four Rust
+curve/validation tests and type/lint/build pass. Screenshots and field evidence
+are updated; source references/persistence and remaining routine variants stay open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

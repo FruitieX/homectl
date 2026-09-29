@@ -81,5 +81,80 @@ export function validateSourceDraft(source: SourceConfig): FieldError[] {
       field: 'compute',
       message: 'Choose a preset or enter a custom script.',
     });
+  return [...errors, ...validateSourceTiming(source.compute)];
+}
+
+export const sourceParamField = (compute: SourceComputeConfig, field: string) =>
+  `source-compute/${encodeURIComponent(computationKey(compute))}/params/${field}`;
+
+/** Timing contract shared by built-in circadian v1 and the pinned script preset. */
+export function validateSourceTiming(
+  compute: SourceComputeConfig,
+): FieldError[] {
+  const known =
+    compute.kind === 'circadian_compat'
+      ? compute.preset_version === 1
+      : compute.preset?.id === 'circadian' && compute.preset.version === 1;
+  if (!known) return [];
+  const params = compute.params;
+  if (!params || typeof params !== 'object' || Array.isArray(params))
+    return [
+      { field: 'compute', message: 'Circadian parameters must be an object.' },
+    ];
+  const values = params as Record<string, unknown>;
+  const errors: FieldError[] = [];
+  const starts: Record<string, number> = {};
+  const ends: Record<string, number> = {};
+  for (const period of ['day', 'night']) {
+    const start = values[`${period}_fade_start`],
+      duration = values[`${period}_fade_duration_hours`],
+      brightness = values[`${period}_brightness`];
+    if (typeof start !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(start))
+      errors.push({
+        field: sourceParamField(compute, `${period}_fade_start`),
+        message: `Choose a ${period} fade start in HH:MM format.`,
+      });
+    else
+      starts[period] = Number(start.slice(0, 2)) * 60 + Number(start.slice(3));
+    if (
+      typeof duration !== 'number' ||
+      !Number.isInteger(duration) ||
+      duration < 1 ||
+      duration > 24
+    )
+      errors.push({
+        field: sourceParamField(compute, `${period}_fade_duration_hours`),
+        message: `The ${period} fade needs 1–24 whole hours.`,
+      });
+    else if (starts[period] !== undefined) {
+      ends[period] = starts[period] + duration * 60;
+      if (ends[period] >= 1440)
+        errors.push({
+          field: sourceParamField(compute, `${period}_fade_duration_hours`),
+          message: `The ${period} fade must finish before midnight.`,
+        });
+    }
+    if (
+      brightness != null &&
+      (typeof brightness !== 'number' ||
+        !Number.isFinite(brightness) ||
+        brightness < 0 ||
+        brightness > 1)
+    )
+      errors.push({
+        field: sourceParamField(compute, `${period}_brightness`),
+        message: `The ${period} brightness must be between 0 and 100%.`,
+      });
+  }
+  if (
+    ends.day !== undefined &&
+    ends.day < 1440 &&
+    starts.night !== undefined &&
+    ends.day > starts.night
+  )
+    errors.push({
+      field: sourceParamField(compute, 'night_fade_start'),
+      message: 'The night fade must start after the day fade finishes.',
+    });
   return errors;
 }

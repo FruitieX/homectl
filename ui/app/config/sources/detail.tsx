@@ -24,6 +24,7 @@ import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { StatePreview } from '@/ui/settings/StatePreview';
 import { SceneColorControl } from '@/ui/settings/SceneColorControl';
 import { JsonValueEditor } from '@/ui/settings/JsonValueEditor';
+import { DraftNumberInput } from '@/ui/settings/DraftNumberInput';
 import { SourcePreviewPanel } from '@/ui/SourcePreviewPanel';
 import SourceScriptEditor, {
   SOURCE_SCRIPT_STARTER,
@@ -31,7 +32,13 @@ import SourceScriptEditor, {
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { confirmDialog } from '@/ui/primitives/confirm-dialog';
-import { computationKey, sourceDefaults, validateSourceDraft } from './shared';
+import {
+  computationKey,
+  sourceDefaults,
+  validateSourceDraft,
+  sourceParamField,
+  validateSourceTiming,
+} from './shared';
 
 export default function SourceDetailPage() {
   const { id } = useParams(),
@@ -271,7 +278,7 @@ export default function SourceDetailPage() {
           )}
           <SettingsSection id="details" title="Details">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="grid gap-2 text-xs">
+              <label className="grid content-start gap-2 text-xs">
                 Name
                 <Input
                   data-field="name"
@@ -282,7 +289,7 @@ export default function SourceDetailPage() {
                 />
               </label>
               {creating && (
-                <label className="grid gap-2 text-xs">
+                <label className="grid content-start gap-2 text-xs">
                   Source ID
                   <Input
                     data-field="id"
@@ -307,7 +314,7 @@ export default function SourceDetailPage() {
           </SettingsSection>
           <SettingsSection id="schedule" title="Schedule">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="grid gap-2 text-xs">
+              <label className="grid content-start gap-2 text-xs">
                 Timezone
                 <Input
                   data-field="timezone"
@@ -317,18 +324,24 @@ export default function SourceDetailPage() {
                   }
                 />
               </label>
-              <label className="grid gap-2 text-xs">
+              <label className="grid content-start gap-2 text-xs">
                 Refresh interval (seconds)
-                <Input
-                  data-field="refresh_interval_ms"
-                  type="number"
-                  min={1}
-                  max={86400}
-                  step={0.001}
+                <DraftNumberInput
+                  aria-label="Refresh interval (seconds)"
+                  draftKey={key}
+                  path="refresh_interval_ms"
                   value={value.refresh_interval_ms / 1000}
-                  onChange={(event) =>
+                  validate={(seconds) =>
+                    seconds < 1 || seconds > 86400
+                      ? 'Use an interval between 1 second and 24 hours.'
+                      : Math.abs(seconds * 1000 - Math.round(seconds * 1000)) >
+                          1e-7
+                        ? 'Use whole milliseconds (up to three decimal places in seconds).'
+                        : undefined
+                  }
+                  onValueChange={(seconds) =>
                     draft.patch({
-                      refresh_interval_ms: Number(event.target.value) * 1000,
+                      refresh_interval_ms: Math.round(seconds! * 1000),
                     })
                   }
                 />
@@ -336,7 +349,7 @@ export default function SourceDetailPage() {
             </div>
           </SettingsSection>
           <SettingsSection id="compute" title="Computation">
-            <label className="grid gap-2 text-xs">
+            <label className="grid content-start gap-2 text-xs">
               Type
               <SettingsSelect
                 data-field="compute"
@@ -427,10 +440,14 @@ export default function SourceDetailPage() {
                         {period === 'day' ? 'Day' : 'Night'}
                       </h3>
                       <div className="grid grid-cols-2 gap-3">
-                        <label className="grid gap-2 text-xs">
+                        <label className="grid content-start gap-2 text-xs">
                           Fade starts
                           <Input
                             aria-label={`${period} fade starts`}
+                            data-field={sourceParamField(
+                              compute,
+                              `${period}_fade_start`,
+                            )}
                             type="time"
                             value={
                               typeof params[`${period}_fade_start`] === 'string'
@@ -445,32 +462,37 @@ export default function SourceDetailPage() {
                             }
                           />
                         </label>
-                        <label className="grid gap-2 text-xs">
+                        <label className="grid content-start gap-2 text-xs">
                           Duration (hours)
-                          <Input
+                          <DraftNumberInput
                             aria-label={`${period} fade duration`}
-                            type="number"
-                            min={1}
-                            max={24}
-                            step={1}
+                            draftKey={key}
+                            path={sourceParamField(
+                              compute,
+                              `${period}_fade_duration_hours`,
+                            )}
+                            validate={(hours) =>
+                              !Number.isInteger(hours) ||
+                              hours < 1 ||
+                              hours > 24
+                                ? 'Use 1–24 whole hours.'
+                                : undefined
+                            }
                             value={
                               typeof params[`${period}_fade_duration_hours`] ===
                               'number'
                                 ? (params[
                                     `${period}_fade_duration_hours`
                                   ] as number)
-                                : ''
+                                : undefined
                             }
-                            onChange={(event) =>
-                              patchParam(
-                                `${period}_fade_duration_hours`,
-                                Number(event.target.value),
-                              )
+                            onValueChange={(hours) =>
+                              patchParam(`${period}_fade_duration_hours`, hours)
                             }
                           />
                         </label>
                       </div>
-                      <label className="grid gap-2 text-xs">
+                      <label className="grid content-start gap-2 text-xs">
                         Color
                         <SceneColorControl
                           field={`compute.params.${period}_color`}
@@ -490,26 +512,31 @@ export default function SourceDetailPage() {
                           }
                         />
                       </label>
-                      <label className="grid gap-2 text-xs">
+                      <label className="grid content-start gap-2 text-xs">
                         Brightness (%)
-                        <Input
+                        <DraftNumberInput
                           aria-label={`${period} brightness`}
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={0.1}
+                          draftKey={key}
+                          path={sourceParamField(
+                            compute,
+                            `${period}_brightness`,
+                          )}
+                          optional
+                          validate={(percent) =>
+                            percent < 0 || percent > 100
+                              ? 'Use brightness between 0 and 100%.'
+                              : undefined
+                          }
                           placeholder="Not specified"
                           value={
                             brightness == null
-                              ? ''
+                              ? undefined
                               : Math.round(brightness * 1000) / 10
                           }
-                          onChange={(event) =>
+                          onValueChange={(percent) =>
                             patchParam(
                               `${period}_brightness`,
-                              event.target.value === ''
-                                ? undefined
-                                : Number(event.target.value) / 100,
+                              percent === undefined ? undefined : percent / 100,
                             )
                           }
                         />
@@ -570,7 +597,19 @@ export default function SourceDetailPage() {
             title="Draft preview"
             description="Preview the current draft without saving or changing devices."
           >
-            <SourcePreviewPanel timezone={value.timezone} compute={compute} />
+            <SourcePreviewPanel
+              timezone={value.timezone}
+              compute={compute}
+              blockedReason={
+                validateSourceTiming(compute).length ||
+                Object.entries(draft.entry?.inputs ?? {}).some(
+                  ([path, input]) =>
+                    path.startsWith('source-compute/') && input.error,
+                )
+                  ? 'Complete the invalid profile fields before previewing.'
+                  : undefined
+              }
+            />
           </SettingsSection>
           <SettingsSection
             id="aliases"

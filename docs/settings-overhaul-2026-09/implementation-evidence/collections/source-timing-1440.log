@@ -1,0 +1,84 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Blank refresh stays blank and receives validation focus",
+    "passed": true
+   },
+   {
+    "name": "Invalid refresh sends no writes",
+    "passed": true
+   },
+   {
+    "name": "Unfinished refresh survives navigation",
+    "passed": true
+   },
+   {
+    "name": "Discard restores saved refresh",
+    "passed": true
+   },
+   {
+    "name": "Sub-millisecond refresh is explained and focused",
+    "passed": true
+   },
+   {
+    "name": "Fractional seconds persist as exactly 1001 milliseconds",
+    "passed": true
+   },
+   {
+    "name": "Incomplete duration stays editable and receives focus",
+    "passed": true
+   },
+   {
+    "name": "Preview blocks invalid draft and marks retained chart as stale",
+    "passed": true
+   },
+   {
+    "name": "Invalid duration sends neither a save nor a preview",
+    "passed": true
+   },
+   {
+    "name": "Fractional hours remain visible with whole-hour guidance",
+    "passed": true
+   },
+   {
+    "name": "Overlapping fades focus the night start",
+    "passed": true
+   },
+   {
+    "name": "A fade ending at midnight focuses its duration",
+    "passed": true
+   },
+   {
+    "name": "Out-of-range brightness remains visible and focused",
+    "passed": true
+   },
+   {
+    "name": "Zero brightness and an omitted endpoint persist distinctly",
+    "passed": true
+   },
+   {
+    "name": "Inactive unfinished fields do not leak errors into another computation",
+    "passed": true
+   },
+   {
+    "name": "Returning to a computation retains its last valid values",
+    "passed": true
+   },
+   {
+    "name": "Saved timing and optional brightness survive reload",
+    "passed": true
+   },
+   {
+    "name": "Chart and time labels remain readable at this viewport",
+    "passed": true
+   },
+   {
+    "name": "Repaired profile can be previewed again",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/sources","viewport":{"width":1440,"height":1080},"problems":[]}

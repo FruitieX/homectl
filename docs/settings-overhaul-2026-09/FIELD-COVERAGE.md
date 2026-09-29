@@ -233,7 +233,29 @@ contracts, local-day sampling, read-only previews and revision checks. Type/lint
 build pass. The fixture serves the actual shipped preset body; generated chart
 samples remain explicitly synthetic. No live household configuration was changed.
 
-Still open: final typed timing-input/validation-focus review, source visibility
-and complete dependency-link reconciliation, and source database round-trip
+Still open: source visibility and complete dependency-link reconciliation, and source database round-trip
 coverage in the broader persistence audit. Native browser evidence is serialization
 and interaction coverage, not a database restart proof.
+
+### Source timing and numeric draft checkpoint
+
+Nineteen checks in `dev/source-timing-review.mjs` pass at both 1440/390 px.
+Cleared and incomplete numbers stay in the session draft, survive navigation,
+and reset on Discard. Save focuses the corresponding field without writing.
+Validation covers fractional hours, overlapping fades, exact-midnight crossings,
+brightness bounds and sub-millisecond refresh values. A 1.001-second refresh
+persists as exactly 1001 milliseconds. Zero brightness and an omitted endpoint
+remain distinct through Save/reload. Computation switches clear inactive input
+errors and retain the last valid per-type values until Save/Discard.
+
+An invalid profile blocks new previews and marks retained samples as stale.
+The phone screenshot exposed chart labels shrinking with the SVG; time labels
+now retain a 12 px size in Compact mode, and the chart is at least 144 px high.
+Both viewports verify those dimensions. The fixture's samples remain synthetic,
+not a claim about this edited profile's computed output.
+
+All 230 UI tests, the four circadian curve/validation Rust tests, type checking,
+lint and production build pass. Screenshots/logs are in
+`implementation-evidence/collections/source-timing-*`. This closes typed timing
+and validation-focus review, leaving the reference/visibility and database gates
+listed above open. No live household configuration was edited.

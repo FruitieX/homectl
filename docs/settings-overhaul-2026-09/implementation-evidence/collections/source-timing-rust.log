@@ -1,0 +1,15 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/homectl_server-deb79e13f06b027d)
+
+running 4 tests
+test core::automation::sources::circadian_compat::tests::d01_legacy_fade_golden_samples ... ok
+test core::automation::sources::circadian_compat::tests::d02_color_and_brightness_mapping ... ok
+test core::automation::sources::circadian_compat::tests::d02_hs_pair_mixes_in_hsv ... ok
+test core::automation::sources::circadian_compat::tests::d03_invalid_params_are_reported ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 803 filtered out; finished in 0.00s
+
