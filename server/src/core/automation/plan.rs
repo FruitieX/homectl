@@ -259,13 +259,14 @@ pub fn plan_script_actions(
     definition_revision: i64,
     actions: &[NativeAction],
     inputs: &PlanInputs<'_>,
+    triggering_device: Option<DeviceKey>,
 ) -> RoutinePlan {
     let mut planner = Planner {
         inputs,
         steps: Vec::new(),
         suppressions: Vec::new(),
         timer_captures: Vec::new(),
-        triggering_device: None,
+        triggering_device,
     };
     planner.plan_steps(actions);
     RoutinePlan {
@@ -285,12 +286,12 @@ struct Planner<'a> {
     /// (J08), flattened across captures.
     timer_captures: Vec<super::timers::CapturedTimerIntents>,
     /// Device of the matched trigger that fired this run, used to resolve
-    /// `RolloutSource::TriggeringDevice` (script result plans have none).
+    /// `RolloutSource::TriggeringDevice`.
     triggering_device: Option<DeviceKey>,
 }
 
 /// The first matched trigger that names a device, in trigger order.
-fn triggering_device(
+pub(crate) fn triggering_device(
     compiled: &CompiledDefinition,
     matched_trigger_ids: &[NodeId],
 ) -> Option<DeviceKey> {
@@ -1550,6 +1551,7 @@ mod tests {
             1,
             &outcome.actions,
             &inputs,
+            None,
         );
         assert_eq!(plan.steps.len(), 1);
         assert!(guard_suppression(&plan.steps[0], &intents).is_none());
@@ -1814,6 +1816,7 @@ mod tests {
             1,
             &outcome.actions,
             &inputs,
+            None,
         );
 
         let normalize = |plan: &RoutinePlan| {
@@ -1833,5 +1836,50 @@ mod tests {
             native_plan.suppressions.len(),
             script_plan.suppressions.len()
         );
+    }
+
+    #[test]
+    fn script_scene_rollout_uses_frozen_triggering_device() {
+        let devices = states(vec![lamp("lamp", None, false)]);
+        let groups = room_group(&["lamp"]);
+        let helpers = helpers_with_mode("night");
+        let intents = IntentTracker::default();
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &helpers,
+            intents: &intents,
+        };
+        let outcome = super::super::script_contract::parse_routine_handler_outcome(
+            &json!({"actions": [{
+                "action": "activate_scene", "scene_id": "evening",
+                "targets": {"groups": ["room"]},
+                "rollout": {
+                    "style": "spatial",
+                    "source": {"kind": "triggering_device"},
+                    "duration_ms": 1500
+                }
+            }]}),
+            super::super::script_contract::MAX_SCRIPT_STATE_BYTES,
+        )
+        .expect("script rollout parses");
+        let plan = plan_script_actions(
+            &RoutineId("routine".to_string()),
+            1,
+            &outcome.actions,
+            &inputs,
+            Some(key("lamp")),
+        );
+        match &plan.steps[0].body {
+            PlannedStepBody::Dispatch(action) => match action.as_ref() {
+                Action::ActivateScene(descriptor) => {
+                    assert_eq!(descriptor.rollout, Some(RolloutStyle::Spatial));
+                    assert_eq!(descriptor.rollout_source_device_key, Some(key("lamp")));
+                    assert_eq!(descriptor.rollout_duration_ms, Some(1500));
+                }
+                other => panic!("expected scene dispatch, got {other:?}"),
+            },
+            other => panic!("expected dispatch, got {other:?}"),
+        }
     }
 }

@@ -171,6 +171,28 @@
       if (spec.select) {
         extra.select = spec.select;
       }
+      if (spec.rollout !== undefined) {
+        if (!spec.rollout || spec.rollout.style !== "spatial") {
+          throw new Error("api.actions.activateScene rollout requires style 'spatial'");
+        }
+        var rollout = { style: spec.rollout.style };
+        if (spec.rollout.source !== undefined) {
+          rollout.source = spec.rollout.source;
+        }
+        if (spec.rollout.durationMs !== undefined) {
+          if (
+            !Number.isInteger(spec.rollout.durationMs) ||
+            spec.rollout.durationMs < 0 ||
+            spec.rollout.durationMs > 600000
+          ) {
+            throw new Error(
+              "api.actions.activateScene rollout durationMs must be an integer from 0 to 600000"
+            );
+          }
+          rollout.duration_ms = spec.rollout.durationMs;
+        }
+        extra.rollout = rollout;
+      }
       return __homectl_action("activate_scene", spec, extra);
     },
     dim: function (spec) {

@@ -314,3 +314,35 @@ async fn prelude_builders_fail_fast_on_malformed_input() {
 
     pool.shutdown().await;
 }
+
+#[tokio::test]
+async fn scripted_scene_action_exposes_spatial_rollout() {
+    let pool = test_pool(1).await;
+    let result = pool.execute(
+        "return { actions: [api.actions.activateScene({scene: 'night', targets: {groups: ['hall']}, rollout: {style: 'spatial', source: {kind: 'triggering_device'}, durationMs: 1500}})] };",
+        context(1, 1),
+    ).await.unwrap();
+    let outcome = homectl_server::core::automation::parse_routine_handler_outcome(
+        &result,
+        homectl_server::core::automation::MAX_SCRIPT_STATE_BYTES,
+    )
+    .unwrap();
+    match &outcome.actions[0] {
+        NativeAction::ActivateScene {
+            rollout: Some(rollout),
+            ..
+        } => {
+            assert_eq!(
+                rollout.style,
+                homectl_server::types::scene::RolloutStyle::Spatial
+            );
+            assert_eq!(rollout.duration_ms, Some(1500));
+            assert!(matches!(
+                rollout.source,
+                Some(homectl_server::types::automation_definition::RolloutSource::TriggeringDevice)
+            ));
+        }
+        other => panic!("expected scene rollout, got {other:?}"),
+    }
+    pool.shutdown().await;
+}
