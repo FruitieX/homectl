@@ -1627,11 +1627,52 @@ fn assistant_chat_routes_light_state_requests_to_a_stored_action() {
     let lamp = device_state(&server.base_url, &client, "dummy", "lamp");
     assert_eq!(lamp["data"]["Controllable"]["state"]["power"], false);
 
+    let apply_url = format!(
+        "{}/api/v1/config/assistant/actions/{action_id}/apply",
+        server.base_url
+    );
+    let empty: Value = client
+        .post(&apply_url)
+        .json(&json!({"deviceKeys":[]}))
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(empty["data"]["appliedCount"], 0);
+    assert_eq!(empty["data"]["results"], json!([]));
+    assert_eq!(
+        device_state(&server.base_url, &client, "dummy", "lamp")["data"]["Controllable"]["state"]
+            ["power"],
+        false
+    );
+    for invalid in [
+        json!({"deviceKeys":["dummy/lamp", "dummy/not-proposed"]}),
+        json!({"deviceKeys":"dummy/lamp"}),
+        json!({"device_keys":[]}),
+    ] {
+        assert_eq!(
+            client
+                .post(&apply_url)
+                .json(&invalid)
+                .send()
+                .unwrap()
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            device_state(&server.base_url, &client, "dummy", "lamp")["data"]["Controllable"]
+                ["state"]["power"],
+            false
+        );
+    }
     let applied: Value = client
         .post(format!(
             "{}/api/v1/config/assistant/actions/{action_id}/apply",
             server.base_url
         ))
+        .json(&json!({"deviceKeys":["dummy/lamp", "dummy/lamp"]}))
         .send()
         .unwrap()
         .json()

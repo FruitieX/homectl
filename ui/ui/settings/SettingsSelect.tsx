@@ -1,4 +1,5 @@
 import type { ComponentProps } from 'react';
+import { cn } from '@/lib/cn';
 import {
   Select,
   SelectContent,
@@ -23,7 +24,7 @@ export function SettingsSelect({
       onValueChange={onValueChange}
       disabled={props.disabled}
     >
-      <SelectTrigger {...props} className="rounded-md">
+      <SelectTrigger {...props} className={cn('rounded-md', props.className)}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

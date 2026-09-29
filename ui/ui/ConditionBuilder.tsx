@@ -12,7 +12,8 @@ import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import type { RawRuleOperator } from '@/bindings/RawRuleOperator';
 import type { ValueSource } from '@/bindings/ValueSource';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
-import { useSources } from '@/hooks/useConfig';
+import { useSources, useDeviceDisplayNames } from '@/hooks/useConfig';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { getDeviceDisplayLabelFromKey } from '@/lib/deviceLabel';
 import {
   OPERATORS_WITHOUT_VALUE,
@@ -21,7 +22,7 @@ import {
 } from '@/lib/conditionWords';
 import { selectClassName } from '@/ui/builder-fields';
 import {
-  DeviceSelect,
+  ReferenceField,
   GroupSelect,
   splitDeviceKey,
 } from '@/ui/config-selectors';
@@ -96,21 +97,6 @@ export function defaultCondition(kind: ConditionKind): ConditionExpr {
         kind: 'not',
         condition: { kind: 'literal', value: true },
       };
-  }
-}
-
-function defaultValueSource(kind: ValueSource['kind']): ValueSource {
-  switch (kind) {
-    case 'device':
-      return {
-        kind: 'device',
-        device: { integration_id: '', device_id: '' },
-        path: '/value',
-      };
-    case 'helper':
-      return { kind: 'helper', helper: '' };
-    case 'computed_source':
-      return { kind: 'computed_source', source: '', path: '/' };
   }
 }
 
@@ -210,13 +196,20 @@ function ComparisonValueEditor({
           : 'text';
 
   return (
-    <>
-      <ConfigField label="Value type">
-        <select
-          className={selectClassName}
+    <div className="grid content-start gap-2">
+      <div className="flex min-h-4 items-center justify-between gap-2">
+        <span className="text-xs font-medium">Value</span>
+        <SettingsSelect
+          aria-label="Value type"
+          className="condition-value-type"
           value={valueType}
-          onChange={(event) => {
-            const next = event.target.value;
+          options={[
+            { value: 'boolean', label: 'Boolean' },
+            { value: 'number', label: 'Number' },
+            { value: 'text', label: 'Text' },
+            { value: 'json', label: 'JSON' },
+          ]}
+          onValueChange={(next) =>
             onChange(
               next === 'json'
                 ? []
@@ -225,45 +218,41 @@ function ComparisonValueEditor({
                   : next === 'boolean'
                     ? true
                     : '',
-            );
+            )
+          }
+        />
+      </div>
+      {valueType === 'json' ? (
+        <JsonValueControl value={value} onChange={onChange} />
+      ) : valueType === 'boolean' ? (
+        <SettingsSelect
+          aria-label="Expected value"
+          value={value === true ? 'true' : 'false'}
+          options={[
+            { value: 'true', label: 'True' },
+            { value: 'false', label: 'False' },
+          ]}
+          onValueChange={(next) => onChange(next === 'true')}
+        />
+      ) : valueType === 'number' ? (
+        <Input
+          aria-label="Expected value"
+          type="number"
+          step="any"
+          value={typeof value === 'number' ? value : ''}
+          onChange={(event) => {
+            const parsed = event.target.valueAsNumber;
+            onChange(Number.isNaN(parsed) ? 0 : parsed);
           }}
-        >
-          <option value="json">JSON array / object / null</option>
-          <option value="text">Text</option>
-          <option value="number">Number</option>
-          <option value="boolean">Boolean</option>
-        </select>
-      </ConfigField>
-      <ConfigField label="Value">
-        {valueType === 'json' ? (
-          <JsonValueControl value={value} onChange={onChange} />
-        ) : valueType === 'boolean' ? (
-          <select
-            className={selectClassName}
-            value={value === true ? 'true' : 'false'}
-            onChange={(event) => onChange(event.target.value === 'true')}
-          >
-            <option value="true">True</option>
-            <option value="false">False</option>
-          </select>
-        ) : valueType === 'number' ? (
-          <Input
-            type="number"
-            step="any"
-            value={typeof value === 'number' ? value : ''}
-            onChange={(event) => {
-              const parsed = event.target.valueAsNumber;
-              onChange(Number.isNaN(parsed) ? 0 : parsed);
-            }}
-          />
-        ) : (
-          <Input
-            value={typeof value === 'string' ? value : ''}
-            onChange={(event) => onChange(event.target.value)}
-          />
-        )}
-      </ConfigField>
-    </>
+        />
+      ) : (
+        <Input
+          aria-label="Expected value"
+          value={typeof value === 'string' ? value : ''}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
+    </div>
   );
 }
 
@@ -280,126 +269,118 @@ function ValueSourceEditor({
   devices: DevicesState;
   helpers: HelperRuntimeStatus[];
 }) {
-  const sourceKind = source.kind;
   const sources = useSources().data ?? [];
-
+  const names = useDeviceDisplayNames().data;
+  const displayNames = Object.fromEntries(
+    names.map((row) => [row.device_key, row.display_name]),
+  );
+  const selectedId =
+    source.kind === 'device'
+      ? source.device.integration_id + '/' + source.device.device_id
+      : source.kind === 'helper'
+        ? source.helper
+        : source.source;
+  const sourceOptions = [
+    ...Object.entries(devices).flatMap(([key, device]) =>
+      device
+        ? [
+            {
+              value: 'device:' + key,
+              label: getDeviceDisplayLabelFromKey(
+                key,
+                device.name,
+                displayNames,
+              ),
+              detail: 'Device · ' + key,
+            },
+          ]
+        : [],
+    ),
+    ...helpers.map((helper) => ({
+      value: 'helper:' + helper.id,
+      label: helper.name,
+      detail: 'Helper · ' + helper.id,
+    })),
+    ...sources.map((item) => ({
+      value: 'computed_source:' + item.id,
+      label: item.name,
+      detail: 'Computed source · ' + item.id,
+    })),
+  ];
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <ConfigField label="Source">
-        <select
-          className={selectClassName}
-          value={sourceKind}
-          onChange={(event) =>
-            onChange(
-              defaultValueSource(event.target.value as ValueSource['kind']),
-            )
-          }
+    <div
+      className="condition-source grid gap-3"
+      style={
+        source.kind === 'helper'
+          ? { gridTemplateColumns: 'minmax(0, 1fr)' }
+          : undefined
+      }
+    >
+      <ConfigField label="Read value from">
+        <ReferenceField
+          kind={source.kind === 'computed_source' ? 'source' : source.kind}
+          value={selectedId}
         >
-          <option value="device">Device value</option>
-          <option value="helper">Helper</option>
-          <option value="computed_source">Computed source</option>
-        </select>
-      </ConfigField>
-
-      {source.kind === 'device' ? (
-        <>
-          <ConfigField label="Device">
-            <DeviceSelect
-              devices={devices}
-              value={
-                source.device.integration_id && source.device.device_id
-                  ? `${source.device.integration_id}/${source.device.device_id}`
-                  : ''
-              }
-              onChange={(key) =>
+          <SearchablePicker
+            options={sourceOptions}
+            value={source.kind + ':' + selectedId}
+            placeholder="Choose a device, helper or source…"
+            onChange={(selected) => {
+              const split = selected.indexOf(':');
+              const kind = selected.slice(0, split);
+              const id = selected.slice(split + 1);
+              if (kind === 'device')
                 onChange({
-                  ...source,
-                  device: splitDeviceKey(key) ?? {
+                  ...(source.kind === 'device' ? source : {}),
+                  kind: 'device',
+                  device: splitDeviceKey(id) ?? {
                     integration_id: '',
                     device_id: '',
                   },
                   path:
-                    devices[key] && 'Controllable' in devices[key]!.data
-                      ? '/power'
-                      : '/value',
-                })
-              }
-            />
-          </ConfigField>
-          <ConfigField
-            label="Value path"
-            description="JSON pointer into the device state, for example /power or /value."
-          >
-            <ValuePathPicker
-              devices={devices}
-              deviceKey={`${source.device.integration_id}/${source.device.device_id}`}
-              path={source.path ?? '/'}
-              onChange={(path) => onChange({ ...source, path })}
-              onChooseValue={onChooseValue}
-            />
-          </ConfigField>
-        </>
-      ) : null}
-
-      {source.kind === 'helper' ? (
-        <ConfigField
-          label="Helper"
-          description="Read the helper's current value."
-        >
-          <SearchablePicker
-            options={helpers.map((helper) => ({
-              value: helper.id,
-              label: helper.name,
-              detail: helper.id,
-            }))}
-            value={source.helper}
-            onChange={(helper) => onChange({ ...source, helper })}
-            placeholder="Select helper…"
+                    source.kind === 'device'
+                      ? source.path
+                      : devices[id] && 'Controllable' in devices[id]!.data
+                        ? '/power'
+                        : '/value',
+                });
+              else if (kind === 'helper')
+                onChange({
+                  ...(source.kind === 'helper' ? source : {}),
+                  kind: 'helper',
+                  helper: id,
+                });
+              else if (kind === 'computed_source')
+                onChange({
+                  ...(source.kind === 'computed_source' ? source : {}),
+                  kind: 'computed_source',
+                  source: id,
+                  path: source.kind === 'computed_source' ? source.path : '/',
+                });
+            }}
           />
-          {source.helper && (
-            <HelperValuePreview
-              id={source.helper}
-              value={
-                helpers.find((helper) => helper.id === source.helper)?.value
-              }
-              onChooseValue={onChooseValue}
-            />
-          )}
+        </ReferenceField>
+      </ConfigField>
+      {source.kind === 'helper' ? (
+        <HelperValuePreview
+          id={source.helper}
+          value={helpers.find((helper) => helper.id === source.helper)?.value}
+          onChooseValue={onChooseValue}
+        />
+      ) : (
+        <ConfigField label="Field">
+          <ValuePathPicker
+            devices={devices}
+            deviceKey={
+              source.kind === 'device' ? selectedId : 'computed/' + selectedId
+            }
+            sourceKind={source.kind === 'device' ? 'device' : 'computed_source'}
+            path={source.path ?? '/'}
+            onChange={(path) => onChange({ ...source, path })}
+            onChooseValue={onChooseValue}
+          />
         </ConfigField>
-      ) : null}
-
-      {source.kind === 'computed_source' ? (
-        <>
-          <ConfigField
-            label="Computed source"
-            description="Computed source defined in the server configuration."
-          >
-            <SearchablePicker
-              options={sources.map((item) => ({
-                value: item.id,
-                label: item.name,
-                detail: `${item.id}${item.enabled ? '' : ' · disabled'}`,
-              }))}
-              value={source.source}
-              onChange={(selected) => onChange({ ...source, source: selected })}
-              placeholder="Select a source…"
-            />
-          </ConfigField>
-          <ConfigField
-            label="Value path"
-            description="JSON pointer into the source value, for example /brightness or /color/ct."
-          >
-            <ValuePathPicker
-              devices={devices}
-              deviceKey={`computed/${source.source}`}
-              sourceKind="computed_source"
-              path={source.path}
-              onChange={(path) => onChange({ ...source, path })}
-              onChooseValue={onChooseValue}
-            />
-          </ConfigField>
-        </>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -516,26 +497,21 @@ export function ConditionEditor({
           <FlowBlock
             key={index}
             title={
-              <select
-                className="settings-select w-full"
+              <SettingsSelect
+                className="w-full"
                 aria-label="Condition type"
                 value={child.kind}
-                onChange={(event) =>
+                options={conditionKindOptions}
+                onValueChange={(kind) =>
                   update(
                     children.map((entry, i) =>
                       i === index
-                        ? defaultCondition(event.target.value as ConditionKind)
+                        ? defaultCondition(kind as ConditionKind)
                         : entry,
                     ),
                   )
                 }
-              >
-                {conditionKindOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              />
             }
             index={index}
             total={children.length}
@@ -597,11 +573,6 @@ export function ConditionEditor({
 
       {condition.kind === 'all' || condition.kind === 'any' ? (
         <>
-          <p className="text-sm text-muted-foreground">
-            {condition.kind === 'all'
-              ? 'Every child condition must hold.'
-              : 'At least one child condition must hold.'}
-          </p>
           {renderChildren(condition.conditions, (conditions) =>
             onChange({ ...condition, conditions }),
           )}
@@ -636,7 +607,7 @@ export function ConditionEditor({
             devices={devices}
             helpers={helpers}
           />
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="condition-comparison grid gap-3">
             <ConfigField label="Operator">
               <select
                 className={selectClassName}

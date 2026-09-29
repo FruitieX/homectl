@@ -9,6 +9,7 @@ import type { RolloutSpec } from './RolloutSpec';
 import type { RoutineId } from './RoutineId';
 import type { SceneId } from './SceneId';
 import type { SceneSelection } from './SceneSelection';
+import type { ScriptSpec } from './ScriptSpec';
 import type { TargetSpec } from './TargetSpec';
 import type { TimerId } from './TimerId';
 import type { JsonValue } from './serde_json/JsonValue';
@@ -17,6 +18,7 @@ import type { JsonValue } from './serde_json/JsonValue';
  * One typed native action with a stable node ID.
  */
 export type NativeAction =
+  | { action: 'run_script'; id: NodeId; spec: ScriptSpec }
   | {
       action: 'activate_scene';
       id: NodeId;

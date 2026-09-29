@@ -1,3 +1,4 @@
+import { Clock, Radio, Timer, Hand, Zap } from 'lucide-react';
 import {
   FlowBlock,
   AddFlowBlock,
@@ -538,14 +539,28 @@ export function TriggerBuilder({
           <FlowBlock
             key={trigger.id || index}
             id={trigger.id}
+            icon={
+              trigger.kind === 'schedule' ? (
+                <Clock className="size-4" />
+              ) : trigger.kind === 'timer_fired' ? (
+                <Timer className="size-4" />
+              ) : trigger.kind === 'manual' ? (
+                <Hand className="size-4" />
+              ) : trigger.kind === 'report' ? (
+                <Radio className="size-4" />
+              ) : (
+                <Zap className="size-4" />
+              )
+            }
             title={
               known ? (
-                <select
+                <SettingsSelect
                   className="settings-select w-full"
                   aria-label="Trigger type"
                   value={trigger.kind}
-                  onChange={(event) => {
-                    const kind = event.target.value as TriggerKind,
+                  options={triggerKindOptions}
+                  onValueChange={(selected) => {
+                    const kind = selected as TriggerKind,
                       fallback = defaultTrigger(kind, trigger.id);
                     update(
                       draftKey
@@ -560,13 +575,7 @@ export function TriggerBuilder({
                         : fallback,
                     );
                   }}
-                >
-                  {triggerKindOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                />
               ) : (
                 'Unrecognized trigger'
               )
@@ -621,3 +630,4 @@ export function TriggerBuilder({
     </div>
   );
 }
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';

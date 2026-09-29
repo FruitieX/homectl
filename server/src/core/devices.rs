@@ -473,6 +473,7 @@ impl Devices {
         invalidated_scenes: &HashSet<SceneId>,
         scenes: &Scenes,
         device_positions: &[DevicePositionRow],
+        integrations: &[IntegrationRow],
     ) {
         let positions = device_positions
             .iter()
@@ -486,6 +487,16 @@ impl Devices {
                 .0
                 .values()
                 .filter(|d| d.get_scene_id().as_ref() == Some(scene_id) && !d.is_scene_paused())
+                .filter(|d| {
+                    !integrations.iter().any(|row| {
+                        row.id == d.integration_id.to_string()
+                            && (!row.enabled
+                                || crate::types::integration::device_is_disabled(
+                                    &row.config,
+                                    &d.id.to_string(),
+                                ))
+                    })
+                })
                 .map(|d| d.set_scene(Some(scene_id), scenes, self))
                 .collect();
 
@@ -1976,6 +1987,7 @@ mod tests {
             &target_key,
             &[scene_id.clone()].into_iter().collect(),
             &scenes,
+            &[],
             &[],
         );
         let stored = devices.get_device(&target_key).unwrap();

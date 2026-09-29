@@ -22,6 +22,7 @@ pub mod scene;
 pub mod scene_command;
 pub mod timer_status;
 pub mod ui;
+pub mod user_timer;
 pub mod websockets;
 
 pub mod config_write;

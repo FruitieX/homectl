@@ -630,6 +630,108 @@ fn script_source_publishes_after_worker_computation() {
 }
 
 #[test]
+fn calibration_editor_saves_both_channels_with_preconditions_and_survives_restart() {
+    let dir = std::env::temp_dir().join(format!(
+        "homectl_calibration_editor_{}_{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut config = blank_backup_config();
+    let light = json!({"Controllable":{"scene_id":null,"state_source":null,
+        "capabilities":{"hs":true,"brightness":true},"state":{"power":false,"brightness":0.5,"color":{"h":90,"s":0.3},"transition":null},"managed":"Full"}});
+    config["integrations"] = json!([{"id":"dummy","plugin":"dummy","enabled":true,"config":{"devices":{
+        "target":{"name":"Target","init_state":light},"other":{"name":"Other","init_state":light}
+    }}}]);
+    let original = json!({"id":"color","name":"Color", "reference_device_key":"dummy/other", "brightness":0.5,
+        "points":[{"reference":{"u":0.2,"v":0.47},"output":{"u":0.21,"v":0.48}}],"brightness_points":[]});
+    config["color_calibration_profiles"] = json!([original]);
+    config["color_calibration_assignments"] = json!([
+        {"device_key":"dummy/target","profile_id":"color"},{"device_key":"dummy/other","profile_id":"color"}
+    ]);
+    let mut server = TestServer::with_config(TestServerConfig {
+        working_dir: Some(dir.clone()),
+        cleanup_working_dir: false,
+        config_content: Some(config.to_string()),
+        ..Default::default()
+    })
+    .unwrap();
+    let base = &server.base_url;
+    wait_for("calibration editor lights", || {
+        device_by_name(&get_json(base, "/api/v1/devices"), "Target").is_some()
+    });
+    let before = get_json(base, "/api/v1/config/calibration-editor")["data"].clone();
+    let mut combined = original.clone();
+    combined["id"] = json!("combined");
+    combined["brightness_points"] =
+        json!([{"logical":0.1,"output":0.2},{"logical":1.0,"output":0.9}]);
+    let write = json!({"expected":before["revision_token"],"profile":combined,"profile_id":"combined","device_keys":["dummy/target"]});
+    let client = Client::new();
+    let session = format!("{base}/api/v1/config/calibration-sessions/editor-test");
+    client.post(format!("{base}/api/v1/config/calibration-brightness-sessions/editor-test"))
+        .json(&json!({"target_key":"dummy/target","reference_key":null,"output":0.6,"reference_logical":null}))
+        .send().unwrap().error_for_status().unwrap();
+    assert_eq!(
+        put_json(base, "/api/v1/config/calibration-editor", &write).status(),
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        get_json(base, "/api/v1/config/calibration-editor")["data"],
+        before,
+        "active preview rejects both profile and assignment writes"
+    );
+    client
+        .delete(&session)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let response = put_json(base, "/api/v1/config/calibration-editor", &write);
+    assert_eq!(response.status(), StatusCode::OK);
+    let saved: Value = response.json().unwrap();
+    assert_eq!(saved["write"]["persistence"], "persisted");
+    assert_eq!(saved["data"]["profiles"].as_array().unwrap().len(), 2);
+    let profile = saved["data"]["profiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["id"] == "combined")
+        .unwrap();
+    assert_eq!(profile["points"], original["points"]);
+    assert_eq!(profile["brightness_points"], combined["brightness_points"]);
+    assert!(saved["data"]["assignments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|row| row["device_key"] == "dummy/other" && row["profile_id"] == "color"));
+    assert_eq!(
+        put_json(base, "/api/v1/config/calibration-editor", &write).status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        get_json(base, "/api/v1/config/calibration-editor")["data"],
+        saved["data"]
+    );
+    server.stop();
+    drop(server);
+    let restarted = TestServer::with_config(TestServerConfig {
+        working_dir: Some(dir),
+        cleanup_working_dir: true,
+        ..Default::default()
+    })
+    .unwrap();
+    let restored = get_json(&restarted.base_url, "/api/v1/config/calibration-editor");
+    assert_eq!(restored["data"]["profiles"], saved["data"]["profiles"]);
+    assert_eq!(
+        restored["data"]["assignments"],
+        saved["data"]["assignments"]
+    );
+}
+
+#[test]
 fn calibration_profiles_assign_atomically_and_previews_preserve_runtime() {
     let mut config = blank_backup_config();
     let light = json!({"Controllable": {
@@ -4280,4 +4382,370 @@ fn cross_origin_allowlist_honors_configured_origins() {
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[test]
+fn everyday_widgets_preserve_options_existing_layouts_and_restart_export() {
+    let dir = std::env::temp_dir().join(format!(
+        "homectl_everyday_widgets_{}_{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut config = blank_backup_config();
+    config["dashboard_widgets"] = json!([{"id":1,"layout_id":1,"widget_type":"text","config":{"title":"Keep me","options":{"text":"Existing dashboard"}},"grid_x":0,"grid_y":0,"grid_w":2,"grid_h":2,"sort_order":0}]);
+    let mut server = TestServer::with_config(TestServerConfig {
+        working_dir: Some(dir.clone()),
+        cleanup_working_dir: false,
+        config_content: Some(config.to_string()),
+        ..Default::default()
+    })
+    .unwrap();
+    let before = get_json(&server.base_url, "/api/v1/config/export")["data"].clone();
+    let options = [
+        (
+            "rooms",
+            json!({"roomSelection":"selected","groupIds":["upstairs","living_room"],"showPower":false,"showAttention":true}),
+        ),
+        (
+            "scenes",
+            json!({"sceneSelection":"selected","sceneIds":["night","normal"],"scope":"devices","deviceKeys":[]}),
+        ),
+        (
+            "indoor_climate",
+            json!({"temperatureSensorId":"living","humiditySensorId":"bedroom","range":"-7d"}),
+        ),
+    ];
+    for (index, (kind, value)) in options.iter().enumerate() {
+        let response = post_json(
+            &server.base_url,
+            "/api/v1/config/dashboard/widgets",
+            &json!({"id":0,"layout_id":1,"widget_type":kind,"config":{"title":kind,"options":value},"grid_x":0,"grid_y":index+2,"grid_w":4,"grid_h":3,"sort_order":index+1}),
+        );
+        assert_eq!(response.status(), StatusCode::OK);
+        let saved: Value = response.json().unwrap();
+        assert_eq!(saved["write"]["persistence"], "persisted");
+        assert_eq!(saved["data"]["config"]["options"], *value);
+    }
+    let exported = get_json(&server.base_url, "/api/v1/config/export")["data"].clone();
+    assert_eq!(exported["dashboard_layouts"], before["dashboard_layouts"]);
+    let rows = exported["dashboard_widgets"].as_array().unwrap();
+    assert_eq!(rows.len(), 4);
+    assert_eq!(
+        rows.iter().find(|row| row["id"] == 1).unwrap(),
+        &before["dashboard_widgets"][0]
+    );
+    server.stop();
+    drop(server);
+    let restarted = TestServer::with_config(TestServerConfig {
+        working_dir: Some(dir),
+        cleanup_working_dir: true,
+        ..Default::default()
+    })
+    .unwrap();
+    let after = get_json(&restarted.base_url, "/api/v1/config/export")["data"].clone();
+    assert_eq!(after["dashboard_widgets"], exported["dashboard_widgets"]);
+    let imported = post_json(&restarted.base_url, "/api/v1/config/import", &exported);
+    assert_eq!(imported.status(), StatusCode::OK);
+    assert_eq!(
+        get_json(&restarted.base_url, "/api/v1/config/export")["data"]["dashboard_widgets"],
+        exported["dashboard_widgets"]
+    );
+}
+
+#[test]
+fn user_timers_execute_without_browser_and_survive_restart() {
+    let dir = std::env::temp_dir().join(format!(
+        "homectl_user_timers_{}_{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut config = blank_backup_config();
+    let light = json!({"Controllable":{"scene_id":null,"state_source":null,"capabilities":{"hs":true,"brightness":true},"state":{"power":false,"brightness":0.5,"color":{"h":90,"s":0.3},"transition":null},"managed":"Full"}});
+    config["integrations"] = json!([{"id":"dummy","plugin":"dummy","enabled":true,"config":{"devices":{"target":{"name":"Timer target","init_state":light},"other":{"name":"Other","init_state":light}}}}]);
+    let mut server = TestServer::with_config(TestServerConfig {
+        working_dir: Some(dir.clone()),
+        cleanup_working_dir: false,
+        config_content: Some(config.to_string()),
+        ..Default::default()
+    })
+    .unwrap();
+    wait_for("timer target", || {
+        device_by_name(
+            &get_json(&server.base_url, "/api/v1/devices"),
+            "Timer target",
+        )
+        .is_some()
+    });
+    let path = "/api/v1/config/timers";
+    let d = json!({"id":"desk","name":"Desk lamp","icon":"light","enabled":true,"schedule":{"kind":"countdown","minutes":5},"action":{"kind":"device","device_key":"dummy/target","power":true},"finish_action":null});
+    let response = put_json(&server.base_url, path, &json!({"timers":[d],"expected":[]}));
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "{}",
+        response.text().unwrap()
+    );
+    let saved = get_json(&server.base_url, path)["data"].clone();
+    assert!(saved["timers"][0]["runtime"]["next_start_ms"]
+        .as_i64()
+        .is_some());
+    assert_eq!(
+        put_json(&server.base_url, path, &json!({"timers":[],"expected":[]})).status(),
+        StatusCode::CONFLICT
+    );
+    // Persist a due checkpoint through the normal export/import API, then
+    // observe execution with no websocket/browser clients connected.
+    let mut export = get_json(&server.base_url, "/api/v1/config/export")["data"].clone();
+    let row = export["widget_settings"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|r| r["key"] == "user_timers")
+        .unwrap();
+    row["config"]["timers"][0]["runtime"]["next_start_ms"] =
+        json!(chrono::Utc::now().timestamp_millis() - 120_000);
+    assert_eq!(
+        post_json(&server.base_url, "/api/v1/config/import", &export).status(),
+        StatusCode::OK
+    );
+    wait_for("headless overdue countdown", || {
+        device_power(
+            &get_json(&server.base_url, "/api/v1/devices"),
+            "Timer target",
+        ) == Some(true)
+    });
+    wait_for("countdown completion persisted", || {
+        get_json(&server.base_url, path)["data"]["timers"][0]["definition"]["enabled"] == false
+    });
+    assert_eq!(
+        device_power(&get_json(&server.base_url, "/api/v1/devices"), "Other"),
+        Some(false)
+    );
+    let devices = get_json(&server.base_url, "/api/v1/devices");
+    let state = &device_by_name(&devices, "Timer target").unwrap()["data"]["Controllable"]["state"];
+    assert_eq!(state["brightness"], 0.5);
+    assert_eq!(state["color"], json!({"h":90,"s":0.3}));
+    let completed = get_json(&server.base_url, path)["data"].clone();
+    server.stop();
+    drop(server);
+    let restarted = TestServer::with_config(TestServerConfig {
+        working_dir: Some(dir),
+        cleanup_working_dir: true,
+        ..Default::default()
+    })
+    .unwrap();
+    assert_eq!(get_json(&restarted.base_url, path)["data"], completed);
+    let expected = json!([completed["timers"][0]["definition"]]);
+    let mut missing = d.clone();
+    missing["action"]["device_key"] = json!("dummy/missing");
+    assert_eq!(
+        put_json(
+            &restarted.base_url,
+            path,
+            &json!({"timers":[missing],"expected":expected})
+        )
+        .status(),
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(get_json(&restarted.base_url, path)["data"], completed);
+    let mut invalid = get_json(&restarted.base_url, "/api/v1/config/export")["data"].clone();
+    let row = invalid["widget_settings"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|r| r["key"] == "user_timers")
+        .unwrap();
+    row["config"]["timers"][0]["definition"]["schedule"]["minutes"] = json!(0);
+    assert_eq!(
+        post_json(&restarted.base_url, "/api/v1/config/import", &invalid).status(),
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(get_json(&restarted.base_url, path)["data"], completed);
+    // Old exports without the reserved setting remain valid and empty.
+    let mut empty = get_json(&restarted.base_url, "/api/v1/config/export")["data"].clone();
+    empty["widget_settings"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|row| row["key"] != "user_timers");
+    assert_eq!(
+        post_json(&restarted.base_url, "/api/v1/config/import", &empty).status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        get_json(&restarted.base_url, path)["data"]["timers"],
+        json!([])
+    );
+}
+
+#[test]
+fn user_timers_migrate_helsinki_and_recover_end_actions() {
+    let dir = std::env::temp_dir().join(format!(
+        "homectl_timer_migration_{}_{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut config = blank_backup_config();
+    let light = json!({"Controllable":{"scene_id":null,"capabilities":{},"state":{"power":true,"brightness":null,"color":null,"transition":null},"managed":"Full"}});
+    config["integrations"] = json!([{"id":"tuya_devices","plugin":"dummy","enabled":true,"config":{"devices":{"bfe553b84e883ace37nvxw":{"name":"Heater","init_state":light}}}}]);
+    let mut server = TestServer::with_config(TestServerConfig {
+        working_dir: Some(dir.clone()),
+        cleanup_working_dir: false,
+        config_content: Some(config.to_string()),
+        ..Default::default()
+    })
+    .unwrap();
+    server.stop();
+    drop(server);
+    {
+        use sea_orm::ConnectionTrait;
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let db=sea_orm::Database::connect(format!("sqlite://{}?mode=rwc",dir.join("homectl.db").display())).await.unwrap();
+            db.execute_raw(sea_orm::Statement::from_sql_and_values(sea_orm::DbBackend::Sqlite,"INSERT INTO ui_state (key,value) VALUES (?,?)",["carHeaterTimer".into(),json!({"timers":[{"enabled":true,"name":"Morning car","repeat":"weekday","hour":8,"minute":30},{"enabled":false,"name":"One departure","repeat":"once","hour":12,"minute":15}]}).to_string().into()])).await.unwrap();
+        });
+    }
+    let mut server = TestServer::with_config(TestServerConfig {
+        working_dir: Some(dir.clone()),
+        cleanup_working_dir: false,
+        ..Default::default()
+    })
+    .unwrap();
+    let path = "/api/v1/config/timers";
+    wait_for("legacy timers migrated", || {
+        get_json(&server.base_url, path)["data"]["timers"]
+            .as_array()
+            .is_some_and(|t| t.len() == 2)
+    });
+    let migrated = get_json(&server.base_url, path)["data"].clone();
+    let d = &migrated["timers"][0]["definition"];
+    assert_eq!(d["enabled"], true);
+    assert_eq!(d["icon"], "car");
+    assert_eq!(d["schedule"]["timezone"], "Europe/Helsinki");
+    assert_eq!(d["schedule"]["time"], "08:30");
+    assert_eq!(d["schedule"]["warmup_minutes"], 40);
+    assert_eq!(d["schedule"]["weekdays"], json!([1, 2, 3, 4, 5]));
+    assert_eq!(migrated["timers"][1]["definition"]["enabled"], false);
+    let exported = get_json(&server.base_url, "/api/v1/config/export")["data"].clone();
+    server.stop();
+    drop(server);
+    let restarted = TestServer::with_config(TestServerConfig {
+        working_dir: Some(dir),
+        cleanup_working_dir: true,
+        ..Default::default()
+    })
+    .unwrap();
+    assert_eq!(
+        get_json(&restarted.base_url, path)["data"],
+        migrated,
+        "migration must run only once"
+    );
+    // Model a crash after a start intent was checkpointed. Once its window
+    // has ended, recovery must send the end action and never turn it back on.
+    let mut recovery = exported;
+    let row = recovery["widget_settings"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|r| r["key"] == "user_timers")
+        .unwrap();
+    row["config"]["timers"][0]["runtime"] = json!({"next_start_ms":null,"finish_ms":chrono::Utc::now().timestamp_millis()-1000,"active":false,"pending":"start","last_message":null,"last_run_ms":null});
+    assert_eq!(
+        post_json(&restarted.base_url, "/api/v1/config/import", &recovery).status(),
+        StatusCode::OK
+    );
+    wait_for("recovered end action", || {
+        device_power(&get_json(&restarted.base_url, "/api/v1/devices"), "Heater") == Some(false)
+    });
+    wait_for("recovered end persisted", || {
+        get_json(&restarted.base_url, path)["data"]["timers"][0]["runtime"]["pending"].is_null()
+    });
+    assert!(
+        get_json(&restarted.base_url, path)["data"]["timers"][0]["runtime"]["next_start_ms"]
+            .as_i64()
+            .unwrap()
+            > chrono::Utc::now().timestamp_millis()
+    );
+    let stopped = post_json(
+        &restarted.base_url,
+        "/api/v1/config/timers/migrated-car-heater-0/stop",
+        &json!({}),
+    );
+    assert_eq!(stopped.status(), StatusCode::OK);
+    assert_eq!(
+        get_json(&restarted.base_url, path)["data"]["timers"][0]["definition"]["enabled"],
+        false
+    );
+    let mut broken = get_json(&restarted.base_url, "/api/v1/config/export")["data"].clone();
+    let row = broken["widget_settings"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|r| r["key"] == "user_timers")
+        .unwrap();
+    row["config"]["timers"][0]["runtime"] = json!({"active":true,"pending":"finish","finish_ms":chrono::Utc::now().timestamp_millis()-1000});
+    row["config"]["timers"][0]["definition"]["finish_action"]["device_key"] =
+        json!("dummy/missing");
+    assert_eq!(
+        post_json(&restarted.base_url, "/api/v1/config/import", &broken).status(),
+        StatusCode::OK
+    );
+    wait_for("end failure remains visible", || {
+        get_json(&restarted.base_url, path)["data"]["timers"][0]["runtime"]["last_message"]
+            .as_str()
+            .is_some_and(|m| m.starts_with("Action failed"))
+    });
+    assert_eq!(
+        get_json(&restarted.base_url, path)["data"]["timers"][0]["runtime"]["pending"],
+        "finish"
+    );
+    assert_eq!(
+        post_json(
+            &restarted.base_url,
+            "/api/v1/config/timers/migrated-car-heater-0/cancel",
+            &json!({})
+        )
+        .status(),
+        StatusCode::OK
+    );
+    let cancelled = get_json(&restarted.base_url, path)["data"].clone();
+    assert_eq!(cancelled["timers"][0]["runtime"]["active"], false);
+    assert!(cancelled["timers"][0]["runtime"]["pending"].is_null());
+    assert_eq!(cancelled["timers"][0]["definition"]["enabled"], false);
+    {
+        use sea_orm::{ConnectionTrait, TryGetable};
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let db = sea_orm::Database::connect(format!(
+                "sqlite://{}?mode=rwc",
+                restarted.temp_dir.join("homectl.db").display()
+            ))
+            .await
+            .unwrap();
+            let row = db
+                .query_one_raw(sea_orm::Statement::from_string(
+                    sea_orm::DbBackend::Sqlite,
+                    "SELECT value FROM ui_state WHERE key='carHeaterTimer'",
+                ))
+                .await
+                .unwrap()
+                .unwrap();
+            let value: Value =
+                serde_json::from_str(&String::try_get_by_index(&row, 0).unwrap()).unwrap();
+            assert_eq!(value["timers"], json!([]));
+            assert_eq!(
+                value["legacy_backup"]["timers"].as_array().unwrap().len(),
+                2
+            );
+        });
+    }
 }

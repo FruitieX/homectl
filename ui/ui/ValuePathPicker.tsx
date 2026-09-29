@@ -167,16 +167,21 @@ export function ValuePathPicker({
   return (
     <div className="space-y-2">
       <SearchablePicker
-        options={
-          options.some((option) => option.value === path) || !path
+        options={[
+          { value: '__custom_path', label: 'Enter a custom path…' },
+          ...(options.some((option) => option.value === path) || !path
             ? options
             : [
                 { value: path, label: `Custom field ${path}`, detail: path },
                 ...options,
-              ]
-        }
+              ]),
+        ]}
         value={custom ? '' : path}
         onChange={(next) => {
+          if (next === '__custom_path') {
+            setCustom(true);
+            return;
+          }
           setCustom(false);
           onChange(next);
         }}
@@ -191,13 +196,6 @@ export function ValuePathPicker({
           className="font-mono"
         />
       ) : null}
-      <button
-        type="button"
-        className="text-xs text-primary hover:underline"
-        onClick={() => setCustom((current) => !current)}
-      >
-        {custom ? 'Use suggested fields' : 'Enter a custom path'}
-      </button>
       <p className="text-xs text-muted-foreground">
         Current value: <span className="font-mono">{shown}</span>
         {sourceKind === 'computed_source' ? ' · computed source' : ''}{' '}
@@ -259,11 +257,6 @@ export function ValuePathPicker({
       {historyError && (
         <p className="text-xs text-muted-foreground">
           Recent changes are unavailable right now.
-        </p>
-      )}
-      {!historyError && history.length === 0 && path && (
-        <p className="text-xs text-muted-foreground">
-          No changes recorded for this field yet.
         </p>
       )}
     </div>

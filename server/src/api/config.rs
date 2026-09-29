@@ -327,6 +327,7 @@ async fn apply_runtime_config_snapshot(
     _guard: &tokio::sync::OwnedMutexGuard<()>,
 ) -> color_eyre::Result<()> {
     for setting in &runtime_config.widget_settings {
+        crate::core::user_timers::validate_setting(&setting.key, &setting.config)?;
         crate::types::device_health::ReportingPolicy::validate_setting(
             &setting.key,
             &setting.config,
@@ -1630,6 +1631,7 @@ pub fn config(
         .and(
             core_routes(snapshot, handle)
                 .or(preferences::preferences_routes(snapshot, handle))
+                .or(user_timers::routes(snapshot, handle))
                 .or(widget_sources::routes(snapshot, handle))
                 .or(warp::path!("device-health")
                     .and(warp::get())
@@ -2203,10 +2205,7 @@ async fn preview_routine(
                     would_run,
                     steps,
                     suppressions,
-                    script_unsupported: matches!(
-                        compiled.normalized.program,
-                        crate::types::automation_definition::Program::Script(_)
-                    ),
+                    script_unsupported: compiled.normalized.program.has_scripts(),
                     ..Default::default()
                 }
             })
@@ -3352,6 +3351,7 @@ mod floorplan_editor;
 mod groups;
 mod migration_review;
 mod preferences;
+mod user_timers;
 mod widget_sources;
 use groups::groups_routes;
 

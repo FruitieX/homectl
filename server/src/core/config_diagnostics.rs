@@ -291,6 +291,11 @@ pub fn inspect_config(snapshot: &RuntimeSnapshot) -> ConfigDiagnostics {
             let DeviceData::Controllable(data) = &device.data else {
                 continue;
             };
+            // Disabled devices deliberately retain their assignment while being
+            // excluded from scene resolution. It is not a broken scene target.
+            if data.disabled == Some(true) {
+                continue;
+            }
             let Some(scene_id) = &data.scene_id else {
                 continue;
             };
@@ -453,6 +458,15 @@ mod tests {
         assert!(codes.contains(&"unresolved_active_scene".into()));
         assert!(codes.contains(&"readonly_scene_target".into()));
         assert_eq!(serde_json::to_value(&*snapshot.devices).unwrap(), before);
+        for device in Arc::make_mut(&mut snapshot.devices).0.values_mut() {
+            if let DeviceData::Controllable(data) = &mut device.data {
+                data.disabled = Some(true);
+            }
+        }
+        assert!(!super::inspect_config(&snapshot)
+            .issues
+            .iter()
+            .any(|issue| issue.code == "unresolved_active_scene"));
     }
 
     #[test]

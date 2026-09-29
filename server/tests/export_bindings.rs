@@ -3,13 +3,14 @@ use std::path::PathBuf;
 use homectl_server::types::{
     action::Action,
     assistant::{
-        ApplyAssistantActionResponse, ApplyAssistantPlanRequest, ApplyAssistantPlanResponse,
-        AssistantAction, AssistantActionChange, AssistantActionChangeResult, AssistantActionColor,
-        AssistantAttachment, AssistantChatRequest, AssistantEntityKind, AssistantHistoryMessage,
-        AssistantMessageRole, AssistantOpKind, AssistantOperation, AssistantOperationResult,
-        AssistantPlan, AssistantPlanRequest, AssistantSearchResult, AssistantThread,
-        AssistantThreadOutcome, AssistantThreadOutcomeRequest, AssistantThreadProposal,
-        AssistantThreadSummary, AssistantUsage,
+        ApplyAssistantActionRequest, ApplyAssistantActionResponse, ApplyAssistantPlanRequest,
+        ApplyAssistantPlanResponse, AssistantAction, AssistantActionChange,
+        AssistantActionChangeResult, AssistantActionColor, AssistantAttachment,
+        AssistantChatRequest, AssistantEntityKind, AssistantHistoryMessage, AssistantMessageRole,
+        AssistantOpKind, AssistantOperation, AssistantOperationResult, AssistantPlan,
+        AssistantPlanRequest, AssistantSearchResult, AssistantThread, AssistantThreadOutcome,
+        AssistantThreadOutcomeRequest, AssistantThreadProposal, AssistantThreadSummary,
+        AssistantUsage,
     },
     automation_definition::{
         ChooseBranch, ConditionExpr, ExecutionPolicy, HelperId, NativeAction, NativeProgram,
@@ -47,6 +48,7 @@ use homectl_server::types::{
     scene::{FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig},
     timer_status::{TimerJobStatus, TimerPersistence, TimerRuntimeStatus},
     ui::UiActionDescriptor,
+    user_timer::UserTimers,
     websockets::{StateUpdate, WebSocketRequest, WebSocketResponse},
 };
 use ts_rs::{Config, ExportError, TS};
@@ -62,11 +64,13 @@ fn export_ts_bindings() -> Result<(), ExportError> {
     ] {
         let cfg = Config::new().with_out_dir(output_dir);
         Action::export_all(&cfg)?;
+        UserTimers::export_all(&cfg)?;
         DeviceHealthSnapshot::export_all(&cfg)?;
         ReportingPolicy::export_all(&cfg)?;
         UiLogEntry::export_all(&cfg)?;
         ConfigDiagnostics::export_all(&cfg)?;
         ApplyAssistantActionResponse::export_all(&cfg)?;
+        ApplyAssistantActionRequest::export_all(&cfg)?;
         ApplyAssistantPlanRequest::export_all(&cfg)?;
         ApplyAssistantPlanResponse::export_all(&cfg)?;
         AssistantAction::export_all(&cfg)?;

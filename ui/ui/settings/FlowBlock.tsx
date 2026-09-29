@@ -1,13 +1,8 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import {
-  ArrowDown,
-  ArrowUp,
-  Copy,
-  MoreHorizontal,
-  Plus,
-  Trash2,
-} from 'lucide-react';
+import { Copy, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
+import { ReorderButtons } from '@/ui/settings/ReorderButtons';
+import { GitBranch } from 'lucide-react';
 import { Button } from '@/ui/primitives/button';
 import {
   DropdownMenu,
@@ -23,6 +18,8 @@ export const useRoutineAuthoring = () => useContext(RoutineAuthoringContext);
 export function FlowBlock({
   id,
   title,
+  icon,
+  className = '',
   children,
   index = 0,
   total = 1,
@@ -32,6 +29,8 @@ export function FlowBlock({
 }: {
   id?: string;
   title: ReactNode;
+  icon?: ReactNode;
+  className?: string;
   children: ReactNode;
   index?: number;
   total?: number;
@@ -42,12 +41,15 @@ export function FlowBlock({
   const { advanced } = useSettingsPreferences();
   return (
     <article
-      className="flow-block focus-visible:outline-2 focus-visible:outline-ring"
+      className={`flow-block focus-visible:outline-2 focus-visible:outline-ring ${className}`}
       data-node-id={id}
       tabIndex={-1}
     >
-      <header className="flex min-w-0 items-start justify-between gap-2">
-        <div className="min-w-0 flex-1 text-sm font-medium">
+      <header className="flow-block-heading flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <span className="flow-node-icon">
+          {icon ?? <GitBranch className="size-4" />}
+        </span>
+        <div className="min-w-0 flex-1 basis-32 text-sm font-medium">
           {title}
           {advanced && id && (
             <p
@@ -58,55 +60,47 @@ export function FlowBlock({
             </p>
           )}
         </div>
-        {(onMove || onRemove || onDuplicate) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 shrink-0"
-                aria-label={`Actions for ${id ?? 'condition'}`}
-              >
-                <MoreHorizontal className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {onMove && (
-                <>
-                  <DropdownMenuItem
-                    disabled={index === 0}
-                    onSelect={() => onMove(-1)}
-                  >
-                    <ArrowUp className="size-4" />
-                    Move earlier
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={index === total - 1}
-                    onSelect={() => onMove(1)}
-                  >
-                    <ArrowDown className="size-4" />
-                    Move later
-                  </DropdownMenuItem>
-                </>
-              )}
-              {onDuplicate && (
-                <DropdownMenuItem onSelect={onDuplicate}>
-                  <Copy className="size-4" />
-                  Duplicate
-                </DropdownMenuItem>
-              )}
-              {onRemove && (
-                <DropdownMenuItem
-                  className="text-destructive"
-                  onSelect={onRemove}
+        <div className="flow-node-actions ml-auto flex items-center">
+          {onMove && (
+            <ReorderButtons
+              label={id ?? 'condition'}
+              index={index}
+              total={total}
+              onMove={onMove}
+            />
+          )}
+          {(onRemove || onDuplicate) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-11 shrink-0 rounded-md md:size-8"
+                  aria-label={`Actions for ${id ?? 'condition'}`}
                 >
-                  <Trash2 className="size-4" />
-                  Remove
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {onDuplicate && (
+                  <DropdownMenuItem onSelect={onDuplicate}>
+                    <Copy className="size-4" />
+                    Duplicate
+                  </DropdownMenuItem>
+                )}
+                {onRemove && (
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onSelect={onRemove}
+                  >
+                    <Trash2 className="size-4" />
+                    Remove
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </header>
       {children}
     </article>

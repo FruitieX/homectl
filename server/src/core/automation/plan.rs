@@ -114,6 +114,9 @@ pub struct PlannedStep {
 
 #[derive(Clone, Debug)]
 pub enum PlannedStepBody {
+    Script {
+        spec: crate::types::automation_definition::ScriptSpec,
+    },
     Dispatch(Box<Action>),
     SetHelper {
         helper: HelperId,
@@ -181,6 +184,7 @@ pub fn step_targets(step: &PlannedStep) -> Vec<String> {
                 targets.push(timer_operation_target(operation));
             }
             PlannedStepBody::Dispatch(_) => {}
+            PlannedStepBody::Script { .. } => {}
         }
         return targets;
     };
@@ -227,6 +231,7 @@ fn step_references(step: &PlannedStep) -> Vec<LogEntityReference> {
         }
     };
     match &step.body {
+        PlannedStepBody::Script { .. } => {}
         PlannedStepBody::SetHelper { helper, .. } => add("helper", helper.to_string()),
         PlannedStepBody::TimerOperation { .. } => {}
         PlannedStepBody::Dispatch(action) => match action.as_ref() {
@@ -862,6 +867,14 @@ impl Planner<'_> {
                 }
                 self.suppress(action, kind, Vec::new(), "no_matching_branch".to_string());
             }
+            NativeAction::RunScript { spec, .. } => {
+                self.push_dispatch(
+                    action,
+                    kind,
+                    PlannedStepBody::Script { spec: spec.clone() },
+                    Vec::new(),
+                );
+            }
             NativeAction::ScheduleTimer {
                 timer,
                 delay_ms,
@@ -1060,6 +1073,7 @@ fn device_key(reference: &DeviceRef) -> DeviceKey {
 
 pub fn action_kind(action: &NativeAction) -> &'static str {
     match action {
+        NativeAction::RunScript { .. } => "run_script",
         NativeAction::ActivateScene { .. } => "activate_scene",
         NativeAction::CycleScenes { .. } => "cycle_scenes",
         NativeAction::SetPower { .. } => "set_power",

@@ -5,7 +5,7 @@ import {
 } from '@/lib/routineActivity';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, Download } from 'lucide-react';
+import { Eye, Download, Zap, ListFilter, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ConditionExpr } from '@/bindings/ConditionExpr';
 import type { ExecutionPolicy } from '@/bindings/ExecutionPolicy';
@@ -412,53 +412,69 @@ export function RoutineEditor({ id }: { id?: string }) {
                   data-field="definition_v2"
                   tabIndex={-1}
                 >
-                  <section className="flow-lane flow-when" id="when">
-                    <header>
-                      <span className="flow-number">1</span>
-                      <div>
-                        <h2>When</h2>
-                        <p>Any of these starts the routine</p>
-                      </div>
-                    </header>
-                    <TriggerBuilder
-                      triggers={definition.triggers ?? []}
-                      onChange={(triggers) => patchDefinition({ triggers })}
-                      devices={devices}
-                      groups={groups}
-                      scenes={scenes.data}
-                      helpers={helperState}
-                      runtimeStatus={status}
-                    />
-                  </section>
-                  <section className="flow-lane flow-if" id="only-if">
-                    <header>
-                      <span className="flow-number">2</span>
-                      <div>
-                        <h2>Only if</h2>
-                        <p>Checked each time it starts</p>
-                      </div>
-                    </header>
-                    <div className="flow-block">
-                      <ConditionEditor
-                        condition={
-                          (definition.condition ?? {
-                            kind: 'literal',
-                            value: true,
-                          }) as ConditionExpr
-                        }
-                        onChange={(condition) => patchDefinition({ condition })}
+                  <p className="flow-board-caption">
+                    Any starting event → check conditions → run actions in order
+                  </p>
+                  <div className="flow-inputs">
+                    <section className="flow-lane flow-when" id="when">
+                      <header>
+                        <span className="flow-number">1</span>
+                        <div>
+                          <h2>
+                            <Zap className="size-4" />
+                            When
+                          </h2>
+                          <p>Any of these starts the routine</p>
+                        </div>
+                      </header>
+                      <TriggerBuilder
+                        triggers={definition.triggers ?? []}
+                        onChange={(triggers) => patchDefinition({ triggers })}
                         devices={devices}
                         groups={groups}
                         scenes={scenes.data}
                         helpers={helperState}
+                        runtimeStatus={status}
                       />
-                    </div>
-                  </section>
+                    </section>
+                    <section className="flow-lane flow-if" id="only-if">
+                      <header>
+                        <span className="flow-number">2</span>
+                        <div>
+                          <h2>
+                            <ListFilter className="size-4" />
+                            Only if
+                          </h2>
+                          <p>Checked each time it starts</p>
+                        </div>
+                      </header>
+                      <div className="flow-block">
+                        <ConditionEditor
+                          condition={
+                            (definition.condition ?? {
+                              kind: 'literal',
+                              value: true,
+                            }) as ConditionExpr
+                          }
+                          onChange={(condition) =>
+                            patchDefinition({ condition })
+                          }
+                          devices={devices}
+                          groups={groups}
+                          scenes={scenes.data}
+                          helpers={helperState}
+                        />
+                      </div>
+                    </section>
+                  </div>
                   <section className="flow-lane flow-then" id="then">
                     <header>
                       <span className="flow-number">3</span>
                       <div>
-                        <h2>Then</h2>
+                        <h2>
+                          <Play className="size-4" />
+                          Then
+                        </h2>
                         <p>Run these actions in order</p>
                       </div>
                     </header>

@@ -82,6 +82,8 @@ export function describeNativeAction(
   deviceDisplayNameMap: Record<string, string>,
 ): string {
   switch (step.action) {
+    case 'run_script':
+      return 'Run sandboxed script';
     case 'activate_scene': {
       if (step.select) {
         return step.select.kind === 'helper_enum'

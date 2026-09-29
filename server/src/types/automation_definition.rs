@@ -415,6 +415,23 @@ pub enum Program {
     Native(NativeProgram),
     Script(ScriptProgram),
 }
+impl Program {
+    pub fn has_scripts(&self) -> bool {
+        fn contains(steps: &[NativeAction]) -> bool {
+            steps.iter().any(|step| match step {
+                NativeAction::RunScript { .. } => true,
+                NativeAction::Choose { branches, .. } => {
+                    branches.iter().any(|branch| contains(&branch.steps))
+                }
+                _ => false,
+            })
+        }
+        match self {
+            Self::Script(_) => true,
+            Self::Native(native) => contains(&native.steps),
+        }
+    }
+}
 
 #[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[ts(export)]
@@ -427,6 +444,9 @@ pub struct NativeProgram {
 #[serde(tag = "action", rename_all = "snake_case")]
 #[ts(export)]
 pub enum NativeAction {
+    /// Pure sandboxed handler whose returned actions are inserted at this
+    /// position. All handlers finish and validate before any effects dispatch.
+    RunScript { id: NodeId, spec: ScriptSpec },
     /// Activates a scene. An empty `targets` uses the scene's own targets.
     /// Exactly one of `scene_id`/`select` must be present.
     ActivateScene {
@@ -561,7 +581,8 @@ pub enum NativeAction {
 impl NativeAction {
     pub fn id(&self) -> &NodeId {
         match self {
-            Self::ActivateScene { id, .. }
+            Self::RunScript { id, .. }
+            | Self::ActivateScene { id, .. }
             | Self::CycleScenes { id, .. }
             | Self::SetPower { id, .. }
             | Self::Dim { id, .. }

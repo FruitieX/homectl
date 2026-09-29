@@ -895,6 +895,9 @@ impl Compiler<'_> {
             self.register_node(action.id(), &action_path);
 
             match action {
+                NativeAction::RunScript { spec, .. } => {
+                    self.compile_script(spec, &format!("{action_path}/spec"))
+                }
                 NativeAction::ActivateScene {
                     scene_id,
                     select,
@@ -1736,6 +1739,13 @@ impl ReferenceCollector {
     fn steps(&mut self, steps: &[NativeAction]) {
         for action in steps {
             match action {
+                NativeAction::RunScript { spec, .. } => {
+                    for declaration in &spec.declarations {
+                        if let ScriptDeclaration::Device { device } = declaration {
+                            self.push_device(device);
+                        }
+                    }
+                }
                 NativeAction::SetPower { device, .. } => self.push_device(device),
                 NativeAction::ActivateScene { targets, .. }
                 | NativeAction::Dim { targets, .. }

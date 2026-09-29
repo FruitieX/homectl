@@ -2570,6 +2570,7 @@ pub async fn db_import_config(config: &ConfigExport) -> Result<()> {
 
 fn validate_import_config(config: &ConfigExport) -> Result<()> {
     for setting in &config.widget_settings {
+        crate::core::user_timers::validate_setting(&setting.key, &setting.config)?;
         crate::types::device_health::ReportingPolicy::validate_setting(
             &setting.key,
             &setting.config,
@@ -2620,6 +2621,7 @@ async fn import_config_on<C: ConnectionTrait + TransactionTrait>(
     update_core_config_on(&txn, &config.core).await?;
     set_scenario_suite_on(&txn, config.scenario_suite.as_ref()).await?;
     for setting in &config.widget_settings {
+        crate::core::user_timers::validate_setting(&setting.key, &setting.config)?;
         insert_widget_setting_on(&txn, setting).await?;
     }
     for integration in &config.integrations {
@@ -3382,6 +3384,7 @@ async fn upsert_widget_setting_on<C: ConnectionTrait>(
 ) -> Result<()> {
     crate::types::device_health::ReportingPolicy::validate_setting(&setting.key, &setting.config)
         .map_err(|error| eyre::eyre!(error))?;
+    crate::core::user_timers::validate_setting(&setting.key, &setting.config)?;
     let config = serde_json::to_string(&setting.config)?;
 
     execute(

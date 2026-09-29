@@ -604,7 +604,9 @@ impl Device {
             data.scene_id = scene_id.cloned();
             data.state_source = None;
 
-            if let Some(scene_id) = scene_id.filter(|_| !data.scene_paused) {
+            if let Some(scene_id) =
+                scene_id.filter(|_| !data.scene_paused && data.disabled != Some(true))
+            {
                 let state = scenes.get_device_scene_state_details(scene_id, self, devices);
 
                 if let Some((state, state_source)) = state {

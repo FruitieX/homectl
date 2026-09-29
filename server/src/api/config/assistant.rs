@@ -50,12 +50,13 @@ use crate::core::integrations::integration_config_schemas;
 use crate::core::snapshot::RuntimeSnapshot;
 use crate::types::assistant::assistant_proposal_id;
 use crate::types::assistant::{
-    ApplyAssistantActionResponse, ApplyAssistantPlanRequest, ApplyAssistantPlanResponse,
-    AssistantAction, AssistantActionChange, AssistantActionChangeResult, AssistantActionColor,
-    AssistantAttachment, AssistantChatRequest, AssistantEntityKind, AssistantHistoryMessage,
-    AssistantMessageRole, AssistantOpKind, AssistantOperation, AssistantOperationResult,
-    AssistantPlan, AssistantPlanRequest, AssistantSearchResult, AssistantThread,
-    AssistantThreadOutcomeRequest, AssistantThreadProposal, AssistantUsage,
+    ApplyAssistantActionRequest, ApplyAssistantActionResponse, ApplyAssistantPlanRequest,
+    ApplyAssistantPlanResponse, AssistantAction, AssistantActionChange,
+    AssistantActionChangeResult, AssistantActionColor, AssistantAttachment, AssistantChatRequest,
+    AssistantEntityKind, AssistantHistoryMessage, AssistantMessageRole, AssistantOpKind,
+    AssistantOperation, AssistantOperationResult, AssistantPlan, AssistantPlanRequest,
+    AssistantSearchResult, AssistantThread, AssistantThreadOutcomeRequest, AssistantThreadProposal,
+    AssistantUsage,
 };
 use crate::types::automation_source::SourceDefinition;
 use crate::types::automation_value::HelperDefinition;
@@ -519,6 +520,7 @@ pub(super) fn assistant_routes(
     let apply_action = warp::path!("assistant" / "actions" / String / "apply")
         .and(warp::path::end())
         .and(warp::post())
+        .and(warp::body::bytes())
         .and(with_snapshot(snapshot))
         .and(with_handle(handle))
         .and(with_plan_store(&plans))
@@ -3138,6 +3140,7 @@ async fn persist_thread_turn(
 /// against the live catalog on each apply.
 async fn apply_stored_action(
     action_id: String,
+    body: Bytes,
     snapshot: SnapshotHandle,
     handle: StateHandle,
     plans: Arc<PlanStore>,
@@ -3145,10 +3148,49 @@ async fn apply_stored_action(
     let Some(action) = plans.get_action(&action_id) else {
         return Ok(not_found("Assistant action"));
     };
+    if body.len() > 65536 {
+        return Ok(error_response(
+            "Action selection is too large",
+            StatusCode::PAYLOAD_TOO_LARGE,
+        ));
+    }
+    let selection: ApplyAssistantActionRequest = if body.is_empty() {
+        Default::default()
+    } else {
+        match serde_json::from_slice(&body) {
+            Ok(selection) => selection,
+            Err(_) => {
+                return Ok(error_response(
+                    "Invalid action selection",
+                    StatusCode::BAD_REQUEST,
+                ))
+            }
+        }
+    };
+    let changes = match selection.device_keys {
+        None => action.changes,
+        Some(keys) => {
+            if keys.iter().any(|key| {
+                !action
+                    .changes
+                    .iter()
+                    .any(|change| &change.device_key == key)
+            }) {
+                return Ok(error_response(
+                    "Selection contains a device outside this proposal",
+                    StatusCode::BAD_REQUEST,
+                ));
+            }
+            action
+                .changes
+                .into_iter()
+                .filter(|change| keys.contains(&change.device_key))
+                .collect()
+        }
+    };
     let live = snapshot.load();
     let control = build_control_catalog(&live, None);
-    let (results, applied_count) =
-        apply_device_changes(&handle, &live, &control, &action.changes).await;
+    let (results, applied_count) = apply_device_changes(&handle, &live, &control, &changes).await;
 
     Ok(ApiResponse::success(ApplyAssistantActionResponse {
         summary: Some(action.summary),

@@ -324,6 +324,11 @@ fn normalize_script_action(action: &Value, index: usize) -> Result<NativeAction,
 
 fn validate_script_action_rollout(action: &NativeAction, path: &str) -> Result<(), String> {
     match action {
+        NativeAction::RunScript { .. } => {
+            return Err(format!(
+                "{path}: a script cannot return another script action"
+            ))
+        }
         NativeAction::ActivateScene { rollout, .. } | NativeAction::CycleScenes { rollout, .. } => {
             if rollout
                 .as_ref()

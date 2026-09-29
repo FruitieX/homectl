@@ -1,4 +1,14 @@
 import {
+  Palette,
+  Power,
+  Timer,
+  GitBranch,
+  SlidersHorizontal,
+  Play,
+  Code2,
+} from 'lucide-react';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
+import {
   FlowBlock,
   AddFlowBlock,
   UnknownFlowValue,
@@ -7,7 +17,6 @@ import {
 import { createUuid } from '@/lib/uuid';
 import { moveSibling, duplicateRoutineNode } from '@/lib/routineDraft';
 import { entityDraftStore } from '@/lib/entityDraft';
-import { confirmDialog } from '@/ui/primitives/confirm-dialog';
 import type { ChooseBranch } from '@/bindings/ChooseBranch';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
@@ -53,10 +62,22 @@ const stepKindOptions: Array<{ value: StepKind; label: string }> = [
   { value: 'set_helper', label: 'Set helper value' },
   { value: 'invoke_routine', label: 'Invoke another routine' },
   { value: 'choose', label: 'Choose a branch' },
+  { value: 'run_script', label: 'Sandboxed script' },
 ];
 
 function defaultStep(kind: StepKind, id: string): NativeAction {
   switch (kind) {
+    case 'run_script':
+      return {
+        action: 'run_script',
+        id,
+        spec: {
+          api_version: 1,
+          source_body: 'return { actions: [] };',
+          declarations: [],
+          limits_profile: 'default',
+        },
+      };
     case 'activate_scene':
       return {
         action: 'activate_scene',
@@ -310,6 +331,7 @@ function ChooseStepEditor({
       {step.branches.map((branch, index) => (
         <FlowBlock
           key={branch.id}
+          className="flow-branch"
           id={branch.id}
           title={index === 0 ? 'If' : 'Otherwise, if'}
           index={index}
@@ -712,6 +734,22 @@ function StepFields({
       encodeURIComponent(step.id)
     : undefined;
   switch (step.action) {
+    case 'run_script':
+      return (
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Returns actions at this point in the sequence. Reads the triggering
+            snapshot, before any actions run. If a script fails, this run
+            applies no actions.
+          </p>
+          <ScriptProgramEditor
+            spec={step.spec}
+            onChange={(spec) => onChange({ ...step, spec })}
+            devices={devices}
+            groups={groups}
+          />
+        </div>
+      );
     case 'activate_scene':
       return (
         <div className="space-y-3">
@@ -727,10 +765,7 @@ function StepFields({
               }
             />
           ) : (
-            <ConfigField
-              label="Scene"
-              description="Exactly one of a fixed scene or a dynamic selection is required."
-            >
+            <ConfigField label="Scene">
               <div className="space-y-2">
                 <SceneSelect
                   scenes={scenes}
@@ -738,6 +773,26 @@ function StepFields({
                   createReturnTo={sceneReturn}
                   onChange={(scene_id) => onChange({ ...step, scene_id })}
                 />
+              </div>
+            </ConfigField>
+          )}
+          <details className="flow-action-options">
+            <summary className="cursor-pointer text-xs text-muted-foreground py-2">
+              Targets & timing ·{' '}
+              {(step.targets?.groups?.length ?? 0) +
+                (step.targets?.devices?.length ?? 0) >
+              0
+                ? `${(step.targets?.groups?.length ?? 0) + (step.targets?.devices?.length ?? 0)} overrides`
+                : 'Scene defaults'}
+              {step.transition_ms != null
+                ? ` · ${Number(step.transition_ms) / 1000}s fade`
+                : step.use_scene_transition === false
+                  ? ' · Instant'
+                  : ''}
+              {step.rollout ? ' · Staggered' : ''}
+            </summary>
+            <div className="space-y-3 pt-2">
+              {!step.select && (
                 <Button
                   type="button"
                   variant="outline"
@@ -752,70 +807,72 @@ function StepFields({
                 >
                   Use a dynamic selection
                 </Button>
+              )}
+              <TargetSpecEditor
+                targets={step.targets}
+                devices={devices}
+                groups={groups}
+                label="Target override"
+                description="Leave empty to use the scene's own targets."
+                onChange={(targets) => onChange({ ...step, targets })}
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <ConfigField
+                  label="Transition"
+                  description="Scene-derived transitions are used unless disabled."
+                >
+                  <select
+                    className={selectClassName}
+                    value={
+                      step.use_scene_transition !== false ? 'scene' : 'none'
+                    }
+                    onChange={(event) =>
+                      onChange({
+                        ...step,
+                        use_scene_transition: event.target.value === 'scene',
+                      })
+                    }
+                  >
+                    <option value="scene">Use scene transitions</option>
+                    <option value="none">No transition (instant)</option>
+                  </select>
+                </ConfigField>
+                <ConfigField
+                  label="Transition override"
+                  description="Optional explicit fade duration for this activation."
+                >
+                  <DurationInput
+                    valueMs={
+                      step.transition_ms === undefined
+                        ? undefined
+                        : Number(step.transition_ms)
+                    }
+                    onChange={(transition_ms) =>
+                      onChange({
+                        ...step,
+                        transition_ms,
+                      } as unknown as NativeAction)
+                    }
+                  />
+                </ConfigField>
               </div>
-            </ConfigField>
-          )}
-          <TargetSpecEditor
-            targets={step.targets}
-            devices={devices}
-            groups={groups}
-            label="Target override"
-            description="Leave empty to use the scene's own targets."
-            onChange={(targets) => onChange({ ...step, targets })}
-          />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <ConfigField
-              label="Transition"
-              description="Scene-derived transitions are used unless disabled."
-            >
-              <select
-                className={selectClassName}
-                value={step.use_scene_transition !== false ? 'scene' : 'none'}
-                onChange={(event) =>
-                  onChange({
-                    ...step,
-                    use_scene_transition: event.target.value === 'scene',
-                  })
-                }
-              >
-                <option value="scene">Use scene transitions</option>
-                <option value="none">No transition (instant)</option>
-              </select>
-            </ConfigField>
-            <ConfigField
-              label="Transition override"
-              description="Optional explicit fade duration for this activation."
-            >
-              <DurationInput
-                valueMs={
-                  step.transition_ms === undefined
-                    ? undefined
-                    : Number(step.transition_ms)
-                }
-                onChange={(transition_ms) =>
-                  onChange({
-                    ...step,
-                    transition_ms,
-                  } as unknown as NativeAction)
+              <RolloutToggle
+                rollout={step.rollout}
+                onChange={(rollout) =>
+                  onChange({ ...step, rollout } as unknown as NativeAction)
                 }
               />
-            </ConfigField>
-          </div>
-          <RolloutToggle
-            rollout={step.rollout}
-            onChange={(rollout) =>
-              onChange({ ...step, rollout } as unknown as NativeAction)
-            }
-          />
-          {step.rollout ? (
-            <RolloutEditor
-              rollout={step.rollout}
-              devices={devices}
-              onChange={(rollout) =>
-                onChange({ ...step, rollout } as unknown as NativeAction)
-              }
-            />
-          ) : null}
+              {step.rollout ? (
+                <RolloutEditor
+                  rollout={step.rollout}
+                  devices={devices}
+                  onChange={(rollout) =>
+                    onChange({ ...step, rollout } as unknown as NativeAction)
+                  }
+                />
+              ) : null}
+            </div>
+          </details>
           {!step.select && !step.scene_id ? (
             <p className="text-xs text-destructive">Select a scene.</p>
           ) : null}
@@ -1385,6 +1442,7 @@ function StepEditor({
   const known =
     stepKindOptions.some((option) => option.value === step.action) &&
     (step.action !== 'set_power' || Boolean(step.device)) &&
+    (step.action !== 'run_script' || Boolean(step.spec)) &&
     (step.action !== 'cycle_scenes' || Array.isArray(step.scenes)) &&
     (step.action !== 'choose' ||
       (Array.isArray(step.branches) &&
@@ -1394,14 +1452,33 @@ function StepEditor({
   return (
     <FlowBlock
       id={step.id}
+      className="flow-action"
+      icon={
+        step.action === 'activate_scene' || step.action === 'cycle_scenes' ? (
+          <Palette className="size-4" />
+        ) : step.action === 'set_power' ? (
+          <Power className="size-4" />
+        ) : step.action === 'choose' ? (
+          <GitBranch className="size-4" />
+        ) : step.action.includes('timer') ? (
+          <Timer className="size-4" />
+        ) : step.action === 'invoke_routine' ? (
+          <Play className="size-4" />
+        ) : step.action === 'run_script' ? (
+          <Code2 className="size-4" />
+        ) : (
+          <SlidersHorizontal className="size-4" />
+        )
+      }
       title={
         known ? (
-          <select
+          <SettingsSelect
             className="settings-select w-full"
             aria-label="Step type"
             value={step.action}
-            onChange={(event) => {
-              const kind = event.target.value as StepKind,
+            options={stepKindOptions}
+            onValueChange={(selected) => {
+              const kind = selected as StepKind,
                 fallback = defaultStep(kind, step.id);
               onChange(
                 draftKey
@@ -1416,13 +1493,7 @@ function StepEditor({
                   : fallback,
               );
             }}
-          >
-            {stepKindOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          />
         ) : (
           'Unrecognized step'
         )
@@ -1698,7 +1769,6 @@ export function ProgramBuilder({
   routines: Array<{ id: string; name: string }>;
   helpers: HelperRuntimeStatus[];
 }) {
-  const { draftKey } = useRoutineAuthoring();
   const steps =
     program?.kind === 'native' && Array.isArray(program.steps)
       ? program.steps
@@ -1716,67 +1786,34 @@ export function ProgramBuilder({
     return <UnknownFlowValue value={program} />;
   const update = (steps: NativeAction[]) =>
     onChange({ ...program, kind: 'native', steps });
-  async function switchProgram(kind: Program['kind']) {
-    if (
-      program &&
-      !(await confirmDialog({
-        title: 'Change the program type?',
-        description:
-          'This replaces the active program in your draft. You can switch back before saving to recover its settings.',
-        confirmLabel: 'Change type',
-      }))
-    )
-      return;
-    const fallback: Program =
-      kind === 'native'
-        ? { kind: 'native', steps: [] }
-        : {
-            kind: 'script',
-            spec: {
-              api_version: 1,
-              source_body: '',
-              declarations: [],
-              limits_profile: 'default',
-            },
-          };
-    onChange(
-      draftKey && program
-        ? entityDraftStore.switchVariant(
-            draftKey,
-            'program',
-            program.kind,
-            program,
-            kind,
-            fallback,
-          )
-        : fallback,
-    );
-  }
   return (
     <div className="flow-sequence">
-      <label className="grid gap-1 text-xs text-muted-foreground">
-        Program
-        <select
-          className="settings-select"
-          value={program?.kind ?? 'native'}
-          onChange={(event) =>
-            void switchProgram(event.target.value as Program['kind'])
-          }
-        >
-          <option value="native">Steps in order</option>
-          <option value="script">Sandboxed script</option>
-          {program && !['native', 'script'].includes(program.kind) && (
-            <option value={program.kind}>Unrecognized program</option>
-          )}
-        </select>
-      </label>
       {program?.kind === 'script' ? (
-        <ScriptProgramEditor
-          spec={program.spec}
-          onChange={(spec) => onChange({ ...program, spec })}
-          devices={devices}
-          groups={groups}
-        />
+        <FlowBlock title="Sandboxed script">
+          <ScriptProgramEditor
+            spec={program.spec}
+            onChange={(spec) => onChange({ ...program, spec })}
+            devices={devices}
+            groups={groups}
+          />
+          <Button
+            variant="outline"
+            onClick={() =>
+              onChange({
+                kind: 'native',
+                steps: [
+                  {
+                    action: 'run_script',
+                    id: createUuid(),
+                    spec: program.spec,
+                  },
+                ],
+              })
+            }
+          >
+            Use as an action in the flow
+          </Button>
+        </FlowBlock>
       ) : program && program.kind !== 'native' ? (
         <UnknownFlowValue value={program} />
       ) : (

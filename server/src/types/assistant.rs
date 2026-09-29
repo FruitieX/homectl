@@ -282,6 +282,16 @@ pub struct ApplyAssistantActionResponse {
     pub applied_count: u32,
 }
 
+/// Review selection. Omitted means all proposed changes; an empty list means none.
+#[derive(TS, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[ts(export)]
+pub struct ApplyAssistantActionRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub device_keys: Option<Vec<String>>,
+}
+
 /// Approximate context usage for the current thread. Token counts come from
 /// the provider when it reports them and are estimated from character counts
 /// otherwise (`approximate` is true in that case).

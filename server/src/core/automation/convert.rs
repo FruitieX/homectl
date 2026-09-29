@@ -829,6 +829,7 @@ fn trigger_name(trigger: &TriggerSpec) -> String {
 
 fn native_action_name(action: &NativeAction) -> &'static str {
     match action {
+        NativeAction::RunScript { .. } => "run_script",
         NativeAction::ActivateScene { .. } => "activate_scene",
         NativeAction::CycleScenes { .. } => "cycle_scenes",
         NativeAction::SetPower { .. } => "set_power",

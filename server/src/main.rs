@@ -460,6 +460,7 @@ async fn run_event_loop(
     // `StateHandle`, and the main loop below forwards incoming events
     // onto the actor's command channel.
     let state_handle = spawn_state_actor(state, snapshot.clone(), deferred_work_tx.clone());
+    homectl_server::core::user_timers::spawn(state_handle.clone());
 
     // P11: computed sources refresh on their own cadence. The ticker only
     // wakes the actor; per-source due checks stay in actor state.

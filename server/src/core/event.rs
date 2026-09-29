@@ -595,6 +595,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 &invalidated_scenes,
                 &state.scenes,
                 &device_positions,
+                &state.runtime_config.integrations,
             );
 
             // Compatibility path for the deprecated event variant. Producers
@@ -910,6 +911,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                                 &scene_ids,
                                 &state.scenes,
                                 &positions,
+                                &state.runtime_config.integrations,
                             );
                         }
                         outcome.mark_snapshot_changes(SnapshotChanges {
@@ -1353,6 +1355,7 @@ fn apply_script_result(
     value: Option<serde_json::Value>,
     error: Option<String>,
 ) {
+    let native_plan = state.scripts.take_native_plan(token.request_id);
     if let Some(message) = error {
         state.rules.record_v2_script_failure(
             routine_id,
@@ -1379,12 +1382,28 @@ fn apply_script_result(
                     helpers: &state.helpers,
                     intents: &state.intents,
                 };
-                state.rules.plan_v2_script_run(
-                    routine_id,
-                    &outcome.actions,
-                    &inputs,
-                    triggering_device,
-                )
+                if let Some(plan) = native_plan {
+                    match super::automation::mixed_scripts::expand_plan(
+                        plan,
+                        &outcome.actions,
+                        &inputs,
+                        triggering_device,
+                    ) {
+                        Ok(plan) => Some(plan),
+                        Err(error) => {
+                            state.rules.record_v2_script_failure(routine_id, error);
+                            state.refresh_routine_statuses();
+                            return;
+                        }
+                    }
+                } else {
+                    state.rules.plan_v2_script_run(
+                        routine_id,
+                        &outcome.actions,
+                        &inputs,
+                        triggering_device,
+                    )
+                }
             };
             match plan {
                 Some(plan) => {
@@ -1773,6 +1792,9 @@ impl AppState {
         plan: RoutinePlan,
         causation: EventCausation,
     ) -> PlannedRunStatus {
+        if super::automation::mixed_scripts::contains_scripts(&plan) {
+            return rejected_policy_plan(&plan, "script actions must finish before dispatch");
+        }
         // Plan §4.2: `max_actions` bounds dispatched actions per invocation.
         // A plan that would exceed it is rejected as a whole (accepted:
         // false), so an over-budget run never publishes a partial effect set.
@@ -1830,6 +1852,7 @@ impl AppState {
                 continue;
             }
             let event = match &step.body {
+                PlannedStepBody::Script { .. } => unreachable!("script actions rejected above"),
                 PlannedStepBody::Dispatch(action) => Event::RoutineAction {
                     action: action.as_ref().clone(),
                     causation,
@@ -1946,6 +1969,7 @@ impl AppState {
             Ok(pool) => pool,
             Err(message) => {
                 for run in &prepared {
+                    self.scripts.take_native_plan(run.token.request_id);
                     self.rules
                         .record_v2_script_failure(&run.routine_id, message.clone());
                 }
@@ -2062,6 +2086,7 @@ impl AppState {
                     &invalidated_scenes,
                     &self.scenes,
                     &positions,
+                    &self.runtime_config.integrations,
                 );
             }
 
@@ -2175,6 +2200,45 @@ impl AppState {
                         intents: &self.intents,
                     };
                     native_plans = self.rules.plan_v2_runs(&accepted_evaluations, &inputs);
+                    let mut immediate = Vec::new();
+                    for plan in std::mem::take(&mut native_plans) {
+                        if !super::automation::mixed_scripts::contains_scripts(&plan) {
+                            immediate.push(plan);
+                            continue;
+                        }
+                        let routine_id = plan.routine_id.clone();
+                        let mode = self
+                            .rules
+                            .execution_policy(&routine_id)
+                            .map(|p| p.mode)
+                            .unwrap_or_default();
+                        let source = accepted_evaluations
+                            .iter()
+                            .find(|e| e.routine_id == routine_id)
+                            .and_then(|e| {
+                                self.rules.v2_script_triggering_device(
+                                    &routine_id,
+                                    &e.matched_trigger_ids,
+                                )
+                            });
+                        match self.scripts.prepare_native_script_blocks(
+                            plan,
+                            mode,
+                            &frame,
+                            frame_id,
+                            origin,
+                            frame_causation,
+                            evaluation_time_ms,
+                            source,
+                        ) {
+                            Ok(run) => {
+                                self.rules.note_v2_invocation(&routine_id, now_monotonic_ms);
+                                prepared_scripts.push(run);
+                            }
+                            Err(reason) => self.rules.record_v2_script_failure(&routine_id, reason),
+                        }
+                    }
+                    native_plans = immediate;
 
                     // P07: script programs are submitted to the supervised
                     // worker while the actor keeps running. Context building
@@ -3730,6 +3794,60 @@ pub(crate) mod tests {
         })
         .await
         .expect("script result arrives within the test budget")
+    }
+
+    #[tokio::test]
+    async fn sandboxed_action_blocks_preserve_native_order_and_reject_failed_runs() {
+        use crate::types::automation_trace::StepDisposition;
+        for (source, expected_success, edit_while_running) in [
+            ("return {actions:[api.actions.setPower({device:{integration_id:'mqtt',device_id:'lamp'},power:true})]};", true, false),
+            ("throw new Error('block failed');", false, false),
+            ("return {actions:[{action:'run_script',id:'recursive',spec:{api_version:1,source_body:'return {actions:[]}',declarations:[],limits_profile:'default'}}]};", false, false),
+            ("return {actions:[]};", false, true),
+        ] {
+            let (mut state, mut event_rx) = test_state();
+            state.scripts.worker_binary = Some(script_worker_binary());
+            let bulb = lamp("mqtt", "lamp", false, 0.1);
+            state.devices.set_state(&bulb, true, true);
+            state.devices.begin_command(EventCausation::default());
+            state.flush_pending_frames().await;
+            let mut row = scripted_routine_row(source, 1);
+            let spec = row.definition_v2.as_ref().unwrap()["program"]["spec"].clone();
+            row.definition_v2.as_mut().unwrap()["program"] = serde_json::json!({"kind":"native","steps":[
+                {"action":"set_power","id":"before","device":{"integration_id":"mqtt","device_id":"lamp"},"power":false},
+                {"action":"choose","id":"branch","branches":[
+                    {"id":"skip","condition":{"kind":"literal","value":false},"steps":[{"action":"run_script","id":"never","spec":{"api_version":1,"source_body":"throw new Error('unselected branch ran');","declarations":[],"limits_profile":"default"}}]},
+                    {"id":"selected","condition":{"kind":"literal","value":true},"steps":[{"action":"run_script","id":"block","spec":spec}]}
+                ]},
+                {"action":"set_power","id":"after","device":{"integration_id":"mqtt","device_id":"lamp"},"power":false}
+            ]});
+            state.runtime_config.routines = vec![row];
+            state.apply_runtime_routines();
+            let mut lit = bulb.clone();
+            if let DeviceData::Controllable(data) = &mut lit.data { data.state.power = true; }
+            handle_event(&mut state, &Event::SetInternalState { device:lit, skip_external_update:Some(true), skip_db_update:Some(true), origin:Some(EventOrigin::Command), causation:None, integration_epoch:None }).await.unwrap();
+            state.flush_pending_frames().await;
+            assert!(state.devices.get_device(&bulb.get_device_key()).unwrap().get_controllable_state().unwrap().power, "native prefix must wait for scripts");
+            let result = next_script_result(&mut state, &mut event_rx).await;
+            if edit_while_running {
+                state.runtime_config.routines[0].revision += 1;
+                state.apply_runtime_routines();
+            }
+            handle_event(&mut state, &result).await.unwrap();
+            let routine_id = crate::types::rule::RoutineId("scripted".into());
+            let statuses = state.rules.get_runtime_statuses();
+            let run = statuses.0[&routine_id].v2.as_ref().unwrap().last_run.as_ref().unwrap();
+            assert_eq!(run.accepted, expected_success, "{run:?}");
+            let mut powers = Vec::new();
+            while let Ok(event) = event_rx.try_recv() {
+                if let Event::RoutineAction { action: Action::SetDeviceState(device), .. } = event { powers.push(device.get_controllable_state().unwrap().power); }
+            }
+            if expected_success {
+                assert_eq!(powers, vec![false, true, false]);
+                assert_eq!(run.steps.iter().map(|step| step.action_id.0.as_str()).collect::<Vec<_>>(), vec!["before", "block/0", "after"]);
+                assert!(run.steps.iter().all(|step| step.disposition == StepDisposition::Dispatched));
+            } else { assert!(powers.is_empty(), "failed or stale scripts must dispatch no prefix or suffix"); }
+        }
     }
 
     // P07 vertical slice: a v2 script program is submitted off-actor, its

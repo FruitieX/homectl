@@ -21,6 +21,7 @@ pub mod compile;
 pub mod convert;
 pub mod evaluate;
 pub mod groups;
+pub mod mixed_scripts;
 pub mod plan;
 pub mod runtime;
 pub mod schedules;
