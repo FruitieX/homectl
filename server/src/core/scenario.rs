@@ -41,8 +41,7 @@ use tokio::sync::Mutex as AsyncMutex;
 const MAX_EVENTS_PER_SCENARIO: usize = 2_048;
 const DEFAULT_START_TIME_MS: i64 = 1_700_000_000_000;
 
-/// Versioned private scenario document. Keep personal suites outside the git
-/// checkout; only the generic runner and synthetic runner tests belong here.
+/// Versioned scenario document, stored with runtime configuration or loaded from a file.
 #[derive(Debug, Deserialize)]
 pub struct ScenarioSuite {
     pub version: u32,

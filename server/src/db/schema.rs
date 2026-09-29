@@ -22,6 +22,13 @@ pub enum CoreConfig {
 }
 
 #[derive(Clone, Copy, Iden)]
+pub enum ScenarioSuites {
+    Table,
+    Id,
+    Document,
+}
+
+#[derive(Clone, Copy, Iden)]
 pub enum Integrations {
     Table,
     Id,

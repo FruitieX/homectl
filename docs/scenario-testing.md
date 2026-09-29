@@ -6,13 +6,23 @@ not start integrations. Simulated sensor reports enter the normal event path;
 outbound device commands and integration actions are recorded instead of being
 sent. Database writes, persistence work, and UI work are discarded.
 
-## Keep the household suite private
+## Household suite location
 
-The default suite path is `$XDG_CONFIG_HOME/homectl/scenarios.json`, or
-`~/.config/homectl/scenarios.json` when `XDG_CONFIG_HOME` is unset. Keep this
-file outside the checkout and restrict it to the user (`chmod 600`). The
-repository contains only the generic runner and synthetic tests for the
-runner—not household device names, IDs, or test cases.
+The scenario suite is stored in the runtime database and included in configuration
+exports and imports. Upload an existing JSON suite once with:
+
+```sh
+homectl --url https://homectl.fruitiex.org config upload-scenarios ~/.config/homectl/scenarios.json
+```
+
+The upload validates the suite format and persists it through the normal config
+write path. `--scenarios PATH` or `HOMECTL_SCENARIOS` overrides the stored suite
+for local drafts; no default file is read implicitly.
+The same document is available through `GET /api/v1/config/scenarios` and can
+be replaced through `PUT /api/v1/config/scenarios`.
+To save a copy from the server, run `homectl --url https://homectl.fruitiex.org
+config download-scenarios ./scenarios.json`. The command refuses to overwrite an
+existing file unless `--force` is passed.
 
 Configuration source selection:
 
@@ -133,6 +143,8 @@ Run locally with:
 homectl config test
 ```
 
+This reads configuration and its suite from the local database in read-only mode.
+
 Or choose sources explicitly:
 
 ```sh
@@ -140,14 +152,21 @@ homectl config test --source-db ./homectl.db --scenarios ~/.config/homectl/scena
 homectl config test --config-export ./sanitized-config.json --scenarios ./private-scenarios.json
 ```
 
-## CI without committing household data
+To check the **current live configuration** from a machine that can reach the
+server, fetch one current export including the stored suite:
+
+```sh
+TZ=Europe/Helsinki homectl --url https://homectl.fruitiex.org config test --server
+```
+
+The command fails if the export or suite is unavailable. `--scenarios PATH` can
+override the stored suite while testing a proposed change. A saved export checks
+the configuration at the time it was saved, not the current live configuration.
+
+## Code tests and live checks
 
 The checked-in Rust scenario-runner tests exercise the same production runtime
-with synthetic configuration. To run the household suite in CI as well, provision
-a **sanitized** config export and private scenario JSON from a private artifact
-store (for example, a separate private repository or encrypted CI artifact),
-then invoke the same `homectl config test --config-export … --scenarios …`
-command. Do not put production DB credentials in CI and do not commit the
-household export or scenario file to this repository. If CI is not provisioned
-with those private files, it runs the generic runner tests only; it cannot test
-the private active configuration.
+with synthetic configuration. CI can continue to use those public tests to
+verify code behavior without reaching the homelab. The stored household suite
+verifies the current live configuration when run on a machine that can reach
+the server. It does not need production DB credentials or command real devices.

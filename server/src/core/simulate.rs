@@ -324,6 +324,7 @@ async fn export_from_legacy_source_db<C: ConnectionTrait>(db: &C) -> Result<Conf
         groups,
         scenes,
         routines,
+        scenario_suite: None,
         helpers: Vec::new(),
         helper_values: Vec::new(),
         sources: Vec::new(),

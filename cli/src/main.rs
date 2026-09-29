@@ -65,7 +65,7 @@ enum Commands {
     },
     /// Check server health
     Health,
-    /// Run private, simulated automation scenarios against the configured routines.
+    /// Manage and run simulated automation scenarios.
     Config {
         #[command(subcommand)]
         action: ConfigAction,
@@ -82,9 +82,25 @@ enum ConfigAction {
         /// Read a JSON config export instead of a database.
         #[arg(long)]
         config_export: Option<PathBuf>,
-        /// Private scenario suite (defaults to $XDG_CONFIG_HOME/homectl/scenarios.json).
+        /// Fetch one current configuration snapshot, including its suite, from --url.
+        #[arg(long, conflicts_with_all = ["source_db", "config_export"])]
+        server: bool,
+        /// Override the suite stored in the configuration with a local JSON file.
         #[arg(long, env = "HOMECTL_SCENARIOS")]
         scenarios: Option<PathBuf>,
+    },
+    /// Upload a scenario suite to the server database.
+    UploadScenarios {
+        /// Scenario suite JSON file.
+        file: PathBuf,
+    },
+    /// Download the server's scenario suite to a JSON file.
+    DownloadScenarios {
+        /// Destination JSON file.
+        file: PathBuf,
+        /// Replace an existing file.
+        #[arg(long)]
+        force: bool,
     },
 }
 
@@ -189,8 +205,17 @@ async fn main() {
             ConfigAction::Test {
                 source_db,
                 config_export,
+                server,
                 scenarios,
-            } => commands::scenario_test(source_db, config_export, scenarios).await,
+            } => {
+                commands::scenario_test(&client, source_db, config_export, server, scenarios).await
+            }
+            ConfigAction::UploadScenarios { file } => {
+                commands::upload_scenarios(&client, file).await
+            }
+            ConfigAction::DownloadScenarios { file, force } => {
+                commands::download_scenarios(&client, file, force).await
+            }
         },
     };
 

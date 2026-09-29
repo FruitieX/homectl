@@ -1,9 +1,10 @@
-use std::{env, fs, path::PathBuf};
+use std::{env, fs, io::Write, path::PathBuf};
 
 use homectl_server::core::{
     scenario::{run_scenario_suite, ScenarioSuite},
     simulate::prepare_simulation_config,
 };
+use homectl_server::db::config_queries::ConfigExport;
 
 use crate::client::Client;
 use crate::output::{self, Format};
@@ -174,17 +175,19 @@ pub async fn health(client: &Client) -> Result<(), String> {
     Ok(())
 }
 
-/// Run a private suite against a read-only config export and simulated devices.
+/// Run stored or file-backed scenarios against a read-only configuration snapshot.
 pub async fn scenario_test(
+    client: &Client,
     source_db: Option<String>,
     config_export: Option<PathBuf>,
+    server: bool,
     scenarios: Option<PathBuf>,
 ) -> Result<(), String> {
     if source_db.is_some() && config_export.is_some() {
         return Err("choose either --source-db or --config-export, not both".to_string());
     }
 
-    let source_db = if config_export.is_some() {
+    let source_db = if server || config_export.is_some() {
         None
     } else {
         source_db
@@ -195,39 +198,50 @@ pub async fn scenario_test(
                     .then(|| "./homectl.db".into())
             })
     };
-    if source_db.is_none() && config_export.is_none() {
+    if !server && source_db.is_none() && config_export.is_none() {
         return Err(
             "no configuration source found; provide --source-db, --config-export, DATABASE_URL, or ./homectl.db"
                 .to_string(),
         );
     }
 
-    let scenario_path = scenarios.unwrap_or_else(default_scenario_path);
-    let scenario_text = fs::read_to_string(&scenario_path).map_err(|error| {
-        format!(
-            "could not read private scenario suite at {}: {error}",
-            scenario_path.display()
-        )
-    })?;
-    let suite: ScenarioSuite = serde_json::from_str(&scenario_text).map_err(|error| {
-        format!(
-            "invalid scenario suite at {}: {error}",
-            scenario_path.display()
-        )
-    })?;
-
-    let config = prepare_simulation_config(
-        source_db.as_deref(),
-        config_export.as_ref().and_then(|path| path.to_str()),
-    )
-    .await
-    .map_err(|error| {
-        if source_db.is_some() {
-            "could not read the database configuration in read-only mode; database details are redacted".to_string()
-        } else {
-            format!("could not load config export: {error:#}")
+    let config: ConfigExport = if server {
+        let response = client.get("/api/v1/config/export").await?;
+        if response["success"] != true {
+            return Err("live configuration export was unsuccessful".into());
         }
-    })?;
+        serde_json::from_value(response["data"].clone())
+            .map_err(|error| format!("invalid live configuration export: {error}"))?
+    } else {
+        prepare_simulation_config(
+            source_db.as_deref(),
+            config_export.as_ref().and_then(|path| path.to_str()),
+        )
+        .await
+        .map_err(|error| {
+            if source_db.is_some() {
+                "could not read the database configuration in read-only mode; database details are redacted".to_string()
+            } else {
+                format!("could not load config export: {error:#}")
+            }
+        })?
+    };
+    let suite_value = if let Some(path) = scenarios {
+        let suite_text = fs::read_to_string(&path).map_err(|error| {
+            format!(
+                "could not read scenario suite at {}: {error}",
+                path.display()
+            )
+        })?;
+        serde_json::from_str(&suite_text)
+            .map_err(|error| format!("invalid scenario suite at {}: {error}", path.display()))?
+    } else {
+        config.scenario_suite.clone().ok_or_else(|| {
+            "configuration has no stored scenario suite; upload one or pass --scenarios".to_string()
+        })?
+    };
+    let suite: ScenarioSuite = serde_json::from_value(suite_value)
+        .map_err(|error| format!("invalid scenario suite: {error}"))?;
     let report = run_scenario_suite(&config, &suite)
         .await
         .map_err(|error| format!("could not run scenario suite: {error:#}"))?;
@@ -254,10 +268,60 @@ pub async fn scenario_test(
     Ok(())
 }
 
-fn default_scenario_path() -> PathBuf {
-    let config_home = env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
-        .unwrap_or_else(|| PathBuf::from("."));
-    config_home.join("homectl").join("scenarios.json")
+pub async fn upload_scenarios(client: &Client, file: PathBuf) -> Result<(), String> {
+    let contents = fs::read_to_string(&file)
+        .map_err(|error| format!("could not read {}: {error}", file.display()))?;
+    let suite: serde_json::Value = serde_json::from_str(&contents)
+        .map_err(|error| format!("invalid JSON at {}: {error}", file.display()))?;
+    let parsed: ScenarioSuite = serde_json::from_value(suite.clone())
+        .map_err(|error| format!("invalid scenario suite: {error}"))?;
+    if parsed.version != 1 || parsed.scenarios.is_empty() {
+        return Err("scenario suite must use version 1 and contain at least one scenario".into());
+    }
+    let response = client.put("/api/v1/config/scenarios", &suite).await?;
+    if response["success"] != true {
+        return Err(format!("scenario upload failed: {response}"));
+    }
+    if response["write"]["persistence"] != "persisted" {
+        return Err(format!(
+            "scenario suite reached the running server but was not saved: {}",
+            response["write"]["warning"]
+                .as_str()
+                .unwrap_or("database persistence unavailable")
+        ));
+    }
+    println!("Uploaded {} scenarios", parsed.scenarios.len());
+    Ok(())
+}
+
+pub async fn download_scenarios(client: &Client, file: PathBuf, force: bool) -> Result<(), String> {
+    let response = client.get("/api/v1/config/scenarios").await?;
+    if response["success"] != true {
+        return Err("server could not provide the scenario suite".into());
+    }
+    let suite = response["data"].clone();
+    if suite.is_null() {
+        return Err("server has no stored scenario suite".into());
+    }
+    let parsed: ScenarioSuite = serde_json::from_value(suite.clone())
+        .map_err(|error| format!("invalid scenario suite from server: {error}"))?;
+    let mut document = serde_json::to_string_pretty(&suite)
+        .map_err(|error| format!("could not encode scenario suite: {error}"))?;
+    document.push('\n');
+    let mut output = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(force)
+        .create_new(!force)
+        .open(&file)
+        .map_err(|error| format!("could not create {}: {error}", file.display()))?;
+    output
+        .write_all(document.as_bytes())
+        .map_err(|error| format!("could not write {}: {error}", file.display()))?;
+    println!(
+        "Downloaded {} scenarios to {}",
+        parsed.scenarios.len(),
+        file.display()
+    );
+    Ok(())
 }
