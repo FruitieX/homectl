@@ -1,0 +1,37 @@
+{
+ "driven": {
+  "checks": [
+   {
+    "name": "Read failure exposes device controls and retry",
+    "passed": true
+   },
+   {
+    "name": "Shared map read retries without nonexistent image requests",
+    "passed": true
+   },
+   {
+    "name": "View options use shared accessible selectors",
+    "passed": true
+   },
+   {
+    "name": "Device inspector retains related settings link",
+    "passed": true
+   },
+   {
+    "name": "Inspector fits the viewport",
+    "passed": true
+   },
+   {
+    "name": "Keyboard Escape dismisses inspector",
+    "passed": true
+   },
+   {
+    "name": "Shared close button dismisses controls",
+    "passed": true
+   }
+  ],
+  "passed": true,
+  "width": 1440
+ }
+}
+{"url":"http://127.0.0.1:3021/map","viewport":{"width":1440,"height":1080},"problems":[]}

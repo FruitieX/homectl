@@ -122,6 +122,19 @@ now also distinguish disabled lights and show attention badges. Map inspector an
 representative state review remain open below. Evidence and screenshots:
 `implementation-evidence/everyday/floorplan-placement-*`.
 
+Map follow-up checkpoint, 2026-09-30: seven desktop and eight phone checks
+cover exhausted floorplan reads with an explicit Retry, reuse of the shared
+metadata/grid cache, no nonexistent image requests, keyboard-operated shared
+selectors, device settings links, inspector bounds, Escape/Close and phone
+keyboard resizing. Screenshot comparison caught and fixed a Pixi brightness
+arc drawing an unwanted line to the map origin. Map and color tabs keep their
+scrolling behavior without cramped native scrollbars. Current screenshots and
+logs are under `implementation-evidence/everyday/map-review-*`. Full group
+inspector, fallback command scope and representative health/label review remain
+open; this checkpoint does not close those broader gates. The phone capture
+shows labels shrinking too far at Fit: give labels a readable minimum screen
+size during the remaining marker review. UI type/lint/build pass.
+
 ## 5. Earlier refinements
 
 - [x] Finish sensor ordering acceptance: catalog, groups and group members.
@@ -180,6 +193,8 @@ empty/error visual review remains in the outstanding acceptance gate.
   reviewed assistant action scope and disabled-device scene suppression.
 - `57ec86b4`: everyday views, generic timer UI, visual widget designer, retained
   calibration editors and the shared control/widget dependencies.
+- `d088d40d`: room climate composition, scoped controls and resilient embedded
+  floorplan previews, with final desktop/phone comparisons.
 - `26b97b75`: readable floorplan markers, native placement/drag verification,
   sensor ordering propagation and disabled-device re-enable regression.
 

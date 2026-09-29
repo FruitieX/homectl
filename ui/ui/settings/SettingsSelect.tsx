@@ -12,9 +12,11 @@ export function SettingsSelect({
   value,
   onValueChange,
   options,
+  placeholder = 'Choose…',
   ...props
 }: Omit<ComponentProps<typeof SelectTrigger>, 'value'> & {
   value: string;
+  placeholder?: string;
   onValueChange: (value: string) => void;
   options: { value: string; label: string }[];
 }) {
@@ -25,7 +27,7 @@ export function SettingsSelect({
       disabled={props.disabled}
     >
       <SelectTrigger {...props} className={cn('rounded-md', props.className)}>
-        <SelectValue />
+        <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => (

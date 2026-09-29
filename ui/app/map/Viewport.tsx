@@ -45,6 +45,7 @@ import {
 } from '@/ui/primitives/popover';
 import { Tabs, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import { Slider } from '@/ui/primitives/slider';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { GroupPanel } from '../groups/GroupPanel';
 
 type FloorplanMode = 'all' | 'lights' | 'sensors';
@@ -90,9 +91,10 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
     floorplans.find((floorplan) => floorplan.id === selectedFloorplanId)?.id ??
     floorplans[0]?.id ??
     null;
-  const { grid: floorplanGrid, imageUrl } = useStoredFloorplan(
+  const storedFloorplan = useStoredFloorplan(
     effectiveSelectedFloorplanId ?? undefined,
   );
+  const { grid: floorplanGrid, imageUrl } = storedFloorplan;
   const floorplanImage = useImageState(imageUrl);
   const placedDeviceKeys = useMemo(
     () => floorplanGrid?.devices.map((device) => device.deviceKey) ?? [],
@@ -239,7 +241,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
             }}
             className="min-w-0"
           >
-            <div className="min-w-0 overflow-x-auto">
+            <div className="min-w-0 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <TabsList className="h-9 w-max justify-start bg-transparent p-0">
                 {floorplans.map((floorplan) => (
                   <TabsTrigger
@@ -277,53 +279,57 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
               <PopoverContent align="end" className="space-y-4">
                 <label className="flex items-center justify-between gap-3 text-sm">
                   Device labels
-                  <select
-                    className="h-10 rounded-md border border-input bg-background px-2"
+                  <SettingsSelect
+                    aria-label="Device labels"
                     value={labelMode}
-                    onChange={(event) =>
-                      setLabelMode(event.target.value as typeof labelMode)
+                    onValueChange={(value) =>
+                      setLabelMode(value as typeof labelMode)
                     }
-                  >
-                    <option value="default">Floorplan default</option>
-                    <option value="none">Hidden</option>
-                    <option value="sensors">Sensors</option>
-                    <option value="lights">Lights</option>
-                    <option value="all">All devices</option>
-                  </select>
+                    options={[
+                      { value: 'default', label: 'Floorplan default' },
+                      { value: 'none', label: 'Hidden' },
+                      { value: 'sensors', label: 'Sensors' },
+                      { value: 'lights', label: 'Lights' },
+                      { value: 'all', label: 'All devices' },
+                    ]}
+                  />
                 </label>
                 {Object.keys(groups).length > 0 ? (
                   <label className="block space-y-2 text-sm">
                     <span>Group filter</span>
-                    <select
-                      className="h-10 w-full rounded-md border border-input bg-background px-2"
-                      value={groupFilterId ?? ''}
-                      onChange={(event) => {
-                        setGroupFilterId(event.target.value || null);
+                    <SettingsSelect
+                      aria-label="Group filter"
+                      className="w-full"
+                      value={groupFilterId ? `group:${groupFilterId}` : 'all'}
+                      onValueChange={(value) => {
+                        setGroupFilterId(
+                          value === 'all' ? null : value.slice(6),
+                        );
                         setSelectedFloorplanId(null);
                         clearSelection();
                         setActiveSensorKey(null);
                       }}
-                    >
-                      <option value="">All devices</option>
-                      {Object.entries(groups)
-                        .sort(([, a], [, b]) =>
-                          (a.name ?? '').localeCompare(b.name ?? ''),
-                        )
-                        .map(([id, group]) => (
-                          <option key={id} value={id}>
-                            {group.name ?? id}
-                          </option>
-                        ))}
-                    </select>
+                      options={[
+                        { value: 'all', label: 'All devices' },
+                        ...Object.entries(groups)
+                          .sort(([, a], [, b]) =>
+                            (a.name ?? '').localeCompare(b.name ?? ''),
+                          )
+                          .map(([id, group]) => ({
+                            value: `group:${id}`,
+                            label: group.name ?? id,
+                          })),
+                      ]}
+                    />
                   </label>
                 ) : null}
                 <label className="block space-y-2 text-sm">
                   <span>Open device or group</span>
-                  <select
-                    className="h-10 w-full rounded-md border border-input bg-background px-2"
+                  <SettingsSelect
+                    aria-label="Open device or group"
+                    className="w-full"
                     value=""
-                    onChange={(event) => {
-                      const value = event.target.value;
+                    onValueChange={(value) => {
                       setViewOpen(false);
                       clearSelection();
                       if (value.startsWith('group:')) openGroup(value.slice(6));
@@ -332,41 +338,31 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
                         if (
                           devicesState?.[key] &&
                           'Sensor' in devicesState[key]!.data
-                        ) {
+                        )
                           setActiveSensorKey(key);
-                        } else openDevice([key]);
+                        else openDevice([key]);
                       }
                     }}
-                  >
-                    <option value="" disabled>
-                      Choose…
-                    </option>
-                    <optgroup label="Groups">
-                      {Object.entries(groups)
-                        .filter(([, group]) =>
-                          group.device_keys.some((key) =>
-                            placedDeviceKeys.includes(key),
+                    options={[
+                      ...Object.entries(groups)
+                        .filter(([id]) =>
+                          resolveGroupDeviceKeys(id, liveGroups ?? {}).some(
+                            (key) => placedDeviceKeys.includes(key),
                           ),
                         )
-                        .map(([id, group]) => (
-                          <option key={id} value={`group:${id}`}>
-                            {group.name ?? id}
-                          </option>
-                        ))}
-                    </optgroup>
-                    <optgroup label="Devices">
-                      {Object.entries(liveDevices ?? {})
-                        .filter(([, device]) => device !== undefined)
-                        .map(([key, device]) => (
-                          <option key={key} value={`device:${key}`}>
-                            {getDeviceDisplayLabel(
-                              device!,
-                              deviceDisplayNameMap,
-                            )}
-                          </option>
-                        ))}
-                    </optgroup>
-                  </select>
+                        .map(([id, group]) => ({
+                          value: `group:${id}`,
+                          label: `Room · ${group.name ?? id}`,
+                        })),
+                      ...visibleDevices.map((device) => ({
+                        value: `device:${getDeviceKey(device)}`,
+                        label: getDeviceDisplayLabel(
+                          device,
+                          deviceDisplayNameMap,
+                        ),
+                      })),
+                    ]}
+                  />
                 </label>
                 <div
                   role="group"
@@ -481,12 +477,20 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p role="status" className="text-sm text-muted-foreground">
                   {pixiFallbackReason ??
-                    'No floorplan image is available. Devices can still be controlled here.'}
+                    (storedFloorplan.isLoading
+                      ? 'Loading floorplan…'
+                      : storedFloorplan.isError
+                        ? 'The floorplan could not be loaded. Device controls are still available.'
+                        : 'No floorplan is available. Devices can still be controlled here.')}
                 </p>
-                {pixiFallbackReason && (
+                {(pixiFallbackReason || storedFloorplan.isError) && (
                   <Button
                     variant="outline"
-                    onClick={() => setPixiFallbackReason(null)}
+                    onClick={() => {
+                      setPixiFallbackReason(null);
+                      if (storedFloorplan.isError)
+                        void storedFloorplan.refetch();
+                    }}
                   >
                     Retry map
                   </Button>

@@ -562,7 +562,7 @@ export function DeviceColorTabs({
         </p>
       )}
       <Tabs value={colorTab} onValueChange={setTab} className="flex flex-col">
-        <TabsList className="min-h-10 flex-nowrap! justify-start overflow-x-auto">
+        <TabsList className="min-h-10 flex-nowrap! justify-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {hasChromaticColor && (
             <>
               <TabsTrigger value="wheel" className="shrink-0">

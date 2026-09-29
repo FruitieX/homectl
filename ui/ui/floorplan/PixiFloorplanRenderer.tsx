@@ -627,6 +627,8 @@ function drawLightMarker(
     light.power && !disabled ? Math.max(0, Math.min(1, light.intensity)) : 0;
   if (brightness > 0)
     graphics
+      // Start at the arc, otherwise Pixi joins it to the previous path origin.
+      .moveTo(light.x, light.y - 14)
       .arc(
         light.x,
         light.y,

@@ -283,3 +283,18 @@ Type checking, lint and production build pass. Evidence: `room-review-*.log`,
 The comparison gallery includes Study 05 references and current room/list/dashboard
 views. Map inspectors, timers, remaining chart/overlay/recovery gates and the final
 settings audit remain open in WORK-QUEUE.md.
+
+### Map follow-up — 2026-09-30
+
+Map follow-up checkpoint, 2026-09-30: seven desktop and eight phone checks
+cover exhausted floorplan reads with an explicit Retry, reuse of the shared
+metadata/grid cache, no nonexistent image requests, keyboard-operated shared
+selectors, device settings links, inspector bounds, Escape/Close and phone
+keyboard resizing. Screenshot comparison caught and fixed a Pixi brightness
+arc drawing an unwanted line to the map origin. Map and color tabs keep their
+scrolling behavior without cramped native scrollbars. Current screenshots and
+logs are under `implementation-evidence/everyday/map-review-*`. Full group
+inspector, fallback command scope and representative health/label review remain
+open; this checkpoint does not close those broader gates. The phone capture
+shows labels shrinking too far at Fit: give labels a readable minimum screen
+size during the remaining marker review. UI type/lint/build pass.
