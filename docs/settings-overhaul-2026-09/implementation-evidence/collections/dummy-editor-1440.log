@@ -1,0 +1,84 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Null initial state displays the server default light",
+    "passed": true
+   },
+   {
+    "name": "Clearing a sensor number preserves an invalid draft",
+    "passed": true
+   },
+   {
+    "name": "Incomplete sensor number never writes",
+    "passed": true
+   },
+   {
+    "name": "Sensor type switch restores its numeric draft",
+    "passed": true
+   },
+   {
+    "name": "Navigation retains edited sensor value without saving",
+    "passed": true
+   },
+   {
+    "name": "Navigation sends no configuration writes",
+    "passed": true
+   },
+   {
+    "name": "Text draft is retained independently",
+    "passed": true
+   },
+   {
+    "name": "Color-temperature mode restores the configured range",
+    "passed": true
+   },
+   {
+    "name": "Clearing Kelvin does not turn into zero",
+    "passed": true
+   },
+   {
+    "name": "False, null, unknown sensor fields and edited Kelvin persist",
+    "passed": true
+   },
+   {
+    "name": "Zero sensor reading persists",
+    "passed": true
+   },
+   {
+    "name": "Empty text reading persists",
+    "passed": true
+   },
+   {
+    "name": "Color sensor state persists",
+    "passed": true
+   },
+   {
+    "name": "Whole device type retains the sensor definition",
+    "passed": true
+   },
+   {
+    "name": "Discard restores the saved color reading",
+    "passed": true
+   },
+   {
+    "name": "Removing and re-adding a device clears inactive drafts",
+    "passed": true
+   },
+   {
+    "name": "Multiple device entries survive reload",
+    "passed": true
+   },
+   {
+    "name": "Device controls fit the viewport",
+    "passed": true
+   },
+   {
+    "name": "Empty device collection remains an empty map",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/integrations","viewport":{"width":1440,"height":1080},"problems":[]}

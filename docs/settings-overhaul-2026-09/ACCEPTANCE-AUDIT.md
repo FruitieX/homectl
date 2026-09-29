@@ -31,7 +31,7 @@ covers. The top-level implementation gates stay open until reconciled here.
 | Scenes | Scene journey/API logs and draft/target tests cover explicit states, links, omission versus zero, precedence, unknown fields and cycles. Capture tests cover capability filtering and color conversion. | Complete variant/collection mapping, malformed target repair behavior and scene creation-return acceptance against current routines. |
 | Routines | Current routine checkpoints cover three-lane/phone presentation, nested conditions, stable IDs, script/native branches, conversion and retained edits. | Map every trigger, condition, action, program and policy variant to its renderer and round-trip fixture; verify unsupported future data cannot be overwritten. |
 | Devices and calibration | Device journeys, reporting-policy API tests, brightness/color/bulk checkpoints and disabled re-enable regression. | Consolidate calibration evidence into the older settings ledger; verify remaining capability/missing-catalog cases and related-reference coverage. |
-| Integrations, helpers, computed sources | Integration/helper/source journeys and preservation tests cover nested editing, omission, arrays, secrets and current-value separation. | Per-module schema matrix, dummy multi-device coverage, unknown/malformed repair, reload failures and complete references. |
+| Integrations, helpers, computed sources | Integration/helper/source journeys and preservation tests cover nested editing, omission, arrays, secrets and current-value separation. | Dummy multi-device editing now has 19 browser checks at each size plus Rust sensor/capability schema checks. Remaining: MQTT/module variants, unknown/malformed repair, reload failures and complete references. |
 | Remaining settings | Catalog, widget-source, settings-tab, assistant, appearance, migration, backup and dashboard checkpoints exist. | Match each original acceptance item to current evidence, especially backup lifecycle failures, malformed definitions, creation/deletion races and obsolete editor cleanup. |
 | Backend contracts | Actor preconditions and persistence outcome tests; database backup/restore, widget secret/redaction, preference/reporting and migration regressions. | Name the exact test for each new persisted field and default-compatible export/import path; do not infer database durability from fixture writes. |
 | Health | Shared evaluator/report evidence and transition tests; disabled suppression/re-enable coverage; room/map use shared results. | Reconcile startup/retained/unchanged report and recovery cases with current tests and UI surfaces. |
@@ -73,8 +73,9 @@ Confirmed by 11 chart checks at 1440/390 px and 8 log checks at
    those contracts. Dynamic routine selection now retains its nested drafts;
    16 checks at each viewport cover selection modes, mappings/fallbacks, activation
    scopes, edited timer captures, cycle entries/detection, Save/Discard and reload.
-   Continue with typed integration/helper/source cases and the remaining routine
-   variants; these checks do not close the full routine schema gate.
+   Typed dummy-device editing now has 19 checks at each size and two Rust schema
+   tests. Continue with MQTT integration/helper/source cases and the remaining
+   routine variants; these checks do not close the full schema gate.
 3. Use those gaps to select additional browser/backend checks. Do not rerun
    whole passing suites merely to increase test counts.
 4. Complete remaining everyday widget/assistant/navigation evidence, then the

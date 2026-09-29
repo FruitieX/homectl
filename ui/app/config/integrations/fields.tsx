@@ -7,6 +7,7 @@ import { Button } from '@/ui/primitives/button';
 import { confirmDialog } from '@/ui/primitives/confirm-dialog';
 import { JsonValueEditor } from '@/ui/settings/JsonValueEditor';
 import { SceneColorControl } from '@/ui/settings/SceneColorControl';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import {
   readConfigPath,
   writeConfigPath,
@@ -112,12 +113,26 @@ function StringEntries({
 export function CapabilitiesFields({
   value,
   onChange,
+  draftKey,
+  path,
 }: {
   value: unknown;
   onChange: (value: unknown) => void;
+  draftKey: string;
+  path: string;
 }) {
   const data = record(value),
     temperature = record(data.ct);
+  if (value != null && (typeof value !== 'object' || Array.isArray(value)))
+    return (
+      <JsonValueEditor
+        value={value}
+        onChange={onChange}
+        label="Capabilities"
+        draftKey={draftKey}
+        path={path}
+      />
+    );
   return (
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
@@ -129,32 +144,44 @@ export function CapabilitiesFields({
         ].map(([key, label]) => (
           <label className="grid gap-2 text-xs" key={key}>
             {label}
-            <select
-              className="settings-select"
-              value={data[key] == null ? 'default' : String(data[key])}
-              onChange={(event) =>
+            <SettingsSelect
+              aria-label={label}
+              value={
+                data[key] === undefined ||
+                (key === 'brightness' && data[key] === null)
+                  ? 'default'
+                  : typeof data[key] === 'boolean'
+                    ? String(data[key])
+                    : 'invalid'
+              }
+              onValueChange={(next) => {
+                if (next === 'invalid') return;
                 onChange(
                   writeConfigPath(
                     data,
                     key,
-                    event.target.value === 'default'
-                      ? undefined
-                      : event.target.value === 'true',
+                    next === 'default' ? undefined : next === 'true',
                   ),
-                )
-              }
-            >
-              <option value="default">Not specified</option>
-              <option value="true">Supported</option>
-              <option value="false">Not supported</option>
-            </select>
+                );
+              }}
+              options={[
+                { value: 'default', label: 'Not specified' },
+                { value: 'true', label: 'Supported' },
+                { value: 'false', label: 'Not supported' },
+                ...(data[key] !== undefined &&
+                typeof data[key] !== 'boolean' &&
+                !(key === 'brightness' && data[key] === null)
+                  ? [{ value: 'invalid', label: 'Stored value needs repair' }]
+                  : []),
+              ]}
+            />
           </label>
         ))}
       </div>
       <label className="grid gap-2 text-xs">
         Color temperature
-        <select
-          className="settings-select"
+        <SettingsSelect
+          aria-label="Color temperature support"
           value={
             data.ct === undefined
               ? 'default'
@@ -162,22 +189,33 @@ export function CapabilitiesFields({
                 ? 'none'
                 : 'range'
           }
-          onChange={(event) =>
+          onValueChange={(next) =>
             onChange({
               ...data,
-              ct:
-                event.target.value === 'default'
+              ct: entityDraftStore.switchVariant(
+                draftKey,
+                path + '/ct',
+                data.ct === undefined
+                  ? 'default'
+                  : data.ct === null
+                    ? 'none'
+                    : 'range',
+                data.ct,
+                next,
+                next === 'default'
                   ? undefined
-                  : event.target.value === 'none'
+                  : next === 'none'
                     ? null
                     : { start: 2000, end: 6500 },
+              ),
             })
           }
-        >
-          <option value="default">Not specified</option>
-          <option value="none">Not supported</option>
-          <option value="range">Supported range</option>
-        </select>
+          options={[
+            { value: 'default', label: 'Not specified' },
+            { value: 'none', label: 'Not supported' },
+            { value: 'range', label: 'Supported range' },
+          ]}
+        />
       </label>
       {data.ct != null && (
         <div className="grid grid-cols-2 gap-3">
@@ -185,24 +223,193 @@ export function CapabilitiesFields({
             ['start', 'Minimum kelvin'],
             ['end', 'Maximum kelvin'],
           ].map(([key, label]) => (
-            <label className="grid gap-2 text-xs" key={key}>
-              {label}
-              <Input
-                type="number"
-                min={1}
-                value={
-                  typeof temperature[key] === 'number' ? temperature[key] : ''
-                }
-                onChange={(event) =>
-                  onChange({
-                    ...data,
-                    ct: { ...temperature, [key]: Number(event.target.value) },
-                  })
-                }
-              />
-            </label>
+            <JsonValueEditor
+              key={key}
+              fixedType={
+                typeof temperature[key] === 'number' ? 'number' : undefined
+              }
+              label={label}
+              value={temperature[key]}
+              draftKey={draftKey}
+              path={path + '/ct/' + key}
+              onChange={(next) =>
+                onChange({ ...data, ct: { ...temperature, [key]: next } })
+              }
+            />
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+function DummySensorFields({
+  value,
+  onChange,
+  draftKey,
+  path,
+}: {
+  value: Record<string, unknown>;
+  onChange: (value: unknown) => void;
+  draftKey: string;
+  path: string;
+}) {
+  const scalar = Object.hasOwn(value, 'value') ? typeof value.value : '';
+  const kind = ['boolean', 'string', 'number'].includes(scalar)
+    ? scalar
+    : typeof value.power === 'boolean'
+      ? 'color'
+      : 'unknown';
+  const defaults: Record<string, unknown> = {
+    boolean: { value: false },
+    string: { value: '' },
+    number: { value: 0 },
+    color: { power: false },
+  };
+  const known = kind === 'color' ? ['power', 'brightness', 'color'] : ['value'];
+  const extra = Object.fromEntries(
+    Object.entries(value).filter(([key]) => !known.includes(key)),
+  );
+  return (
+    <div className="space-y-3">
+      <label className="grid gap-2 text-xs">
+        Sensor reading type
+        <SettingsSelect
+          aria-label="Sensor reading type"
+          value={kind}
+          options={[
+            { value: 'boolean', label: 'On / off' },
+            { value: 'number', label: 'Number' },
+            { value: 'string', label: 'Text' },
+            { value: 'color', label: 'Light state / color' },
+            ...(kind === 'unknown'
+              ? [{ value: 'unknown', label: 'Unrecognized reading' }]
+              : []),
+          ]}
+          onValueChange={(next) => {
+            if (next !== 'unknown')
+              onChange(
+                entityDraftStore.switchVariant(
+                  draftKey,
+                  path,
+                  kind,
+                  value,
+                  next,
+                  defaults[next],
+                ),
+              );
+          }}
+        />
+      </label>
+      {kind === 'boolean' ? (
+        <label className="grid gap-2 text-xs">
+          Initial reading
+          <SettingsSelect
+            aria-label="Initial reading"
+            value={String(value.value)}
+            options={[
+              { value: 'true', label: 'On / true' },
+              { value: 'false', label: 'Off / false' },
+            ]}
+            onValueChange={(next) =>
+              onChange({ ...value, value: next === 'true' })
+            }
+          />
+        </label>
+      ) : kind === 'string' ? (
+        <label className="grid gap-2 text-xs">
+          Initial text
+          <Input
+            aria-label="Initial text"
+            value={value.value as string}
+            onChange={(event) =>
+              onChange({ ...value, value: event.target.value })
+            }
+          />
+        </label>
+      ) : kind === 'number' ? (
+        <JsonValueEditor
+          fixedType="number"
+          label="Initial reading"
+          value={value.value}
+          draftKey={draftKey}
+          path={path + '/value'}
+          onChange={(next) => onChange({ ...value, value: next })}
+        />
+      ) : kind === 'color' ? (
+        <>
+          <label className="grid gap-2 text-xs">
+            Initial power
+            <SettingsSelect
+              aria-label="Initial power"
+              value={value.power ? 'on' : 'off'}
+              options={[
+                { value: 'on', label: 'On' },
+                { value: 'off', label: 'Off' },
+              ]}
+              onValueChange={(next) =>
+                onChange({ ...value, power: next === 'on' })
+              }
+            />
+          </label>
+          <label className="grid gap-2 text-xs">
+            Initial brightness (%)
+            <Input
+              aria-label="Initial brightness (%)"
+              type="number"
+              min={0}
+              max={100}
+              value={
+                typeof value.brightness === 'number'
+                  ? value.brightness * 100
+                  : ''
+              }
+              placeholder="Not specified"
+              onChange={(event) =>
+                onChange({
+                  ...value,
+                  brightness:
+                    event.target.value === ''
+                      ? undefined
+                      : Number(event.target.value) / 100,
+                })
+              }
+            />
+          </label>
+          <SceneColorControl
+            color={value.color as DeviceColor | undefined}
+            brightness={value.brightness as number | undefined}
+            field={path + '/color'}
+            onChange={(color) => onChange({ ...value, color })}
+          />
+        </>
+      ) : (
+        <JsonValueEditor
+          value={value}
+          label="Initial sensor fields"
+          draftKey={draftKey}
+          path={path}
+          onChange={onChange}
+        />
+      )}
+      {kind !== 'unknown' && Object.keys(extra).length > 0 && (
+        <details className="text-xs">
+          <summary className="cursor-pointer">Additional sensor fields</summary>
+          <JsonValueEditor
+            value={extra}
+            fixedType="object"
+            label="Additional sensor fields"
+            draftKey={draftKey}
+            path={path + '/extra'}
+            onChange={(next) =>
+              onChange({
+                ...Object.fromEntries(
+                  Object.entries(value).filter(([key]) => known.includes(key)),
+                ),
+                ...record(next),
+              })
+            }
+          />
+        </details>
       )}
     </div>
   );
@@ -218,21 +425,48 @@ function DummyDevices({
 }) {
   const [id, setId] = useState(''),
     data = record(value);
+  if (
+    value !== undefined &&
+    (!value || typeof value !== 'object' || Array.isArray(value))
+  )
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-destructive">
+          Devices must be keyed fields. The current value is preserved until you
+          repair it.
+        </p>
+        <JsonValueEditor
+          value={value}
+          label="Devices"
+          draftKey={draftKey}
+          path="dummy"
+          onChange={onChange}
+        />
+      </div>
+    );
   return (
-    <div className="space-y-3">
+    <div className="grid items-start gap-3 lg:grid-cols-2">
       {Object.entries(data).map(([id, value]) => {
         const slot = `dummy/${id.replaceAll('~', '~0').replaceAll('/', '~1')}`;
+        const malformed =
+          !value || typeof value !== 'object' || Array.isArray(value);
         const entry = record(value),
           initial = record(entry.init_state),
           controllable = record(initial.Controllable),
           sensor = record(initial.Sensor),
           state = record(controllable.state);
         const kind =
-          entry.init_state === undefined
+          entry.init_state == null
             ? 'default'
-            : Object.hasOwn(initial, 'Controllable')
+            : Object.keys(initial).length === 1 &&
+                initial.Controllable &&
+                typeof initial.Controllable === 'object' &&
+                !Array.isArray(initial.Controllable)
               ? 'controllable'
-              : Object.hasOwn(initial, 'Sensor')
+              : Object.keys(initial).length === 1 &&
+                  initial.Sensor &&
+                  typeof initial.Sensor === 'object' &&
+                  !Array.isArray(initial.Sensor)
                 ? 'sensor'
                 : 'unknown';
         const patch = (next: Record<string, unknown>) =>
@@ -240,6 +474,7 @@ function DummyDevices({
         return (
           <article
             className="space-y-3 rounded-md border border-border p-3"
+            data-dummy-device={id}
             key={id}
           >
             <header className="flex items-center justify-between gap-2">
@@ -262,168 +497,186 @@ function DummyDevices({
                 <Trash2 className="size-4" />
               </Button>
             </header>
-            <label className="grid gap-2 text-xs">
-              Device name
-              <Input
-                value={typeof entry.name === 'string' ? entry.name : ''}
-                onChange={(event) => patch({ name: event.target.value })}
+            {malformed ? (
+              <JsonValueEditor
+                value={value}
+                onChange={(next) => onChange({ ...data, [id]: next })}
+                label="Device definition"
+                draftKey={draftKey}
+                path={slot}
               />
-            </label>
-            <label className="grid gap-2 text-xs">
-              Initial device type
-              <select
-                className="settings-select"
-                value={kind}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  patch({
-                    init_state: entityDraftStore.switchVariant(
-                      draftKey,
-                      slot,
-                      kind,
-                      entry.init_state,
-                      next,
-                      next === 'default'
-                        ? undefined
-                        : next === 'sensor'
-                          ? { Sensor: { value: false } }
-                          : {
-                              Controllable: {
-                                state: { power: false },
-                                capabilities: {},
-                                managed: 'Full',
-                              },
-                            },
-                    ),
-                  });
-                }}
-              >
-                <option value="default">Default light</option>
-                <option value="controllable">
-                  Configured light or control
-                </option>
-                <option value="sensor">Sensor</option>
-                {kind === 'unknown' && (
-                  <option value="unknown">Unrecognized type</option>
-                )}
-              </select>
-            </label>
-            {kind === 'controllable' ? (
+            ) : (
               <>
-                <label className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={state.power === true}
-                    onChange={(event) =>
-                      patch({
-                        init_state: {
-                          ...initial,
-                          Controllable: {
-                            ...controllable,
-                            state: { ...state, power: event.target.checked },
-                          },
-                        },
-                      })
-                    }
+                <label className="grid gap-2 text-xs">
+                  Device name
+                  <Input
+                    value={typeof entry.name === 'string' ? entry.name : ''}
+                    onChange={(event) => patch({ name: event.target.value })}
                   />
-                  Initially on
                 </label>
                 <label className="grid gap-2 text-xs">
-                  Initial brightness (%)
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={
-                      typeof state.brightness === 'number'
-                        ? state.brightness * 100
-                        : ''
-                    }
-                    placeholder="Not specified"
-                    onChange={(event) =>
+                  Initial device type
+                  <SettingsSelect
+                    aria-label={`${id} initial device type`}
+                    value={kind}
+                    onValueChange={(next) => {
+                      if (next === 'unknown') return;
                       patch({
-                        init_state: {
-                          ...initial,
-                          Controllable: {
-                            ...controllable,
-                            state: {
-                              ...state,
-                              brightness:
-                                event.target.value === ''
-                                  ? undefined
-                                  : Number(event.target.value) / 100,
-                            },
-                          },
-                        },
-                      })
-                    }
+                        init_state: entityDraftStore.switchVariant(
+                          draftKey,
+                          slot,
+                          kind,
+                          entry.init_state,
+                          next,
+                          next === 'default'
+                            ? undefined
+                            : next === 'sensor'
+                              ? { Sensor: { value: false } }
+                              : {
+                                  Controllable: {
+                                    state: { power: false },
+                                    capabilities: {},
+                                    managed: 'Full',
+                                  },
+                                },
+                        ),
+                      });
+                    }}
+                    options={[
+                      { value: 'default', label: 'Default light' },
+                      {
+                        value: 'controllable',
+                        label: 'Configured light or control',
+                      },
+                      { value: 'sensor', label: 'Sensor' },
+                      ...(kind === 'unknown'
+                        ? [{ value: 'unknown', label: 'Unrecognized type' }]
+                        : []),
+                    ]}
                   />
                 </label>
-                <SceneColorControl
-                  color={state.color as DeviceColor | undefined}
-                  brightness={state.brightness as number | undefined}
-                  field={`config.devices.${id}.color`}
-                  onChange={(color) =>
-                    patch({
-                      init_state: {
-                        ...initial,
-                        Controllable: {
-                          ...controllable,
-                          state: { ...state, color },
-                        },
-                      },
-                    })
-                  }
-                />
-                <CapabilitiesFields
-                  value={controllable.capabilities}
-                  onChange={(capabilities) =>
-                    patch({
-                      init_state: {
-                        ...initial,
-                        Controllable: { ...controllable, capabilities },
-                      },
-                    })
-                  }
-                />
-                <details className="text-xs">
-                  <summary className="cursor-pointer">
-                    Other initial state fields
-                  </summary>
-                  <JsonValueEditor
-                    value={controllable}
-                    label="Controllable device"
+                {kind === 'controllable' ? (
+                  <>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={state.power === true}
+                        onChange={(event) =>
+                          patch({
+                            init_state: {
+                              ...initial,
+                              Controllable: {
+                                ...controllable,
+                                state: {
+                                  ...state,
+                                  power: event.target.checked,
+                                },
+                              },
+                            },
+                          })
+                        }
+                      />
+                      Initially on
+                    </label>
+                    <label className="grid gap-2 text-xs">
+                      Initial brightness (%)
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={
+                          typeof state.brightness === 'number'
+                            ? state.brightness * 100
+                            : ''
+                        }
+                        placeholder="Not specified"
+                        onChange={(event) =>
+                          patch({
+                            init_state: {
+                              ...initial,
+                              Controllable: {
+                                ...controllable,
+                                state: {
+                                  ...state,
+                                  brightness:
+                                    event.target.value === ''
+                                      ? undefined
+                                      : Number(event.target.value) / 100,
+                                },
+                              },
+                            },
+                          })
+                        }
+                      />
+                    </label>
+                    <SceneColorControl
+                      color={state.color as DeviceColor | undefined}
+                      brightness={state.brightness as number | undefined}
+                      field={`config.devices.${id}.color`}
+                      onChange={(color) =>
+                        patch({
+                          init_state: {
+                            ...initial,
+                            Controllable: {
+                              ...controllable,
+                              state: { ...state, color },
+                            },
+                          },
+                        })
+                      }
+                    />
+                    <CapabilitiesFields
+                      value={controllable.capabilities}
+                      draftKey={draftKey}
+                      path={`${slot}/capabilities`}
+                      onChange={(capabilities) =>
+                        patch({
+                          init_state: {
+                            ...initial,
+                            Controllable: { ...controllable, capabilities },
+                          },
+                        })
+                      }
+                    />
+                    <details className="text-xs">
+                      <summary className="cursor-pointer">
+                        Other initial state fields
+                      </summary>
+                      <JsonValueEditor
+                        value={controllable}
+                        label="Controllable device"
+                        draftKey={draftKey}
+                        path={`${slot}/data`}
+                        onChange={(Controllable) =>
+                          patch({ init_state: { ...initial, Controllable } })
+                        }
+                      />
+                    </details>
+                  </>
+                ) : kind === 'sensor' ? (
+                  <DummySensorFields
+                    value={sensor}
                     draftKey={draftKey}
-                    path={`${slot}/data`}
-                    onChange={(Controllable) =>
-                      patch({ init_state: { ...initial, Controllable } })
+                    path={`${slot}/sensor`}
+                    onChange={(Sensor) =>
+                      patch({ init_state: { ...initial, Sensor } })
                     }
                   />
-                </details>
+                ) : kind === 'unknown' ? (
+                  <JsonValueEditor
+                    value={entry.init_state}
+                    label="Initial state"
+                    draftKey={draftKey}
+                    path={`${slot}/initial`}
+                    onChange={(init_state) => patch({ init_state })}
+                  />
+                ) : null}
               </>
-            ) : kind === 'sensor' ? (
-              <JsonValueEditor
-                value={sensor}
-                label="Initial sensor fields"
-                draftKey={draftKey}
-                path={`${slot}/sensor`}
-                onChange={(Sensor) =>
-                  patch({ init_state: { ...initial, Sensor } })
-                }
-              />
-            ) : kind === 'unknown' ? (
-              <JsonValueEditor
-                value={entry.init_state}
-                label="Initial state"
-                draftKey={draftKey}
-                path={`${slot}/initial`}
-                onChange={(init_state) => patch({ init_state })}
-              />
-            ) : null}
+            )}
           </article>
         );
       })}
-      <div className="flex flex-wrap gap-2">
+      <div className="col-span-full flex flex-wrap gap-2">
         <Input
           aria-label="New device ID"
           value={id}
@@ -444,7 +697,7 @@ function DummyDevices({
         </Button>
       </div>
       {Object.hasOwn(data, id) && (
-        <p className="text-xs text-destructive">
+        <p className="col-span-full text-xs text-destructive">
           This device ID already exists.
         </p>
       )}
@@ -514,7 +767,14 @@ export function IntegrationField({
       </div>
     );
   else if (field.key === 'capabilities_override')
-    control = <CapabilitiesFields value={value} onChange={update} />;
+    control = (
+      <CapabilitiesFields
+        value={value}
+        onChange={update}
+        draftKey={draftKey}
+        path={`config/${field.key}`}
+      />
+    );
   else if (field.key === 'devices' && plugin === 'dummy')
     control = (
       <DummyDevices value={value} onChange={update} draftKey={draftKey} />

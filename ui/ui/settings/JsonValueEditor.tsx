@@ -40,7 +40,7 @@ export function JsonValueEditor({
   draftKey: string;
   path?: string;
   allowUnset?: boolean;
-  fixedType?: 'object' | 'array';
+  fixedType?: 'object' | 'array' | 'number';
   depth?: number;
 }) {
   const [newKey, setNewKey] = useState('');

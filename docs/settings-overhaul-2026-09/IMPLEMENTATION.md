@@ -406,3 +406,23 @@ checks pass at both sizes after the shared cache change. The targeted Rust test
 nonempty-capture contract. Logs/captures are under `implementation-evidence/collections/`.
 Remaining schema and accessibility gates are tracked in FIELD-COVERAGE.md and
 ACCEPTANCE-AUDIT.md; this checkpoint does not declare the overhaul complete.
+
+## Typed dummy integrations — 2026-09-30
+
+Dummy sensors now expose on/off, number, text and light-state/color controls.
+Each type retains its inactive draft. Device-type and capability controls use the
+shared selector; desktop cards form two columns and phone cards stay vertical.
+Null initial state correctly displays Default light. Malformed entries stay
+available in the value editor rather than being silently coerced into a device.
+
+Color-temperature capability mode switches retain the custom range. Kelvin
+inputs use retained numeric drafts and reject incomplete/non-integer/out-of-range
+values. Validation distinguishes nullable dimming from the server's non-null
+color-support booleans and checks dummy initial state shapes.
+
+Evidence: 19 native browser checks at each 1440/390 px, 225 UI tests, type/lint/build,
+and 2 Rust dummy deserialization tests. Browser writes were confined to owned,
+disabled records on the marked fixture and cleaned up. Actual database durability
+and integration reload failures are not claimed by this browser fixture.
+Screenshots were inspected at both sizes and added to the comparison gallery.
+The full remaining field and acceptance gates stay open.

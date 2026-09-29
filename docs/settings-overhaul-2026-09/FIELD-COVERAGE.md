@@ -112,3 +112,30 @@ records the actual loss; no household configuration was changed.
 Next: typed integration/helper/source cases and the remaining trigger/condition/
 policy/action variants. Continue to expand the individual-field and backend
 round-trip evidence before closing PLAN.md's coverage gate.
+
+### Typed dummy-device checkpoint
+
+`dev/dummy-editor-review.mjs` performs 19 checks at both 1440 and 390 px on an
+isolated, disabled integration. It edits and saves boolean false, numeric zero,
+empty text and color-state readings; switches sensor and whole-device types;
+retains separate drafts across navigation; checks incomplete numeric inputs,
+Discard, multiple devices, remove/recreate, reload and an empty device map.
+Null initial state displays the server's default light and remains null after an
+unrelated save. Unknown sensor siblings are preserved through a boolean edit;
+this is preservation evidence, not a complete unknown-definition repair journey.
+
+Device/type/capability choices use shared selectors. Temperature mode changes
+retain the custom range; incomplete Kelvin inputs stay visible instead of
+becoming zero. Whole-integer/u16 limits and nullable capability distinctions are
+validated. `integrations::dummy::tests` confirms all four sensor shapes and the
+capability distinctions against Rust deserialization (2 tests). UI validation
+also rejects malformed maps, entries and initial states without silently replacing
+them. Dedicated browser repair coverage remains open.
+
+Desktop device cards use two columns; phone cards remain one column. These are
+Compact-style adaptations without a dedicated approved integration mockup.
+Screenshots/logs are under `implementation-evidence/collections/dummy-*`.
+All 225 UI tests, type checking, lint and production build pass. Remaining
+integration cases include MQTT collection editing/profile switches, secrets,
+management variants, optional-field resets and reload failures. Helper/source
+and remaining routine variants are still open.

@@ -244,6 +244,15 @@ targeted server duration/capture validation test pass. Evidence is under
 integration/helper/source cases and the remaining routine variants in the field
 matrix; overall acceptance remains open.
 
+Typed dummy checkpoint, 2026-09-30: 19 native browser checks pass at 1440/390 px,
+covering all sensor types, false/zero/empty text, retained drafts, edited capability
+ranges, multiple devices, removal/recreation, empty maps and reload. Two Rust
+schema tests and all 225 UI tests pass, along with type/lint/build. Screenshots
+show compact two-column desktop cards and single-column phone controls. See
+FIELD-COVERAGE.md for the distinction between preservation and repair evidence.
+Next: MQTT collections/profile and optional resets, helper/source cases and
+remaining routine variants. The overall acceptance gate remains open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

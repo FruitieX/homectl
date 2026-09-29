@@ -139,3 +139,115 @@ test('validation checks all sensor pointers, range bounds and integer ports', ()
     [],
   );
 });
+
+test('capability validation distinguishes optional dimming from required booleans and u16 bounds', () => {
+  const validate = (capabilities: unknown) =>
+    validateIntegrationDraft({
+      id: 'test',
+      plugin: 'mqtt',
+      enabled: false,
+      config: { capabilities_override: capabilities },
+    });
+  for (const capabilities of [
+    undefined,
+    null,
+    {},
+    { brightness: null, hs: false, ct: null },
+    { ct: { start: 1, end: 65535 } },
+  ])
+    assert.deepEqual(validate(capabilities), []);
+  for (const capabilities of [
+    { hs: null },
+    { xy: null },
+    { rgb: null },
+    { ct: { start: 2000.5, end: 6500 } },
+    { ct: { start: 2000, end: 65536 } },
+    { ct: [] },
+  ])
+    assert.ok(validate(capabilities).length > 0, JSON.stringify(capabilities));
+});
+
+test('dummy initial readings support all sensor variants and retain false, zero, empty text and extensions', () => {
+  const devices = {
+    omitted: { name: 'Default' },
+    nullable: { name: 'Default', init_state: null },
+    boolean: {
+      name: 'Boolean',
+      init_state: { Sensor: { value: false, future: [0, null] } },
+    },
+    number: { name: 'Number', init_state: { Sensor: { value: 0 } } },
+    negative: { name: 'Temperature', init_state: { Sensor: { value: -12.5 } } },
+    text: { name: 'Text', init_state: { Sensor: { value: '' } } },
+    color: {
+      name: 'Color',
+      init_state: {
+        Sensor: { power: false, brightness: 0, color: null, transition: 0 },
+      },
+    },
+    light: {
+      name: 'Light',
+      init_state: {
+        Controllable: {
+          state: { power: false },
+          capabilities: { brightness: false, ct: null },
+        },
+      },
+    },
+  };
+  const before = structuredClone(devices);
+  assert.deepEqual(
+    validateIntegrationDraft({
+      id: 'test',
+      plugin: 'dummy',
+      enabled: false,
+      config: { devices },
+    }),
+    [],
+  );
+  assert.deepEqual(devices, before);
+  assert.deepEqual(
+    validateIntegrationDraft({
+      id: 'test',
+      plugin: 'dummy',
+      enabled: false,
+      config: { devices: {} },
+    }),
+    [],
+  );
+});
+
+test('malformed dummy collections and initial states stay invalid until explicitly repaired', () => {
+  const validate = (devices: unknown) =>
+    validateIntegrationDraft({
+      id: 'test',
+      plugin: 'dummy',
+      enabled: false,
+      config: { devices },
+    });
+  for (const devices of [
+    undefined,
+    null,
+    [],
+    [false],
+    { bad: false },
+    { bad: { name: '' } },
+  ])
+    assert.ok(validate(devices).length > 0);
+  for (const init_state of [
+    false,
+    [],
+    {},
+    { Future: {} },
+    { Sensor: null },
+    { Sensor: { value: null } },
+    { Sensor: { value: Infinity } },
+    { Sensor: { power: false, brightness: 2 } },
+    { Controllable: { state: {} } },
+    { Controllable: { state: { power: false }, capabilities: null } },
+    { Sensor: { value: false }, Controllable: { state: { power: false } } },
+  ])
+    assert.ok(
+      validate({ bad: { name: 'Repair me', init_state } }).length > 0,
+      JSON.stringify(init_state),
+    );
+});

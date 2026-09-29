@@ -157,7 +157,11 @@ export function validateIntegrationDraft(
     }
     const capabilities = raw as Record<string, unknown>;
     for (const key of ['brightness', 'hs', 'xy', 'rgb']) {
-      if (capabilities[key] != null && typeof capabilities[key] !== 'boolean')
+      if (
+        capabilities[key] !== undefined &&
+        !(key === 'brightness' && capabilities[key] === null) &&
+        typeof capabilities[key] !== 'boolean'
+      )
         errors.push({
           field,
           message: `${key} support must be on, off or unspecified.`,
@@ -169,15 +173,16 @@ export function validateIntegrationDraft(
       if (
         typeof start !== 'number' ||
         typeof end !== 'number' ||
-        !Number.isFinite(start) ||
-        !Number.isFinite(end) ||
+        !Number.isInteger(start) ||
+        !Number.isInteger(end) ||
+        end > 65535 ||
         start <= 0 ||
         end <= start
       )
         errors.push({
           field,
           message:
-            'Color temperature needs positive kelvin values with the minimum below the maximum.',
+            'Color temperature needs whole kelvin values from 1 to 65535, with the minimum below the maximum.',
         });
     }
   };
@@ -185,28 +190,77 @@ export function validateIntegrationDraft(
     value.config.capabilities_override,
     'config.capabilities_override',
   );
-  if (
-    value.plugin === 'dummy' &&
-    value.config.devices &&
-    typeof value.config.devices === 'object'
-  ) {
-    for (const [id, device] of Object.entries(value.config.devices)) {
-      validateCapabilities(
-        readConfigPath(device, 'init_state.Controllable.capabilities'),
-        'config.devices',
-      );
-      if (
-        !id.trim() ||
-        !device ||
-        typeof device !== 'object' ||
-        typeof (device as { name?: unknown }).name !== 'string' ||
-        !(device as { name: string }).name.trim()
-      )
-        errors.push({
-          field: 'config.devices',
-          message: 'Each dummy device needs an ID and a name.',
-        });
-    }
+  if (value.plugin === 'dummy') {
+    const devices = value.config.devices;
+    const object = (raw: unknown): raw is Record<string, unknown> =>
+      !!raw && typeof raw === 'object' && !Array.isArray(raw);
+    const error = (message: string) =>
+      errors.push({ field: 'config.devices', message });
+    const validateState = (state: unknown, id: string) => {
+      if (!object(state) || typeof state.power !== 'boolean') {
+        error(`${id}: initial light state needs an on/off power value.`);
+        return;
+      }
+      for (const key of ['brightness', 'transition']) {
+        const input = state[key];
+        if (
+          input != null &&
+          (typeof input !== 'number' ||
+            !Number.isFinite(input) ||
+            input < 0 ||
+            (key === 'brightness' && input > 1))
+        )
+          error(
+            `${id}: initial ${key} must be ${key === 'brightness' ? 'between 0 and 1' : 'a non-negative number'}.`,
+          );
+      }
+    };
+    if (!object(devices))
+      error('Dummy devices must be an object keyed by device ID.');
+    else
+      for (const [id, device] of Object.entries(devices)) {
+        if (
+          !id.trim() ||
+          !object(device) ||
+          typeof device.name !== 'string' ||
+          !device.name.trim()
+        ) {
+          error('Each dummy device needs an ID and a name.');
+          continue;
+        }
+        const initial = device.init_state;
+        if (initial == null) continue;
+        if (!object(initial) || Object.keys(initial).length !== 1) {
+          error(`${id}: choose a recognized initial device type.`);
+          continue;
+        }
+        if (Object.hasOwn(initial, 'Controllable')) {
+          const control = initial.Controllable;
+          if (!object(control)) {
+            error(`${id}: initial control fields must be an object.`);
+            continue;
+          }
+          validateState(control.state, id);
+          if (control.capabilities === null)
+            error(`${id}: capabilities must be an object or omitted.`);
+          else validateCapabilities(control.capabilities, 'config.devices');
+        } else if (Object.hasOwn(initial, 'Sensor')) {
+          const sensor = initial.Sensor;
+          if (!object(sensor)) {
+            error(`${id}: sensor reading must be an object.`);
+            continue;
+          }
+          // Match Rust's untagged SensorDevice order: boolean, text, number, color.
+          if (
+            typeof sensor.value === 'boolean' ||
+            typeof sensor.value === 'string'
+          )
+            continue;
+          if (typeof sensor.value === 'number' && Number.isFinite(sensor.value))
+            continue;
+          validateState(sensor, id);
+        } else error(`${id}: choose a recognized initial device type.`);
+      }
   }
   return errors;
 }
