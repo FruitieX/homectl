@@ -28,6 +28,7 @@ import { previewMountBudget } from '@/lib/preview-mount-budget';
 import { excludeUndefined } from 'utils/excludeUndefined';
 
 import { PixiFloorplanRenderer } from './PixiFloorplanRenderer';
+import { FloorplanThumbnail } from './FloorplanThumbnail';
 
 type GroupFloorplanPreviewProps = {
   groupId: string;
@@ -161,14 +162,32 @@ export function GroupFloorplanPreview({
       selectedFloorplan.grid,
       metrics,
     );
-    return getGroupFocusBounds(positions, selection.placedDeviceKeys, {
+    const deviceBounds = getGroupFocusBounds(
+      positions,
+      selection.placedDeviceKeys,
+      {
+        width: metrics.width,
+        height: metrics.height,
+      },
+    );
+    if (deviceBounds) return deviceBounds;
+    const cells = selectedFloorplan.grid.groups?.[groupId] ?? [];
+    const maskPositions = Object.fromEntries(
+      cells.map((cell, index) => [
+        String(index),
+        {
+          x: ((cell.x + 0.5) * metrics.width) / selectedFloorplan.grid!.width,
+          y: ((cell.y + 0.5) * metrics.height) / selectedFloorplan.grid!.height,
+        },
+      ]),
+    );
+    return getGroupFocusBounds(maskPositions, Object.keys(maskPositions), {
       width: metrics.width,
       height: metrics.height,
     });
-  }, [selectedFloorplan, selection, image]);
+  }, [selectedFloorplan, selection, image, groupId]);
 
   const canRender =
-    !unavailable &&
     selectedFloorplan !== null &&
     selectedFloorplan.grid !== null &&
     selection !== null &&
@@ -176,7 +195,7 @@ export function GroupFloorplanPreview({
     scene.height > 0;
   const canMountRenderer = usePreviewMountSlot(
     previewId,
-    canRender,
+    canRender && interactive && !unavailable,
     isIntersecting,
   );
 
@@ -189,11 +208,11 @@ export function GroupFloorplanPreview({
       <div
         ref={containerRef}
         className={cn(
-          'relative overflow-hidden rounded-2xl border border-border bg-muted/20',
+          'relative overflow-hidden rounded-lg border border-border bg-muted/20',
           className,
         )}
       >
-        {canMountRenderer ? (
+        {canMountRenderer && !unavailable ? (
           <PixiFloorplanRenderer
             key={`${selectedFloorplan.id}:${rendererGeneration}`}
             scene={scene}
@@ -208,7 +227,13 @@ export function GroupFloorplanPreview({
               setRendererGeneration((current) => current + 1)
             }
           />
-        ) : null}
+        ) : (
+          <FloorplanThumbnail
+            scene={scene}
+            bounds={focusBounds}
+            label={`${group.name} floorplan`}
+          />
+        )}
       </div>
     </div>
   );

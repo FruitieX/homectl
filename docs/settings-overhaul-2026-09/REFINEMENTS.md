@@ -4,6 +4,17 @@ Status: active. User requests recorded 2026-09-29. This supplements
 [EVERYDAY-IMPLEMENTATION.md](EVERYDAY-IMPLEMENTATION.md); it does not replace
 the remaining implementation and acceptance work there.
 
+## Screenshot audit and widget creation (additional feedback)
+
+- [ ] Compare current desktop and phone screenshots against approved mockups;
+      record omissions and corrections in [VISUAL-AUDIT.md](VISUAL-AUDIT.md).
+- [ ] Prioritize the Study 04 complex routine. Preserve its three-column
+      desktop board, compact readable nodes, and connected vertical phone flow.
+- [ ] Verify embedded floorplan previews on rooms list, room details and
+      dashboard room cards, including failure/recovery and saved map edits.
+- [ ] Redesign New widget with a visual type gallery, layout presets/visual
+      placement, and a preview of the configured widget before Create.
+
 ## Sensor configuration
 
 - [ ] Reorder the sensor catalog, sensor groups, and members within each group.

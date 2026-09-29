@@ -1,7 +1,8 @@
 import { useAppConfig } from '@/hooks/appConfig';
-import { useFloorplans, type FloorplanMetadata } from '@/hooks/useConfig';
+import { useFloorplans } from '@/hooks/useConfig';
 import { deserializeGrid, type FloorplanGrid } from '@/ui/FloorplanGridEditor';
 import { useEffect, useMemo, useState } from 'react';
+import { useQueries } from '@tanstack/react-query';
 
 export function useStoredFloorplan(floorplanId?: string | null) {
   const { apiEndpoint } = useAppConfig();
@@ -66,109 +67,43 @@ export type StoredFloorplan = {
   imageUrl: string;
 };
 
-// Module-level cache keyed by apiEndpoint so multiple `useAllFloorplans`
-// callers (e.g. every group Preview in the list) do not each issue their
-// own fetch storm for the floorplan grids.
-const allFloorplanCache = new Map<string, Promise<StoredFloorplan[]>>();
-const maxAllFloorplanCacheEntries = 8;
-
-function setAllFloorplanCache(
-  cacheKey: string,
-  pending: Promise<StoredFloorplan[]>,
-) {
-  if (!allFloorplanCache.has(cacheKey)) {
-    while (allFloorplanCache.size >= maxAllFloorplanCacheEntries) {
-      const oldestCacheKey = allFloorplanCache.keys().next().value;
-      if (oldestCacheKey === undefined) {
-        break;
-      }
-      allFloorplanCache.delete(oldestCacheKey);
-    }
-  }
-
-  allFloorplanCache.set(cacheKey, pending);
-}
-
-const fetchAllFloorplans = (
-  apiEndpoint: string,
-  metadata: FloorplanMetadata[],
-): Promise<StoredFloorplan[]> =>
-  Promise.all(
-    metadata.map(async ({ id, name }) => {
-      const query = `?id=${encodeURIComponent(id)}`;
-      let grid: FloorplanGrid | null = null;
-      try {
-        const response = await fetch(
-          `${apiEndpoint}/api/v1/config/floorplan/grid${query}`,
-        );
-        const result = await response.json();
-        if (result.success && typeof result.data === 'string') {
-          grid = deserializeGrid(result.data);
-        }
-      } catch {
-        grid = null;
-      }
-
-      return {
-        id,
-        name,
-        grid,
-        imageUrl: `${apiEndpoint}/api/v1/config/floorplan/image${query}`,
-      };
-    }),
-  );
-
-/**
- * Load every floorplan's grid + image URL. Meant for consumers that need to
- * pick a floorplan dynamically (e.g. the group preview selects the floorplan
- * containing the most devices from the group).
+/** Shared query keys deduplicate previews and participate in config invalidation.
+ * Failed reads are retried; they cannot permanently cache a missing map.
  */
-export function useAllFloorplans(): {
-  floorplans: StoredFloorplan[];
-} {
+export function useAllFloorplans(): { floorplans: StoredFloorplan[] } {
   const { apiEndpoint } = useAppConfig();
   const { data: metadata } = useFloorplans();
-  const [floorplans, setFloorplans] = useState<StoredFloorplan[]>([]);
-
-  const cacheKey = useMemo(
-    () =>
-      `${apiEndpoint}::${metadata
-        .map((meta) => meta.id)
-        .sort()
-        .join(',')}`,
-    [apiEndpoint, metadata],
-  );
-
-  useEffect(() => {
-    if (metadata.length === 0) {
-      setFloorplans([]);
-      return;
-    }
-
-    let cancelled = false;
-
-    let pending = allFloorplanCache.get(cacheKey);
-    if (!pending) {
-      pending = fetchAllFloorplans(apiEndpoint, metadata);
-      setAllFloorplanCache(cacheKey, pending);
-    }
-
-    pending
-      .then((result) => {
-        if (!cancelled) {
-          setFloorplans(result);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setFloorplans([]);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [apiEndpoint, cacheKey, metadata]);
-
+  const queries = useQueries({
+    queries: metadata.map(({ id }) => ({
+      queryKey: ['config', apiEndpoint, 'floorplan-grid', id],
+      queryFn: async () => {
+        const response = await fetch(
+          apiEndpoint +
+            '/api/v1/config/floorplan/grid?id=' +
+            encodeURIComponent(id),
+        );
+        if (!response.ok) throw new Error('Could not load floorplan.');
+        const result = await response.json();
+        if (!result.success)
+          throw new Error(result.error ?? 'Could not load floorplan.');
+        return typeof result.data === 'string'
+          ? deserializeGrid(result.data)
+          : null;
+      },
+      staleTime: 30000,
+      refetchOnWindowFocus: true,
+    })),
+  });
+  const floorplans = metadata.map(({ id, name }, index) => ({
+    id,
+    name,
+    grid: queries[index].data ?? null,
+    imageUrl:
+      apiEndpoint +
+      '/api/v1/config/floorplan/image?id=' +
+      encodeURIComponent(id) +
+      '&v=' +
+      queries[index].dataUpdatedAt,
+  }));
   return { floorplans };
 }
