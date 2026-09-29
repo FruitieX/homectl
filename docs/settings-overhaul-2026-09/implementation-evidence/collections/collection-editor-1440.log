@@ -1,0 +1,64 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Clearing a number keeps its input and marks the unfinished draft",
+    "passed": true
+   },
+   {
+    "name": "Validation focuses the number without duplicating the save error",
+    "passed": true
+   },
+   {
+    "name": "Unfinished number issues no API write",
+    "passed": true
+   },
+   {
+    "name": "Unfinished number survives related-page navigation",
+    "passed": true
+   },
+   {
+    "name": "A negative decimal saves as a number",
+    "passed": true
+   },
+   {
+    "name": "An unfinished exponent stays editable",
+    "passed": true
+   },
+   {
+    "name": "Completed exponent saves its numeric value",
+    "passed": true
+   },
+   {
+    "name": "Type variants follow reordered items",
+    "passed": true
+   },
+   {
+    "name": "Unfinished inputs follow reordered items",
+    "passed": true
+   },
+   {
+    "name": "Removing an item clears its raw input and type cache before a new item is added",
+    "passed": true
+   },
+   {
+    "name": "Saved collection preserves zero, false, null, escaped keys and unrelated nested data",
+    "passed": true
+   },
+   {
+    "name": "Deleting and recreating a field cannot restore its old type cache",
+    "passed": true
+   },
+   {
+    "name": "Discard restores saved values and clears numeric errors",
+    "passed": true
+   },
+   {
+    "name": "Collection controls fit the viewport",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/integrations","viewport":{"width":1440,"height":1080},"problems":[]}

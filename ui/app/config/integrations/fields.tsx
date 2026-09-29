@@ -22,7 +22,11 @@ function StringEntries({
   value,
   onChange,
   label,
+  draftKey,
+  path,
 }: {
+  draftKey: string;
+  path: string;
   value: unknown;
   onChange: (value: unknown) => void;
   label: string;
@@ -37,6 +41,8 @@ function StringEntries({
         value={value}
         onChange={onChange}
         label={label}
+        draftKey={draftKey}
+        path={path}
         allowUnset
       />
     );
@@ -215,6 +221,7 @@ function DummyDevices({
   return (
     <div className="space-y-3">
       {Object.entries(data).map(([id, value]) => {
+        const slot = `dummy/${id.replaceAll('~', '~0').replaceAll('/', '~1')}`;
         const entry = record(value),
           initial = record(entry.init_state),
           controllable = record(initial.Controllable),
@@ -241,13 +248,16 @@ function DummyDevices({
                 size="icon"
                 variant="ghost"
                 aria-label={`Remove device ${id}`}
-                onClick={() =>
+                onClick={() => {
+                  entityDraftStore.remapEditorPaths(draftKey, (path) =>
+                    path === slot || path.startsWith(slot + '/') ? null : path,
+                  );
                   onChange(
                     Object.fromEntries(
                       Object.entries(data).filter(([key]) => key !== id),
                     ),
-                  )
-                }
+                  );
+                }}
               >
                 <Trash2 className="size-4" />
               </Button>
@@ -269,7 +279,7 @@ function DummyDevices({
                   patch({
                     init_state: entityDraftStore.switchVariant(
                       draftKey,
-                      `dummy/${id}`,
+                      slot,
                       kind,
                       entry.init_state,
                       next,
@@ -384,7 +394,7 @@ function DummyDevices({
                     value={controllable}
                     label="Controllable device"
                     draftKey={draftKey}
-                    path={`dummy/${id}/data`}
+                    path={`${slot}/data`}
                     onChange={(Controllable) =>
                       patch({ init_state: { ...initial, Controllable } })
                     }
@@ -396,7 +406,7 @@ function DummyDevices({
                 value={sensor}
                 label="Initial sensor fields"
                 draftKey={draftKey}
-                path={`dummy/${id}/sensor`}
+                path={`${slot}/sensor`}
                 onChange={(Sensor) =>
                   patch({ init_state: { ...initial, Sensor } })
                 }
@@ -406,7 +416,7 @@ function DummyDevices({
                 value={entry.init_state}
                 label="Initial state"
                 draftKey={draftKey}
-                path={`dummy/${id}/initial`}
+                path={`${slot}/initial`}
                 onChange={(init_state) => patch({ init_state })}
               />
             ) : null}
@@ -465,7 +475,13 @@ export function IntegrationField({
     field.key === 'disabled_device_ids'
   )
     control = (
-      <StringEntries value={value} onChange={update} label={field.label} />
+      <StringEntries
+        draftKey={draftKey}
+        path={`config/${field.key}`}
+        value={value}
+        onChange={update}
+        label={field.label}
+      />
     );
   else if (field.key === 'brightness_range' || field.key === 'transition_range')
     control = (

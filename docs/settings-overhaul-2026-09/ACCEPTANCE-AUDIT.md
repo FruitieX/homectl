@@ -62,9 +62,11 @@ Confirmed by 11 chart checks at 1440/390 px and 8 log checks at
 
 1. Chart/log checks from this pass are recorded; no further repetition is needed
    unless a later change affects their contracts.
-2. Create the collection/variant matrix required by PLAN.md: renderer, empty
-   behavior, add/remove, ordering and actual round-trip fixture for every listed
-   authoring collection, enum and optional field. Mark gaps and fix them.
+2. Continue [FIELD-COVERAGE.md](FIELD-COVERAGE.md), which now maps the minimum
+   collection set and identifies variant/optional-field gaps. Close its open
+   rows with edited fixtures, beginning with scene links and routine scopes.
+   The shared JSON editor repair passes 14 browser checks at each viewport;
+   it does not close the domain-specific coverage gate.
 3. Use those gaps to select additional browser/backend checks. Do not rerun
    whole passing suites merely to increase test counts.
 4. Complete remaining everyday widget/assistant/navigation evidence, then the

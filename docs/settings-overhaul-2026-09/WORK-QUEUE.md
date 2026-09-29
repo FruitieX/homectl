@@ -211,6 +211,16 @@ Shared source/level selectors update URL filters, including a source named
 focus restoration are verified. Type checking, lint and production build pass.
 Full cross-family acceptance remains open in [ACCEPTANCE-AUDIT.md](ACCEPTANCE-AUDIT.md).
 
+Collection checkpoint, 2026-09-30: [FIELD-COVERAGE.md](FIELD-COVERAGE.md) now
+maps the required collections to their controls, empty/order behavior and actual
+evidence, distinguishing edited values from untouched preservation. The audit
+found and fixed numeric inputs disappearing when cleared and type caches moving
+to the wrong list item. Fourteen browser checks pass at 1440/390 px, including
+unfinished numeric drafts, navigation, decimal/exponent saves, reorder/remove/
+re-add, nested-value preservation and Discard. All 219 UI unit tests, type checking,
+lint and build pass. The full field gate remains open: next are edited scene-link
+scopes, routine target/mapping collections and typed dummy-device variants.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

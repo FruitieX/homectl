@@ -36,13 +36,21 @@ export function useEntityDraft<T extends object>({
   }, [key, item, label, href]);
   const entry = entityDraftStore.get<T>(key);
   const value = entry?.value ?? item;
+  const inputErrors = Object.entries(entry?.inputs ?? {}).flatMap(
+    ([field, input]) => (input.error ? [{ field, message: input.error }] : []),
+  );
   return {
     key,
     entry,
     value,
     dirty: entry?.dirty ?? false,
     saving: entry?.saving ?? false,
-    errors: entry?.errors ?? [],
+    errors: [
+      ...inputErrors,
+      ...(entry?.errors ?? []).filter(
+        (error) => !inputErrors.some((input) => input.field === error.field),
+      ),
+    ],
     conflict: entry?.conflict ?? false,
     change: (next: T | ((current: T) => T)) =>
       entityDraftStore.change(key, next),
@@ -53,7 +61,12 @@ export function useEntityDraft<T extends object>({
     save: async () => {
       const current = entityDraftStore.get<T>(key);
       if (!current) return;
-      const errors = validate?.(current.value) ?? [];
+      const errors = [
+        ...Object.entries(current.inputs ?? {}).flatMap(([field, input]) =>
+          input.error ? [{ field, message: input.error }] : [],
+        ),
+        ...(validate?.(current.value) ?? []),
+      ];
       if (errors.length) {
         entityDraftStore.errors(key, errors);
         requestAnimationFrame(() =>

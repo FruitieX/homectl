@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { Input } from '@/ui/primitives/input';
 import { Button } from '@/ui/primitives/button';
-import { entityDraftStore } from '@/lib/entityDraft';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
+import { entityDraftStore, remapArrayEditorPath } from '@/lib/entityDraft';
 function typeOf(value: unknown) {
   return value === null
     ? 'null'
@@ -36,7 +37,7 @@ export function JsonValueEditor({
   value: unknown;
   onChange: (value: unknown) => void;
   label?: string;
-  draftKey?: string;
+  draftKey: string;
   path?: string;
   allowUnset?: boolean;
   fixedType?: 'object' | 'array';
@@ -44,6 +45,15 @@ export function JsonValueEditor({
 }) {
   const [newKey, setNewKey] = useState('');
   const kind = typeOf(value);
+  const input = entityDraftStore.get(draftKey)?.inputs?.[path];
+  const removeEditorPath = (removed: string) =>
+    entityDraftStore.remapEditorPaths(draftKey, (slot) =>
+      slot === removed || slot.startsWith(removed + '/') ? null : slot,
+    );
+  const reorderEditors = (order: number[]) =>
+    entityDraftStore.remapEditorPaths(draftKey, (slot) =>
+      remapArrayEditorPath(slot, path + '/array', order),
+    );
   const record = kind === 'object' ? (value as Record<string, unknown>) : {};
   const options = [
     ...(allowUnset || kind === 'unset' ? ['unset'] : []),
@@ -66,44 +76,37 @@ export function JsonValueEditor({
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <span className="min-w-0 break-all text-xs font-medium">{label}</span>
         {!fixedType && (
-          <select
+          <SettingsSelect
             aria-label={`${label} value type`}
-            className="settings-select ml-auto max-w-full"
+            className="ml-auto w-auto max-w-full"
             value={kind}
-            onChange={(event) => {
-              const next = event.target.value;
+            onValueChange={(next) =>
               onChange(
-                draftKey
-                  ? entityDraftStore.switchVariant(
-                      draftKey,
-                      path,
-                      kind,
-                      value,
-                      next,
-                      structuredClone(empty[next]),
-                    )
-                  : structuredClone(empty[next]),
-              );
-            }}
-          >
-            {options.map((option) => (
-              <option key={option} value={option}>
+                entityDraftStore.switchVariant(
+                  draftKey,
+                  path,
+                  kind,
+                  value,
+                  next,
+                  structuredClone(empty[next]),
+                ),
+              )
+            }
+            options={options.map((option) => ({
+              value: option,
+              label: (
                 {
-                  (
-                    {
-                      unset: 'Use default',
-                      string: 'Text',
-                      number: 'Number',
-                      boolean: 'True / false',
-                      null: 'None (null)',
-                      array: 'List',
-                      object: 'Fields',
-                    } as Record<string, string>
-                  )[option]
-                }
-              </option>
-            ))}
-          </select>
+                  unset: 'Use default',
+                  string: 'Text',
+                  number: 'Number',
+                  boolean: 'True / false',
+                  null: 'None (null)',
+                  array: 'List',
+                  object: 'Fields',
+                } as Record<string, string>
+              )[option],
+            }))}
+          />
         )}
       </div>
       {kind === 'string' ? (
@@ -113,19 +116,41 @@ export function JsonValueEditor({
           onChange={(event) => onChange(event.target.value)}
         />
       ) : kind === 'number' ? (
-        <Input
-          aria-label={label}
-          type="number"
-          step="any"
-          value={value as number}
-          onChange={(event) =>
-            onChange(
-              event.target.value === ''
-                ? undefined
-                : Number(event.target.value),
-            )
-          }
-        />
+        <div className="space-y-1">
+          <Input
+            aria-label={label}
+            data-field={path}
+            inputMode="decimal"
+            aria-invalid={Boolean(input?.error)}
+            aria-describedby={
+              input?.error
+                ? `number-error-${encodeURIComponent(path)}`
+                : undefined
+            }
+            value={input?.raw ?? String(value)}
+            onChange={(event) => {
+              const raw = event.target.value;
+              const valid =
+                /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(raw.trim()) &&
+                Number.isFinite(Number(raw));
+              entityDraftStore.stageInput(draftKey, path, {
+                raw,
+                error: valid
+                  ? undefined
+                  : `${label}: enter a complete, finite number.`,
+              });
+              if (valid) onChange(Number(raw));
+            }}
+          />
+          {input?.error && (
+            <p
+              id={`number-error-${encodeURIComponent(path)}`}
+              className="text-xs text-destructive"
+            >
+              {input.error}
+            </p>
+          )}
+        </div>
       ) : kind === 'boolean' ? (
         <label className="flex items-center gap-2 text-xs">
           <input
@@ -159,6 +184,12 @@ export function JsonValueEditor({
                         next[index + offset],
                         next[index],
                       ];
+                      const order = items.map((_, i) => i);
+                      [order[index], order[index + offset]] = [
+                        order[index + offset],
+                        order[index],
+                      ];
+                      reorderEditors(order);
                       onChange(next);
                     }}
                   >
@@ -174,7 +205,12 @@ export function JsonValueEditor({
                   variant="ghost"
                   className="size-8"
                   aria-label={`Remove item ${index + 1}`}
-                  onClick={() => onChange(items.filter((_, i) => i !== index))}
+                  onClick={() => {
+                    reorderEditors(
+                      items.map((_, i) => i).filter((i) => i !== index),
+                    );
+                    onChange(items.filter((_, i) => i !== index));
+                  }}
                 >
                   <Trash2 className="size-3" />
                 </Button>
@@ -183,7 +219,7 @@ export function JsonValueEditor({
                 value={item}
                 label={`${label} ${index + 1}`}
                 depth={depth + 1}
-                path={`${path}/${index}`}
+                path={`${path}/array/${index}`}
                 draftKey={draftKey}
                 onChange={(next) =>
                   onChange(
@@ -213,13 +249,16 @@ export function JsonValueEditor({
                   variant="ghost"
                   className="size-8"
                   aria-label={`Remove ${key}`}
-                  onClick={() =>
+                  onClick={() => {
+                    removeEditorPath(
+                      `${path}/object/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`,
+                    );
                     onChange(
                       Object.fromEntries(
                         Object.entries(record).filter(([name]) => name !== key),
                       ),
-                    )
-                  }
+                    );
+                  }}
                 >
                   <Trash2 className="size-3" />
                 </Button>
@@ -228,7 +267,7 @@ export function JsonValueEditor({
                 value={item}
                 label={key}
                 depth={depth + 1}
-                path={`${path}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`}
+                path={`${path}/object/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`}
                 draftKey={draftKey}
                 onChange={(next) => onChange({ ...record, [key]: next })}
               />
