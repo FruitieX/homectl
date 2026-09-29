@@ -6,6 +6,10 @@ requested an implementation goal on 2026-09-29. Design authority:
 the Study 05 Compact mockups. Settings acceptance remains tracked in
 [IMPLEMENTATION.md](IMPLEMENTATION.md).
 
+Remaining work is prioritized in [WORK-QUEUE.md](WORK-QUEUE.md). Use that queue
+alongside the delivery gates below; completed checkpoints do not imply that
+the entire overhaul is finished.
+
 ## Confirmed constraints
 
 - Room details default to controls first, with optional floorplan access.

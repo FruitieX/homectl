@@ -4,6 +4,9 @@ Status: in progress, 2026-09-29. Functional acceptance does not replace visual
 acceptance. Compare desktop (1440 px) and phone (390 px), using representative
 fixture data. Differences in fixture content are not missing UI features.
 
+The ordered remaining tasks and completion criteria are in
+[WORK-QUEUE.md](WORK-QUEUE.md).
+
 ## Confirmed priorities
 
 - The approved Compact **Study 04 complex routine** is the strongest reference.
