@@ -1,0 +1,63 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Unknown preset stays explicit without the known-version form",
+    "passed": true
+   },
+   {
+    "name": "Malformed alias value stays visible for explicit repair",
+    "passed": true
+   },
+   {
+    "name": "Unknown-preset parameters survive navigation",
+    "passed": true
+   },
+   {
+    "name": "Inspecting unknown data does not normalize the stored values",
+    "passed": true
+   },
+   {
+    "name": "Explicit conversion preserves opaque parameters and repairs aliases",
+    "passed": true
+   },
+   {
+    "name": "Repaired opaque parameters survive reload",
+    "passed": true
+   },
+   {
+    "name": "Fork copies the exact shipped body and parameters without a preset pin",
+    "passed": true
+   },
+   {
+    "name": "Unsupported preview does not invent a chart",
+    "passed": true
+   },
+   {
+    "name": "Empty result differs from unsupported computation",
+    "passed": true
+   },
+   {
+    "name": "Failed preview clears old empty results and keeps Retry available",
+    "passed": true
+   },
+   {
+    "name": "Successful retry clears the preview error",
+    "passed": true
+   },
+   {
+    "name": "Every preview is read-only",
+    "passed": true
+   },
+   {
+    "name": "Forked custom definition survives reload",
+    "passed": true
+   }
+  ],
+  "expectedHttpErrors": [
+   503
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/sources","viewport":{"width":1440,"height":1080},"problems":["log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)"]}

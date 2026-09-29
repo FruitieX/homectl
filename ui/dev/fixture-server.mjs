@@ -14,6 +14,7 @@ import { orderedSceneTargets } from '../lib/sceneTargets.ts';
  */
 
 import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import { isDeepStrictEqual } from 'node:util';
 import { fixtures } from './fixtures.mjs';
@@ -524,6 +525,32 @@ function buildIntegrationSchemas() {
 }
 
 const SPECIAL_GET = {
+  'source-presets': () => [
+    {
+      id: 'circadian',
+      version: 1,
+      name: 'Circadian',
+      description:
+        'Versioned circadian JavaScript preset. Fixture metadata uses the shipped script.',
+      default_params: {
+        day_fade_start: '06:00',
+        day_fade_duration_hours: 2,
+        day_color: { ct: 3000 },
+        day_brightness: 0.8,
+        night_fade_start: '20:00',
+        night_fade_duration_hours: 2,
+        night_color: { ct: 2000 },
+        night_brightness: 0.2,
+      },
+      source_body: readFileSync(
+        new URL(
+          '../../server/src/core/automation/sources/presets/circadian_v1.js',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    },
+  ],
   'device-health': () => buildDeviceHealth(),
   'integration-schemas': () => buildIntegrationSchemas(),
   'runtime-status': () => db.runtimeStatus,

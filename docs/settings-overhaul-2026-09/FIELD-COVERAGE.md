@@ -36,7 +36,7 @@ rows marked **open** are not acceptance sign-off. Paths below are relative to
 | `TargetSpec.devices[]`, `groups[]` | `ProgramBuilder.TargetSpecEditor`: independent device and group multiselects; empty means the action's documented default, not invented “all” behavior | Scope membership | `dev/routine-selection-review.mjs` edits multiple activation targets, cycle detection targets, entry scopes and timer capture. **Open:** dim/random-color consumers and empty/default targets; do not infer their semantics from activation. |
 | `SceneSelection.mapping` and optional fallback | `ProgramBuilder.SceneSelectionEditor`: helper-option-to-scene rows and fallback selector | Keyed mapping | `dev/routine-selection-review.mjs` edits several mappings (including `__proto__`), removes an obsolete option, switches helper/group/fixed modes, retains independent fallbacks, navigates to the helper, saves/discards and reloads. **Open:** unavailable helper/scene recovery and empty mapping compiler validation. |
 | Timer `capture_target_intents` | `ProgramBuilder` schedule/replace timer controls with target picker | Optional captured scope | `dev/routine-selection-review.mjs` adds/removes scope members, retains the edited scope through off/on, saves every member and extension, then saves capture disabled as omission. Empty capture is rejected by the compiler (`compile.rs` timer validation test); existing stale-intent tests cover execution separately. |
-| Source `aliases[]` | `app/config/sources/detail.tsx`: repeatable text rows, add/remove, validation of unique full keys | Preserve array; aliases have no execution sequence | `dev/settings-source-journey.js` creates two aliases and checks the API result. **Open:** empty/removal and malformed alias repair. |
+| Source `aliases[]` | `app/config/sources/detail.tsx`: repeatable text rows, add/remove, validation of unique full keys | Preserve array; aliases have no execution sequence | `dev/source-editor-review.mjs` edits, removes/adds and reloads multiple/empty aliases; duplicate keys are blocked. `source-repair-review.mjs` explicitly repairs a malformed null value. Source creation/color/conflict coverage remains in the existing journey. |
 | Helper enum `options[]` | `app/config/helpers/fields.tsx`: direct rows, add/remove/up/down; invalid initial selection must be repaired explicitly | Display order retained | `dev/helper-editor-review.mjs` edits/reorders/removes options; validates empty/duplicate lists and removed initial values; verifies Cancel and confirmed reset when the current choice is removed. Existing helper journey additionally covers creation and conflict review. |
 | MQTT `sensor_value_fields[]`, `disabled_device_ids[]` | `app/config/integrations/fields.tsx` `StringEntries`: repeatable rows, add/remove/up/down; malformed values use typed JSON fallback | Preserve configured order | `dev/mqtt-editor-review.mjs` edits both collections, adds/removes/reorders entries, blocks invalid pointers/blank device IDs, saves empty arrays and reloads. `lib/integrationDraft.test.ts` checks every pointer. Malformed non-list repair remains a separate open case. |
 | Legacy cron schedules map | `app/config/integrations/detail.tsx`: visible read-only definition and current-format destination/offline conversion guidance | Preserved until explicit conversion | Deliberately not editable. **Open:** identify conversion round-trip test for multi-schedule legacy input. |
@@ -61,7 +61,7 @@ schema; server compiler/resolver behavior remains authoritative.
 | `ProgramBody`, `ScriptSpec` declarations | `ProgramBuilder`, `RoutineScriptEditor`: native/mixed scripts; explicit whole-script conversion; declaration rows | Mixed script and whole-program conversion journeys already pass. Still name each declaration collection and persistence/limits default fixture. |
 | Scene explicit/device-link/scene-link state | `app/config/scenes/target-row.tsx`, shared color controls | Scene collection journey edits explicit/device-link/scene-link modes, source and multiplier, default power, zero brightness/fade, full stored scopes, missing-target replacement, and retained inactive variants. Nullable transition and unknown siblings survive. Color variants/capture and creation-return still need ledger reconciliation. |
 | Helper boolean/enum/number/string and initial value | Helper definition fields plus separate current-value control | All four types and initial values now have edited save/reload evidence, including false/zero/empty text/optional bounds. Separate command tests cover rejection, pending state, acknowledgement and retained configuration drafts. Visibility and full dependency-link reconciliation remain open. |
-| `SourceCompute`: circadian compatibility, script preset, custom script | Source detail, day/night color controls, params JSON, script editor, draft preview | Preset id/version, unknown preset, optional source body, parameter null/list/object values and extra fields; type change and discard. |
+| `SourceCompute`: circadian compatibility, script preset, custom script | Source detail, day/night color controls, params JSON, script editor, draft preview | Edited pinned/custom/built-in computations, exact forked and edited bodies, unknown-pin conversion, null/list/object params, extra-field preservation, switches/Discard/reload and preview recovery now have native browser evidence. Timing-input/error-focus and complete visibility/reference reconciliation remain open. |
 | Integration config primitive/JSON fields; MQTT mode; dummy state/capabilities | Schema fields plus typed adapters | Missing/null/false capability overrides; Kelvin bounds; payload paths; secret unchanged/replace/remove; malformed known collection repair; reload failure without misleading “saved” state. |
 | Device overrides, reporting preferences, shared advanced preference | Device settings, reporting field and system preferences | Tie each default/inherit/custom/ignore state to exact backend persistence/export test; disabled-device suppression already has separate regression evidence. |
 | Widget types, source references and optional dimensions/settings | Visual widget designer and sources pages | Existing 17-type preview evidence proves composition/inertness; pair each persisted field with round-trip/default compatibility evidence. |
@@ -203,3 +203,37 @@ fixture covers enum/string definitions; it is not a claim of a complete per-type
 restart test. Type checking, lint and build pass. Visibility/picker filtering,
 complete dependency links and the wider responsive/accessibility matrix remain
 part of the final audit; computed-source variants are next.
+
+### Computed-source variants and preview checkpoint
+
+`dev/source-editor-review.mjs` passes 16 checks at each 1440/390 px: edited
+built-in/pinned/custom computations, zero brightness, ordered alias removal/add,
+empty aliases, exact edited script text, list/null/object parameters, computation
+switches, retained navigation drafts, Discard and reload. Parameter editor paths
+are scoped by computation identity; hidden numeric errors cannot block another
+computation. Preset forking offers “Return to custom draft” when a custom draft
+already exists, preserving its script and parameters.
+
+`dev/source-repair-review.mjs` passes 13 checks at each size. A synthetic unknown
+`circadian@99` pin keeps its opaque parameter list visible without the version-1
+form. A malformed null alias value remains explicitly repairable. Conversion to
+custom preserves those parameters; forking a known preset copies the exact shipped
+body and defaults, then removes the pin. Preview states distinguish unsupported
+custom scripts, successful empty results, a deliberately injected HTTP 503 and a
+successful retry. These preview requests issue no definition writes. Unknown
+fixture definitions are converted before saving; this is not a claim that the
+real API accepts unknown preset pins.
+
+The existing phone source journey passes eight creation/color/conflict checks,
+including Kelvin display, stale preview labeling and remote timing/revision
+preservation. Its HTTP 409 is intentional. Three new UI contract tests verify
+parameter shapes, aliases and computation identities; all 228 UI tests pass.
+Eight targeted Rust preset/preview/API tests pass for strict pins, parameter
+contracts, local-day sampling, read-only previews and revision checks. Type/lint/
+build pass. The fixture serves the actual shipped preset body; generated chart
+samples remain explicitly synthetic. No live household configuration was changed.
+
+Still open: final typed timing-input/validation-focus review, source visibility
+and complete dependency-link reconciliation, and source database round-trip
+coverage in the broader persistence audit. Native browser evidence is serialization
+and interaction coverage, not a database restart proof.

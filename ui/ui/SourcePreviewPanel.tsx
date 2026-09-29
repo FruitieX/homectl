@@ -8,6 +8,7 @@ import { ConfigHelpPanel } from '@/ui/config-form';
 import { Skeleton } from '@/ui/primitives/skeleton';
 import { useState } from 'react';
 import { StatePreview } from '@/ui/settings/StatePreview';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 
 const SAMPLES_OPTIONS = [24, 48, 96];
 
@@ -181,18 +182,16 @@ export function SourcePreviewPanel({
         </p>
       </ConfigHelpPanel>
       <div className="flex flex-wrap items-center gap-2">
-        <select
+        <SettingsSelect
           aria-label="Preview sample count"
-          className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          value={samples}
-          onChange={(event) => setSamples(Number(event.target.value))}
-        >
-          {SAMPLES_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {option} samples
-            </option>
-          ))}
-        </select>
+          className="w-auto"
+          value={String(samples)}
+          onValueChange={(next) => setSamples(Number(next))}
+          options={SAMPLES_OPTIONS.map((option) => ({
+            value: String(option),
+            label: `${option} samples`,
+          }))}
+        />
         <Button
           type="button"
           variant="outline"
@@ -230,6 +229,11 @@ export function SourcePreviewPanel({
           <AlertDescription>{data.unsupported_reason}</AlertDescription>
         </Alert>
       ) : null}
+      {data && !data.unsupported_reason && data.samples.length === 0 && (
+        <p role="status" className="text-sm text-muted-foreground">
+          The preview returned no samples.
+        </p>
+      )}
       {data && !data.unsupported_reason && data.samples.length > 0 ? (
         <div className={stale ? 'opacity-60' : undefined}>
           <SourcePreviewChart samples={data.samples} />

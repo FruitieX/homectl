@@ -7,7 +7,7 @@
     location.port !== '3021'
   )
     throw Error('Use the isolated fixture on port 3021.');
-  const id = `settings_source_${innerWidth}`,
+  const id = `settings_source_${innerWidth}_${Date.now()}`,
     checks = [],
     pause = () => new Promise((resolve) => setTimeout(resolve, 150));
   const until = async (predicate, message) => {
@@ -38,6 +38,23 @@
         bubbles: true,
       }),
     );
+  };
+  const computation = async (label) => {
+    document
+      .querySelector('[data-field=compute]')
+      .dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+      );
+    await until(
+      () => document.querySelector('[role=option]'),
+      'Computation choices',
+    );
+    [...document.querySelectorAll('[role=option]')]
+      .find((el) => el.textContent.trim() === label)
+      .dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+      );
+    await pause();
   };
   const saved = async () =>
     (await (await fetch(root)).json()).data.find((row) => row.id === id);
@@ -87,9 +104,9 @@
     document.querySelector('#preview').innerText.includes('Draft changed.'),
     'Editing inputs marks the previous preview stale',
   );
-  input(document.querySelector('[data-field=compute]'), 'custom');
+  await computation('Custom JavaScript');
   await pause();
-  input(document.querySelector('[data-field=compute]'), 'circadian_compat');
+  await computation('Built-in circadian');
   await pause();
   assert(
     document.querySelector('[aria-label="day brightness"]').value === '65',

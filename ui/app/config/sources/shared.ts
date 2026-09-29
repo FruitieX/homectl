@@ -31,7 +31,9 @@ export const computationLabel = (compute: SourceComputeConfig) =>
       : 'Custom script';
 export const computationKey = (compute: SourceComputeConfig) =>
   compute.kind === 'circadian_compat'
-    ? 'circadian_compat'
+    ? compute.preset_version === 1
+      ? 'circadian_compat'
+      : `circadian_compat@${compute.preset_version}`
     : compute.preset
       ? `${compute.preset.id}@${compute.preset.version}`
       : 'custom';
@@ -50,20 +52,30 @@ export function validateSourceDraft(source: SourceConfig): FieldError[] {
       message: 'Refresh interval must be between 1 second and 24 hours.',
     });
   if (
-    (source.aliases ?? []).some(
-      (alias) => !/^\S+\/\S+$/.test(alias) || alias.split('/').length !== 2,
-    )
+    source.aliases !== undefined &&
+    (!Array.isArray(source.aliases) ||
+      source.aliases.some(
+        (alias) =>
+          typeof alias !== 'string' ||
+          !/^\S+\/\S+$/.test(alias) ||
+          alias.split('/').length !== 2,
+      ))
   )
     errors.push({
       field: 'aliases',
       message: 'Each alias needs an integration/device key.',
     });
-  if (new Set(source.aliases).size !== (source.aliases ?? []).length)
+  if (
+    Array.isArray(source.aliases) &&
+    new Set(source.aliases).size !== source.aliases.length
+  )
     errors.push({ field: 'aliases', message: 'Each alias must be unique.' });
   if (
     source.compute.kind === 'script' &&
-    Boolean(source.compute.preset) ===
-      Boolean(source.compute.source_body?.trim())
+    ((source.compute.preset != null) === (source.compute.source_body != null) ||
+      (source.compute.source_body != null &&
+        (typeof source.compute.source_body !== 'string' ||
+          !source.compute.source_body.trim())))
   )
     errors.push({
       field: 'compute',

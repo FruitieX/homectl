@@ -464,3 +464,24 @@ were inspected on both sizes. Two new server contract tests, the helper API
 concurrency test and the existing database export/import round-trip test pass.
 Type/lint/build pass. All writes were confined to the marked local fixture or
 isolated server tests. FIELD-COVERAGE.md records exact coverage and remaining work.
+
+## Computed-source editing and previews — 2026-09-30
+
+Computation and preview-sample selectors now match the shared controls, and alias
+removal uses named icon buttons. Unknown circadian versions keep their own identity
+and a generic parameter editor; they are not interpreted as version 1. Malformed
+alias values are visible and repairable. Script validation matches the server's
+exactly-one-body-or-pin rule, including an explicitly empty body alongside a pin.
+
+Custom drafts survive returning from presets. Parameter type caches are scoped
+by computation, and changing computation clears inactive numeric-input errors.
+A known preset still forks by copying its exact shipped script when no custom
+draft exists. Successful empty previews now say that no samples were returned;
+unsupported scripts and errors have distinct messages.
+
+Evidence: 16 editing and 13 repair/preview checks at each 1440/390 px, eight existing
+phone creation/color/conflict checks, all 228 UI tests, eight targeted server
+preset/preview/API tests, and type/lint/build. HTTP 503 and 409 entries in recovery
+and conflict logs are deliberate. Screenshots were reviewed at both sizes. Writes
+were limited to the marked fixture; charts use labeled synthetic data. Remaining
+field and persistence gates are recorded in FIELD-COVERAGE.md.

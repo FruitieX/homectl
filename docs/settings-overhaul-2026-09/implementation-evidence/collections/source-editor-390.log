@@ -1,0 +1,72 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Duplicate aliases cannot be saved",
+    "passed": true
+   },
+   {
+    "name": "Incomplete parameter number remains editable",
+    "passed": true
+   },
+   {
+    "name": "Computation switch clears inactive numeric errors and restores its values",
+    "passed": true
+   },
+   {
+    "name": "Built-in settings preserve zero, edited aliases and unknown parameters",
+    "passed": true
+   },
+   {
+    "name": "Preset identity and edited params persist without an inline body",
+    "passed": true
+   },
+   {
+    "name": "Existing custom draft has an explicit return action",
+    "passed": true
+   },
+   {
+    "name": "Returning to custom retains its parameter list",
+    "passed": true
+   },
+   {
+    "name": "Custom body and list params persist without a preset pin",
+    "passed": true
+   },
+   {
+    "name": "Explicit null params persist",
+    "passed": true
+   },
+   {
+    "name": "Custom object parameters survive type switching",
+    "passed": true
+   },
+   {
+    "name": "Navigation retains the custom parameter draft",
+    "passed": true
+   },
+   {
+    "name": "Discard restores stored null params",
+    "passed": true
+   },
+   {
+    "name": "Preview shows when its inputs became stale",
+    "passed": true
+   },
+   {
+    "name": "Preview and editing issue no configuration save",
+    "passed": true
+   },
+   {
+    "name": "All aliases can be removed and stay empty after reload",
+    "passed": true
+   },
+   {
+    "name": "Source controls fit the viewport",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/sources","viewport":{"width":390,"height":844},"problems":[]}

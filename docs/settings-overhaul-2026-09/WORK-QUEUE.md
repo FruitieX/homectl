@@ -268,6 +268,14 @@ states preserve definition drafts. Four targeted Rust tests cover schema behavio
 API concurrency and durable/session export. Type/lint/build pass. Next: computed
 sources and the remaining routine/module and final acceptance contracts.
 
+Computed-source checkpoint, 2026-09-30: 16 editing and 13 repair/preview checks
+pass at 1440/390 px, plus eight phone creation/color/conflict checks. Preset forks
+copy the exact shipped body; existing custom drafts are retained. Unknown versions
+and malformed aliases remain visible for explicit repair. Empty/error/unsupported
+previews are distinct. All 228 UI tests, eight targeted Rust tests and type/lint/
+build pass. FIELD-COVERAGE.md records remaining timing, reference and persistence
+checks. Remaining routine/module variants and overall acceptance are still open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

@@ -1,3 +1,5 @@
+import { Trash2 } from 'lucide-react';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -92,8 +94,13 @@ export default function SourceDetailPage() {
         ? (rawParams as Record<string, unknown>)
         : {};
   const circadian =
-    compute?.kind === 'circadian_compat' ||
-    (compute?.kind === 'script' && compute.preset?.id === 'circadian');
+    rawParams != null &&
+    typeof rawParams === 'object' &&
+    !Array.isArray(rawParams) &&
+    ((compute?.kind === 'circadian_compat' && compute.preset_version === 1) ||
+      (compute?.kind === 'script' &&
+        compute.preset?.id === 'circadian' &&
+        compute.preset.version === 1));
   const knownParams = [
     'day_fade_start',
     'day_fade_duration_hours',
@@ -174,8 +181,19 @@ export default function SourceDetailPage() {
       toast.error((error as Error).message);
     }
   }
-  const aliases = value?.aliases ?? [],
-    keys = new Set([`computed/${id}`, ...(saved?.aliases ?? [])]);
+  const aliases =
+      Array.isArray(value?.aliases) &&
+      value.aliases.every((alias) => typeof alias === 'string')
+        ? value.aliases
+        : [],
+    malformedAliases =
+      value?.aliases !== undefined &&
+      (!Array.isArray(value.aliases) ||
+        value.aliases.some((alias) => typeof alias !== 'string')),
+    keys = new Set([
+      `computed/${id}`,
+      ...(Array.isArray(saved?.aliases) ? saved.aliases : []),
+    ]);
   const usedBy = scenes.data.filter((scene) =>
     Object.values({ ...scene.group_states, ...scene.device_states }).some(
       (target) =>
@@ -320,29 +338,43 @@ export default function SourceDetailPage() {
           <SettingsSection id="compute" title="Computation">
             <label className="grid gap-2 text-xs">
               Type
-              <select
+              <SettingsSelect
                 data-field="compute"
-                className="settings-select"
+                aria-label="Computation type"
                 value={selection}
-                onChange={(event) => switchComputation(event.target.value)}
-              >
-                <option value="circadian_compat">Built-in circadian</option>
-                {presets.data.map((row) => (
-                  <option
-                    key={`${row.id}@${row.version}`}
-                    value={`${row.id}@${row.version}`}
-                  >
-                    {row.name} · v{row.version}
-                  </option>
-                ))}
-                <option value="custom">Custom JavaScript</option>
-                {compute.kind === 'script' && compute.preset && !preset && (
-                  <option value={selection}>
-                    Unavailable preset: {compute.preset.id} · v
-                    {compute.preset.version}
-                  </option>
-                )}
-              </select>
+                onValueChange={switchComputation}
+                options={[
+                  { value: 'circadian_compat', label: 'Built-in circadian' },
+                  ...presets.data.map((row) => ({
+                    value: row.id + '@' + row.version,
+                    label: row.name + ' · v' + row.version,
+                  })),
+                  { value: 'custom', label: 'Custom JavaScript' },
+                  ...(compute.kind === 'script' && compute.preset && !preset
+                    ? [
+                        {
+                          value: selection,
+                          label:
+                            'Unavailable preset: ' +
+                            compute.preset.id +
+                            ' · v' +
+                            compute.preset.version,
+                        },
+                      ]
+                    : []),
+                  ...(compute.kind === 'circadian_compat' &&
+                  compute.preset_version !== 1
+                    ? [
+                        {
+                          value: selection,
+                          label:
+                            'Unavailable built-in circadian · v' +
+                            compute.preset_version,
+                        },
+                      ]
+                    : []),
+                ]}
+              />
             </label>
             {presets.error && (
               <p role="alert" className="mt-2 text-xs">
@@ -364,27 +396,11 @@ export default function SourceDetailPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => {
-                    entityDraftStore.switchVariant(
-                      key,
-                      'source-compute',
-                      selection,
-                      compute,
-                      'custom',
-                      {
-                        kind: 'script',
-                        source_body: preset.source_body,
-                        params: compute.params,
-                      },
-                    );
-                    patchCompute({
-                      kind: 'script',
-                      source_body: preset.source_body,
-                      params: compute.params,
-                    });
-                  }}
+                  onClick={() => switchComputation('custom')}
                 >
-                  Copy to custom script
+                  {draft.entry?.variants?.['source-compute']?.custom
+                    ? 'Return to custom draft'
+                    : 'Copy to custom script'}
                 </Button>
               </div>
             )}
@@ -534,7 +550,7 @@ export default function SourceDetailPage() {
                   );
                 }}
                 draftKey={key}
-                path="compute.params"
+                path={`source-compute/${encodeURIComponent(selection)}/params`}
                 label="Parameters"
               />
             </SettingsSection>
@@ -562,41 +578,57 @@ export default function SourceDetailPage() {
             description="Other device keys that resolve to this source. Existing scene links can keep using them."
           >
             <div data-field="aliases" tabIndex={-1} className="space-y-2">
-              {aliases.map((alias, index) => (
-                <div className="flex items-center gap-2" key={index}>
-                  <Input
-                    aria-label={`Alias ${index + 1}`}
-                    value={alias}
-                    placeholder="integration/device"
-                    onChange={(event) =>
-                      draft.patch({
-                        aliases: aliases.map((item, i) =>
-                          i === index ? event.target.value : item,
-                        ),
-                      })
-                    }
-                  />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Remove alias ${index + 1}`}
-                    onClick={() =>
-                      draft.patch({
-                        aliases: aliases.filter((_, i) => i !== index),
-                      })
-                    }
-                  >
-                    Remove
-                  </Button>
-                </div>
-              ))}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => draft.patch({ aliases: [...aliases, ''] })}
-              >
-                Add alias
-              </Button>
+              {malformedAliases ? (
+                <JsonValueEditor
+                  value={value.aliases}
+                  label="Aliases"
+                  draftKey={key}
+                  path="aliases"
+                  onChange={(aliases) =>
+                    draft.patch({ aliases: aliases as string[] })
+                  }
+                />
+              ) : (
+                aliases.map((alias, index) => (
+                  <div className="flex items-center gap-2" key={index}>
+                    <Input
+                      className="min-w-0 flex-1"
+                      aria-label={`Alias ${index + 1}`}
+                      value={alias}
+                      placeholder="integration/device"
+                      onChange={(event) =>
+                        draft.patch({
+                          aliases: aliases.map((item, i) =>
+                            i === index ? event.target.value : item,
+                          ),
+                        })
+                      }
+                    />
+                    <Button
+                      size="icon"
+                      className="shrink-0 md:size-8"
+                      variant="ghost"
+                      aria-label={`Remove alias ${index + 1}`}
+                      onClick={() =>
+                        draft.patch({
+                          aliases: aliases.filter((_, i) => i !== index),
+                        })
+                      }
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                ))
+              )}
+              {!malformedAliases && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => draft.patch({ aliases: [...aliases, ''] })}
+                >
+                  Add alias
+                </Button>
+              )}
             </div>
           </SettingsSection>
           {!creating && (
