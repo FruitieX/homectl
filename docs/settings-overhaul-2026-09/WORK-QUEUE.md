@@ -11,6 +11,25 @@ Track supporting evidence in [VISUAL-AUDIT.md](VISUAL-AUDIT.md),
 [EVERYDAY-IMPLEMENTATION.md](EVERYDAY-IMPLEMENTATION.md),
 [IMPLEMENTATION.md](IMPLEMENTATION.md), and [REFINEMENTS.md](REFINEMENTS.md).
 
+## Current user priorities — 2026-09-30
+
+The user asked to close the remaining items without overcomplicating the work.
+The widget bodies and their detail views now take priority over further generic
+verification. Existing widget creation/options coverage is not visual acceptance
+of the widgets themselves.
+
+- [ ] Overhaul the actual dashboard widgets using approved Compact mockups;
+      review their content hierarchy, useful density, controls and detail views
+      at realistic small/large widget sizes and phone/desktop layouts.
+- [ ] Return the mobile floorplan selector to the AppBar, immediately left of
+      the assistant button, without consuming an extra row.
+- [ ] Explore a shared quick-adjust popover for light indicators, with long
+      press on touch screens and an accessible button/keyboard alternative.
+      Keep short taps and map pan/zoom reliable; use acknowledged existing
+      commands and consistent brightness/color previews across entry points.
+- [ ] Finish the concrete restore, transport, activity and accessibility gaps;
+      reconcile evidence rather than adding speculative acceptance work.
+
 ## 1. Routine editor — highest visual priority
 
 Delivered in `e5d7983e`: three connected desktop columns, vertical phone flow,
@@ -981,3 +1000,16 @@ kiosk detection, explicit exit and reload guards; do not claim hardware testing.
 The user cleared the previous paused goal. A new goal covering this entire
 queue is now active, with no requested token budget. Continue autonomously and
 mark it complete only when the required work and acceptance gates are finished.
+
+### Restore/restart gate closed — 2026-09-30
+
+The real-server reviewed-backup lifecycle passes across repeated restarts,
+including secret retention, stale review rejection and replacement with an empty
+older-format backup. Fixed brightness-calibration persistence and explicit empty
+DB initialization; both migration backends pass. See IMPLEMENTATION.md and
+`server/tests/config_api_integration.rs` for the reproducible acceptance test.
+
+Long-press refinement: keep hold-and-release as selection. While held, show a
+larger outer brightness ring and the quick-controls popover. Dragging onto the
+ring adjusts brightness and releases one acknowledged command; leave the popover
+open for color. Movement before the hold threshold remains ordinary map panning.

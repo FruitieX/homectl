@@ -13,15 +13,17 @@ async fn links(db: &DatabaseConnection) -> Vec<(String, String, Option<i32>)> {
         .await.unwrap().into_iter().map(|r| (r.try_get("", "parent_group_id").unwrap(), r.try_get("", "child_group_id").unwrap(), r.try_get("", "sort_order").unwrap())).collect()
 }
 async fn verify(db: DatabaseConnection) {
-    Migrator::up(&db, Some((Migrator::migrations().len() - 1) as u32))
-        .await
+    let index = Migrator::migrations()
+        .iter()
+        .position(|m| m.name() == "m20260930000000_repairable_group_links")
         .unwrap();
+    Migrator::up(&db, Some(index as u32)).await.unwrap();
     for sql in [
         "INSERT INTO groups (id,name,hidden) VALUES ('parent','Parent',false),('child','Child',false),('other','Other',true)",
         "INSERT INTO group_links (parent_group_id,child_group_id,sort_order) VALUES ('parent','child',2),('parent','other',1)",
     ] { execute(&db, sql).await; }
     let original = links(&db).await;
-    Migrator::up(&db, None).await.unwrap();
+    Migrator::up(&db, Some(1)).await.unwrap();
     assert_eq!(links(&db).await, original);
     // Child deletion must leave a reference for the editor to repair.
     execute(&db, "DELETE FROM groups WHERE id='child'").await;
@@ -36,7 +38,7 @@ async fn verify(db: DatabaseConnection) {
     execute(&db,"INSERT INTO groups (id,name,hidden) VALUES ('child','Child',false),('missing','Recovered',false)").await;
     Migrator::down(&db, Some(1)).await.unwrap();
     assert_eq!(links(&db).await, unresolved);
-    Migrator::up(&db, None).await.unwrap();
+    Migrator::up(&db, Some(1)).await.unwrap();
     assert_eq!(links(&db).await, unresolved);
     assert!(db.execute_raw(Statement::from_string(db.get_database_backend(),
         "INSERT INTO group_links (parent_group_id,child_group_id,sort_order) VALUES ('absent-parent','missing',0)")).await.is_err());

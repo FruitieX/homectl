@@ -662,7 +662,8 @@ async fn persist_runtime_snapshot(state_handle: &StateHandle) -> Result<()> {
     Ok(())
 }
 
-/// Seed the database from a JSON export backup file if the DB has no integrations.
+/// Seed once from a backup, then retain database authority even when the user
+/// later removes every entity or restores an empty setup.
 async fn seed_from_config_if_empty(cli: &Cli) -> Result<()> {
     if !config_queries::db_has_config().await? {
         let config_path = backup_config_path(cli);
@@ -690,7 +691,7 @@ async fn seed_from_config_if_empty(cli: &Cli) -> Result<()> {
         }
     }
 
-    Ok(())
+    config_queries::db_mark_config_initialized().await
 }
 
 async fn load_runtime_config_snapshot() -> Result<RuntimeConfigSnapshot> {

@@ -515,6 +515,7 @@ async fn update_core_config_on<C: ConnectionTrait>(db: &C, config: &CoreConfigRo
         db,
         Query::update()
             .table(CoreConfig::Table)
+            .value(CoreConfig::Initialized, true)
             .value(
                 CoreConfig::WarmupTimeSeconds,
                 Expr::value(config.warmup_time_seconds),
@@ -636,6 +637,7 @@ pub async fn db_get_device_color_calibrations() -> Result<Vec<DeviceColorCalibra
             .columns([
                 DeviceColorCalibrations::DeviceKey,
                 DeviceColorCalibrations::Points,
+                DeviceColorCalibrations::BrightnessPoints,
             ])
             .from(DeviceColorCalibrations::Table)
             .order_by(DeviceColorCalibrations::DeviceKey, Order::Asc)
@@ -675,14 +677,19 @@ async fn upsert_device_color_calibration_on<C: ConnectionTrait>(
             .columns([
                 DeviceColorCalibrations::DeviceKey,
                 DeviceColorCalibrations::Points,
+                DeviceColorCalibrations::BrightnessPoints,
             ])
             .values_panic([
                 Expr::value(row.device_key.clone()),
                 Expr::value(serde_json::to_string(&row.points)?),
+                Expr::value(serde_json::to_string(&row.brightness_points)?),
             ])
             .on_conflict(
                 OnConflict::column(DeviceColorCalibrations::DeviceKey)
-                    .update_column(DeviceColorCalibrations::Points)
+                    .update_columns([
+                        DeviceColorCalibrations::Points,
+                        DeviceColorCalibrations::BrightnessPoints,
+                    ])
                     .value(
                         DeviceColorCalibrations::UpdatedAt,
                         Expr::current_timestamp(),
@@ -2468,6 +2475,7 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
             .columns([
                 DeviceColorCalibrations::DeviceKey,
                 DeviceColorCalibrations::Points,
+                DeviceColorCalibrations::BrightnessPoints,
             ])
             .from(DeviceColorCalibrations::Table)
             .order_by(DeviceColorCalibrations::DeviceKey, Order::Asc)
@@ -2738,7 +2746,34 @@ pub async fn db_save_config_version(
 }
 
 /// Check whether the database contains any user-managed configuration.
+/// Once initialized, even an intentionally empty setup is authoritative.
+pub async fn db_mark_config_initialized() -> Result<()> {
+    execute(
+        get_db_connection()?,
+        Query::update()
+            .table(CoreConfig::Table)
+            .value(CoreConfig::Initialized, true)
+            .and_where(Expr::col(CoreConfig::Id).eq(1))
+            .to_owned(),
+    )
+    .await?;
+    Ok(())
+}
+
 pub async fn db_has_config() -> Result<bool> {
+    if exists(
+        get_db_connection()?,
+        Query::select()
+            .expr(Expr::value(1))
+            .from(CoreConfig::Table)
+            .and_where(Expr::col(CoreConfig::Id).eq(1))
+            .and_where(Expr::col(CoreConfig::Initialized).eq(true))
+            .to_owned(),
+    )
+    .await?
+    {
+        return Ok(true);
+    }
     if !db_get_integrations().await?.is_empty()
         || !db_get_groups().await?.is_empty()
         || !db_get_config_scenes().await?.is_empty()
@@ -4985,13 +5020,26 @@ mod consistency_tests {
             "device_key": "mqtt/lamp", "points": [
                 {"reference":{"u":0.20,"v":0.47},"output":{"u":0.21,"v":0.48}},
                 {"reference":{"u":0.30,"v":0.52},"output":{"u":0.29,"v":0.51}}
-            ]
+            ], "brightness_points":[{"logical":0.5,"output":0.4},{"logical":1,"output":1}]
         }))
         .unwrap();
         upsert_device_color_calibration_on(&source, &row)
             .await
             .unwrap();
+        let brightness_only = DeviceColorCalibration {
+            device_key: "mqtt/brightness-only".into(),
+            points: vec![],
+            brightness_points: row.brightness_points.clone(),
+        };
+        upsert_device_color_calibration_on(&source, &brightness_only)
+            .await
+            .unwrap();
         let export = db_export_config_from_connection(&source).await.unwrap();
+        assert_eq!(export.device_color_calibrations.len(), 2);
+        assert!(export
+            .device_color_calibrations
+            .iter()
+            .all(|item| item.brightness_points == row.brightness_points));
         let json = serde_json::to_value(&export).unwrap();
         let restored: ConfigExport = serde_json::from_value(json.clone()).unwrap();
         let target = database().await;
@@ -5288,9 +5336,7 @@ fn device_color_calibration_from_row(row: QueryResult) -> Result<DeviceColorCali
     let calibration = DeviceColorCalibration {
         device_key: row.try_get("", "device_key")?,
         points: serde_json::from_str(&points)?,
-        // Legacy per-device rows predate brightness curves; a device that needs
-        // one gets it through a profile.
-        brightness_points: Vec::new(),
+        brightness_points: serde_json::from_str(&row.try_get::<String>("", "brightness_points")?)?,
     };
     calibration.validate().map_err(|error| eyre!(error))?;
     Ok(calibration)

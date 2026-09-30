@@ -231,6 +231,22 @@ impl TestServer {
             let _ = process.wait();
         }
     }
+
+    /// Stop an isolated server and retain startup/runtime diagnostics for lifecycle tests.
+    pub fn stop_with_logs(&mut self) -> String {
+        let Some(mut process) = self.process.take() else {
+            return String::new();
+        };
+        let _ = process.kill();
+        let output = process
+            .wait_with_output()
+            .expect("read stopped server output");
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )
+    }
 }
 
 /// Wait for the server to become ready.

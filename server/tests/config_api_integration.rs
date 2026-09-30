@@ -4749,3 +4749,222 @@ fn user_timers_migrate_helsinki_and_recover_end_actions() {
         });
     }
 }
+
+/// Exercises the UI's review/apply contract across actual server processes and
+/// a file-backed database, rather than pairing fixture HTTP with DB unit tests.
+#[test]
+fn reviewed_backup_restore_survives_restart_and_clears_replaced_collections() {
+    let dir = std::env::temp_dir().join(format!(
+        "homectl_restore_lifecycle_{}_{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let bootstrap = std::cell::RefCell::new(blank_backup_config());
+    let start = |cleanup| {
+        TestServer::with_config(TestServerConfig {
+            working_dir: Some(dir.clone()),
+            cleanup_working_dir: cleanup,
+            // Deliberately stale bootstrap input: a restart must read the database.
+            config_content: Some(bootstrap.borrow().to_string()),
+            ..Default::default()
+        })
+        .unwrap()
+    };
+    let mut server = start(false);
+    let export = |base: &str, secrets: bool| {
+        get_json(
+            base,
+            if secrets {
+                "/api/v1/config/export?include_secrets=true"
+            } else {
+                "/api/v1/config/export"
+            },
+        )["data"]
+            .clone()
+    };
+    let review = |base: &str, config: &Value| {
+        let response = post_json(base, "/api/v1/config/import/preview", config);
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "{}",
+            response.text().unwrap()
+        );
+        response.json::<Value>().unwrap()["data"].clone()
+    };
+    let apply = |base: &str, config: &Value, token: &Value| {
+        let response = post_json(
+            base,
+            &format!("/api/v1/config/import?expected={}", token.as_str().unwrap()),
+            config,
+        );
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "{}",
+            response.text().unwrap()
+        );
+        let body: Value = response.json().unwrap();
+        assert_eq!(body["write"]["applied"], true);
+        assert_eq!(body["write"]["persistence"], "persisted");
+    };
+    // Row order from storage is immaterial; nested user-defined collection order
+    // remains significant and is compared without normalization.
+    let canonical = |mut config: Value| {
+        for value in config.as_object_mut().unwrap().values_mut() {
+            if let Some(rows) = value.as_array_mut() {
+                rows.sort_by_key(|row| row.to_string());
+            }
+        }
+        config
+    };
+    let baseline = export(&server.base_url, true);
+    let mut candidate = blank_backup_config();
+    candidate["core"] =
+        json!({"warmup_time_seconds":0,"default_transition_ms":120,"scene_transition_ms":0});
+    candidate["integrations"] = json!([{"id":"fixture","plugin":"dummy","enabled":false,"config":{"devices":{},"future":false}}]);
+    candidate["groups"] = json!([
+        {"id":"room","name":"Restore room","hidden":false,"devices":[{"integration_id":"fixture","device_id":"lamp-b"},{"integration_id":"fixture","device_id":"lamp-a"}],"linked_groups":[]},
+        {"id":"home","name":"Home","hidden":false,"devices":[],"linked_groups":["room"]}
+    ]);
+    candidate["scenes"] = json!([{"id":"normal","name":"Normal","hidden":false,"script":null,"device_states":{},"group_states":{"room":{"power":false,"brightness":0,"color":{"ct":2700},"future":{"keep":null}}},"group_state_order":["room"]}]);
+    candidate["routines"] = json!([{"id":"manual","name":"Manual","enabled":false,"semantics_version":2,"revision":3,"rules":[],"actions":[],"definition_v2":v2_manual_timer_definition()}]);
+    candidate["helpers"] = json!([{"id":"mode","name":"Mode","kind":{"kind":"enum","options":["home","away"]},"initial_value":"home","persistence":"durable","hidden":true}]);
+    candidate["helper_values"] = json!([{"id":"mode","value":"away","revision":7}]);
+    candidate["sources"] = json!([{"id":"circadian","name":"Circadian","enabled":false,"revision":2,"timezone":"Europe/Helsinki","refresh_interval_ms":60000,"aliases":["legacy/circadian"],"compute":{"kind":"circadian_compat","preset_version":1,"params":{"day_fade_start":"06:00","day_fade_duration_hours":2,"day_color":{"ct":3000},"day_brightness":0.8,"night_fade_start":"20:00","night_fade_duration_hours":2,"night_color":{"ct":2000},"night_brightness":0.2}}}]);
+    candidate["floorplans"] = json!([{"id":"ground","name":"Ground floor","image_data":[137,80,78,71],"image_mime_type":"image/png","width":2,"height":2,"grid_data":json!({"width":2,"height":2,"tileSize":32,"tiles":[["floor","floor"],["floor","wall"]],"devices":[{"deviceKey":"fixture/lamp-a","deviceName":"Lamp","x":0,"y":0}],"groups":{"room":[{"x":0,"y":0}]},"labelMode":"lights","future":false}).to_string()}]);
+    candidate["group_positions"] =
+        json!([{"group_id":"room","x":0.25,"y":0.5,"width":1.5,"height":1.0,"z_index":2}]);
+    candidate["device_display_overrides"] =
+        json!([{"device_key":"fixture/lamp-a","display_name":"Window light"}]);
+    candidate["device_color_calibrations"] = json!([{"device_key":"fixture/lamp-b","points":[],"brightness_points":[{"logical":0.5,"output":0.4},{"logical":1.0,"output":1.0}]}]);
+    candidate["color_calibration_profiles"] = json!([{"id":"profile","name":"Profile","points":[],"reference_device_key":null,"brightness":0.7,"brightness_points":[{"logical":0.5,"output":0.3},{"logical":1.0,"output":1.0}]}]);
+    candidate["color_calibration_assignments"] =
+        json!([{"device_key":"fixture/lamp-a","profile_id":"profile"}]);
+    candidate["device_sensor_configs"] = json!([{"device_ref":"fixture/button","interaction_kind":"on_off_buttons","config":{"on_value":"press","off_value":"release","future":false}}]);
+    candidate["dashboard_widgets"] = json!([{"id":5,"layout_id":1,"widget_type":"rooms","config":{"title":"Rooms","options":{"groupIds":["home","room"],"roomSelection":"selected","showFloorplan":true}},"grid_x":0,"grid_y":0,"grid_w":2.25,"grid_h":3.5,"sort_order":0}]);
+    candidate["widget_settings"] = json!([
+        {"key":"calendar","config":{"icsUrl":"https://example.invalid/restore-test-secret"}},
+        {"key":"sensor_catalog","config":{"sensors":[{"id":"second","name":"Second","source":"influxdb","enabled":false},{"id":"first","name":"First","source":"influxdb","enabled":true}],"groups":[{"id":"indoor","name":"Indoor","sensorIds":["first","second"]}]}},
+        {"key":"user_timers","config":{"legacy_migrated":true,"timers":[{"definition":{"id":"timer","name":"Timer","icon":"light","enabled":false,"schedule":{"kind":"countdown","minutes":15},"action":{"kind":"scene","scene_id":"normal"},"finish_action":null}}]}},
+        {"key":"settings_preferences","config":{"advanced":true,"future":false}}
+    ]);
+    let inspected = review(&server.base_url, &candidate);
+    assert!(!inspected.to_string().contains("restore-test-secret"));
+    assert_eq!(
+        export(&server.base_url, true),
+        baseline,
+        "Review must not write"
+    );
+    let mut invalid = candidate.clone();
+    invalid["groups"]
+        .as_array_mut()
+        .unwrap()
+        .push(candidate["groups"][0].clone());
+    for path in ["/api/v1/config/import/preview", "/api/v1/config/import"] {
+        assert_eq!(
+            post_json(&server.base_url, path, &invalid).status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+    assert_eq!(
+        export(&server.base_url, true),
+        baseline,
+        "Rejected restore must not write"
+    );
+    apply(&server.base_url, &candidate, &inspected["revision_token"]);
+    *bootstrap.borrow_mut() = candidate.clone();
+    let restored = export(&server.base_url, true);
+    assert!(!export(&server.base_url, false)
+        .to_string()
+        .contains("restore-test-secret"));
+    assert_eq!(restored["groups"], candidate["groups"]);
+    assert_eq!(restored["helper_values"], candidate["helper_values"]);
+    assert_eq!(restored["floorplans"], candidate["floorplans"]);
+    server.stop();
+    drop(server);
+    let mut server = start(false);
+    let after_restart = export(&server.base_url, true);
+    if canonical(after_restart.clone()) != canonical(restored.clone()) {
+        panic!("Restart changed config: {}", server.stop_with_logs());
+    }
+
+    let mut redacted = export(&server.base_url, false);
+    redacted["groups"][0]["name"] = json!("Edited after restore");
+    let inspected = review(&server.base_url, &redacted);
+    let response = put_json(
+        &server.base_url,
+        "/api/v1/config/core",
+        &json!({"default_transition_ms":321}),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let changed = export(&server.base_url, true);
+    let response = post_json(
+        &server.base_url,
+        &format!(
+            "/api/v1/config/import?expected={}",
+            inspected["revision_token"].as_str().unwrap()
+        ),
+        &redacted,
+    );
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        export(&server.base_url, true),
+        changed,
+        "Stale review must not overwrite a concurrent edit"
+    );
+    let inspected = review(&server.base_url, &redacted);
+    apply(&server.base_url, &redacted, &inspected["revision_token"]);
+    let restored = export(&server.base_url, true);
+    assert_eq!(
+        widget_setting(&restored, "calendar")["config"]["icsUrl"],
+        "https://example.invalid/restore-test-secret"
+    );
+    server.stop();
+    drop(server);
+    let mut server = start(false);
+    assert_eq!(
+        canonical(export(&server.base_url, true)),
+        canonical(restored),
+        "Redacted restore must durably preserve matching secrets"
+    );
+
+    // A minimal older-format backup omits newer collections. Replacement must
+    // remove their previous data, not resurrect it on restart.
+    let mut empty = blank_backup_config();
+    for field in [
+        "helpers",
+        "helper_values",
+        "sources",
+        "floorplans",
+        "group_positions",
+        "device_display_overrides",
+        "device_color_calibrations",
+        "color_calibration_profiles",
+        "color_calibration_assignments",
+        "device_sensor_configs",
+        "widget_settings",
+    ] {
+        empty.as_object_mut().unwrap().remove(field);
+    }
+    let inspected = review(&server.base_url, &empty);
+    assert_eq!(inspected["destructive"], true);
+    apply(&server.base_url, &empty, &inspected["revision_token"]);
+    let cleared = export(&server.base_url, true);
+    for (field, value) in cleared.as_object().unwrap() {
+        if field != "dashboard_layouts" && value.is_array() {
+            assert_eq!(value, &json!([]), "Old {field} must be removed");
+        }
+    }
+    server.stop();
+    drop(server);
+    let restarted = start(true);
+    assert_eq!(
+        canonical(export(&restarted.base_url, true)),
+        canonical(cleared),
+        "Removed entries must not return after restart"
+    );
+}

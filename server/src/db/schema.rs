@@ -18,6 +18,7 @@ pub enum CoreConfig {
     WarmupTimeSeconds,
     DefaultTransitionMs,
     SceneTransitionMs,
+    Initialized,
     UpdatedAt,
 }
 
@@ -262,6 +263,7 @@ pub enum DeviceColorCalibrations {
     Table,
     DeviceKey,
     Points,
+    BrightnessPoints,
     UpdatedAt,
 }
 

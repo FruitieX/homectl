@@ -9,6 +9,8 @@ use crate::db::schema::{
 use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm_migration::prelude::*;
 
+mod calibration_brightness;
+mod config_initialized;
 mod group_links;
 
 pub struct Migrator;
@@ -35,6 +37,8 @@ impl MigratorTrait for Migrator {
             Box::new(M20260923000000ValueHistory),
             Box::new(M20260929000000ScenarioSuites),
             Box::new(group_links::RepairableGroupLinks),
+            Box::new(calibration_brightness::DeviceCalibrationBrightness),
+            Box::new(config_initialized::ConfigInitialized),
         ]
     }
 }

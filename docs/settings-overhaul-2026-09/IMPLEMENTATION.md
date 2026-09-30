@@ -702,3 +702,19 @@ conversion remains in the routine editor. No JSX native select elements remain
 in the UI source. This closes the identified selector/obsolete-editor inventory;
 restore/restart, MQTT transport, activity-runtime and broader accessibility/final
 reconciliation remain open.
+
+### Restore/restart checkpoint — 2026-09-30
+
+Real HTTP review/apply and file-SQLite server restarts now cover the current
+configuration collections, helper values, floorplan image bytes, ordered nested
+members, calibration curves, private calendar source settings, stale-review
+rejection and empty/older-format replacement. Two discovered bugs are fixed:
+per-device brightness calibration now has its own persisted column; an internal
+initialization marker keeps an intentionally empty database authoritative over
+an older bootstrap backup. Migrations preserve existing color calibrations.
+
+Verification: the real-server restore lifecycle and calibration export/import
+regression pass; four SQLite/PostgreSQL calibration and group-link migration
+checks pass. Synthetic image bytes test retention, not image rendering. No
+household configuration was changed. Already-lost calibration values cannot be
+reconstructed by this migration.
