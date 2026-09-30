@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Color, { type ColorInstance } from 'color';
 
 type Color = ColorInstance;
@@ -13,6 +13,8 @@ import { useCalibrationDraft } from '@/hooks/useCalibrationDraft';
 import { CalibrationConflict } from '@/ui/settings/CalibrationConflict';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { StatePreview } from '@/ui/settings/StatePreview';
+import { CalibrationCatalogStatus } from '@/ui/settings/CalibrationCatalogStatus';
+import { SearchablePicker } from '@/ui/SearchablePicker';
 import { useAppConfig } from '@/hooks/appConfig';
 import { getDeviceKey } from '@/lib/device';
 import { compareDeviceNames } from '@/lib/deviceLabel';
@@ -37,8 +39,6 @@ import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 
 type Phase = 'setup' | 'match' | 'review' | 'saved';
-const selectClass =
-  'w-full rounded-xl border border-input bg-background p-3 text-sm';
 
 function SliderStepButtons({
   disabled = false,
@@ -87,26 +87,17 @@ export function ColorCalibrationWizard(props: {
   devices: Device[];
 }) {
   const query = useCalibrationEditor();
-  if (!query.data)
-    return (
-      <div
-        role={query.error ? 'alert' : 'status'}
-        className="space-y-2 text-sm"
-      >
-        {query.error ? query.error.message : 'Loading calibration…'}
-        {query.error && (
-          <Button variant="outline" onClick={() => void query.refetch()}>
-            Retry
-          </Button>
-        )}
-      </div>
-    );
   return (
-    <ColorCalibrationForm
-      key={getDeviceKey(props.device)}
-      {...props}
-      initial={query.data}
-    />
+    <div className="space-y-3">
+      <CalibrationCatalogStatus query={query} />
+      {query.data && (
+        <ColorCalibrationForm
+          key={getDeviceKey(props.device)}
+          {...props}
+          initial={query.data}
+        />
+      )}
+    </div>
   );
 }
 function ColorCalibrationForm({
@@ -137,7 +128,7 @@ function ColorCalibrationForm({
       points: suggestedMatchingPoints(),
       index: 0,
     }),
-    beforeSave: () => stop(),
+    beforeSave: (): Promise<void> => stop(),
     validate: (form) => [
       ...(Object.keys(form.numberEdits ?? {}).length
         ? [
@@ -240,11 +231,19 @@ function ColorCalibrationForm({
   const [error, setError] = useState('');
   const [checkIndex, setCheckIndex] = useState<number | null>(null);
   const session = useRef<string | null>(null);
+  const [sessionActive, setSessionActive] = useState(false);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const point = points[index];
   const referenceDevice = devices.find(
     (candidate) => getDeviceKey(candidate) === referenceKey,
   );
+  const previewIssue: string | null = !canCalibrateDevice(device)
+    ? 'This light cannot be previewed for color calibration. It must support color and be enabled and writable.'
+    : !referenceDevice ||
+        !canCalibrateDevice(referenceDevice) ||
+        referenceKey === targetKey
+      ? 'Choose an available, writable reference light that supports color. Your matching points are kept.'
+      : null;
   const currentReferenceColor = referenceDevice
     ? getCurrentHsColor(referenceDevice)
     : null;
@@ -258,22 +257,26 @@ function ColorCalibrationForm({
   );
   const baseUrl = `${apiEndpoint}/api/v1/config`;
 
-  const enqueue = <T,>(action: () => Promise<T>): Promise<T> => {
+  const enqueue = useCallback(<T,>(action: () => Promise<T>): Promise<T> => {
     const next = queue.current.catch(() => undefined).then(action);
     queue.current = next;
     return next;
-  };
-  const request = async (path: string, method: string, body?: unknown) => {
-    const response = await fetch(`${baseUrl}/${path}`, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      keepalive: method === 'DELETE',
-    });
-    const result = await response.json();
-    if (!response.ok || !result.success)
-      throw new Error(result.error ?? 'Could not contact the lights');
-  };
+  }, []);
+  const request = useCallback(
+    async (path: string, method: string, body?: unknown) => {
+      if (body !== undefined && previewIssue) throw new Error(previewIssue);
+      const response = await fetch(`${baseUrl}/${path}`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        keepalive: method === 'DELETE',
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success)
+        throw new Error(result.error ?? 'Could not contact the lights');
+    },
+    [baseUrl, previewIssue],
+  );
   const previewBody = (reference: Hs, output: Hs) => ({
     target_key: targetKey,
     reference_key: referenceKey,
@@ -292,13 +295,24 @@ function ColorCalibrationForm({
       setBusy(false);
     }
   };
-  const stop = async () => {
+  const stop = useCallback(async () => {
     const id = session.current;
     if (id) {
       await enqueue(() => request(`calibration-sessions/${id}`, 'DELETE'));
       session.current = null;
+      setSessionActive(false);
     }
-  };
+  }, [enqueue, request]);
+  useEffect(() => {
+    if (previewIssue && session.current) {
+      setPreviewed(false);
+      void stop().catch((error: unknown) =>
+        setError(
+          error instanceof Error ? error.message : 'Could not stop preview',
+        ),
+      );
+    }
+  }, [previewIssue, sessionActive, stop]);
   const startMatching = (startingPoint: (typeof points)[number]) => {
     void run(async () => {
       const id = createUuid();
@@ -311,6 +325,7 @@ function ColorCalibrationForm({
             previewBody(startingPoint.reference, startingPoint.output),
           ),
         );
+        setSessionActive(true);
         setPhase('match');
       } catch (error) {
         await stop();
@@ -341,7 +356,8 @@ function ColorCalibrationForm({
   // Requests run in order: dragging cannot make an older response overwrite a
   // newer test. Only the latest acknowledged adjustment enables Next.
   useEffect(() => {
-    if (phase !== 'match' || !session.current || invalidNumbers) return;
+    if (phase !== 'match' || !session.current || invalidNumbers || previewIssue)
+      return;
     let disposed = false;
     setPreviewed(false);
     const id = session.current;
@@ -373,6 +389,7 @@ function ColorCalibrationForm({
   }, [
     phase,
     invalidNumbers,
+    previewIssue,
     index,
     point.reference.h,
     point.reference.s,
@@ -512,6 +529,29 @@ function ColorCalibrationForm({
       }
     >
       <div className="space-y-5">
+        {previewIssue && (referenceKey || !canCalibrateDevice(device)) && (
+          <div
+            role="status"
+            className="space-y-2 text-sm text-muted-foreground"
+          >
+            <p>{previewIssue}</p>
+            {phase !== 'setup' && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    await stop();
+                    setPhase('setup');
+                  })
+                }
+              >
+                Change reference
+              </Button>
+            )}
+          </div>
+        )}
         {error && (
           <p
             role="alert"
@@ -563,29 +603,25 @@ function ColorCalibrationForm({
             )}
             <label className="block space-y-2 text-sm">
               Reference light
-              <select
-                className={selectClass}
+              <SearchablePicker
+                ariaLabel="Color reference light"
                 value={referenceKey}
-                onChange={(event) => setReferenceKey(event.target.value)}
+                onChange={setReferenceKey}
                 disabled={busy}
-              >
-                <option value="">Choose a reference light</option>
-                {devices
+                placeholder="Choose a reference light"
+                options={devices
                   .filter(
                     (candidate) =>
                       getDeviceKey(candidate) !== targetKey &&
                       canCalibrateDevice(candidate),
                   )
                   .sort(compareDeviceNames)
-                  .map((candidate) => (
-                    <option
-                      key={getDeviceKey(candidate)}
-                      value={getDeviceKey(candidate)}
-                    >
-                      {candidate.name}
-                    </option>
-                  ))}
-              </select>
+                  .map((candidate) => ({
+                    value: getDeviceKey(candidate),
+                    label: candidate.name,
+                    detail: getDeviceKey(candidate),
+                  }))}
+              />
             </label>
             <label className="block space-y-2 text-sm">
               Profile name
@@ -646,6 +682,7 @@ function ColorCalibrationForm({
               type="button"
               disabled={
                 busy ||
+                Boolean(previewIssue) ||
                 'brightness' in numberEdits ||
                 !referenceDevice ||
                 !canCalibrateDevice(referenceDevice) ||
@@ -683,9 +720,9 @@ function ColorCalibrationForm({
               aria-label="Matching progress"
             />
             <p className="text-sm">
-              Keep <strong>{referenceDevice?.name}</strong> as your reference.
-              Adjust <strong>{device.name}</strong> until its light looks the
-              same. Changes preview automatically.
+              Keep <strong>{referenceDevice?.name ?? referenceKey}</strong> as
+              your reference. Adjust <strong>{device.name}</strong> until its
+              light looks the same. Changes preview automatically.
             </p>
             {editingProfileId && (
               <p className="text-sm text-muted-foreground">
@@ -828,9 +865,15 @@ function ColorCalibrationForm({
             <p className="text-xs text-muted-foreground">
               {invalidNumbers
                 ? 'Finish the number entry: hue 0–359°, saturation 0–100%, brightness 1–100%.'
-                : previewed
-                  ? 'Adjustment sent. Judge the actual light, not your screen.'
-                  : 'Sending adjustment…'}{' '}
+                : !sessionActive
+                  ? 'Preview is stopped. Your edits are kept.'
+                  : previewIssue
+                    ? 'Reference unavailable. Stopping preview…'
+                    : error
+                      ? 'Preview needs attention. See the error above.'
+                      : previewed
+                        ? 'Adjustment sent. Judge the actual light, not your screen.'
+                        : 'Sending adjustment…'}{' '}
               {point.reference.s === 0
                 ? 'For white, increase saturation slightly if needed to correct a color tint.'
                 : 'Some colors may be outside this lamp’s range; use the closest match.'}
@@ -892,13 +935,16 @@ function ColorCalibrationForm({
           </>
         )}
 
-        {(phase === 'match' || phase === 'review') && !session.current && (
+        {(phase === 'match' || phase === 'review') && !sessionActive && (
           <div
             role="status"
             className="space-y-2 rounded-lg border border-border p-3 text-sm"
           >
             <p>Your matching points are kept. Preview is stopped.</p>
-            <Button disabled={busy} onClick={() => startMatching(point)}>
+            <Button
+              disabled={busy || Boolean(previewIssue)}
+              onClick={() => startMatching(point)}
+            >
               Resume live preview
             </Button>
           </div>
@@ -935,7 +981,7 @@ function ColorCalibrationForm({
                   key={check.label}
                   type="button"
                   variant={checkIndex === i ? 'default' : 'outline'}
-                  disabled={busy}
+                  disabled={busy || Boolean(previewIssue) || !sessionActive}
                   onClick={() =>
                     void run(async () => {
                       const id = session.current;

@@ -502,11 +502,25 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
                 ) : undefined
               }
             >
-              {profiles.error || assignments.error || calibrations.error ? (
-                <p role="alert" className="text-xs text-destructive">
-                  {profiles.error ?? assignments.error ?? calibrations.error}
-                </p>
-              ) : wizard === 'color' ? (
+              {(profiles.error || assignments.error || calibrations.error) && (
+                <div role="alert" className="space-y-2 text-sm">
+                  <p>Could not refresh the calibration summary.</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      void Promise.allSettled([
+                        profiles.refetch(),
+                        assignments.refetch(),
+                        calibrations.refetch(),
+                      ])
+                    }
+                  >
+                    Retry calibration summary
+                  </Button>
+                </div>
+              )}
+              {wizard === 'color' ? (
                 <ColorCalibrationWizard
                   device={device}
                   devices={catalog.devices}

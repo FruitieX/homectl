@@ -10,24 +10,23 @@ import { EntitySaveBar } from './EntitySaveBar';
 import { CalibrationConflict } from './CalibrationConflict';
 import { SearchablePicker } from '@/ui/SearchablePicker';
 import { Button } from '@/ui/primitives/button';
+import { CalibrationCatalogStatus } from './CalibrationCatalogStatus';
 import { SettingsSelect } from './SettingsSelect';
 
 /** Assignment uses the same atomic write and retained draft as calibration. */
 export function CalibrationAssignment({ deviceKey }: { deviceKey: string }) {
   const api = useCalibrationEditor();
-  if (!api.data)
-    return (
-      <div className="space-y-2 text-sm" role={api.error ? 'alert' : 'status'}>
-        {api.error?.message ?? 'Loading profiles…'}
-        {api.error && (
-          <Button variant="outline" onClick={() => void api.refetch()}>
-            Retry
-          </Button>
-        )}
-      </div>
-    );
   return (
-    <AssignmentForm key={deviceKey} deviceKey={deviceKey} initial={api.data} />
+    <div className="space-y-3">
+      <CalibrationCatalogStatus query={api} />
+      {api.data && (
+        <AssignmentForm
+          key={deviceKey}
+          deviceKey={deviceKey}
+          initial={api.data}
+        />
+      )}
+    </div>
   );
 }
 function AssignmentForm({
@@ -91,14 +90,14 @@ export function BulkCalibrationAssignment({
   selected: string[];
 }) {
   const api = useCalibrationEditor();
-  if (!api.data)
-    return (
-      <div role={api.error ? 'alert' : 'status'}>
-        {api.error?.message ?? 'Loading calibration profiles…'}
-        {api.error && <Button onClick={() => void api.refetch()}>Retry</Button>}
-      </div>
-    );
-  return <BulkAssignmentForm initial={api.data} selected={selected} />;
+  return (
+    <div className="space-y-3">
+      <CalibrationCatalogStatus query={api} />
+      {api.data && (
+        <BulkAssignmentForm initial={api.data} selected={selected} />
+      )}
+    </div>
+  );
 }
 function BulkAssignmentForm({
   initial,

@@ -580,3 +580,28 @@ source plus a scene referencing its unavailable output contributes only one
 canonical source key to attention. Diagnostics retain both explanations and
 return the source entity ID and device-key log reference. This closes the
 previous API deduplication gap; it does not claim a live MQTT session.
+
+### Calibration evidence reconciliation — 2026-09-30
+
+The earlier “connect the color wizard” and bulk-assignment work is complete;
+those historical remaining-work paragraphs do not describe the current UI.
+
+- Brightness uses retained drafts, atomic Save and acknowledged preview cleanup.
+  Existing `settings-brightness-*-result.json` and keyboard evidence cover both
+  viewports, incomplete numbers, shared profiles, other-channel preservation,
+  stopped reopening and explicit removal. `homectl-calibration-editor-api.log`
+  covers actual API conflicts, active-preview rejection and SQLite restart.
+- Color uses the same atomic API and retained draft contract. The phone color
+  journey covers stopped closing/reopening, unfinished numeric edits, Reset,
+  explicit Save and unchanged shared-profile assignments/brightness data.
+- Individual and bulk assignment use shared Save/Discard. The eight-check bulk
+  journeys at both sizes cover retained selection, navigation, exact removal and
+  assignment, and unchanged profiles (`everyday/calibration-bulk-*-checkpoint.log`).
+- The new 15-check journey at both 390/1440 px closes missing-reference,
+  incompatible/disabled/read-only choice filtering and initial/cached catalog
+  recovery. Drafts survive retries; fixture server sessions are empty after
+  reference loss. Shared pickers retain unavailable IDs for repair. See the
+  [work queue checkpoint](WORK-QUEUE.md#calibration-catalog-and-reference-recovery--2026-09-30).
+
+These are isolated browser/API/storage checks. Physical color matching and the
+broader accessibility/recovery matrix are not claimed complete.

@@ -740,6 +740,37 @@ canonical source key to attention. Diagnostics retain both explanations and
 return the source entity ID and device-key log reference. This closes the
 previous API deduplication gap; it does not claim a live MQTT session.
 
+### Calibration catalog and reference recovery — 2026-09-30
+
+Color, brightness and assignment editors now share an initial/cached catalog
+failure status with Retry. A failed refresh keeps the mounted editor and its
+numeric draft; failures in the device's legacy calibration summary no longer
+hide the independent atomic editor. Reference selection uses the shared searchable
+picker and excludes disabled, read-only and incompatible lights. Missing selected
+IDs remain visible. Losing a reference stops its preview, keeps matching points
+and offers replacement. Color's stopped status updates after acknowledged cleanup
+and no longer incorrectly says an adjustment is being sent.
+
+Fifteen browser checks pass at each 390/1440 px in
+`ui/dev/calibration-recovery-review.mjs`. They cover initial failure/retry, cached
+failure/retry with an edited curve, capability filtering, disappeared references,
+retained numeric edits, blocked preview/resume and replacement. The driver checks
+the isolated fixture's session store after cleanup and observes no configuration
+writes. Expected 503s are injected read failures; there are no page exceptions.
+Screenshots were inspected at both sizes. Evidence:
+`implementation-evidence/everyday/calibration-recovery-*` and the
+[comparison gallery](implementation-evidence/comparison/index.html#calibration-recovery).
+
+The existing color Save/Discard lifecycle passes all ten phone checks again;
+brightness passes its four native keyboard/200% enlargement checks. Type checking,
+lint and production build pass. Lint retains the existing backup-effect cleanup
+warning; build retains its existing chunk-size warning.
+
+Earlier calibration evidence is consolidated in IMPLEMENTATION.md. This closes
+the named catalog/capability/reference cases; broader cross-family recovery,
+accessibility and real-device acceptance remain open. No household configuration
+or physical light was changed.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 
@@ -15,6 +15,9 @@ import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { CalibrationConflict } from '@/ui/settings/CalibrationConflict';
 import { StatePreview } from '@/ui/settings/StatePreview';
 import { getDeviceKey } from '@/lib/device';
+import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
+import { SearchablePicker } from '@/ui/SearchablePicker';
+import { CalibrationCatalogStatus } from '@/ui/settings/CalibrationCatalogStatus';
 import {
   BRIGHTNESS_COARSE_STEP,
   BRIGHTNESS_FINE_STEP,
@@ -67,26 +70,17 @@ export function BrightnessCalibrationWizard(
   props: BrightnessCalibrationWizardProps,
 ) {
   const query = useCalibrationEditor();
-  if (!query.data)
-    return (
-      <div
-        className="space-y-2 text-sm"
-        role={query.error ? 'alert' : 'status'}
-      >
-        {query.error ? query.error.message : 'Loading calibration…'}
-        {query.error && (
-          <Button variant="outline" onClick={() => void query.refetch()}>
-            Retry
-          </Button>
-        )}
-      </div>
-    );
   return (
-    <BrightnessCalibrationForm
-      key={getDeviceKey(props.device)}
-      {...props}
-      initial={query.data}
-    />
+    <div className="space-y-3">
+      <CalibrationCatalogStatus query={query} />
+      {query.data && (
+        <BrightnessCalibrationForm
+          key={getDeviceKey(props.device)}
+          {...props}
+          initial={query.data}
+        />
+      )}
+    </div>
   );
 }
 
@@ -241,6 +235,7 @@ function BrightnessCalibrationForm({
     () =>
       devices
         .filter((candidate) => isDimmableDevice(candidate))
+        .filter((candidate) => !isDeviceReadOnly(candidate))
         .filter((candidate) => getDeviceKey(candidate) !== deviceKey)
         .map((candidate) => ({
           key: getDeviceKey(candidate),
@@ -255,6 +250,20 @@ function BrightnessCalibrationForm({
       referenceOptions.find((option) => option.key === referenceKey) ?? null,
     [referenceKey, referenceOptions],
   );
+  const previewIssue = !dimmable || isDeviceReadOnly(device)
+    ? 'This light must support dimming and be enabled and writable to preview. Your calibration draft is kept.'
+    : mode === 'reference' && !reference
+      ? 'Choose an available, writable reference light that supports dimming, or enter a curve manually.'
+      : null;
+  const { active: previewActive, stop: stopSession } = session;
+  useEffect(() => {
+    if (previewIssue && previewActive)
+      void stopSession().catch((error: unknown) =>
+        setError(
+          error instanceof Error ? error.message : 'Could not stop preview',
+        ),
+      );
+  }, [previewIssue, previewActive, stopSession]);
 
   const stopPreview = async () => {
     try {
@@ -267,6 +276,10 @@ function BrightnessCalibrationForm({
     }
   };
   const startPreview = async (point: BrightnessPoint) => {
+    if (previewIssue) {
+      setError(previewIssue);
+      return;
+    }
     setError(null);
     try {
       await session.preview({
@@ -414,6 +427,11 @@ function BrightnessCalibrationForm({
           {error}
         </p>
       )}
+      {previewIssue && (referenceKey || isDeviceReadOnly(device)) && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {previewIssue}
+        </p>
+      )}
       {draft.value.form.remove && (
         <p role="status" className="text-sm">
           Brightness calibration will be removed on Save. Existing color
@@ -510,18 +528,17 @@ function BrightnessCalibrationForm({
               <div className="space-y-2">
                 <label className="block space-y-1.5 text-sm font-medium">
                   Reference light
-                  <select
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  <SearchablePicker
+                    ariaLabel="Brightness reference light"
                     value={referenceKey}
-                    onChange={(event) => setReferenceKey(event.target.value)}
-                  >
-                    <option value="">Choose a light…</option>
-                    {referenceOptions.map((option) => (
-                      <option key={option.key} value={option.key}>
-                        {option.name} — {option.id}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setReferenceKey}
+                    placeholder="Choose a reference light"
+                    options={referenceOptions.map((option) => ({
+                      value: option.key,
+                      label: option.name,
+                      detail: option.id,
+                    }))}
+                  />
                 </label>
                 <p className="text-xs text-muted-foreground">
                   Use a light you like the look of at a given level. Its own
@@ -532,13 +549,13 @@ function BrightnessCalibrationForm({
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
-                disabled={mode === 'reference' && !referenceKey}
+                disabled={mode === 'reference' && !reference}
                 onClick={() => setStep('points')}
               >
                 Continue
               </Button>
               <span className="self-center text-xs text-muted-foreground">
-                {mode === 'reference' && !referenceKey
+                {mode === 'reference' && !reference
                   ? 'Choose a reference light, or switch to entering a curve manually'
                   : 'Nothing is saved until you review'}
               </span>
@@ -765,7 +782,9 @@ function BrightnessCalibrationForm({
                         variant="outline"
                         size="sm"
                         disabled={
-                          preview.state === 'starting' || Boolean(rowError)
+                          preview.state === 'starting' ||
+                          Boolean(rowError) ||
+                          Boolean(previewIssue)
                         }
                         onClick={() => void startPreview(point)}
                       >

@@ -1,0 +1,69 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Failed initial catalog read starts no preview or configuration write",
+    "passed": true
+   },
+   {
+    "name": "Brightness choices exclude read-only, disabled, switch and color-only devices",
+    "passed": true
+   },
+   {
+    "name": "Missing brightness reference stops its session",
+    "passed": true
+   },
+   {
+    "name": "Missing brightness reference keeps edits and blocks previews",
+    "passed": true
+   },
+   {
+    "name": "Unavailable reference stays identifiable and cannot continue",
+    "passed": true
+   },
+   {
+    "name": "Replacing the reference keeps the edited curve",
+    "passed": true
+   },
+   {
+    "name": "Cached catalog failure keeps the editor and numeric draft",
+    "passed": true
+   },
+   {
+    "name": "Catalog recovery keeps numeric draft",
+    "passed": true
+   },
+   {
+    "name": "Color choices exclude dimmers, switches and unwritable devices",
+    "passed": true
+   },
+   {
+    "name": "Missing color reference stops its session",
+    "passed": true
+   },
+   {
+    "name": "Color points survive missing reference and resume is blocked",
+    "passed": true
+   },
+   {
+    "name": "Stopped color preview does not claim to be sending",
+    "passed": true
+   },
+   {
+    "name": "Color repair returns to setup with unavailable ID preserved",
+    "passed": true
+   },
+   {
+    "name": "Review and preview never save calibration implicitly",
+    "passed": true
+   },
+   {
+    "name": "No page exceptions",
+    "passed": true
+   }
+  ],
+  "scope": "Synthetic REST catalog and calibration read failures; previews acknowledged by isolated fixture only"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)"]}
