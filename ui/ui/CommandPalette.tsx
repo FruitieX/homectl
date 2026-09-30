@@ -16,7 +16,7 @@ import {
   Sun,
   Wand2,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { openAssistantPanelAtom } from '@/assistant/state';
@@ -32,12 +32,14 @@ import {
   useDevicesState,
   useGroupsState,
   useScenesState,
+  useConnectionStatus,
 } from '@/hooks/websocket';
 import {
   useDeviceDisplayNames,
   useHelpers,
   useIntegrations,
   useRoutines,
+  useSources,
 } from '@/hooks/useConfig';
 import { configItemHref } from '@/lib/configItemHref';
 import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
@@ -55,6 +57,7 @@ import {
   CommandShortcut,
 } from '@/ui/primitives/command';
 import { DialogTitle } from '@/ui/primitives/dialog';
+import { Button } from '@/ui/primitives/button';
 
 export const commandPaletteOpenAtom = atom(false);
 
@@ -124,6 +127,7 @@ const staticNavItems = [
 export function CommandPalette() {
   const [open, setOpen] = useAtom(commandPaletteOpenAtom);
   const [query, setQuery] = useState('');
+  const searchInput = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const recordRecent = useRecordRecent();
   const favorites = useFavoriteKeys();
@@ -133,7 +137,8 @@ export function CommandPalette() {
   const openAssistant = useSetAtom(openAssistantPanelAtom);
 
   const devicesState = useDevicesState();
-  const { data: nameOverrides } = useDeviceDisplayNames();
+  const namesQuery = useDeviceDisplayNames();
+  const { data: nameOverrides } = namesQuery;
   const names = useMemo(
     () =>
       Object.fromEntries(
@@ -143,9 +148,24 @@ export function CommandPalette() {
   );
   const scenesState = useScenesState();
   const groupsState = useGroupsState();
-  const { data: routines } = useRoutines();
-  const { data: helpers } = useHelpers();
-  const { data: integrations } = useIntegrations();
+  const routinesQuery = useRoutines();
+  const helpersQuery = useHelpers();
+  const integrationsQuery = useIntegrations();
+  const sourcesQuery = useSources();
+  const { data: routines } = routinesQuery;
+  const { data: helpers } = helpersQuery;
+  const { data: integrations } = integrationsQuery;
+  const { data: sources } = sourcesQuery;
+  const connectionStatus = useConnectionStatus();
+  const [retrying, setRetrying] = useState(false);
+  const catalogs = [
+    { label: 'Device names', ...namesQuery },
+    { label: 'Routines', ...routinesQuery },
+    { label: 'Helpers', ...helpersQuery },
+    { label: 'Integrations', ...integrationsQuery },
+    { label: 'Computed sources', ...sourcesQuery },
+  ];
+  const failedCatalogs = catalogs.filter((catalog) => catalog.error);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -400,6 +420,19 @@ export function CommandPalette() {
       });
     }
 
+    for (const source of sources) {
+      result.push({
+        key: `source:${source.id}`,
+        label: source.name || source.id,
+        description: `Computed source · ${source.id}`,
+        keywords: `${source.id} source computed`,
+        group: 'Computed sources',
+        icon: <Activity />,
+        run: () =>
+          go(`source:${source.id}`, configItemHref('source', source.id)),
+      });
+    }
+
     return result;
   }, [
     density,
@@ -412,6 +445,7 @@ export function CommandPalette() {
     openAssistant,
     routines,
     scenesState,
+    sources,
     setDensity,
     setOpen,
     setThemeMode,
@@ -445,14 +479,73 @@ export function CommandPalette() {
     <CommandDialog open={open} onOpenChange={setOpen}>
       <DialogTitle className="sr-only">Command palette</DialogTitle>
       <CommandInput
+        ref={searchInput}
+        aria-label="Search homectl"
+        className="pr-14"
         value={query}
         onValueChange={setQuery}
         placeholder="Search settings, devices, scenes, routines, actions…"
       />
+      {connectionStatus !== 'connected' && (
+        <p
+          role="status"
+          className="border-b border-border px-3 py-2 text-xs text-muted-foreground"
+        >
+          {devicesState
+            ? 'Live device, room and scene results may be out of date.'
+            : 'Live device, room and scene results are unavailable until the connection returns.'}
+        </p>
+      )}
+      {failedCatalogs.length > 0 ? (
+        <div
+          role="status"
+          className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs"
+        >
+          <p className="min-w-0 flex-1 text-muted-foreground">
+            Could not refresh{' '}
+            {failedCatalogs
+              .map((catalog) => catalog.label.toLowerCase())
+              .join(', ')}
+            . Results may be incomplete.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={retrying}
+            onClick={async (event) => {
+              const retryButton = event.currentTarget;
+              setRetrying(true);
+              try {
+                await Promise.all(
+                  failedCatalogs.map((catalog) => catalog.refetch()),
+                );
+              } finally {
+                setRetrying(false);
+                if (
+                  document.activeElement === retryButton ||
+                  document.activeElement === document.body ||
+                  document.activeElement ===
+                    searchInput.current?.closest('[role="dialog"]')
+                )
+                  searchInput.current?.focus();
+              }
+            }}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : catalogs.some((catalog) => catalog.loading) ? (
+        <p
+          role="status"
+          className="border-b border-border px-3 py-2 text-xs text-muted-foreground"
+        >
+          Loading settings results…
+        </p>
+      ) : null}
       <CommandList className="max-h-[min(70dvh,32rem)]">
         <CommandEmpty>No matches found.</CommandEmpty>
 
-        {recentItems.length > 0 ? (
+        {!query.trim() && recentItems.length > 0 ? (
           <CommandGroup heading="Recent">
             {recentItems.map((item) => (
               <PaletteRow key={`recent-${item.key}`} item={item} />
@@ -462,9 +555,16 @@ export function CommandPalette() {
 
         {Array.from(groups.entries()).map(([group, groupItems]) => (
           <CommandGroup key={group} heading={group}>
-            {groupItems.slice(0, 40).map((item) => (
-              <PaletteRow key={item.key} item={item} />
-            ))}
+            {groupItems
+              .filter(
+                (item) =>
+                  query.trim() ||
+                  !recentItems.some((recent) => recent.key === item.key),
+              )
+              .slice(0, query.trim() ? undefined : 40)
+              .map((item) => (
+                <PaletteRow key={item.key} item={item} />
+              ))}
           </CommandGroup>
         ))}
       </CommandList>

@@ -36,7 +36,7 @@ covers. The top-level implementation gates stay open until reconciled here.
 | Backend contracts | Actor preconditions and persistence outcome tests; database backup/restore, widget secret/redaction, preference/reporting and migration regressions. | [PERSISTENCE-COVERAGE.md](PERSISTENCE-COVERAGE.md) now names 17 passing consistency tests, including file-backed source/everyday collection restart and JSON restore. Raw scene/routine definitions now have file-backed reopen/JSON restore evidence. Remaining: complete widget default mapping and API recovery reconciliation. |
 | Health | Shared evaluator/report evidence and transition tests; disabled suppression/re-enable coverage; room/map use shared results. | Reconcile startup/retained/unchanged report and recovery cases with current tests and UI surfaces. |
 | Troubleshooting | Compact rows, filters, structured links and routine-history evidence. | Desktop density, full-message focus and large-buffer pagination are now covered by the log checkpoint below. Remaining activity trace cases still need reconciliation. |
-| Everyday views | Room/map/timer gates have current browser evidence; widget creation/preview and chart input checks already exist. | Chart recovery/empty cases pass in the checkpoint below. Widget selections now have SQLite reopen/restore evidence. Assistant review now has 17 native checks per size for pending selection/discard locks, persistent request errors, partial results, contained previews and related-page retention. Conversation/search failures now have 13 native checks per size, including Retry, preserved thread state and new-conversation request isolation. Streaming now has 12 native checks per size, four stream unit tests and a Rust response-drop/provider-cancellation test. Reconnect now has 16 native checks per size for fresh-state readiness, revision gaps, timed probes, retained drafts, acknowledged commands and no replay after a lost acknowledgement. Remaining: complete option/default mapping, navigation/search and overlay consistency. |
+| Everyday views | Room/map/timer gates have current browser evidence; widget creation/preview and chart input checks already exist. | Chart recovery/empty cases pass in the checkpoint below. Widget selections now have SQLite reopen/restore evidence. Assistant review now has 17 native checks per size for pending selection/discard locks, persistent request errors, partial results, contained previews and related-page retention. Conversation/search failures now have 13 native checks per size, including Retry, preserved thread state and new-conversation request isolation. Streaming now has 12 native checks per size, four stream unit tests and a Rust response-drop/provider-cancellation test. Reconnect now has 16 native checks per size for fresh-state readiness, revision gaps, timed probes, retained drafts, acknowledged commands and no replay after a lost acknowledgement. Navigation/search now has 15 native checks per size for complete catalogs, retry, canonical source links, recent deduplication, keyboard focus and draft retention through Back. Remaining: complete option/default mapping and overlay consistency. |
 | Cleanup and final delivery | Comparison gallery and regular pushed checkpoints. | Full field matrix, remaining cross-family failure/accessibility cases, superseded surface audit and final requirement-by-requirement sign-off. |
 
 ## Discrepancies resolved in this pass
@@ -130,3 +130,24 @@ a file database before JSON export/import into a second database. They cover
 computed sources and the everyday collections missing from prior browser-only
 evidence. Helper persistence also now covers all types and visibility values.
 The top-level gates remain open for the explicitly listed remaining contracts.
+
+
+### Navigation and search recovery — 2026-09-30
+
+15 native browser checks pass at 1440/390 px. Search now considers the full
+catalog while keeping the idle list compact; previously each category was
+truncated to 40 entries before filtering. Computed sources have searchable
+identity and canonical detail links. Recent destinations appear once. Failed
+catalogs identify incomplete results and offer Retry without clearing the query;
+successful retry returns keyboard focus to the search field. Live-state recovery
+also labels potentially stale entity results. Close fits within the search row.
+
+Ctrl+K, Enter, Escape and browser Back preserve an unsaved room draft. Escape
+returns focus to the edited field; navigating to another page does not restore
+focus to an obsolete trigger. The driver intercepts a 65-routine catalog and
+503 failures on the marked local fixture, performs no writes and explicitly
+discards its draft. Evidence: `ui/dev/navigation-search-review.mjs` and
+`implementation-evidence/everyday/navigation-search-*`. Captures were visually
+reviewed on desktop and phone. Type/lint/build pass (the existing bundle-size
+warning remains). These checks do not close the wider viewport/accessibility
+matrix, all widget defaults, remaining field coverage or final reconciliation.

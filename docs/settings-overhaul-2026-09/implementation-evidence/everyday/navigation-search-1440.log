@@ -1,0 +1,69 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Incomplete catalog is identified",
+    "passed": true
+   },
+   {
+    "name": "Unavailable catalog does not invent results",
+    "passed": true
+   },
+   {
+    "name": "Close stays within the search row without covering Retry",
+    "passed": true
+   },
+   {
+    "name": "Retry retains the query and finds the last of 65 routines",
+    "passed": true
+   },
+   {
+    "name": "Search field has accessible keyboard focus",
+    "passed": true
+   },
+   {
+    "name": "Escape restores focus without losing the draft",
+    "passed": true
+   },
+   {
+    "name": "Reopening clears the prior query",
+    "passed": true
+   },
+   {
+    "name": "Navigation closes the palette",
+    "passed": true
+   },
+   {
+    "name": "Browser Back retains the room draft",
+    "passed": true
+   },
+   {
+    "name": "Recent destination appears exactly once",
+    "passed": true
+   },
+   {
+    "name": "Recent destination is not duplicated during search",
+    "passed": true
+   },
+   {
+    "name": "Computed sources are included with their identity",
+    "passed": true
+   },
+   {
+    "name": "Entity search opens source details",
+    "passed": true
+   },
+   {
+    "name": "Navigation fits viewport",
+    "passed": true
+   },
+   {
+    "name": "Search and navigation perform no writes",
+    "passed": true
+   }
+  ],
+  "expectedErrors": "Injected routine catalog HTTP 503 before Retry"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":1440,"height":1080},"problems":["log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)"]}

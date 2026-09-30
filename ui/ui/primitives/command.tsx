@@ -1,6 +1,6 @@
 import { Command as CommandPrimitive } from 'cmdk';
 import { Search } from 'lucide-react';
-import { type ComponentProps } from 'react';
+import { type ComponentProps, useRef } from 'react';
 
 import { cn } from '@/lib/cn';
 import { Dialog, DialogContent } from '@/ui/primitives/dialog';
@@ -24,9 +24,29 @@ export function CommandDialog({
   children,
   ...props
 }: ComponentProps<typeof Dialog>) {
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const returnLocation = useRef('');
   return (
     <Dialog {...props}>
-      <DialogContent className="overflow-hidden p-0 shadow-2xl">
+      <DialogContent
+        className="overflow-hidden p-0 shadow-2xl sm:p-0 [&>button]:right-1 [&>button]:top-0.5"
+        aria-describedby={undefined}
+        onOpenAutoFocus={() => {
+          returnFocus.current =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null;
+          returnLocation.current = window.location.href;
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (
+            returnFocus.current?.isConnected &&
+            returnLocation.current === window.location.href
+          )
+            returnFocus.current.focus();
+        }}
+      >
         <Command>{children}</Command>
       </DialogContent>
     </Dialog>

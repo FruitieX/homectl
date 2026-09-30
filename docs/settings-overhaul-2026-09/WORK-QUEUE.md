@@ -440,6 +440,27 @@ and `everyday/reconnect-*`. These are real local socket interruptions with
 synthetic state, not household network/hardware tests. Navigation/search, widget
 option defaults, overlay consistency and wider accessibility remain open.
 
+
+### Navigation and search recovery — 2026-09-30
+
+15 native browser checks pass at 1440/390 px. Search now considers the full
+catalog while keeping the idle list compact; previously each category was
+truncated to 40 entries before filtering. Computed sources have searchable
+identity and canonical detail links. Recent destinations appear once. Failed
+catalogs identify incomplete results and offer Retry without clearing the query;
+successful retry returns keyboard focus to the search field. Live-state recovery
+also labels potentially stale entity results. Close fits within the search row.
+
+Ctrl+K, Enter, Escape and browser Back preserve an unsaved room draft. Escape
+returns focus to the edited field; navigating to another page does not restore
+focus to an obsolete trigger. The driver intercepts a 65-routine catalog and
+503 failures on the marked local fixture, performs no writes and explicitly
+discards its draft. Evidence: `ui/dev/navigation-search-review.mjs` and
+`implementation-evidence/everyday/navigation-search-*`. Captures were visually
+reviewed on desktop and phone. Type/lint/build pass (the existing bundle-size
+warning remains). These checks do not close the wider viewport/accessibility
+matrix, all widget defaults, remaining field coverage or final reconciliation.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before
