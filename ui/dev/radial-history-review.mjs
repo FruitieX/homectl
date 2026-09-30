@@ -234,13 +234,54 @@ export default async function (cdp, { width, url }) {
     );
     await shot('light');
 
+    if (
+      !(await evaluate(
+        `(()=>{const title=${pop}.querySelector('p'),arc=${pop}.querySelector('[data-brightness-arc]'),power=${pop}.querySelector('button[aria-label^="Turn "]');return getComputedStyle(title).backgroundColor!=='rgba(0, 0, 0, 0)'&&!${pop}.textContent.includes('Inner circle:')&&getComputedStyle(arc).color===getComputedStyle(power).backgroundColor})()`,
+      ))
+    )
+      throw Error('Radial title or shared light color');
+    checks.push(
+      'Title has a background; brightness ring and power button use the light color',
+    );
+
+    await request('/api/__fixture/live-controls', { delay: 400 });
+    const liveBefore = (await commands()).length;
+    await pointer('down', { x: center.x + 119, y: center.y });
+    await pause(180);
+    if ((await commands()).length !== liveBefore + 1)
+      throw Error('Brightness must apply while held');
+    await pointer('move', { x: center.x, y: center.y + 119 });
+    await pause(70);
+    await pointer('move', { x: center.x - 119, y: center.y });
+    await evaluate(
+      `window.__radialLevels=[];window.__radialLevelTimer=setInterval(()=>window.__radialLevels.push(${pop}.querySelector('[aria-label="Living room lamp brightness"]').getAttribute('aria-valuenow')),16)`,
+    );
+    await pointer('up', { x: center.x - 119, y: center.y });
+    await pause(900);
+    const liveBrightness = await evaluate(
+      `(()=>{clearInterval(window.__radialLevelTimer);return window.__radialLevels.every(v=>v==='75')})()`,
+    );
+    if (
+      !liveBrightness ||
+      (await commands()).at(-1)?.DeviceCommand?.brightness !== 0.75 ||
+      (await commands()).length !== liveBefore + 2
+    )
+      throw Error('Live brightness coalescing or stale acknowledgement jump');
+    checks.push(
+      'Held brightness applies immediately and coalesces a slow acknowledgement into the latest value',
+    );
+    checks.push(
+      'Brightness remains steady across release and delayed older acknowledgements',
+    );
+    await request('/api/__fixture/live-controls', { delay: 0 });
+
     await pointer('down', { x: center.x, y: center.y - 119 });
     await pointer('move', { x: center.x + 119, y: center.y });
     await pointer('up', { x: center.x + 119, y: center.y });
     await pause(300);
     if ((await commands()).at(-1)?.DeviceCommand?.brightness !== 0.25)
       throw Error('Radial brightness commit');
-    checks.push('Outer ring commits brightness once after release');
+    checks.push('Outer ring flushes the final brightness on release');
     await click(`document.querySelector('[aria-label="Hue and saturation"]')`);
     await pointer('down', { x: center.x + 70, y: center.y });
     await pointer('up', { x: center.x + 70, y: center.y });
@@ -250,6 +291,91 @@ export default async function (cdp, { width, url }) {
       throw Error('Hue saturation command');
     checks.push('Inner circle controls hue and saturation');
     await shot('color');
+
+    for (const density of ['compact', 'comfortable']) {
+      await evaluate(
+        `document.documentElement.dataset.density=${JSON.stringify(density)}`,
+      );
+      await pause();
+      for (const angle of [45, 135, 225, 315]) {
+        const radians = (angle * Math.PI) / 180 - Math.PI / 2;
+        const position = {
+          x: center.x + Math.cos(radians) * 84,
+          y: center.y + Math.sin(radians) * 84,
+        };
+        await pointer('down', position);
+        await pointer('up', position);
+        await pause();
+        const geometry = await evaluate(
+          `(()=>{const wheel=${pop}.querySelector('[aria-label="Living room lamp hue and saturation"]').getBoundingClientRect(),dot=${pop}.querySelector('[data-color-indicator]').getBoundingClientRect();return {diameter:wheel.width,center:Math.hypot(wheel.x+wheel.width/2-${center.x},wheel.y+wheel.height/2-${center.y}),extent:Math.hypot(dot.x+dot.width/2-wheel.x-wheel.width/2,dot.y+dot.height/2-wheel.y-wheel.height/2)+dot.width/2}})()`,
+        );
+        if (
+          Math.abs(geometry.diameter - 192) > 0.5 ||
+          geometry.center > 0.5 ||
+          geometry.extent > 92.5
+        )
+          throw Error(
+            'Hue geometry ' + density + ': ' + JSON.stringify(geometry),
+          );
+      }
+      checks.push(
+        density +
+          ' density: centered 192 px hue wheel and indicator within its color surface in all four quadrants',
+      );
+    }
+    await evaluate(`document.documentElement.dataset.density='compact'`);
+    await request('/api/__fixture/live-controls', { delay: 400 });
+    const colorBefore = (await commands()).length;
+    await pointer('down', { x: center.x + 84, y: center.y });
+    await pause(180);
+    if ((await commands()).length !== colorBefore + 1)
+      throw Error('Color must apply while held');
+    const dot = await evaluate(
+      `${pop}.querySelector('[data-color-indicator]').style.cssText`,
+    );
+    await pointer('up', { x: center.x + 84, y: center.y });
+    await pause(70);
+    if (
+      (await evaluate(
+        `${pop}.querySelector('[data-color-indicator]').style.cssText`,
+      )) !== dot
+    )
+      throw Error('Color jumped before acknowledgement');
+    await pause(450);
+    if (
+      (await evaluate(
+        `${pop}.querySelector('[data-color-indicator]').style.cssText`,
+      )) !== dot
+    )
+      throw Error('Color jumped after acknowledgement');
+    if (
+      !(await evaluate(
+        `(()=>{const dot=${pop}.querySelector('[data-color-indicator]'),arc=${pop}.querySelector('[data-brightness-arc]'),power=${pop}.querySelector('button[aria-label^="Turn "]');return getComputedStyle(dot).backgroundColor===getComputedStyle(arc).color&&getComputedStyle(arc).color===getComputedStyle(power).backgroundColor})()`,
+      ))
+    )
+      throw Error('Selected color is not shared');
+    checks.push(
+      'Hue applies while held and stays steady across release and acknowledgement',
+    );
+    checks.push(
+      'Selected hue immediately colors the indicator, brightness arc and power button',
+    );
+    await shot('live-color');
+    await request('/api/__fixture/live-controls', { delay: 0 });
+    await pointer('down', { x: center.x, y: center.y + 84 });
+    await pause(220);
+    await pointer('up', { x: center.x, y: center.y + 84 });
+    await pause();
+    const updatedDevice = (
+      await (await fetch(base + '/api/v1/devices')).json()
+    ).devices.find((device) => device.id === 'living_room_lamp');
+    updatedDevice.data.Controllable.state.color = { h: 240, s: 0.5 };
+    updatedDevice.data.Controllable.state.brightness = 0.55;
+    await request('/api/v1/devices/living_room_lamp', updatedDevice, 'PUT');
+    await until(
+      `${pop}.querySelector('[aria-label="Living room lamp hue and saturation"]').getAttribute('aria-valuenow')==='240'&&${pop}.querySelector('[aria-label="Living room lamp brightness"]').getAttribute('aria-valuenow')==='55'`,
+      'After a held value is confirmed, later device updates remain visible',
+    );
     await click(`document.querySelector('[aria-label="Color temperature"]')`);
     await evaluate(
       `document.querySelector('[aria-label="Living room lamp color temperature"]').focus()`,
@@ -420,6 +546,7 @@ export default async function (cdp, { width, url }) {
     await shot('failure');
     throw e;
   } finally {
+    await request('/api/__fixture/live-controls', { delay: 0, reject: false });
     await fetch(base + `/api/v1/config/floorplans/${id}`, { method: 'DELETE' });
   }
 }

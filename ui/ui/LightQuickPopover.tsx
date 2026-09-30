@@ -9,7 +9,6 @@ import {
   LoaderCircle,
 } from 'lucide-react';
 import type { Device } from '@/bindings/Device';
-import type { DeviceColor } from '@/bindings/DeviceColor';
 import { useConnectionStatus } from '@/hooks/websocket';
 import { useLiveDeviceControls } from '@/hooks/useLiveDeviceControls';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
@@ -17,12 +16,21 @@ import {
   isDeviceReadOnly,
   supportsDeviceBrightness,
 } from '@/lib/deviceCapabilities';
-import { ringBrightness, type LightHold } from '@/lib/lightQuickAdjust';
+import {
+  createLightAdjustmentQueue,
+  ringBrightness,
+  type LightHold,
+  type LightAdjustment,
+} from '@/lib/lightQuickAdjust';
 import { getColor } from '@/lib/colors';
 import { Button } from './primitives/button';
 
-type Adjustment = { brightness?: number; color?: DeviceColor };
-/** One radial surface for map and row indicators. Commands commit on release. */
+const SURFACE_SIZE = 268;
+const COLOR_SIZE = 192;
+const COLOR_CENTER = COLOR_SIZE / 2 - 4;
+const COLOR_MIN_RADIUS = 42;
+const COLOR_MAX_RADIUS = COLOR_CENTER - 8;
+/** One radial surface for map and row indicators, with coalesced live updates. */
 export function LightQuickPopover({
   device,
   anchor,
@@ -58,55 +66,122 @@ export function LightQuickPopover({
           ? 'ct'
           : 'hs',
   );
-  const [draft, setDraft] = useState<Adjustment | null>(null),
-    [pending, setPending] = useState(false);
-  const enabled = connected && !isDeviceReadOnly(device) && !pending;
+  const [draft, setDraft] = useState<LightAdjustment | null>(null),
+    [pending, setPending] = useState(false),
+    [dragging, setDragging] = useState(false);
+  const enabled = connected && !isDeviceReadOnly(device);
   const root = useRef<HTMLDivElement>(null),
     returnFocus = useRef(document.activeElement);
-  const color = getColor(device.data);
-  const hue = draft?.color && 'h' in draft.color ? draft.color.h : color.hue();
+  const surface = useRef<HTMLDivElement>(null);
+  const draftRef = useRef<LightAdjustment | null>(null);
+  const queue = useRef<ReturnType<typeof createLightAdjustmentQueue> | null>(
+    null,
+  );
+  const color = getColor(
+    'Controllable' in device.data && draft?.color
+      ? {
+          Controllable: {
+            ...device.data.Controllable,
+            state: { ...device.data.Controllable.state, color: draft.color },
+          },
+        }
+      : device.data,
+  );
+  const selectedColor = draft?.color ?? state?.color;
+  const hue =
+    selectedColor && 'h' in selectedColor ? selectedColor.h : color.hue();
   const saturation =
-    draft?.color && 's' in draft.color
-      ? draft.color.s
+    selectedColor && 's' in selectedColor
+      ? selectedColor.s
       : color.saturationv() / 100;
   const temperature =
-    draft?.color && 'ct' in draft.color
-      ? draft.color.ct
-      : state?.color && 'ct' in state.color
-        ? state.color.ct
-        : 4000;
+    selectedColor && 'ct' in selectedColor ? selectedColor.ct : 4000;
   const level = draft?.brightness ?? Math.round((state?.brightness ?? 1) * 100);
+  const power = draft?.power ?? state?.power ?? false;
   const cx = Math.max(140, Math.min(innerWidth - 140, anchor.x));
-  const cy = Math.max(208, Math.min(innerHeight - 162, anchor.y));
+  const cy = Math.min(innerHeight - 146, Math.max(228, anchor.y));
   const label = getDeviceDisplayLabel(device, displayNames);
-  const apply = async (value: Adjustment) => {
-    if (!enabled) return;
-    setPending(true);
-    try {
-      await setState(
-        device,
-        value.brightness === undefined
-          ? (state?.power ?? true)
-          : value.brightness > 0,
-        value.brightness === undefined ? undefined : value.brightness / 100,
-        value.color,
-      );
-    } finally {
-      setPending(false);
-      setDraft(null);
-    }
-  };
   const latest = useRef({
     enabled,
-    apply,
+    device,
+    setState,
+    power,
     onClose,
     mode,
     caps,
     dimmable,
-    cx,
-    cy,
   });
-  latest.current = { enabled, apply, onClose, mode, caps, dimmable, cx, cy };
+  latest.current = {
+    enabled,
+    device,
+    setState,
+    power,
+    onClose,
+    mode,
+    caps,
+    dimmable,
+  };
+  const resetDraft = () => {
+    draftRef.current = null;
+    setDraft(null);
+  };
+  useEffect(() => {
+    const commands = createLightAdjustmentQueue({
+      send: (value) =>
+        latest.current.setState(
+          latest.current.device,
+          value.power ?? latest.current.power,
+          value.brightness === undefined ? undefined : value.brightness / 100,
+          value.color,
+        ),
+      onBusy: setPending,
+      onFailure: () => {
+        draftRef.current = null;
+        setDraft(null);
+      },
+    });
+    queue.current = commands;
+    return () => {
+      commands.dispose();
+      queue.current = null;
+    };
+  }, [device.integration_id, device.id]);
+  useEffect(() => {
+    if (!draft || !state || dragging || !queue.current?.idle) return;
+    const reportedRgb = getColor(device.data).rgb().array();
+    const colorMatches =
+      draft.color === undefined ||
+      (draft.color && 'h' in draft.color && state.color && 'h' in state.color
+        ? Math.abs(((draft.color.h - state.color.h + 540) % 360) - 180) < 0.2 &&
+          Math.abs(draft.color.s - state.color.s) < 0.002
+        : color
+            .rgb()
+            .array()
+            .every(
+              (channel, index) => Math.abs(channel - reportedRgb[index]) < 0.5,
+            ));
+    const confirmed =
+      (draft.power === undefined || draft.power === state.power) &&
+      (draft.brightness === undefined ||
+        Math.abs(draft.brightness - (state.brightness ?? 1) * 100) < 0.1) &&
+      colorMatches;
+    if (confirmed) {
+      draftRef.current = null;
+      setDraft(null);
+    }
+  }, [draft, state, pending, dragging, color, device.data]);
+  const adjust = (value: LightAdjustment, immediate = false) => {
+    if (!latest.current.enabled) return;
+    const next = { ...draftRef.current, ...value };
+    if (value.brightness !== undefined && value.power === undefined)
+      next.power = value.brightness > 0;
+    if (JSON.stringify(next) !== JSON.stringify(draftRef.current)) {
+      draftRef.current = next;
+      setDraft(next);
+      queue.current?.update(next);
+    }
+    if (immediate) queue.current?.flush();
+  };
   useEffect(() => {
     const previousFocus = returnFocus.current;
     const outside = (e: PointerEvent) => {
@@ -136,15 +211,22 @@ export function LightQuickPopover({
   const start = (
     pointerId: number,
     region: 'brightness' | 'color',
-    origin: { x: number; y: number },
     initial?: PointerEvent,
   ) => {
-    let value: Adjustment | null = null,
+    setDragging(true);
+    let value: LightAdjustment | null = null,
       previous: number | null = null;
     const move = (e: PointerEvent) => {
       if (e.pointerId !== pointerId || !latest.current.enabled) return;
-      const dx = e.clientX - origin.x,
-        dy = e.clientY - origin.y,
+      const bounds = surface.current?.getBoundingClientRect();
+      if (!bounds?.width) return;
+      // DOM coordinates include the opening animation and browser/UI scaling.
+      const dx =
+          ((e.clientX - bounds.left - bounds.width / 2) * SURFACE_SIZE) /
+          bounds.width,
+        dy =
+          ((e.clientY - bounds.top - bounds.height / 2) * SURFACE_SIZE) /
+          bounds.height,
         r = Math.hypot(dx, dy);
       if (region === 'brightness' && r < 108) return;
       e.preventDefault();
@@ -169,28 +251,37 @@ export function LightQuickPopover({
         value = {
           color: {
             h: ringBrightness(dx, dy) * 3.6,
-            s: Math.max(0, Math.min(1, (r - 30) / 66)),
+            s: Math.max(
+              0,
+              Math.min(
+                1,
+                (r - COLOR_MIN_RADIUS) / (COLOR_MAX_RADIUS - COLOR_MIN_RADIUS),
+              ),
+            ),
           },
         };
       }
-      setDraft(value);
+      adjust(value);
     };
     const end = (e: PointerEvent) => {
       if (e.pointerId !== pointerId) return;
       if (value && e.type !== 'pointercancel') move(e);
       cleanup();
       if (e.type === 'pointercancel') {
-        setDraft(null);
+        queue.current?.cancel();
+        resetDraft();
         return;
       }
-      if (value) void latest.current.apply(value);
+      if (value) queue.current?.flush();
     };
     const cancel = (e: PointerEvent) => {
       if (e.pointerId === pointerId) return;
       cleanup();
-      setDraft(null);
+      queue.current?.cancel();
+      resetDraft();
     };
     const cleanup = () => {
+      setDragging(false);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
@@ -207,9 +298,9 @@ export function LightQuickPopover({
   useEffect(() => () => dragCleanup.current?.(), []);
   useEffect(() => {
     if (!hold) return;
-    const cleanup = start(hold.pointerId, 'brightness', { x: cx, y: cy });
+    const cleanup = start(hold.pointerId, 'brightness');
     return cleanup;
-  }, [hold, cx, cy]);
+  }, [hold]);
   if (!state) return null;
   const angle = (hue * Math.PI) / 180 - Math.PI / 2;
   const ctAngle = caps?.ct
@@ -218,22 +309,33 @@ export function LightQuickPopover({
         Math.PI -
       Math.PI / 2
     : angle;
-  const selectionRadius = 30 + saturation * 66;
+  const selectionRadius =
+    mode === 'ct'
+      ? COLOR_MAX_RADIUS
+      : COLOR_MIN_RADIUS + saturation * (COLOR_MAX_RADIUS - COLOR_MIN_RADIUS);
   const disk =
     mode === 'ct'
       ? 'conic-gradient(from 0deg,#ffb35e,#fff4dc,#daedff,#a9ceff,#ffb35e)'
-      : 'radial-gradient(circle, white 34px, transparent 96px),conic-gradient(from 0deg, #f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)';
+      : `radial-gradient(circle, white ${COLOR_MIN_RADIUS}px, transparent ${COLOR_MAX_RADIUS}px),conic-gradient(from 0deg, #f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)`;
+  const status = !connected
+    ? 'Reconnecting…'
+    : isDeviceReadOnly(device)
+      ? 'Disabled or read-only'
+      : null;
   return createPortal(
     <div
       ref={root}
       role="dialog"
       aria-label={`${label} quick controls`}
-      aria-describedby={helpId}
+      aria-describedby={status ? helpId : undefined}
+      aria-busy={pending}
       className="radial-light-control fixed z-[60] w-[268px] touch-none text-center text-foreground"
       style={{ left: cx - 134, top: cy - 134 }}
     >
-      <div className="absolute -top-16 left-0 w-full">
-        <p className="mb-1 truncate text-xs font-medium">{label}</p>
+      <div className="absolute -top-[80px] left-0 w-full">
+        <p className="mb-2 inline-block max-w-full truncate rounded-full border border-border bg-card/95 px-3 py-1 text-xs font-medium shadow-sm backdrop-blur-md">
+          {label}
+        </p>
         <div className="flex justify-center gap-1 rounded-full">
           {colored && (
             <Button
@@ -292,7 +394,10 @@ export function LightQuickPopover({
           </Button>
         </div>
       </div>
-      <div className="relative size-[268px] rounded-full border border-border bg-card/95 shadow-2xl backdrop-blur-md">
+      <div
+        ref={surface}
+        className="relative size-[268px] rounded-full bg-card/95 shadow-2xl ring-1 ring-border backdrop-blur-md"
+      >
         <svg
           viewBox="0 0 268 268"
           className="pointer-events-none absolute inset-0 size-full"
@@ -314,7 +419,8 @@ export function LightQuickPopover({
               r="119"
               fill="none"
               stroke="currentColor"
-              className="text-primary"
+              data-brightness-arc
+              style={{ color: color.hex() }}
               strokeWidth="14"
               pathLength="100"
               strokeDasharray={`${level} 100`}
@@ -332,7 +438,7 @@ export function LightQuickPopover({
             aria-valuenow={level}
             aria-disabled={!enabled}
             tabIndex={enabled ? 0 : -1}
-            className="absolute inset-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="absolute inset-[8px] rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onPointerDown={(e) => {
               if (!enabled) return;
               e.preventDefault();
@@ -340,7 +446,6 @@ export function LightQuickPopover({
               dragCleanup.current = start(
                 e.pointerId,
                 'brightness',
-                { x: cx, y: cy },
                 e.nativeEvent,
               );
             }}
@@ -354,7 +459,7 @@ export function LightQuickPopover({
               else if (e.key === 'End') v = 100;
               else return;
               e.preventDefault();
-              void apply({ brightness: Math.max(0, Math.min(100, v)) });
+              adjust({ brightness: Math.max(0, Math.min(100, v)) }, true);
             }}
           />
         )}
@@ -375,7 +480,7 @@ export function LightQuickPopover({
           }
           aria-disabled={!enabled}
           tabIndex={enabled && (colored || caps?.ct) ? 0 : -1}
-          className="absolute left-[38px] top-[38px] size-48 rounded-full border-4 border-card outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="absolute left-1/2 top-1/2 size-[192px] -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-card outline-none focus-visible:ring-2 focus-visible:ring-ring"
           style={{
             background: colored || caps?.ct ? disk : 'var(--color-muted)',
           }}
@@ -384,12 +489,7 @@ export function LightQuickPopover({
             e.stopPropagation();
             e.preventDefault();
             dragCleanup.current?.();
-            dragCleanup.current = start(
-              e.pointerId,
-              'color',
-              { x: cx, y: cy },
-              e.nativeEvent,
-            );
+            dragCleanup.current = start(e.pointerId, 'color', e.nativeEvent);
           }}
           onKeyDown={(e) => {
             if (
@@ -401,68 +501,68 @@ export function LightQuickPopover({
             e.preventDefault();
             const d = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : -1;
             if (mode === 'ct' && caps?.ct)
-              void apply({
-                color: {
-                  ct: Math.max(
-                    caps.ct.start,
-                    Math.min(caps.ct.end, temperature + d * 100),
-                  ),
+              adjust(
+                {
+                  color: {
+                    ct: Math.max(
+                      caps.ct.start,
+                      Math.min(caps.ct.end, temperature + d * 100),
+                    ),
+                  },
                 },
-              });
+                true,
+              );
             else
-              void apply({
-                color: {
-                  h: (hue + (e.altKey ? 0 : d * 5) + 360) % 360,
-                  s: Math.max(
-                    0,
-                    Math.min(1, saturation + (e.altKey ? d * 0.05 : 0)),
-                  ),
+              adjust(
+                {
+                  color: {
+                    h: (hue + (e.altKey ? 0 : d * 5) + 360) % 360,
+                    s: Math.max(
+                      0,
+                      Math.min(1, saturation + (e.altKey ? d * 0.05 : 0)),
+                    ),
+                  },
                 },
-              });
+                true,
+              );
           }}
         >
           {(colored || caps?.ct) && (
             <span
               className="pointer-events-none absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-md"
+              data-color-indicator
               style={{
+                width: 16,
+                height: 16,
                 left:
-                  92 +
+                  COLOR_CENTER +
                   Math.cos(mode === 'ct' ? ctAngle : angle) * selectionRadius,
                 top:
-                  92 +
+                  COLOR_CENTER +
                   Math.sin(mode === 'ct' ? ctAngle : angle) * selectionRadius,
-                background:
-                  mode === 'hs'
-                    ? `hsl(${hue} ${saturation * 100}% 50%)`
-                    : color.hex(),
+                background: color.hex(),
               }}
             />
           )}
         </div>
         <button
           type="button"
-          aria-label={`Turn ${label} ${state.power ? 'off' : 'on'}`}
-          aria-pressed={state.power}
+          aria-label={`Turn ${label} ${power ? 'off' : 'on'}`}
+          aria-pressed={power}
           disabled={!enabled}
-          className="absolute left-1/2 top-1/2 grid size-[68px] -translate-x-1/2 -translate-y-1/2 place-content-center rounded-full border-4 border-card bg-card text-foreground shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-          onClick={async () => {
-            setPending(true);
-            try {
-              await setState(device, !state.power);
-            } finally {
-              setPending(false);
-            }
+          className="absolute left-1/2 top-1/2 grid size-[68px] -translate-x-1/2 -translate-y-1/2 place-content-center rounded-full border-4 border-card shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          style={{
+            background: color.hex(),
+            color: color.isLight() ? '#17251e' : '#fff',
           }}
+          onClick={() => adjust({ power: !power }, true)}
         >
-          {pending ? (
-            <LoaderCircle className="mx-auto size-5 animate-spin" />
-          ) : (
-            <Power
-              className={`mx-auto size-5 ${state.power ? 'text-primary' : 'text-muted-foreground'}`}
-            />
+          <Power className={`mx-auto size-5 ${power ? '' : 'opacity-50'}`} />
+          {pending && (
+            <LoaderCircle className="pointer-events-none absolute -right-1 -top-1 size-4 animate-spin rounded-full bg-card text-foreground" />
           )}
           <span className="mt-1 text-xs tabular-nums">
-            {dimmable ? `${level}%` : state.power ? 'On' : 'Off'}
+            {dimmable ? `${level}%` : power ? 'On' : 'Off'}
           </span>
         </button>
         <span className="pointer-events-none absolute bottom-8 left-0 w-full text-[10px] text-foreground/80">
@@ -473,18 +573,14 @@ export function LightQuickPopover({
               : ''}
         </span>
       </div>
-      <p
-        id={helpId}
-        className="mt-2 rounded-full bg-card/95 px-2 py-1 text-[10px] text-muted-foreground"
-      >
-        {!connected
-          ? 'Reconnecting…'
-          : isDeviceReadOnly(device)
-            ? 'Disabled or read-only'
-            : mode === 'ct'
-              ? 'Inner circle: temperature · outer ring: brightness'
-              : 'Inner circle: color · outer ring: brightness'}
-      </p>
+      {status && (
+        <p
+          id={helpId}
+          className="mt-2 rounded-full bg-card/95 px-2 py-1 text-[10px] text-muted-foreground"
+        >
+          {status}
+        </p>
+      )}
     </div>,
     document.body,
   );

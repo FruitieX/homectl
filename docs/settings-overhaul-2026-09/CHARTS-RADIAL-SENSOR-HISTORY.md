@@ -152,7 +152,8 @@ of a multi-value sensor.
 
 - Light controls share one animated radial surface on floorplans and dashboard/
   room light indicators. Mode buttons reflect the current mode. Holding and
-  releasing leaves the circle open; direct hold/drag commits on release. The
+  releasing leaves the circle open; direct hold/drag now sends coalesced live
+  updates and flushes the final value on release (see the follow-up below). The
   center toggles power; the inner area edits color; the outside ring edits brightness.
 - With a device sheet open, holding a light selects it alongside the sheet's
   existing light. Ctrl-click selects directly; removing the last selection exits.
@@ -250,3 +251,52 @@ CDP_PORT=9337 node ui/dev/cdp-probe.mjs \
   --url http://127.0.0.1:3021/ --width 390 --height 844 \
   --driver-file ui/dev/widget-chart-sizing-review.mjs
 ```
+
+## Follow-up: radial geometry and live adjustment
+
+Requested and delivered 2026-09-30. This supersedes the initial release-only
+command behavior.
+
+- [x] Fix the hue surface's center and scale. The wheel previously used a
+  rem-based diameter with pixel-based coordinates, which broke at Compact
+  density. Its diameter is now explicitly 192 px, centered on the 268 px
+  surface; the indicator stays inside the colored area at full saturation.
+  Pointer coordinates also account for the actual animated surface bounds.
+- [x] Prevent brightness/color indicators from briefly returning to old values.
+  Keep the latest local adjustment until its matching device state arrives,
+  across older intermediate acknowledgements. Confirmed values release the
+  local overlay so later external device updates remain visible.
+- [x] Apply while dragging through a 120 ms coalescing window, with only one
+  request in flight. A continuous drag updates the physical target before
+  release. New input replaces queued input; release flushes the latest value.
+  Closing finishes the released value without updating an unmounted view.
+  A rejected command stops queued writes through the existing error path.
+- [x] Keep controls responsive while awaiting acknowledgements. Keyboard and
+  power changes flush immediately through the same serialized command path.
+  Canceling drops unsent changes; values already applied by live adjustment
+  remain applied.
+- [x] Use the selected light color for the brightness arc, center power button
+  and color indicator, using the same color conversion as floorplan markers.
+- [x] Give the title a background pill and remove the “inner circle … outer
+  ring …” instruction. Connection/read-only status still appears when needed.
+
+The shared popover delivers these changes on floorplans and dashboard/room light
+indicators. No new endpoint, setting, database migration or dependency is needed.
+
+Verification: **261 UI tests** passed, including five queue tests for coalescing,
+slow acknowledgements, rejection, cancellation and closing during a pending
+command. Type check, production build and lint passed; lint retains the existing
+import/export cleanup warning. **68 browser checks passed** (34 desktop,
+34 phone). Desktop and phone browser batches include native
+mouse/touch adjustments before release, 400 ms acknowledgement delays, stable
+indicators, all four hue quadrants at both densities, matching preview colors,
+and subsequent external updates, alongside existing selection/sensor/history
+checks. The browser batches reported no errors and used only isolated fixtures.
+No live household configuration or devices were changed.
+
+[Desktop hue](implementation-evidence/radial-live/desktop-hue.png) ·
+[Phone hue](implementation-evidence/radial-live/phone-hue.png) ·
+[Desktop temperature](implementation-evidence/radial-live/desktop-temperature.png) ·
+[Phone temperature](implementation-evidence/radial-live/phone-temperature.png) ·
+[Desktop checks](implementation-evidence/radial-live/desktop-checks.json) ·
+[Phone checks](implementation-evidence/radial-live/phone-checks.json).
