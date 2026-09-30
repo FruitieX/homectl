@@ -302,6 +302,16 @@ keep names readable. All 234 UI tests, ten targeted Rust tests and type/lint/bui
 pass. Remaining routine work: actions, rollout, policies and the final reference/
 recovery contracts. Full overhaul acceptance remains open.
 
+Routine execution/timing checkpoint, 2026-09-30: 25 checks pass at each
+1440/390 px. Execution modes, action limits and minimum spacing now use shared
+controls with explicit validation and retained drafts. Scene transitions and
+spatial rollout preserve exact milliseconds, optional values, source choices and
+extension fields. Cycle-entry drafts follow reordering/removal. Save opens a
+collapsed section before focusing its invalid input. All 234 UI tests, two
+targeted Rust compiler tests and type/lint/build pass. Screenshots are recorded.
+Remaining: other action variants, script declarations and the broader reference,
+persistence, recovery and final acceptance gates. The goal remains active.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

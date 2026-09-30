@@ -490,22 +490,28 @@ export function RoutineEditor({ id }: { id?: string }) {
                   </section>
                 </div>
               ) : null}
-              {version === 2 && (advanced || definition.execution != null) && (
-                <SettingsSection
-                  id="execution"
-                  title="Execution"
-                  description="How overlapping runs and action limits are handled."
-                >
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <RoutineExecutionPolicyEditor
-                      policy={
-                        definition.execution as ExecutionPolicy | undefined
-                      }
-                      onChange={(execution) => patchDefinition({ execution })}
-                    />
-                  </div>
-                </SettingsSection>
-              )}
+              {version === 2 &&
+                (advanced ||
+                  definition.execution != null ||
+                  draft.errors.some((error) =>
+                    error.field.startsWith('execution/'),
+                  )) && (
+                  <SettingsSection
+                    id="execution"
+                    title="Execution"
+                    description="How overlapping runs and action limits are handled."
+                  >
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <RoutineExecutionPolicyEditor
+                        draftKey={key}
+                        policy={
+                          definition.execution as ExecutionPolicy | undefined
+                        }
+                        onChange={(execution) => patchDefinition({ execution })}
+                      />
+                    </div>
+                  </SettingsSection>
+                )}
             </div>
           )}
           {version === 1 && (

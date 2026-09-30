@@ -88,3 +88,14 @@ Confirmed by 11 chart checks at 1440/390 px and 8 log checks at
 No household configuration has been edited in this audit. All browser writes
 use the marked local fixture; physical kiosk/GPU behavior remains distinct from
 simulated browser event checks.
+
+## Routine policy and timing follow-up
+
+The routine timing journey adds 25 native browser checks at each 1440/390 px.
+Execution policy, activation/cycle transitions and spatial rollout now preserve
+unfinished drafts and optional/zero distinctions, with validation focused inside
+expanded optional sections. The screenshot gallery shows the reviewed controls.
+Two targeted server compiler tests and all 234 UI tests pass; type/lint/build
+also pass. FIELD-COVERAGE.md records the exact scope and remaining action/script,
+reference and persistence contracts. This closes those edited-field cases only;
+all broader final acceptance gates above remain open.

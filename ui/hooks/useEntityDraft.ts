@@ -69,13 +69,19 @@ export function useEntityDraft<T extends object>({
       ];
       if (errors.length) {
         entityDraftStore.errors(key, errors);
-        requestAnimationFrame(() =>
-          document
-            .querySelector<HTMLElement>(
-              `[data-field="${CSS.escape(errors[0].field)}"]`,
-            )
-            ?.focus(),
-        );
+        requestAnimationFrame(() => {
+          const field = document.querySelector<HTMLElement>(
+            `[data-field="${CSS.escape(errors[0].field)}"]`,
+          );
+          // A retained error can belong to a collapsed optional section after navigation.
+          for (
+            let parent = field?.parentElement;
+            parent;
+            parent = parent.parentElement
+          )
+            if (parent instanceof HTMLDetailsElement) parent.open = true;
+          field?.focus();
+        });
         return;
       }
       const submission = entityDraftStore.start<T>(key);

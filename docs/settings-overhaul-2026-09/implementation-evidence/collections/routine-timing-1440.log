@@ -1,0 +1,108 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Clearing the action limit does not replace it with a default",
+    "passed": true
+   },
+   {
+    "name": "An incomplete action limit sends no writes",
+    "passed": true
+   },
+   {
+    "name": "Unfinished policy fields survive navigation",
+    "passed": true
+   },
+   {
+    "name": "Discard restores the saved action limit",
+    "passed": true
+   },
+   {
+    "name": "Invalid action limit stays visible: 1.5",
+    "passed": true
+   },
+   {
+    "name": "Invalid action limit stays visible: 65",
+    "passed": true
+   },
+   {
+    "name": "Zero rate limit is explained rather than silently removed",
+    "passed": true
+   },
+   {
+    "name": "Execution mode persists: single",
+    "passed": true
+   },
+   {
+    "name": "Execution mode persists: restart",
+    "passed": true
+   },
+   {
+    "name": "Execution mode persists: queued",
+    "passed": true
+   },
+   {
+    "name": "Minimum spacing retains exact milliseconds across units",
+    "passed": true
+   },
+   {
+    "name": "A zero override points to the instant alternative",
+    "passed": true
+   },
+   {
+    "name": "Rollout source switches retain the fixed device",
+    "passed": true
+   },
+   {
+    "name": "Rollout off/on restores spread and source before Save",
+    "passed": true
+   },
+   {
+    "name": "Rollout and explicit instant configuration persist without losing extensions",
+    "passed": true
+   },
+   {
+    "name": "Save opens collapsed options and focuses their retained error",
+    "passed": true
+   },
+   {
+    "name": "Disabling rollout drops its incomplete fields and saves omission",
+    "passed": true
+   },
+   {
+    "name": "Rollout duration is bounded at ten minutes",
+    "passed": true
+   },
+   {
+    "name": "Zero rollout is explicit immediate activation",
+    "passed": true
+   },
+   {
+    "name": "Missing rollout spread remains omitted",
+    "passed": true
+   },
+   {
+    "name": "Cycle transition drafts follow their scene when reordered",
+    "passed": true
+   },
+   {
+    "name": "Reordered cycle timing persists per scene with extension fields",
+    "passed": true
+   },
+   {
+    "name": "Removing a cycle entry clears its incomplete timing draft",
+    "passed": true
+   },
+   {
+    "name": "Cycle rollout independently saves zero",
+    "passed": true
+   },
+   {
+    "name": "Saved policy and action timing survive reload",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/routines","viewport":{"width":1440,"height":1080},"problems":[]}

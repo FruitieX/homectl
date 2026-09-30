@@ -26,6 +26,7 @@ export function DurationInput({
   draftKey,
   path,
   required = false,
+  validate,
 }: {
   valueMs: number | undefined;
   onChange: (ms: number | undefined) => void;
@@ -34,6 +35,7 @@ export function DurationInput({
   draftKey?: string;
   path?: string;
   required?: boolean;
+  validate?: (ms: number) => string | undefined;
 }) {
   const [selectedUnit, setUnit] = useState<DurationUnit>(() =>
     guessDurationUnit(valueMs),
@@ -54,6 +56,8 @@ export function DurationInput({
       durationUnits.find((entry) => entry.value === nextUnit)!.factor,
       required,
     );
+    if (!result.error && result.value !== undefined)
+      result.error = validate?.(result.value);
     if (draftKey && path)
       entityDraftStore.stageInput(draftKey, path, {
         raw,

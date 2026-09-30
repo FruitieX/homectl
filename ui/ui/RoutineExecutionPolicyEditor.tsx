@@ -1,8 +1,9 @@
 import type { ExecutionMode } from '@/bindings/ExecutionMode';
 import type { ExecutionPolicy } from '@/bindings/ExecutionPolicy';
-import { DurationInput, selectClassName } from '@/ui/builder-fields';
+import { DurationInput } from '@/ui/builder-fields';
 import { ConfigField } from '@/ui/config-form';
-import { Input } from '@/ui/primitives/input';
+import { DraftNumberInput } from '@/ui/settings/DraftNumberInput';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 
 export const defaultExecutionPolicy: ExecutionPolicy = {
   mode: 'queued',
@@ -37,14 +38,14 @@ const modeOptions: Array<{
 export function RoutineExecutionPolicyEditor({
   policy,
   onChange,
+  draftKey,
 }: {
   policy: ExecutionPolicy | undefined;
   onChange: (policy: ExecutionPolicy) => void;
+  draftKey: string;
 }) {
   const current = { ...defaultExecutionPolicy, ...policy };
-  const mode =
-    modeOptions.find((option) => option.value === current.mode) ??
-    modeOptions[0];
+  const mode = modeOptions.find((option) => option.value === current.mode);
   const minIntervalMs =
     current.min_interval_ms === undefined
       ? undefined
@@ -56,20 +57,29 @@ export function RoutineExecutionPolicyEditor({
 
   return (
     <>
-      <ConfigField label="Mode" description={mode.description}>
-        <select
-          className={selectClassName}
+      <ConfigField
+        label="Mode"
+        description={
+          mode?.description ??
+          'This execution mode is unsupported. Its stored value is preserved until you choose another mode.'
+        }
+      >
+        <SettingsSelect
+          aria-label="Execution mode"
           value={current.mode}
-          onChange={(event) =>
-            update({ mode: event.target.value as ExecutionMode })
+          options={
+            mode
+              ? modeOptions
+              : [
+                  ...modeOptions,
+                  {
+                    value: current.mode,
+                    label: `Unsupported mode: ${current.mode}`,
+                  },
+                ]
           }
-        >
-          {modeOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          onValueChange={(mode) => update({ mode: mode as ExecutionMode })}
+        />
       </ConfigField>
 
       <ConfigField
@@ -77,19 +87,17 @@ export function RoutineExecutionPolicyEditor({
         description="Upper bound on dispatched actions per invocation (1-64). Runs that would dispatch more are rejected whole."
         className="max-w-xs"
       >
-        <Input
-          type="number"
-          min={1}
-          max={64}
+        <DraftNumberInput
+          aria-label="Max actions"
+          draftKey={draftKey}
+          path="execution/max_actions"
           value={current.max_actions}
-          onChange={(event) => {
-            const parsed = event.target.valueAsNumber;
-            update({
-              max_actions: Number.isNaN(parsed)
-                ? defaultExecutionPolicy.max_actions
-                : Math.min(64, Math.max(1, Math.round(parsed))),
-            });
-          }}
+          validate={(value) =>
+            Number.isInteger(value) && value >= 1 && value <= 64
+              ? undefined
+              : 'Enter a whole number from 1 to 64.'
+          }
+          onValueChange={(max_actions) => update({ max_actions })}
         />
       </ConfigField>
 
@@ -99,6 +107,14 @@ export function RoutineExecutionPolicyEditor({
         className="max-w-xs"
       >
         <DurationInput
+          label="Minimum spacing"
+          draftKey={draftKey}
+          path="execution/min_interval_ms"
+          validate={(ms) =>
+            ms === 0
+              ? 'Use a positive duration, or leave empty for no minimum.'
+              : undefined
+          }
           valueMs={minIntervalMs}
           placeholder="No minimum"
           onChange={(ms) =>

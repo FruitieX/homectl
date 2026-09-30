@@ -20,7 +20,7 @@ import {
   duplicateRoutineNode,
   isEditableSceneSelection,
 } from '@/lib/routineDraft';
-import { entityDraftStore } from '@/lib/entityDraft';
+import { entityDraftStore, remapArrayEditorPath } from '@/lib/entityDraft';
 import type { ChooseBranch } from '@/bindings/ChooseBranch';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
@@ -465,36 +465,56 @@ function RolloutEditor({
   rollout,
   devices,
   onChange,
+  path,
 }: {
   rollout: RolloutSpec;
   devices: DevicesState;
   onChange: (rollout: RolloutSpec) => void;
+  path: string;
 }) {
+  const { draftKey } = useRoutineAuthoring();
+  if (
+    rollout.style !== 'spatial' ||
+    (rollout.source &&
+      !['device', 'triggering_device'].includes(rollout.source.kind))
+  )
+    return <UnknownFlowValue value={rollout} />;
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <ConfigField
         label="Rollout source"
         description="Where the stagger radiates from."
       >
-        <select
-          className={selectClassName}
+        <SettingsSelect
+          aria-label="Rollout source"
           value={rollout.source?.kind === 'device' ? 'device' : 'trigger'}
-          onChange={(event) =>
+          options={[
+            { value: 'trigger', label: 'Triggering device' },
+            { value: 'device', label: 'Fixed device' },
+          ]}
+          onValueChange={(next) => {
+            const source =
+              next === 'device'
+                ? {
+                    kind: 'device' as const,
+                    device: { integration_id: '', device_id: '' },
+                  }
+                : { kind: 'triggering_device' as const };
             onChange({
               ...rollout,
-              source:
-                event.target.value === 'device'
-                  ? {
-                      kind: 'device',
-                      device: { integration_id: '', device_id: '' },
-                    }
-                  : { kind: 'triggering_device' },
-            })
-          }
-        >
-          <option value="trigger">Triggering device</option>
-          <option value="device">Fixed device</option>
-        </select>
+              source: draftKey
+                ? entityDraftStore.switchVariant(
+                    draftKey,
+                    path + '/source',
+                    rollout.source?.kind === 'device' ? 'device' : 'trigger',
+                    rollout.source,
+                    next,
+                    source,
+                  )
+                : source,
+            });
+          }}
+        />
       </ConfigField>
       {rollout.source?.kind === 'device' ? (
         <ConfigField label="Source device">
@@ -505,6 +525,7 @@ function RolloutEditor({
               onChange({
                 ...rollout,
                 source: {
+                  ...rollout.source,
                   kind: 'device',
                   device: keyToDeviceRef(key),
                 },
@@ -518,6 +539,12 @@ function RolloutEditor({
         description="Targets without a saved position apply immediately."
       >
         <DurationInput
+          label="Rollout spread"
+          validate={(ms) =>
+            ms > 600000 ? 'Rollout spread cannot exceed 10 minutes.' : undefined
+          }
+          draftKey={draftKey}
+          path={path + '/duration'}
           valueMs={
             rollout.duration_ms === undefined
               ? undefined
@@ -535,27 +562,41 @@ function RolloutEditor({
 function RolloutToggle({
   rollout,
   onChange,
+  path,
 }: {
   rollout: RolloutSpec | null | undefined;
   onChange: (rollout: RolloutSpec | undefined) => void;
+  path: string;
 }) {
+  const { draftKey } = useRoutineAuthoring();
   return (
     <label className="flex cursor-pointer items-center gap-2 text-sm">
       <input
         type="checkbox"
         className="size-4 shrink-0 rounded border border-input bg-background accent-primary"
         checked={rollout !== undefined && rollout !== null}
-        onChange={(event) =>
+        aria-label="Spatial rollout"
+        onChange={(event) => {
+          const fallback = event.target.checked
+            ? ({
+                style: 'spatial',
+                source: { kind: 'triggering_device' },
+                duration_ms: 1500,
+              } as unknown as RolloutSpec)
+            : undefined;
           onChange(
-            event.target.checked
-              ? ({
-                  style: 'spatial',
-                  source: { kind: 'triggering_device' },
-                  duration_ms: 1500,
-                } as unknown as RolloutSpec)
-              : undefined,
-          )
-        }
+            draftKey
+              ? entityDraftStore.switchVariant(
+                  draftKey,
+                  path,
+                  rollout == null ? 'disabled' : 'enabled',
+                  rollout ?? undefined,
+                  event.target.checked ? 'enabled' : 'disabled',
+                  fallback,
+                )
+              : fallback,
+          );
+        }}
       />
       Spatial rollout (stagger targets by distance from a source)
     </label>
@@ -775,6 +816,7 @@ function StepFields({
   existingIds: string[];
 }) {
   const { returnHref, draftKey } = useRoutineAuthoring();
+  const actionPath = `step/${step.id}/${step.action}`;
   const sceneSlot = 'scene-choice/' + encodeURIComponent(step.id);
   const switchSceneMode = (mode: 'fixed' | 'dynamic') => {
     if (step.action !== 'activate_scene') return;
@@ -886,27 +928,36 @@ function StepFields({
                   label="Transition"
                   description="Scene-derived transitions are used unless disabled."
                 >
-                  <select
-                    className={selectClassName}
+                  <SettingsSelect
+                    aria-label="Transition source"
+                    options={[
+                      { value: 'scene', label: 'Use scene transitions' },
+                      { value: 'none', label: 'Instant unless overridden' },
+                    ]}
                     value={
                       step.use_scene_transition !== false ? 'scene' : 'none'
                     }
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       onChange({
                         ...step,
-                        use_scene_transition: event.target.value === 'scene',
+                        use_scene_transition: value === 'scene',
                       })
                     }
-                  >
-                    <option value="scene">Use scene transitions</option>
-                    <option value="none">No transition (instant)</option>
-                  </select>
+                  />
                 </ConfigField>
                 <ConfigField
                   label="Transition override"
                   description="Optional explicit fade duration for this activation."
                 >
                   <DurationInput
+                    label="Transition override"
+                    validate={(ms) =>
+                      ms === 0
+                        ? 'Choose instant and clear the override, or enter a positive duration.'
+                        : undefined
+                    }
+                    draftKey={draftKey}
+                    path={actionPath + '/transition'}
                     valueMs={
                       step.transition_ms === undefined
                         ? undefined
@@ -922,6 +973,7 @@ function StepFields({
                 </ConfigField>
               </div>
               <RolloutToggle
+                path={actionPath + '/rollout'}
                 rollout={step.rollout}
                 onChange={(rollout) =>
                   onChange({ ...step, rollout } as unknown as NativeAction)
@@ -929,6 +981,7 @@ function StepFields({
               />
               {step.rollout ? (
                 <RolloutEditor
+                  path={actionPath + '/rollout'}
                   rollout={step.rollout}
                   devices={devices}
                   onChange={(rollout) =>
@@ -961,18 +1014,25 @@ function StepFields({
                       variant="outline"
                       size="sm"
                       disabled={index === 0}
-                      onClick={() =>
+                      onClick={() => {
+                        const order = moveSibling(
+                          step.scenes.map((_, i) => i),
+                          index,
+                          -1,
+                        );
+                        if (draftKey)
+                          entityDraftStore.remapEditorPaths(draftKey, (path) =>
+                            remapArrayEditorPath(
+                              path,
+                              actionPath + '/scenes',
+                              order,
+                            ),
+                          );
                         onChange({
                           ...step,
-                          scenes: step.scenes.map((item, itemIndex) =>
-                            itemIndex === index - 1
-                              ? entry
-                              : itemIndex === index
-                                ? step.scenes[index - 1]
-                                : item,
-                          ),
-                        })
-                      }
+                          scenes: order.map((i) => step.scenes[i]),
+                        });
+                      }}
                     >
                       Move up
                     </Button>
@@ -980,14 +1040,23 @@ function StepFields({
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() =>
+                      onClick={() => {
+                        const order = step.scenes
+                          .map((_, i) => i)
+                          .filter((i) => i !== index);
+                        if (draftKey)
+                          entityDraftStore.remapEditorPaths(draftKey, (path) =>
+                            remapArrayEditorPath(
+                              path,
+                              actionPath + '/scenes',
+                              order,
+                            ),
+                          );
                         onChange({
                           ...step,
-                          scenes: step.scenes.filter(
-                            (_, itemIndex) => itemIndex !== index,
-                          ),
-                        })
-                      }
+                          scenes: order.map((i) => step.scenes[i]),
+                        });
+                      }}
                     >
                       Remove
                     </Button>
@@ -1027,35 +1096,43 @@ function StepFields({
                     label="Transition"
                     description="Scene-derived transitions are used unless disabled."
                   >
-                    <select
-                      className={selectClassName}
+                    <SettingsSelect
+                      aria-label="Transition source"
+                      options={[
+                        { value: 'scene', label: 'Use scene transitions' },
+                        { value: 'none', label: 'Instant unless overridden' },
+                      ]}
                       value={
                         entry.use_scene_transition !== false ? 'scene' : 'none'
                       }
-                      onChange={(event) =>
+                      onValueChange={(value) =>
                         onChange({
                           ...step,
                           scenes: step.scenes.map((item, itemIndex) =>
                             itemIndex === index
                               ? {
                                   ...item,
-                                  use_scene_transition:
-                                    event.target.value === 'scene',
+                                  use_scene_transition: value === 'scene',
                                 }
                               : item,
                           ),
                         })
                       }
-                    >
-                      <option value="scene">Use scene transitions</option>
-                      <option value="none">No transition (instant)</option>
-                    </select>
+                    />
                   </ConfigField>
                   <ConfigField
                     label="Transition override"
                     description="Optional explicit fade duration for this entry."
                   >
                     <DurationInput
+                      label="Transition override"
+                      validate={(ms) =>
+                        ms === 0
+                          ? 'Choose instant and clear the override, or enter a positive duration.'
+                          : undefined
+                      }
+                      draftKey={draftKey}
+                      path={actionPath + '/scenes/' + index + '/transition'}
                       valueMs={
                         entry.transition_ms === undefined
                           ? undefined
@@ -1113,6 +1190,7 @@ function StepFields({
             onChange={(detection) => onChange({ ...step, detection })}
           />
           <RolloutToggle
+            path={actionPath + '/rollout'}
             rollout={step.rollout}
             onChange={(rollout) =>
               onChange({ ...step, rollout } as unknown as NativeAction)
@@ -1120,6 +1198,7 @@ function StepFields({
           />
           {step.rollout ? (
             <RolloutEditor
+              path={actionPath + '/rollout'}
               rollout={step.rollout}
               devices={devices}
               onChange={(rollout) =>
