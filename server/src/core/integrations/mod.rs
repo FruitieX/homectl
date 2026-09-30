@@ -280,9 +280,9 @@ impl Integrations {
                 .map(|old| old.module_name != row.plugin || old.config != row.config)
                 .unwrap_or(true);
             if changed {
-                // Installing the epoch before the old instance is stopped means
-                // events from the superseded instance are rejected immediately.
-                let epoch = self.install_event_epoch(id);
+                // Reserve an epoch without changing the live map. A later
+                // constructor/policy failure must leave old events valid.
+                let epoch = self.next_event_epoch();
                 let event_tx = self.spawn_epoch_forwarder(epoch);
                 let integration =
                     load_custom_integration(&row.plugin, id, &row.config, &self.cli, event_tx)?;
@@ -301,6 +301,22 @@ impl Integrations {
             }
         }
 
+        let previous_epochs = {
+            let mut epochs = self
+                .event_epochs
+                .lock()
+                .expect("integration epoch lock poisoned");
+            let previous = epochs.clone();
+            // Cut over only after every replacement has been constructed, but
+            // before stopping old instances so late old events are rejected.
+            for (id, replacement) in &replacements {
+                epochs.insert(
+                    id.clone(),
+                    replacement.event_epoch.expect("replacement epoch"),
+                );
+            }
+            previous
+        };
         let mut stopped = Vec::new();
         let mut started = Vec::new();
         let apply: Result<()> = async {
@@ -320,6 +336,13 @@ impl Integrations {
         }
         .await;
         if let Err(error) = apply {
+            // Reload runs on a staged clone sharing the epoch map with the
+            // state actor. Restore that map before restarting old instances;
+            // otherwise their reports are silently rejected after rollback.
+            *self
+                .event_epochs
+                .lock()
+                .expect("integration epoch lock poisoned") = previous_epochs;
             for replacement in started {
                 let _ = replacement.stop().await;
             }
@@ -1035,6 +1058,8 @@ mod tests {
             .reload_config_rows(std::slice::from_ref(&original))
             .await
             .unwrap();
+        let id = IntegrationId::from("timer".to_string());
+        let epoch = state.integrations.event_epoch(&id).unwrap();
         let invalid = config_queries::IntegrationRow {
             config: json!({"device_name": 123}),
             ..original.clone()
@@ -1050,6 +1075,9 @@ mod tests {
             .get(&IntegrationId::from("timer".to_string()))
             .unwrap();
         assert_eq!(current.config, original.config);
+        assert!(state
+            .integrations
+            .accepts_integration_epoch(&id, Some(epoch)));
         current.register().await.unwrap();
     }
 
@@ -1081,6 +1109,7 @@ mod tests {
         let (mut state, _rx) = crate::core::event::tests::test_state();
         let starts = Arc::new(AtomicUsize::new(0));
         let id = IntegrationId::from("existing".to_string());
+        let epoch = state.integrations.install_event_epoch(&id);
         state.integrations.custom_integrations.insert(
             id.clone(),
             IntegrationHandle::new(
@@ -1089,7 +1118,7 @@ mod tests {
                 "test".into(),
                 json!({}),
                 Default::default(),
-                None,
+                Some(epoch),
             ),
         );
         let error = state
@@ -1100,6 +1129,26 @@ mod tests {
         assert!(error.to_string().contains("stop failed"));
         assert_eq!(starts.load(Ordering::SeqCst), 1);
         assert!(state.integrations.custom_integrations.contains_key(&id));
+        // Exercise replacement as well as removal. Both the staged copy and
+        // original actor must accept the restarted old instance's reports.
+        let mut staged = state.integrations.clone();
+        assert!(staged
+            .reload_config_rows(&[config_queries::IntegrationRow {
+                id: "existing".into(),
+                plugin: "dummy".into(),
+                config: json!({"devices":{}}),
+                enabled: true,
+            }])
+            .await
+            .is_err());
+        assert_eq!(starts.load(Ordering::SeqCst), 2);
+        assert!(staged.accepts_integration_epoch(&id, Some(epoch)));
+        assert!(state
+            .integrations
+            .accepts_integration_epoch(&id, Some(epoch)));
+        assert!(!state
+            .integrations
+            .accepts_integration_epoch(&id, Some(epoch + 1)));
     }
 
     #[test]

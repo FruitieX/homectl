@@ -49,19 +49,25 @@ export default function ImportExportPage() {
   const { advanced } = useSettingsPreferences();
   const [exporting, setExporting] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [reading, setReading] = useState(false);
   const [includeSecrets, setIncludeSecrets] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState('');
+  const [exportError, setExportError] = useState('');
   const [result, setResult] = useState('');
   const [filter, setFilter] = useState('');
   const [limit, setLimit] = useState(80);
   const [host, setHost] = useState<HTMLElement | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const restoreButton = useRef<HTMLButtonElement>(null);
   const reviewRequest = useRef<AbortController | null>(null);
   const fileGeneration = useRef(0);
   useEffect(() => {
     setHost(document.getElementById('settings-save-slot'));
-    return () => reviewRequest.current?.abort();
+    return () => {
+      fileGeneration.current++;
+      reviewRequest.current?.abort();
+    };
   }, []);
   const draft = useEntityDraft<RestoreDraft>({
     key: `${apiEndpoint}/backup-restore`,
@@ -130,6 +136,7 @@ export default function ImportExportPage() {
         setLimit(80);
         setFilter('');
         requestAnimationFrame(() => {
+          if (request.signal.aborted) return;
           const heading = document.getElementById('backup-review-title');
           heading?.focus({ preventScroll: true });
           heading?.scrollIntoView({ block: 'start' });
@@ -151,29 +158,37 @@ export default function ImportExportPage() {
   const chooseFile = async (file: File) => {
     const generation = ++fileGeneration.current;
     reviewRequest.current?.abort();
-    draft.patch({ review: null });
+    draft.patch({ filename: file.name, backup: null, review: null });
     setConfirm(false);
     setError('');
+    setResult('');
+    setReading(false);
     if (file.size > 32 * 1024 * 1024) {
       setError('Choose a backup smaller than 32 MB.');
       return;
     }
+    setReading(true);
     try {
       const backup = JSON.parse(await file.text()) as ConfigExport;
       if (generation !== fileGeneration.current) return;
       if (!backup || typeof backup !== 'object' || Array.isArray(backup))
         throw Error('Choose a homectl JSON backup.');
       draft.patch({ filename: file.name, backup, review: null });
+      setReading(false);
       await reviewBackup(backup);
     } catch (error) {
+      if (generation !== fileGeneration.current) return;
       setError(
         error instanceof Error
           ? `Could not read the backup: ${error.message}`
           : 'Could not read the backup.',
       );
+    } finally {
+      if (generation === fileGeneration.current) setReading(false);
     }
   };
   const download = async () => {
+    setExportError('');
     setExporting(true);
     try {
       const config = await exportConfig(includeSecrets);
@@ -189,7 +204,7 @@ export default function ImportExportPage() {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast.success('Backup downloaded');
     } catch (error) {
-      setError(
+      setExportError(
         error instanceof Error
           ? error.message
           : 'Could not download the backup.',
@@ -203,6 +218,9 @@ export default function ImportExportPage() {
     reviewRequest.current?.abort();
     draft.discard();
     setError('');
+    setResult('');
+    setReading(false);
+    setConfirm(false);
     setFilter('');
     if (fileInput.current) fileInput.current.value = '';
   };
@@ -229,6 +247,7 @@ export default function ImportExportPage() {
               type="checkbox"
               className="mt-1"
               checked={includeSecrets}
+              disabled={exporting}
               onChange={(event) => setIncludeSecrets(event.target.checked)}
             />
             <span>
@@ -244,6 +263,11 @@ export default function ImportExportPage() {
             {exporting ? 'Preparing…' : 'Download backup'}
           </Button>
         </div>
+        {exportError && (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            {exportError}
+          </p>
+        )}
       </SettingsSection>
       <SettingsSection
         title="Restore a backup"
@@ -275,6 +299,20 @@ export default function ImportExportPage() {
             Reviewing backup…
           </p>
         )}
+        {reading && (
+          <p role="status" className="mt-3 text-sm">
+            Reading backup…
+          </p>
+        )}
+        {value.filename &&
+          !value.backup &&
+          !reading &&
+          !reviewing &&
+          !error && (
+            <p role="status" className="mt-3 text-sm">
+              Choose this file again to read and review it.
+            </p>
+          )}
         {error && (
           <p role="alert" className="mt-3 text-sm text-destructive">
             {error}
@@ -427,25 +465,34 @@ export default function ImportExportPage() {
                 Discard
               </Button>
               <Button
-                disabled={draft.saving || reviewing}
+                ref={restoreButton}
+                disabled={draft.saving || reviewing || reading || !value.backup}
                 onClick={() => {
                   if (!review) void reviewBackup(value.backup!);
                   else if (review.destructive) setConfirm(true);
                   else void draft.save();
                 }}
               >
-                {reviewing
-                  ? 'Reviewing…'
-                  : review
-                    ? 'Restore backup'
-                    : 'Review again'}
+                {reading
+                  ? 'Reading…'
+                  : reviewing
+                    ? 'Reviewing…'
+                    : review
+                      ? 'Restore backup'
+                      : 'Review again'}
               </Button>
             </div>
           </div>,
           host,
         )}
       <Dialog open={confirm} onOpenChange={setConfirm}>
-        <DialogContent className="settings-dialog">
+        <DialogContent
+          className="settings-dialog"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            restoreButton.current?.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Replace the saved setup?</DialogTitle>
             <DialogDescription>

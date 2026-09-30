@@ -1,0 +1,113 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Large review initially renders 80 entries",
+    "passed": true
+   },
+   {
+    "name": "Completed review receives focus",
+    "passed": true
+   },
+   {
+    "name": "Show more reveals the next 80 entries",
+    "passed": true
+   },
+   {
+    "name": "Filter finds an entry beyond the rendered page",
+    "passed": true
+   },
+   {
+    "name": "Cancel restores keyboard focus to Restore",
+    "passed": true
+   },
+   {
+    "name": "Review and cancellation issue no apply request",
+    "passed": true
+   },
+   {
+    "name": "Invalid replacement cannot restore the previous file",
+    "passed": true
+   },
+   {
+    "name": "Invalid JSON is not sent for review",
+    "passed": true
+   },
+   {
+    "name": "Oversized file has a clear local error and disabled review",
+    "passed": true
+   },
+   {
+    "name": "Oversized upload performs no request",
+    "passed": true
+   },
+   {
+    "name": "Pending file read has feedback and cannot restore",
+    "passed": true
+   },
+   {
+    "name": "Superseded read failure cannot replace the newer review",
+    "passed": true
+   },
+   {
+    "name": "Discarded file read never starts a review",
+    "passed": true
+   },
+   {
+    "name": "Discard clears the pending file and save bar",
+    "passed": true
+   },
+   {
+    "name": "Unmount cancels publication of a pending read",
+    "passed": true
+   },
+   {
+    "name": "Interrupted read gives a usable next step on return",
+    "passed": true
+   },
+   {
+    "name": "Canceled review cannot restore the discarded candidate",
+    "passed": true
+   },
+   {
+    "name": "Failed review keeps the candidate for an explicit retry",
+    "passed": true
+   },
+   {
+    "name": "Pending apply locks file replacement, Discard and resubmission",
+    "passed": true
+   },
+   {
+    "name": "Explicit confirmation sends one apply request",
+    "passed": true
+   },
+   {
+    "name": "Failed apply keeps file and requires a fresh review",
+    "passed": true
+   },
+   {
+    "name": "Export failure is shown in the download section",
+    "passed": true
+   },
+   {
+    "name": "Export can be retried explicitly",
+    "passed": true
+   },
+   {
+    "name": "Recovery fits the viewport",
+    "passed": true
+   },
+   {
+    "name": "Read-only journey leaves fixture configuration unchanged",
+    "passed": true
+   },
+   {
+    "name": "Interception completed without unexpected errors",
+    "passed": true
+   }
+  ],
+  "expectedErrors": "Injected review/apply/export HTTP 503 responses"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":1440,"height":1080},"problems":["log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)"]}

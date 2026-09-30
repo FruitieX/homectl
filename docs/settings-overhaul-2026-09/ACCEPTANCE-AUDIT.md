@@ -32,7 +32,7 @@ covers. The top-level implementation gates stay open until reconciled here.
 | Routines | Current routine checkpoints cover three-lane/phone presentation, nested conditions, stable IDs, script/native branches, conversion and retained edits. | All eight trigger kinds now have edited Save/reload evidence at both sizes, including schedule modes and optional report fields. Nested conditions, all comparison operators and group quantifiers now have 32 checks per size plus ten server condition/compiler tests; unsupported sources stay visible and are removed explicitly. Action/policy/declaration checkpoints now add edited field coverage (38/25/20 checks per size), with conversion and compiler contracts. Empty-cycle repair, focus/no-write validation and Discard now pass in the 19-check selection journey at both sizes, backed by the compiler test. Remaining: unavailable-reference and broader recovery. Raw definitions now have database reopen/JSON restore evidence. |
 | Devices and calibration | Device journeys, reporting-policy API tests, brightness/color/bulk checkpoints and disabled re-enable regression. | Consolidate calibration evidence into the older settings ledger; verify remaining capability/missing-catalog cases and related-reference coverage. |
 | Integrations, helpers, computed sources | Integration/helper/source journeys and preservation tests cover nested editing, omission, arrays, secrets and current-value separation. | Dummy multi-device editing now has 19 browser checks at each size plus Rust sensor/capability schema checks. MQTT lists/profile/credentials have 21 checks and reporting/rejected-save recovery has 9 at each size, backed by API and runtime rollback tests. Helpers now have 21 edited-type and 6 command checks at each size, plus phone conflict review and server persistence evidence. Computed sources have 16 edited-variant and 13 repair/preview checks per size, plus existing phone conflict/color checks. Source timing/error focus and chart readability now have 19 checks per size plus four curve/validation Rust tests. Remaining: module variants, visibility, complete references and database reconciliation. |
-| Remaining settings | Catalog, widget-source, settings-tab, assistant, appearance, migration, backup and dashboard checkpoints exist. | Match each original acceptance item to current evidence, especially backup lifecycle failures, malformed definitions, creation/deletion races and obsolete editor cleanup. |
+| Remaining settings | Catalog, widget-source, settings-tab, assistant, appearance, migration, backup and dashboard checkpoints exist. | Backup recovery now has 26 native checks per size covering large lists, file-read races, invalid replacements, pending locks, failed review/apply/export and cancellation. Integration epoch rollback has targeted runtime regression evidence. Remaining: full restore/database restart lifecycle, malformed/legacy definitions, creation/deletion races and obsolete editor cleanup. |
 | Backend contracts | Actor preconditions and persistence outcome tests; database backup/restore, widget secret/redaction, preference/reporting and migration regressions. | [PERSISTENCE-COVERAGE.md](PERSISTENCE-COVERAGE.md) now names 17 passing consistency tests, including file-backed source/everyday collection restart and JSON restore. Raw scene/routine definitions now have file-backed reopen/JSON restore evidence. All widget defaults and storage representations are mapped in WIDGET-OPTIONS.md; the expanded everyday persistence test covers every type with edited and empty options. Remaining: API recovery reconciliation. |
 | Health | Shared evaluator/report evidence and transition tests; disabled suppression/re-enable coverage; room/map use shared results. | Reconcile startup/retained/unchanged report and recovery cases with current tests and UI surfaces. |
 | Troubleshooting | Compact rows, filters, structured links and routine-history evidence. | Desktop density, full-message focus and large-buffer pagination are now covered by the log checkpoint below. Remaining activity trace cases still need reconciliation. |
@@ -167,3 +167,38 @@ empty option objects for every type, including synthetic private overrides.
 Type/lint/build pass. Captures, driver and exact evidence are linked from the
 option ledger. The remaining gates include backup/recovery races, reference and
 module reconciliation, shared overlays and the wider accessibility matrix.
+
+### Backup recovery and integration rollback — 2026-09-30
+
+26 native browser checks pass at 1440/390 px in
+`ui/dev/backup-recovery-review.mjs`. A 205-addition review renders 80 entries
+at a time and filtering finds entries beyond the current page. Review completion
+and confirmation cancellation restore useful keyboard focus. Invalid/oversized
+replacement files clear the previous candidate and cannot restore it. Pending
+file reads show progress; superseded failures, Discard and navigation cannot
+publish an old read. Returning from an interrupted read explains how to resume.
+Aborted reviews cannot repopulate discarded drafts.
+
+Failed reviews retain the file for explicit retry. Pending apply locks file
+replacement, Discard and resubmission; an apply failure retains the file and
+requires a fresh review. Export failures appear beside Download and can be
+retried independently. Export credentials are locked while preparing a download.
+The marked local fixture receives only read-only preview POSTs; apply/export
+responses are intercepted, and its configuration is compared unchanged afterward.
+Injected review/apply/export 503 responses are expected in the probe logs.
+
+The lifecycle audit found that failed integration replacement could preserve the
+old handle while invalidating its event epoch. Reload now reserves replacement
+epochs during construction, cuts over after all constructors succeed, and
+restores the previous shared epoch map before restarting old instances on failure.
+The existing invalid-configuration and stop-failure tests now verify old event
+acceptance through staged and original integration handles, and rejection of the
+failed replacement epoch. Six reload-filtered Rust tests pass; the successful
+cutover/stale-event regression and two backup review/API tests also pass.
+
+Type/lint/build pass. Reviewed captures and logs are in
+`implementation-evidence/everyday/backup-recovery-*`. This covers browser
+recovery and the named runtime lifecycle contracts; it does not claim an HTTP
+restore plus real-database restart test across every external integration. Nested
+legacy/unknown-field reconciliation, creation/deletion races and the wider
+accessibility matrix remain open.

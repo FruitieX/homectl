@@ -477,6 +477,41 @@ Type/lint/build pass. Captures, driver and exact evidence are linked from the
 option ledger. The remaining gates include backup/recovery races, reference and
 module reconciliation, shared overlays and the wider accessibility matrix.
 
+### Backup recovery and integration rollback — 2026-09-30
+
+26 native browser checks pass at 1440/390 px in
+`ui/dev/backup-recovery-review.mjs`. A 205-addition review renders 80 entries
+at a time and filtering finds entries beyond the current page. Review completion
+and confirmation cancellation restore useful keyboard focus. Invalid/oversized
+replacement files clear the previous candidate and cannot restore it. Pending
+file reads show progress; superseded failures, Discard and navigation cannot
+publish an old read. Returning from an interrupted read explains how to resume.
+Aborted reviews cannot repopulate discarded drafts.
+
+Failed reviews retain the file for explicit retry. Pending apply locks file
+replacement, Discard and resubmission; an apply failure retains the file and
+requires a fresh review. Export failures appear beside Download and can be
+retried independently. Export credentials are locked while preparing a download.
+The marked local fixture receives only read-only preview POSTs; apply/export
+responses are intercepted, and its configuration is compared unchanged afterward.
+Injected review/apply/export 503 responses are expected in the probe logs.
+
+The lifecycle audit found that failed integration replacement could preserve the
+old handle while invalidating its event epoch. Reload now reserves replacement
+epochs during construction, cuts over after all constructors succeed, and
+restores the previous shared epoch map before restarting old instances on failure.
+The existing invalid-configuration and stop-failure tests now verify old event
+acceptance through staged and original integration handles, and rejection of the
+failed replacement epoch. Six reload-filtered Rust tests pass; the successful
+cutover/stale-event regression and two backup review/API tests also pass.
+
+Type/lint/build pass. Reviewed captures and logs are in
+`implementation-evidence/everyday/backup-recovery-*`. This covers browser
+recovery and the named runtime lifecycle contracts; it does not claim an HTTP
+restore plus real-database restart test across every external integration. Nested
+legacy/unknown-field reconciliation, creation/deletion races and the wider
+accessibility matrix remain open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before
