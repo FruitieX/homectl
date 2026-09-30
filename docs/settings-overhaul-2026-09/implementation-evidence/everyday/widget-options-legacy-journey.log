@@ -1,0 +1,20 @@
+{
+ "evaluated": {
+  "passed": true,
+  "checks": [
+   "Widget token is masked and represented by presence",
+   "Switching sensor mode retains selected IDs, including unavailable sensors",
+   "Related navigation keeps all widget edits in memory",
+   "Related navigation does not save a widget",
+   "Explicit save preserves empty selection, extensions and masks the credential",
+   "Secret-only changes reject stale widget writes without losing title edits",
+   "Review preserves the remotely saved credential",
+   "Removing a credential is staged until Save",
+   "Invalid dimensions focus the control without submitting",
+   "Widget editor fits the viewport",
+   "New widget type switching retains the previous type draft",
+   "Creating a widget adds exactly one entry to its layout"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/dashboard/1/widgets/1","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 409 (Conflict)"]}

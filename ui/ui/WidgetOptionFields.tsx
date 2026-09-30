@@ -17,7 +17,7 @@ import { ConfigField, ConfigHelpPanel } from '@/ui/config-form';
 import { Input } from '@/ui/primitives/input';
 import { Textarea } from '@/ui/primitives/textarea';
 
-const selectClassName = 'settings-select';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 
 function WidgetEntitySelection({
   kind,
@@ -124,6 +124,7 @@ function IndoorClimateOptions({
     <div className="grid gap-4 md:grid-cols-2">
       <ConfigField label="Temperature sensor">
         <SearchablePicker
+          ariaLabel="Temperature sensor"
           options={choices}
           value={
             typeof options.temperatureSensorId === 'string'
@@ -139,6 +140,7 @@ function IndoorClimateOptions({
         description="Leave empty to use the same sensor as temperature."
       >
         <SearchablePicker
+          ariaLabel="Humidity sensor"
           options={choices}
           value={
             typeof options.humiditySensorId === 'string'
@@ -150,20 +152,25 @@ function IndoorClimateOptions({
         />
       </ConfigField>
       <ConfigField label="History range">
-        <select
+        <SettingsSelect
           aria-label="History range"
-          className={selectClassName}
-          value={typeof options.range === 'string' ? options.range : '-24h'}
-          onChange={(e) => onChange('range', e.target.value)}
-        >
-          <option value="-6h">6 hours</option>
-          <option value="-24h">24 hours</option>
-          <option value="-7d">7 days</option>
-          {typeof options.range === 'string' &&
-            !['-6h', '-24h', '-7d'].includes(options.range) && (
-              <option value={options.range}>{options.range} · Custom</option>
-            )}
-        </select>
+          value={
+            typeof options.range === 'string' && options.range
+              ? options.range
+              : '-24h'
+          }
+          onValueChange={(value) => onChange('range', value)}
+          options={[
+            { value: '-6h', label: '6 hours' },
+            { value: '-24h', label: '24 hours' },
+            { value: '-7d', label: '7 days' },
+            ...(typeof options.range === 'string' &&
+            options.range &&
+            !['-6h', '-24h', '-7d'].includes(options.range)
+              ? [{ value: options.range, label: options.range + ' · Custom' }]
+              : []),
+          ]}
+        />
       </ConfigField>
       <div className="space-y-2 text-xs text-muted-foreground">
         <p>
@@ -216,12 +223,14 @@ function OptionNumberField({
   value,
   min,
   max,
+  step = 1,
   onChange,
 }: {
   label: string;
   value: number | string;
   min?: number;
   max?: number;
+  step?: number | 'any';
   onChange: (value: number | string) => void;
 }) {
   return (
@@ -233,6 +242,8 @@ function OptionNumberField({
         value={value}
         min={min}
         max={max}
+        step={step}
+        required
         onChange={(event) =>
           onChange(
             Number.isFinite(event.target.valueAsNumber)
@@ -259,23 +270,19 @@ function HelperOptionField({
       label="Helper"
       description="The mode widget shows this helper's current value and writes new values to it."
     >
-      <select
-        className={selectClassName}
+      <SearchablePicker
+        ariaLabel="Helper"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">Select a helper…</option>
-        {value && !helpers?.some((helper) => helper.id === value) && (
-          <option value={value}>{value} · Unavailable</option>
-        )}
-        {(helpers ?? [])
+        onChange={onChange}
+        placeholder="Select a helper…"
+        options={(helpers ?? [])
           .filter((helper) => helper.hidden !== true || helper.id === value)
-          .map((helper) => (
-            <option key={helper.id} value={helper.id}>
-              {helper.name || helper.id} ({helper.kind.kind})
-            </option>
-          ))}
-      </select>
+          .map((helper) => ({
+            value: helper.id,
+            label: helper.name || helper.id,
+            detail: helper.id + ' · ' + helper.kind.kind,
+          }))}
+      />
       {value && (
         <Link
           className="settings-link text-xs"
@@ -303,21 +310,17 @@ function GroupOptionField({
 
   return (
     <ConfigField label="Group" description={description}>
-      <select
-        className={selectClassName}
+      <SearchablePicker
+        ariaLabel="Group"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">{emptyLabel}</option>
-        {value && !groups?.some((group) => group.id === value) && (
-          <option value={value}>{value} · Unavailable</option>
-        )}
-        {(groups ?? []).map((group) => (
-          <option key={group.id} value={group.id}>
-            {group.name} ({group.id})
-          </option>
-        ))}
-      </select>
+        onChange={onChange}
+        placeholder={emptyLabel}
+        options={(groups ?? []).map((group) => ({
+          value: group.id,
+          label: group.name,
+          detail: group.id,
+        }))}
+      />
       {value && (
         <Link
           className="settings-link text-xs"
@@ -367,22 +370,16 @@ function SensorPrimaryField({
       label="Header sensor"
       description="Shown beside the title in compact cards. Leave empty to use the first shown sensor."
     >
-      <select
-        className={selectClassName}
+      <SearchablePicker
+        ariaLabel="Header sensor"
         value={selected}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">First shown sensor</option>
-        {selected &&
-          !sensors.some((sensor) => sensor.device_id === selected) && (
-            <option value={selected}>{selected} · Unavailable</option>
-          )}
-        {sensors.map((sensor) => (
-          <option key={sensor.device_id} value={sensor.device_id}>
-            {sensor.device_name}
-          </option>
-        ))}
-      </select>
+        onChange={onChange}
+        placeholder="First shown sensor"
+        options={sensors.map((sensor) => ({
+          value: sensor.device_id,
+          label: sensor.device_name,
+        }))}
+      />
     </ConfigField>
   );
 }
@@ -428,15 +425,15 @@ function SensorVisibilityField({
     <div className="space-y-3 md:col-span-2">
       <label className="block space-y-2 text-sm">
         <span className="font-medium">Sensors shown</span>
-        <select
+        <SettingsSelect
           aria-label="Sensors shown"
-          className="settings-select"
           value={effectiveMode}
-          onChange={(event) => onModeChange(event.target.value)}
-        >
-          <option value="all">All enabled sensors</option>
-          <option value="selected">Selected sensors</option>
-        </select>
+          onValueChange={onModeChange}
+          options={[
+            { value: 'all', label: 'All enabled sensors' },
+            { value: 'selected', label: 'Selected sensors' },
+          ]}
+        />
       </label>
       {effectiveMode === 'selected' && (
         <>
@@ -524,19 +521,21 @@ export function WidgetOptionFields({
     return (
       <div className="space-y-4">
         <ConfigField label={rooms ? 'Rooms shown' : 'Scenes shown'}>
-          <select
+          <SettingsSelect
             aria-label={rooms ? 'Rooms shown' : 'Scenes shown'}
-            className={selectClassName}
             value={getString(modeKey, 'all')}
-            onChange={(e) => onChange(modeKey, e.target.value)}
-          >
-            <option value="all">
-              All visible {rooms ? 'rooms' : 'scenes'}
-            </option>
-            <option value="selected">
-              Selected {rooms ? 'rooms' : 'scenes'}
-            </option>
-          </select>
+            onValueChange={(value) => onChange(modeKey, value)}
+            options={[
+              {
+                value: 'all',
+                label: 'All visible ' + (rooms ? 'rooms' : 'scenes'),
+              },
+              {
+                value: 'selected',
+                label: 'Selected ' + (rooms ? 'rooms' : 'scenes'),
+              },
+            ]}
+          />
         </ConfigField>
         {getString(modeKey, 'all') === 'selected' && (
           <WidgetEntitySelection
@@ -568,16 +567,16 @@ export function WidgetOptionFields({
         ) : (
           <>
             <ConfigField label="Activation scope">
-              <select
+              <SettingsSelect
                 aria-label="Activation scope"
-                className={selectClassName}
                 value={getString('scope', 'home')}
-                onChange={(e) => onChange('scope', e.target.value)}
-              >
-                <option value="home">Whole home</option>
-                <option value="group">Room or group</option>
-                <option value="devices">Selected devices</option>
-              </select>
+                onValueChange={(value) => onChange('scope', value)}
+                options={[
+                  { value: 'home', label: 'Whole home' },
+                  { value: 'group', label: 'Room or group' },
+                  { value: 'devices', label: 'Selected devices' },
+                ]}
+              />
             </ConfigField>
             {getString('scope', 'home') === 'group' && (
               <GroupOptionField
@@ -784,16 +783,19 @@ export function WidgetOptionFields({
         </ConfigHelpPanel>
         <OptionNumberField
           label="Low price threshold"
+          step="any"
           value={getNumber('lowPriceThreshold', 2)}
           onChange={(value) => onChange('lowPriceThreshold', value)}
         />
         <OptionNumberField
           label="Medium price threshold"
+          step="any"
           value={getNumber('mediumPriceThreshold', 5)}
           onChange={(value) => onChange('mediumPriceThreshold', value)}
         />
         <OptionNumberField
           label="High price threshold"
+          step="any"
           value={getNumber('highPriceThreshold', 8)}
           onChange={(value) => onChange('highPriceThreshold', value)}
         />
@@ -827,15 +829,18 @@ export function WidgetOptionFields({
         />
         <label className="space-y-2 text-sm">
           <span className="block font-medium">Direction</span>
-          <select
-            className="h-10 w-full rounded-md border border-input bg-background px-3"
-            value={getString('directionId', '')}
-            onChange={(event) => onChange('directionId', event.target.value)}
-          >
-            <option value="">Both directions</option>
-            <option value="0">Direction 0</option>
-            <option value="1">Direction 1</option>
-          </select>
+          <SettingsSelect
+            aria-label="Direction"
+            value={getString('directionId', '') || 'all'}
+            onValueChange={(value) =>
+              onChange('directionId', value === 'all' ? '' : value)
+            }
+            options={[
+              { value: 'all', label: 'Both directions' },
+              { value: '0', label: 'Direction 0' },
+              { value: '1', label: 'Direction 1' },
+            ]}
+          />
           <span className="block text-xs text-muted-foreground">
             Direction numbers vary by route. Use a destination such as Helsinki
             to filter several routes together.
@@ -994,14 +999,15 @@ function TimerWidgetOptions({
   return (
     <div className="space-y-4">
       <ConfigField label="Timers shown">
-        <select
-          className={selectClassName}
+        <SettingsSelect
+          aria-label="Timers shown"
           value={options.timerSelection === 'selected' ? 'selected' : 'all'}
-          onChange={(e) => onChange('timerSelection', e.target.value)}
-        >
-          <option value="all">All timers</option>
-          <option value="selected">Selected timers</option>
-        </select>
+          onValueChange={(value) => onChange('timerSelection', value)}
+          options={[
+            { value: 'all', label: 'All timers' },
+            { value: 'selected', label: 'Selected timers' },
+          ]}
+        />
       </ConfigField>
       {options.timerSelection === 'selected' && (
         <SearchableMultiPicker

@@ -42,7 +42,7 @@ rows marked **open** are not acceptance sign-off. Paths below are relative to
 | Legacy cron schedules map | `app/config/integrations/detail.tsx`: visible read-only definition and current-format destination/offline conversion guidance | Preserved until explicit conversion | Deliberately not editable. **Open:** identify conversion round-trip test for multi-schedule legacy input. |
 | Dummy `devices` map | `app/config/integrations/fields.tsx` `DummyDevices`: keyed add/remove, direct initial-state and capability fields | Keyed identity; no semantic order | `dev/dummy-editor-review.mjs` saves/reloads multiple default/controllable/sensor devices, all four sensor variants and empty maps; remove/recreate clears metadata. Rust tests confirm shapes and null defaults. **Open:** browser repair of unknown/malformed states. |
 | Sensor catalog `sensors[]`, `groups[]`, group `sensor_ids[]` | `app/config/sensors/page.tsx`: catalog/group/member row controls, empty selections supported | Three independent presentation orders | `dev/sensor-order-input.mjs` verifies saved orders, independent memberships, widgets and group charts; catalog journey covers configuration editing. |
-| Dashboard layouts/widgets and per-widget selections | `app/config/dashboard/widget.tsx` and designer: type gallery, sources, size/order, retained per-type options | Layout order, sizes and explicit selection order | `dev/widget-design-journey.js`, `widget-preview-input.mjs`, `sensor-order-input.mjs`. **Open:** reconcile every widget option with export/import evidence and missing-source repair. |
+| Dashboard layouts/widgets and per-widget selections | `app/config/dashboard/widget.tsx` and designer: type gallery, sources, size/order, retained per-type options | Layout order, sizes and explicit selection order | `dev/widget-design-journey.js`, `widget-preview-input.mjs`, `sensor-order-input.mjs`. All 17 types and defaults are mapped in WIDGET-OPTIONS.md with edited/empty SQLite reopen/restore payloads. The new 22-check browser journey covers missing scene/room/sensor/timer repair and numeric/selection behavior; remaining external-source/helper recovery follows the cross-family gate. |
 | Calibration profile assignments | Calibration configuration and bulk selection flows | Keyed device assignment; profile data preserved | `dev/calibration-bulk-journey.js` checks exact assignment/removal and unchanged profiles. **Open:** remaining capability/missing-catalog fixtures from implementation ledger. |
 | Extension JSON maps/lists | `ui/settings/JsonValueEditor.tsx`: recursive typed fields, explicit null/default, add/remove; number input keeps unfinished text without changing the domain type | Lists offer up/down; maps retain keys including escaped names | **Edited:** `dev/collection-editor-review.mjs`, 14 checks at 1440/390 px, numbers/type changes/reorder/remove/re-add/Save/Discard/navigation. `lib/entityDraft.test.ts` covers delayed saves and metadata remapping. Nesting beyond 12 levels is preserved read-only; it is not claimed as fully editable. |
 
@@ -64,7 +64,7 @@ schema; server compiler/resolver behavior remains authoritative.
 | `SourceCompute`: circadian compatibility, script preset, custom script | Source detail, day/night color controls, params JSON, script editor, draft preview | Edited pinned/custom/built-in computations, exact forked and edited bodies, unknown-pin conversion, null/list/object params, extra-field preservation, switches/Discard/reload and preview recovery now have native browser evidence. Timing-input/error-focus is covered by the source timing checkpoint; complete visibility/reference reconciliation remains open. |
 | Integration config primitive/JSON fields; MQTT mode; dummy state/capabilities | Schema fields plus typed adapters | Missing/null/false capability overrides; Kelvin bounds; payload paths; secret unchanged/replace/remove; malformed known collection repair; reload failure without misleading “saved” state. |
 | Device overrides, reporting preferences, shared advanced preference | Device settings, reporting field and system preferences | Tie each default/inherit/custom/ignore state to exact backend persistence/export test; disabled-device suppression already has separate regression evidence. |
-| Widget types, source references and optional dimensions/settings | Visual widget designer and sources pages | Existing 17-type preview evidence proves composition/inertness; pair each persisted field with round-trip/default compatibility evidence. |
+| Widget types, source references and optional dimensions/settings | Visual widget designer and sources pages | WIDGET-OPTIONS.md now maps every field/default to its renderer and the expanded all-type database round trip. Existing 17-type preview evidence proves composition/inertness; 22 additional native checks per size cover numeric and reference repair. |
 | Floorplan metadata/grid/image, calibration profile/session state | Purpose-built editors | Existing placement/bulk journeys prove edits; reconcile omitted/missing references, image failure and session lifecycle cases with the API ledger. |
 
 ## Latest verified repair
@@ -457,3 +457,19 @@ compiler test `cycle_scenes_validation_requires_scenes_and_resolves_references`,
 and type/lint/build pass. Evidence: `collections/routine-cycle-*`. The reload
 harness waits for scene catalog labels as well as routine controls before checking
 the restored selection. Other reference/recovery and final gates remain open.
+
+
+### Widget options and persistence — 2026-09-30
+
+[WIDGET-OPTIONS.md](WIDGET-OPTIONS.md) maps all 17 widget types, field defaults,
+legacy representations and renderer behavior. Nine remaining native dropdowns
+now use shared selectors or searchable entity pickers. Numeric options require a
+complete value before Save; price thresholds accept signed decimals. Missing
+references remain visible and repairable, and mode switches retain inactive IDs.
+
+22 native checks pass at each 1440/390 px viewport, with no live commands. The
+expanded existing SQLite test now closes/reopens and exports/restores edited and
+empty option objects for every type, including synthetic private overrides.
+Type/lint/build pass. Captures, driver and exact evidence are linked from the
+option ledger. The remaining gates include backup/recovery races, reference and
+module reconciliation, shared overlays and the wider accessibility matrix.

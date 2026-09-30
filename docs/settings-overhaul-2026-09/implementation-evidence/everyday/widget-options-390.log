@@ -1,0 +1,96 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Omitted train options show established defaults",
+    "passed": true
+   },
+   {
+    "name": "Incomplete number blocks Save and focuses its field",
+    "passed": true
+   },
+   {
+    "name": "Incomplete numeric draft issues no write",
+    "passed": true
+   },
+   {
+    "name": "Explicit Save persists zero, direction and count",
+    "passed": true
+   },
+   {
+    "name": "Unedited defaults stay omitted and extension data survives",
+    "passed": true
+   },
+   {
+    "name": "Both directions saves the established empty-string representation",
+    "passed": true
+   },
+   {
+    "name": "Price thresholds accept signed decimals and explicit zero",
+    "passed": true
+   },
+   {
+    "name": "Missing selected scene and room remain visible for repair",
+    "passed": true
+   },
+   {
+    "name": "Unavailable references can be repaired without widening selection",
+    "passed": true
+   },
+   {
+    "name": "Changing scope preserves the inactive room draft",
+    "passed": true
+   },
+   {
+    "name": "Custom history range and unavailable sources stay explicit",
+    "passed": true
+   },
+   {
+    "name": "Clearing humidity restores temperature fallback without clearing temperature",
+    "passed": true
+   },
+   {
+    "name": "Legacy nonempty sensor IDs imply selected mode",
+    "passed": true
+   },
+   {
+    "name": "Missing primary sensor remains visible",
+    "passed": true
+   },
+   {
+    "name": "All sensor mode preserves selected IDs for a later switch",
+    "passed": true
+   },
+   {
+    "name": "Missing timer selection remains visible",
+    "passed": true
+   },
+   {
+    "name": "Timer selection survives mode switches",
+    "passed": true
+   },
+   {
+    "name": "Room choice restores when switching scope",
+    "passed": true
+   },
+   {
+    "name": "Saved decimal thresholds reload exactly",
+    "passed": true
+   },
+   {
+    "name": "Widget options fit viewport",
+    "passed": true
+   },
+   {
+    "name": "Option controls use shared selectors",
+    "passed": true
+   },
+   {
+    "name": "Authoring and previews issue no live commands",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":390,"height":844},"problems":[]}

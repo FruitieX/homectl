@@ -4361,6 +4361,59 @@ mod consistency_tests {
                 "timers",
                 json!({"timerSelection":"selected","timerIds":["ready","countdown"]}),
             ),
+            (46, "home_overview", json!({})),
+            (
+                47,
+                "clock",
+                json!({"showSeconds":true,"showDate":false,"showCalendar":false,"calendarUrl":"https://example.invalid/private-test-feed","calendarPath":"/calendar-override"}),
+            ),
+            (
+                48,
+                "weather",
+                json!({"weatherUrl":"https://example.invalid/weather","weatherPath":"/weather-override","outdoorSensorId":"outside","sensorPath":"/readings","forecastHours":72,"forecastDays":7,"showWidgetForecast":true,"refreshSeconds":90}),
+            ),
+            (
+                49,
+                "sensors",
+                json!({"sensorSelection":"selected","sensorIds":[],"primarySensorId":"missing","influxUrl":"https://example.invalid/influx","influxToken":"fixture-only-token","sensorPath":"/readings","range":"-48h","window":"15m","wrapPreview":false}),
+            ),
+            (
+                50,
+                "controls",
+                json!({"groupId":"upstairs","deviceKeys":["dummy/lamp","missing/device"]}),
+            ),
+            (51, "helper_mode", json!({"helperId":"mode"})),
+            (
+                52,
+                "spot_price",
+                json!({"spotPricePath":"/prices","lowPriceThreshold":-1.25,"mediumPriceThreshold":0,"highPriceThreshold":8.5}),
+            ),
+            (
+                53,
+                "train_schedule",
+                json!({"trainApiUrl":"https://example.invalid/trains","trainSchedulePath":"/departures","stationId":"HSL:123","destination":"Helsinki","directionId":"","walkMinutes":0,"overdueMinutes":0,"maxMinutesAhead":60,"limit":8,"displayLimit":5,"scrollMore":true}),
+            ),
+            (54, "text", json!({"body":"Line one\nLine two"})),
+            (
+                55,
+                "link",
+                json!({"url":"/groups/upstairs","label":"Upstairs","description":""}),
+            ),
+            (
+                56,
+                "iframe",
+                json!({"url":"https://example.invalid/camera","title":"Camera"}),
+            ),
+            (
+                57,
+                "image",
+                json!({"imageUrl":"https://example.invalid/image.png","alt":"Floorplan"}),
+            ),
+            (
+                58,
+                "custom",
+                json!({"content":"<p style='color: red'>Text</p>"}),
+            ),
         ] {
             export.dashboard_widgets.push(DashboardWidgetRow {
                 id,
@@ -4374,6 +4427,19 @@ mod consistency_tests {
                 sort_order: id,
             });
         }
+        // Existing widgets with omitted options must stay omitted: defaults are
+        // applied by readers, not materialized by a database round trip.
+        let empty_widgets: Vec<_> = export
+            .dashboard_widgets
+            .iter()
+            .map(|row| DashboardWidgetRow {
+                id: row.id + 100,
+                sort_order: row.sort_order + 100,
+                config: json!({"title":"Default options","options":{}}),
+                ..row.clone()
+            })
+            .collect();
+        export.dashboard_widgets.extend(empty_widgets);
         let expected_settings = serde_json::to_value(&export.widget_settings).unwrap();
         let expected_floorplans = serde_json::to_value(&export.floorplans).unwrap();
         let expected_widgets = serde_json::to_value(&export.dashboard_widgets).unwrap();

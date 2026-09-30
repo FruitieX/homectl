@@ -25,7 +25,48 @@
       (el) => el.textContent.trim() === text,
     );
   const field = (name) => document.querySelector(`[data-field="${name}"]`);
-  const input = (el, value) => {
+  const input = async (el, value) => {
+    if (el.getAttribute('aria-label') === 'Widget type') {
+      [...el.querySelectorAll('button')]
+        .find((button) =>
+          button.textContent
+            .trim()
+            .startsWith(value === 'text' ? 'Text' : 'Clock'),
+        )
+        .click();
+      await pause();
+      return;
+    }
+    if (el.tagName === 'BUTTON') {
+      el.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
+      );
+      const text =
+        el.getAttribute('aria-label') === 'Sensors shown'
+          ? value === 'all'
+            ? 'All enabled sensors'
+            : 'Selected sensors'
+          : el.getAttribute('aria-label') === 'Rooms shown'
+            ? value === 'all'
+              ? 'All visible rooms'
+              : 'Selected rooms'
+            : 'Selected devices';
+      const option = () =>
+        [
+          ...document.querySelectorAll(
+            '[data-radix-select-viewport] [role=option]',
+          ),
+        ].find((e) => e.textContent.trim() === text);
+      await until(option, 'Shared selector opened');
+      option().dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+      );
+      await until(
+        () => !document.querySelector('[data-radix-select-viewport]'),
+        'Shared selector closed',
+      );
+      return;
+    }
     Object.getOwnPropertyDescriptor(
       el.tagName === 'SELECT'
         ? HTMLSelectElement.prototype
@@ -52,11 +93,14 @@
       (await saved()).secret_fields.includes('influxToken'),
     'Widget token is masked and represented by presence',
   );
-  input(field('title'), 'Reviewed sensors');
-  input(field('influxToken'), 'pending-widget-token');
-  input(document.querySelector('[aria-label="Sensors shown"]'), 'all');
+  await input(field('title'), 'Reviewed sensors');
+  await input(field('influxToken'), 'pending-widget-token');
+  await input(document.querySelector('[aria-label="Sensors shown"]'), 'all');
   await pause();
-  input(document.querySelector('[aria-label="Sensors shown"]'), 'selected');
+  await input(
+    document.querySelector('[aria-label="Sensors shown"]'),
+    'selected',
+  );
   await pause();
   assert(
     document.querySelector(
@@ -101,7 +145,7 @@
       field('influxToken').value === '',
     'Explicit save preserves empty selection, extensions and masks the credential',
   );
-  input(field('title'), 'Locally renamed');
+  await input(field('title'), 'Locally renamed');
   await pause();
   await fetch(endpoint + '/widgets', {
     method: 'POST',
@@ -142,7 +186,7 @@
   );
   button('Discard').click();
   await pause();
-  input(field('grid_w'), '0');
+  await input(field('grid_w'), '0');
   await pause();
   button('Save changes').click();
   await until(
@@ -169,10 +213,10 @@
     () => document.querySelector('[aria-label="Widget type"]'),
     'New widget opened',
   );
-  input(field('title'), 'Custom clock title');
-  input(document.querySelector('[aria-label="Widget type"]'), 'text');
+  await input(field('title'), 'Custom clock title');
+  await input(document.querySelector('[aria-label="Widget type"]'), 'text');
   await pause();
-  input(document.querySelector('[aria-label="Widget type"]'), 'clock');
+  await input(document.querySelector('[aria-label="Widget type"]'), 'clock');
   await pause();
   assert(
     field('title').value === 'Custom clock title',

@@ -51,3 +51,8 @@ Test implementations are in `server/src/db/config_queries.rs`.
 - Remaining reconciliation includes each widget's option defaults, backup
   lifecycle failures and the
   named accessibility/viewport gates. The full overhaul is not signed off here.
+
+Widget follow-up: the everyday collection test now includes edited and empty option
+objects for all 17 widget types. Its targeted rerun passes; exact fields/default
+mapping and evidence are in [WIDGET-OPTIONS.md](WIDGET-OPTIONS.md). The broader
+17-test checkpoint above remains a historical suite result.

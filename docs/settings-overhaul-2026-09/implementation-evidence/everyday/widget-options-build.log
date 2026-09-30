@@ -1,0 +1,264 @@
+$ vite build
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vite.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 5184 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                       2.26 kB │ gzip:   0.82 kB
+dist/assets/codicon-DF1abBS2.ttf                    153.22 kB
+dist/assets/editor.worker-DWPaKKV_.js               303.98 kB
+dist/assets/json.worker-CrsoSj5O.js                 433.34 kB
+dist/assets/html.worker-DBhNYEPj.js                 743.58 kB
+dist/assets/css.worker-gLj4_ykt.js                1,078.53 kB
+dist/assets/ts.worker-D0RfN2Tp.js                 6,928.94 kB
+dist/assets/localMonaco-n7clI0si.css                 86.92 kB │ gzip:  13.74 kB
+dist/assets/editor-B8GMDV7_.css                      99.09 kB │ gzip:  14.27 kB
+dist/assets/index-ezKO5qVX.css                      120.25 kB │ gzip:  20.33 kB
+dist/assets/floorplan-BQHZg7jf.js                     0.04 kB │ gzip:   0.06 kB
+dist/assets/webworkerAll-Dx68jJmV.js                  0.07 kB │ gzip:   0.08 kB
+dist/assets/device-CH3gUDg-.js                        0.09 kB │ gzip:   0.11 kB │ map:      0.59 kB
+dist/assets/useAtom-DCxI3u_g.js                       0.14 kB │ gzip:   0.15 kB │ map:      0.66 kB
+dist/assets/new-Bmg4__QK.js                           0.18 kB │ gzip:   0.18 kB │ map:      0.32 kB
+dist/assets/new-CxmdQO_L.js                           0.18 kB │ gzip:   0.17 kB │ map:      0.31 kB
+dist/assets/new-D-FxrNEO.js                           0.18 kB │ gzip:   0.17 kB │ map:      0.31 kB
+dist/assets/square-DKloecgq.js                        0.22 kB │ gzip:   0.20 kB │ map:      0.96 kB
+dist/assets/page-C87BljfC.js                          0.23 kB │ gzip:   0.21 kB │ map:      0.36 kB
+dist/assets/page-CECrJAd0.js                          0.23 kB │ gzip:   0.21 kB │ map:      0.37 kB
+dist/assets/clock-3-b4gLRaKF.js                       0.24 kB │ gzip:   0.22 kB │ map:      1.03 kB
+dist/assets/loader-circle-BaCMrxnV.js                 0.24 kB │ gzip:   0.22 kB │ map:      0.99 kB
+dist/assets/search-DFVrbZPo.js                        0.24 kB │ gzip:   0.22 kB │ map:      1.04 kB
+dist/assets/detail-Cr9DzL6L.js                        0.26 kB │ gzip:   0.22 kB │ map:      0.46 kB
+dist/assets/play-Csim7O7S.js                          0.26 kB │ gzip:   0.23 kB │ map:      0.99 kB
+dist/assets/detail-15AbxKoR.js                        0.26 kB │ gzip:   0.23 kB │ map:      0.46 kB
+dist/assets/detail-B_XTKsUC.js                        0.26 kB │ gzip:   0.23 kB │ map:      0.46 kB
+dist/assets/skeleton-DZLXPMH1.js                      0.26 kB │ gzip:   0.23 kB │ map:      0.54 kB
+dist/assets/pause-SFnvLhU9.js                         0.28 kB │ gzip:   0.22 kB │ map:      1.15 kB
+dist/assets/circle-check-BUpggBGJ.js                  0.29 kB │ gzip:   0.24 kB │ map:      1.13 kB
+dist/assets/copy-Dr0JBwy7.js                          0.30 kB │ gzip:   0.26 kB │ map:      1.13 kB
+dist/assets/eye-8SM4ifjo.js                           0.32 kB │ gzip:   0.26 kB │ map:      1.15 kB
+dist/assets/external-link-DTN0ny0E.js                 0.33 kB │ gzip:   0.25 kB │ map:      1.18 kB
+dist/assets/deviceCapabilities-58f8jp6t.js            0.34 kB │ gzip:   0.22 kB │ map:      1.00 kB
+dist/assets/arrow-up-DhBVxYAS.js                      0.37 kB │ gzip:   0.26 kB │ map:      1.91 kB
+dist/assets/configSearch-B5Nj1yha.js                  0.39 kB │ gzip:   0.26 kB │ map:      1.43 kB
+dist/assets/getTextureBatchBindGroup-B9GyXQ7S.js      0.40 kB │ gzip:   0.32 kB │ map:      1.82 kB
+dist/assets/selectedDevices-DnyaMYK-.js               0.41 kB │ gzip:   0.30 kB │ map:      1.78 kB
+dist/assets/useDeviceHealth-dHHimL15.js               0.41 kB │ gzip:   0.31 kB │ map:      1.19 kB
+dist/assets/trash-COr9o9La.js                         0.41 kB │ gzip:   0.28 kB │ map:      1.40 kB
+dist/assets/useAssistantPageContext-haGMk8Su.js       0.42 kB │ gzip:   0.31 kB │ map:      1.42 kB
+dist/assets/radio-BzGQWlJP.js                         0.44 kB │ gzip:   0.31 kB │ map:      1.43 kB
+dist/assets/droplets-Dow2FwNP.js                      0.44 kB │ gzip:   0.34 kB │ map:      1.31 kB
+dist/assets/jsx-runtime-NZYk81nU.js                   0.48 kB │ gzip:   0.34 kB │ map:      1.98 kB
+dist/assets/zap-U4nIAJR2.js                           0.48 kB │ gzip:   0.34 kB │ map:      1.99 kB
+dist/assets/textarea-CZ1oAVJX.js                      0.50 kB │ gzip:   0.34 kB │ map:      0.81 kB
+dist/assets/SettingsSelect-BiFTwmfl.js                0.56 kB │ gzip:   0.36 kB │ map:      1.60 kB
+dist/assets/dist-CFg2uGb_.js                          0.57 kB │ gzip:   0.35 kB │ map:      1.82 kB
+dist/assets/SettingsSection-CaWQ8L0G.js               0.57 kB │ gzip:   0.33 kB │ map:      1.45 kB
+dist/assets/input-Be_yaimr.js                         0.58 kB │ gzip:   0.38 kB │ map:      0.91 kB
+dist/assets/sliders-horizontal-FNPPEh84.js            0.65 kB │ gzip:   0.35 kB │ map:      2.66 kB
+dist/assets/useDeepLink-CDgx3olJ.js                   0.65 kB │ gzip:   0.41 kB │ map:      2.62 kB
+dist/assets/ConfigTabs-BHu81hmB.js                    0.66 kB │ gzip:   0.43 kB │ map:      1.54 kB
+dist/assets/empty-state-CEL_nzxy.js                   0.70 kB │ gzip:   0.41 kB │ map:      1.56 kB
+dist/assets/rolldown-runtime-hePW80VL.js              0.71 kB │ gzip:   0.42 kB
+dist/assets/javascript-C37XZpqr.js                    0.73 kB │ gzip:   0.45 kB │ map:      1.94 kB
+dist/assets/page-header-6gPKbhHl.js                   0.74 kB │ gzip:   0.41 kB │ map:      1.65 kB
+dist/assets/azcli-Bc_sGQ0U.js                         0.75 kB │ gzip:   0.32 kB │ map:      2.36 kB
+dist/assets/palette-uPzehE1f.js                       0.78 kB │ gzip:   0.41 kB │ map:      2.81 kB
+dist/assets/useSettingsPreferences-oOpw3bnQ.js        0.83 kB │ gzip:   0.50 kB │ map:      2.56 kB
+dist/assets/badge-D6BDmKhg.js                         0.84 kB │ gzip:   0.45 kB │ map:      1.63 kB
+dist/assets/card-CFAGB4Dd.js                          0.85 kB │ gzip:   0.45 kB │ map:      3.06 kB
+dist/assets/DraftNumberInput-1nYmgfNb.js              0.94 kB │ gzip:   0.62 kB │ map:      2.85 kB
+dist/assets/useDevicesApi-BdF3-Gdf.js                 0.97 kB │ gzip:   0.58 kB │ map:      3.33 kB
+dist/assets/useUserTimers-nZmiPAR9.js                 0.98 kB │ gzip:   0.58 kB │ map:      3.10 kB
+dist/assets/ini-sBoK_t0W.js                           1.00 kB │ gzip:   0.52 kB │ map:      3.07 kB
+dist/assets/ConfigListSearchBar-YdLQq8n0.js           1.07 kB │ gzip:   0.62 kB │ map:      2.66 kB
+dist/assets/IdentityFields-DpR3EZcq.js                1.08 kB │ gzip:   0.62 kB │ map:      3.09 kB
+dist/assets/shared-6cUZSsrj.js                        1.09 kB │ gzip:   0.59 kB │ map:      3.04 kB
+dist/assets/atomWithStorage-Bf1LvGh2.js               1.21 kB │ gzip:   0.64 kB │ map:      6.80 kB
+dist/assets/shared-Dw157f5O.js                        1.21 kB │ gzip:   0.66 kB │ map:      3.95 kB
+dist/assets/preload-helper-BZ1Pz5am.js                1.21 kB │ gzip:   0.69 kB
+dist/assets/workers-CBEoHb05.js                       1.29 kB │ gzip:   0.62 kB │ map:      8.79 kB
+dist/assets/csp-bTuwJoIa.js                           1.31 kB │ gzip:   0.51 kB │ map:      2.92 kB
+dist/assets/dashboardEditing-BlKpWYOk.js              1.49 kB │ gzip:   0.70 kB │ map:      8.92 kB
+dist/assets/pla-CopQ2nXW.js                           1.58 kB │ gzip:   0.64 kB │ map:      4.98 kB
+dist/assets/page-DR118g7s.js                          1.59 kB │ gzip:   0.80 kB │ map:      3.35 kB
+dist/assets/scheme-BeGwcela.js                        1.67 kB │ gzip:   0.81 kB │ map:      4.40 kB
+dist/assets/flow9-C5_-GSwl.js                         1.71 kB │ gzip:   0.85 kB │ map:      4.97 kB
+dist/assets/sb-CcwsVR0C.js                            1.72 kB │ gzip:   0.82 kB │ map:      4.88 kB
+dist/assets/bat-i0X4ZdIN.js                           1.73 kB │ gzip:   0.85 kB │ map:      4.62 kB
+dist/assets/groupGraph-CelbX4Mp.js                    1.77 kB │ gzip:   0.85 kB │ map:      8.85 kB
+dist/assets/dockerfile-DZFCIeNp.js                    1.77 kB │ gzip:   0.66 kB │ map:      5.42 kB
+dist/assets/group-floorplan-preview-i4cIH4MY.js       1.82 kB │ gzip:   0.83 kB │ map:     10.56 kB
+dist/assets/page-BmKGrl2z.js                          1.84 kB │ gzip:   0.91 kB │ map:      4.05 kB
+dist/assets/useEntityDraft-D4SoLr1w.js                1.89 kB │ gzip:   1.03 kB │ map:      6.36 kB
+dist/assets/pascaligo-D-ptJ9y-.js                     1.90 kB │ gzip:   0.90 kB │ map:      5.77 kB
+dist/assets/sceneCapture-fCKz1s1G.js                  1.92 kB │ gzip:   0.77 kB │ map:      8.86 kB
+dist/assets/xml-NG4iJD8D.js                           1.96 kB │ gzip:   0.77 kB │ map:      4.97 kB
+dist/assets/ReportingPolicyField-DWMfD94H.js          2.00 kB │ gzip:   0.94 kB │ map:      4.69 kB
+dist/assets/cameligo-DMUM7wLl.js                      2.02 kB │ gzip:   0.95 kB │ map:      6.07 kB
+dist/assets/lua-CsQS60Ue.js                           2.02 kB │ gzip:   0.92 kB │ map:      5.96 kB
+dist/assets/config-form-DZ-blRmm.js                   2.03 kB │ gzip:   0.74 kB │ map:      5.98 kB
+dist/assets/objective-c-FvmIjYaQ.js                   2.15 kB │ gzip:   1.04 kB │ map:      5.76 kB
+dist/assets/graphql-fmXr3nnJ.js                       2.16 kB │ gzip:   1.03 kB │ map:      6.24 kB
+dist/assets/sparql-D_Lu-MrJ.js                        2.26 kB │ gzip:   1.14 kB │ map:      6.13 kB
+dist/assets/lexon-CfSJPG6W.js                         2.33 kB │ gzip:   0.92 kB │ map:      6.52 kB
+dist/assets/mips-CIPQ_RoX.js                          2.36 kB │ gzip:   1.06 kB │ map:      6.70 kB
+dist/assets/go-C-y9NEjX.js                            2.39 kB │ gzip:   1.15 kB │ map:      7.17 kB
+dist/assets/bicep-B5-_aFwp.js                         2.41 kB │ gzip:   0.95 kB │ map:      6.29 kB
+dist/assets/sophia-CRfGWb83.js                        2.52 kB │ gzip:   1.19 kB │ map:      6.82 kB
+dist/assets/m3-D-oSqn_W.js                            2.56 kB │ gzip:   1.32 kB │ map:      6.83 kB
+dist/assets/sceneTargets-w3Wm2Aot.js                  2.57 kB │ gzip:   1.15 kB │ map:     11.95 kB
+dist/assets/page-CGrATt5R.js                          2.64 kB │ gzip:   1.32 kB │ map:      6.04 kB
+dist/assets/typespec-B8J7ngcE.js                      2.67 kB │ gzip:   1.05 kB │ map:      7.01 kB
+dist/assets/pascal-DrH0SRf2.js                        2.68 kB │ gzip:   1.38 kB │ map:      7.47 kB
+dist/assets/fsharp-C8Ef5oNN.js                        2.69 kB │ gzip:   1.31 kB │ map:      7.14 kB
+dist/assets/page-DrNaD8yx.js                          2.70 kB │ gzip:   1.38 kB │ map:      6.60 kB
+dist/assets/qsharp-DkqhCAOL.js                        2.76 kB │ gzip:   1.41 kB │ map:      7.85 kB
+dist/assets/page-XJedjnsd.js                          2.83 kB │ gzip:   1.36 kB │ map:      6.39 kB
+dist/assets/shell-CC2rA5mh.js                         2.85 kB │ gzip:   1.20 kB │ map:      7.55 kB
+dist/assets/r-BwWrilGY.js                             2.87 kB │ gzip:   1.28 kB │ map:      7.69 kB
+dist/assets/java-BEtHBSE6.js                          2.94 kB │ gzip:   1.38 kB │ map:      8.02 kB
+dist/assets/EntityPicker-CIuimq4H.js                  2.96 kB │ gzip:   1.35 kB │ map:      8.17 kB
+dist/assets/cssMode-BGADWQ7E.js                       2.99 kB │ gzip:   1.16 kB │ map:      8.90 kB
+dist/assets/shared-CFpBeRwR.js                        3.00 kB │ gzip:   1.27 kB │ map:      8.54 kB
+dist/assets/redis-ClamHrr6.js                         3.07 kB │ gzip:   1.45 kB │ map:      7.84 kB
+dist/assets/kotlin-BOotOW0E.js                        3.08 kB │ gzip:   1.45 kB │ map:      8.16 kB
+dist/assets/cypher-CVaqCwHa.js                        3.09 kB │ gzip:   1.43 kB │ map:      8.30 kB
+dist/assets/powershell-DmHpPYUd.js                    3.10 kB │ gzip:   1.37 kB │ map:      8.67 kB
+dist/assets/shared-CfJav6T1.js                        3.25 kB │ gzip:   1.24 kB │ map:      9.37 kB
+dist/assets/tcl-DISqw1ZD.js                           3.31 kB │ gzip:   1.36 kB │ map:      8.40 kB
+dist/assets/liquid-BK6WNlSy.js                        3.38 kB │ gzip:   1.46 kB │ map:      8.33 kB
+dist/assets/tabs-BXFRQel0.js                          3.40 kB │ gzip:   1.51 kB │ map:     12.32 kB
+dist/assets/coffee-Ba7i2nA0.js                        3.40 kB │ gzip:   1.28 kB │ map:      9.36 kB
+dist/assets/htmlMode-DXiHIuEj.js                      3.45 kB │ gzip:   1.28 kB │ map:     10.09 kB
+dist/assets/hcl-CpzslTdj.js                           3.49 kB │ gzip:   1.49 kB │ map:      8.17 kB
+dist/assets/python-CNtYGLiu.js                        3.49 kB │ gzip:   1.47 kB │ map:      9.96 kB
+dist/assets/apex-BWPQTe0t.js                          3.51 kB │ gzip:   1.74 kB │ map:      9.64 kB
+dist/assets/SceneColorControl-ZWMGzZK2.js             3.54 kB │ gzip:   1.49 kB │ map:     11.38 kB
+dist/assets/yaml-BIVZTeWt.js                          3.58 kB │ gzip:   1.33 kB │ map:      9.39 kB
+dist/assets/SaveSceneModal-BDTvipc_.js                3.59 kB │ gzip:   1.78 kB │ map:     10.11 kB
+dist/assets/routineActivity-DyW3aDGn.js               3.67 kB │ gzip:   1.44 kB │ map:      9.36 kB
+dist/assets/page-Co5ywZhb.js                          3.68 kB │ gzip:   1.72 kB │ map:      9.51 kB
+dist/assets/markdown-Cimd5fb3.js                      3.68 kB │ gzip:   1.38 kB │ map:     10.52 kB
+dist/assets/rust-DdL9SqIa.js                          3.70 kB │ gzip:   1.84 kB │ map:      9.65 kB
+dist/assets/less-B9JPFI3C.js                          3.79 kB │ gzip:   1.40 kB │ map:      8.83 kB
+dist/assets/restructuredtext-BYgofb2h.js              3.79 kB │ gzip:   1.37 kB │ map:      9.04 kB
+dist/assets/dart-onAF5SnQ.js                          3.97 kB │ gzip:   1.64 kB │ map:     10.34 kB
+dist/assets/csharp-BKxtCVv1.js                        4.16 kB │ gzip:   1.70 kB │ map:     11.23 kB
+dist/assets/DetailPageShell-DTL73SPp.js               4.25 kB │ gzip:   1.79 kB │ map:     15.12 kB
+dist/assets/dist-2MoC3gge.js                          4.30 kB │ gzip:   1.91 kB │ map:     17.18 kB
+dist/assets/msdax-DauUninz.js                         4.31 kB │ gzip:   1.91 kB │ map:     10.19 kB
+dist/assets/RoomConditions-CgLYyS5f.js                4.33 kB │ gzip:   1.80 kB │ map:     12.90 kB
+dist/assets/mdx-Nurb20qZ.js                           4.36 kB │ gzip:   1.24 kB │ map:     10.50 kB
+dist/assets/page-CfoZsXK6.js                          4.39 kB │ gzip:   1.97 kB │ map:     11.75 kB
+dist/assets/css-DIMkf-bt.js                           4.40 kB │ gzip:   1.37 kB │ map:     10.83 kB
+dist/assets/influxdb-Da7FqgML.js                      4.45 kB │ gzip:   1.95 kB │ map:     18.20 kB
+dist/assets/checkbox-B2CPgqSH.js                      4.48 kB │ gzip:   1.95 kB │ map:     16.12 kB
+dist/assets/HealthStatus-CP9_Leut.js                  4.50 kB │ gzip:   1.68 kB │ map:     10.16 kB
+dist/assets/pug-Z5eAx3Zn.js                           4.50 kB │ gzip:   1.64 kB │ map:     13.24 kB
+dist/assets/swift-Bxkupp3x.js                         4.52 kB │ gzip:   2.02 kB │ map:     10.81 kB
+dist/assets/html-BLIct0aP.js                          4.55 kB │ gzip:   1.19 kB │ map:     12.38 kB
+dist/assets/EntitySaveBar-BI0QRc8B.js                 4.56 kB │ gzip:   2.12 kB │ map:     13.48 kB
+dist/assets/page-BN9v-4nd.js                          4.57 kB │ gzip:   1.92 kB │ map:     11.63 kB
+dist/assets/ecl-D05T4iGw.js                           4.66 kB │ gzip:   2.23 kB │ map:     11.70 kB
+dist/assets/typescript-MFLFlhgy.js                    4.72 kB │ gzip:   1.98 kB │ map:     12.07 kB
+dist/assets/cpp-C7h46wYY.js                           4.78 kB │ gzip:   2.06 kB │ map:     12.15 kB
+dist/assets/SearchablePicker-BMcryRRJ.js              4.78 kB │ gzip:   1.87 kB │ map:     14.61 kB
+dist/assets/popover-SeKC0inD.js                       4.85 kB │ gzip:   1.87 kB │ map:     19.17 kB
+dist/assets/SceneList-D1kK3dES.js                     4.88 kB │ gzip:   2.42 kB │ map:     13.92 kB
+dist/assets/JsonValueEditor-CzGUnYQo.js               5.06 kB │ gzip:   2.03 kB │ map:     15.92 kB
+dist/assets/detail-BtDhsOEx.js                        5.08 kB │ gzip:   2.24 kB │ map:     14.36 kB
+dist/assets/LiveSensorRow-CpdtPWzS.js                 5.11 kB │ gzip:   2.07 kB │ map:     13.44 kB
+dist/assets/shared-DOwuzFTh.js                        5.32 kB │ gzip:   2.03 kB │ map:     15.65 kB
+dist/assets/vb-DV3o63ZY.js                            5.34 kB │ gzip:   2.05 kB │ map:     12.85 kB
+dist/assets/layout-CyE_hqWA.js                        5.41 kB │ gzip:   2.13 kB │ map:     15.12 kB
+dist/assets/DeviceReportStatus-BVHbIsa0.js            5.69 kB │ gzip:   2.46 kB │ map:     15.47 kB
+dist/assets/page-BXLNkhcW.js                          5.78 kB │ gzip:   2.44 kB │ map:     14.80 kB
+dist/assets/twig-De2hgUGE.js                          5.82 kB │ gzip:   1.52 kB │ map:     16.04 kB
+dist/assets/page-BK8Cp2aR.js                          5.88 kB │ gzip:   2.26 kB │ map:     16.39 kB
+dist/assets/ColorPickerModal-De8JIY-E.js              6.08 kB │ gzip:   2.48 kB │ map:     16.41 kB
+dist/assets/canvasUtils-DgmdVZnL.js                   6.10 kB │ gzip:   2.09 kB │ map:     22.14 kB
+dist/assets/page-DvBg6JAn.js                          6.14 kB │ gzip:   2.52 kB │ map:     16.61 kB
+dist/assets/scss-gp-XZpBa.js                          6.30 kB │ gzip:   1.74 kB │ map:     15.80 kB
+dist/assets/handlebars-CDg2cHX-.js                    6.33 kB │ gzip:   1.41 kB │ map:     16.37 kB
+dist/assets/SensorActionPanel-DaM4JUhJ.js             6.42 kB │ gzip:   1.88 kB │ map:     19.69 kB
+dist/assets/julia-Bri6UV-V.js                         6.54 kB │ gzip:   2.68 kB │ map:     16.27 kB
+dist/assets/page-BdTpY8wp.js                          6.75 kB │ gzip:   2.64 kB │ map:     19.43 kB
+dist/assets/systemverilog-Bz4Y3fRF.js                 6.90 kB │ gzip:   2.76 kB │ map:     17.08 kB
+dist/assets/dialog-ARl0QrI6.js                        6.91 kB │ gzip:   2.55 kB │ map:     24.67 kB
+dist/assets/st-DbInun42.js                            6.98 kB │ gzip:   2.28 kB │ map:     16.64 kB
+dist/assets/scala-DHpiXF5c.js                         7.15 kB │ gzip:   2.11 kB │ map:     17.58 kB
+dist/assets/wgsl-DpFanUEy.js                          7.22 kB │ gzip:   2.76 kB │ map:     13.66 kB
+dist/assets/editor-DDFRG9Sn.js                        7.25 kB │ gzip:   3.05 kB │ map:     22.38 kB
+dist/assets/perl-oz_6vUea.js                          7.39 kB │ gzip:   3.13 kB │ map:     18.62 kB
+dist/assets/postiats-43DmfD33.js                      7.41 kB │ gzip:   2.43 kB │ map:     26.29 kB
+dist/assets/TimersCard-s19EJLnP.js                    7.42 kB │ gzip:   2.97 kB │ map:     20.97 kB
+dist/assets/dist-BS_qgt5V.js                          7.44 kB │ gzip:   2.73 kB │ map:     30.59 kB
+dist/assets/php-nr791fC2.js                           7.78 kB │ gzip:   2.06 kB │ map:     19.47 kB
+dist/assets/react-Cvdyeg_0.js                         7.91 kB │ gzip:   3.04 kB │ map:     28.55 kB
+dist/assets/razor-CFKa_1Nf.js                         8.15 kB │ gzip:   2.08 kB │ map:     20.69 kB
+dist/assets/clojure-Cm7r79vr.js                       8.25 kB │ gzip:   3.53 kB │ map:     17.89 kB
+dist/assets/ruby-DezsRK8O.js                          8.25 kB │ gzip:   2.59 kB │ map:     22.92 kB
+dist/assets/page-x3E3Qv09.js                          8.44 kB │ gzip:   2.81 kB │ map:     25.07 kB
+dist/assets/useDashboard-DXAmIVzj.js                  8.51 kB │ gzip:   3.07 kB │ map:     27.87 kB
+dist/assets/GroupViewport-Dy7kBH5b.js                 8.72 kB │ gzip:   3.28 kB │ map:     16.01 kB
+dist/assets/sql-NEE52Syq.js                           8.88 kB │ gzip:   3.78 kB │ map:     20.61 kB
+dist/assets/protobuf-C531GsRP.js                      8.94 kB │ gzip:   2.08 kB │ map:     21.65 kB
+dist/assets/mysql-SOo6toE5.js                         9.70 kB │ gzip:   4.02 kB │ map:     20.95 kB
+dist/assets/SceneScriptEditor-BEdkjsAk.js             9.74 kB │ gzip:   3.14 kB │ map:     25.21 kB
+dist/assets/elixir-6RTg0lbw.js                       10.16 kB │ gzip:   2.54 kB │ map:     27.33 kB
+dist/assets/detail-CCu3R3gV.js                       10.22 kB │ gzip:   3.87 kB │ map:     32.52 kB
+dist/assets/redshift-DT7zqm-g.js                     10.37 kB │ gzip:   4.28 kB │ map:     20.83 kB
+dist/assets/BufferResource-uHHNB3wd.js               11.08 kB │ gzip:   2.86 kB │ map:     26.67 kB
+dist/assets/Viewport-BHsCb9dz.js                     11.08 kB │ gzip:   4.11 kB │ map:     38.59 kB
+dist/assets/page-B1CTH0Ek.js                         11.13 kB │ gzip:   4.25 kB │ map:     28.41 kB
+dist/assets/page-CFXpqjU9.js                         11.73 kB │ gzip:   4.29 kB │ map:     31.14 kB
+dist/assets/abap-08VXUWAP.js                         11.73 kB │ gzip:   5.18 kB │ map:     28.61 kB
+dist/assets/pgsql-DTj74zXo.js                        11.95 kB │ gzip:   4.47 kB │ map:     22.87 kB
+dist/assets/jsonMode-D9WZsgh2.js                     12.22 kB │ gzip:   4.49 kB │ map:     70.34 kB
+dist/assets/dropdown-menu-BU7NOuXJ.js                12.30 kB │ gzip:   4.52 kB │ map:     72.42 kB
+dist/assets/page-DRx9yjMd.js                         12.38 kB │ gzip:   4.32 kB │ map:     36.31 kB
+dist/assets/page-Co9Annqz.js                         12.99 kB │ gzip:   4.05 kB │ map:     32.38 kB
+dist/assets/dist-5Nq-IbRG.js                         14.01 kB │ gzip:   4.80 kB │ map:     44.01 kB
+dist/assets/page-D0uv6K_o.js                         14.99 kB │ gzip:   5.59 kB │ map:     43.04 kB
+dist/assets/page-DoUgNhDr.js                         15.19 kB │ gzip:   5.65 kB │ map:     55.22 kB
+dist/assets/powerquery-D3hlyOfw.js                   15.39 kB │ gzip:   4.77 kB │ map:     26.40 kB
+dist/assets/init-DQVkVxVw.js                         15.42 kB │ gzip:   4.82 kB │ map:     53.93 kB
+dist/assets/freemarker2-ajGhJtMv.js                  15.59 kB │ gzip:   4.01 kB │ map:     57.66 kB
+dist/assets/solidity-BEEn4gHE.js                     16.03 kB │ gzip:   4.43 kB │ map:     32.07 kB
+dist/assets/page-a6IzyiE_.js                         20.96 kB │ gzip:   6.66 kB │ map:     62.43 kB
+dist/assets/select-CuTpRKev.js                       21.06 kB │ gzip:   7.28 kB │ map:     86.41 kB
+dist/assets/tsMode-E_CkIskb.js                       21.89 kB │ gzip:   6.18 kB │ map:     63.89 kB
+dist/assets/detail-DjTWcLdM.js                       21.98 kB │ gzip:   7.83 kB │ map:     64.94 kB
+dist/assets/colors-BBXUg09x.js                       25.12 kB │ gzip:   9.10 kB │ map:     91.28 kB
+dist/assets/editor-A8gAIwpm.js                       27.12 kB │ gzip:   9.18 kB │ map:     80.72 kB
+dist/assets/detail-B7oYtmO4.js                       27.84 kB │ gzip:   8.69 kB │ map:     89.37 kB
+dist/assets/lspLanguageFeatures-C8UwF0_W.js          28.28 kB │ gzip:   7.21 kB │ map:    126.96 kB
+dist/assets/es2015-Dfk2comW.js                       34.32 kB │ gzip:  11.98 kB │ map:    162.65 kB
+dist/assets/widget-CaIVTH3V.js                       34.60 kB │ gzip:  10.65 kB │ map:    103.03 kB
+dist/assets/FloorplanGridEditor-lS3OT_At.js          35.76 kB │ gzip:  11.25 kB │ map:    132.89 kB
+dist/assets/responsive-overlay-Dujjdt70.js           37.01 kB │ gzip:  11.51 kB │ map:    132.34 kB
+dist/assets/browserAll-BWZG4zYL.js                   42.71 kB │ gzip:  11.24 kB │ map:    157.52 kB
+dist/assets/TimeSeriesPlot-tZlcSSHq.js               57.47 kB │ gzip:  21.41 kB │ map:    236.39 kB
+dist/assets/DeviceControls-CANVST_t.js               61.45 kB │ gzip:  22.39 kB │ map:    247.76 kB
+dist/assets/DashboardWidgetCard-fraX2rcL.js          63.30 kB │ gzip:  18.26 kB │ map:    205.93 kB
+dist/assets/page-DhEUMXXz.js                         68.43 kB │ gzip:  19.80 kB │ map:    226.17 kB
+dist/assets/RenderTargetSystem-B7Y9OBMG.js           78.14 kB │ gzip:  22.12 kB │ map:    288.28 kB
+dist/assets/chunk-OB3PAWPO-i-0bo3bL.js               95.30 kB │ gzip:  31.53 kB │ map:    503.45 kB
+dist/assets/button-BKXwmRo4.js                      100.91 kB │ gzip:  32.99 kB │ map:    554.34 kB
+dist/assets/CanvasPool-Bv_WirYb.js                  109.73 kB │ gzip:  33.36 kB │ map:    537.58 kB
+dist/assets/editor-DUZCxGUn.js                      111.83 kB │ gzip:  31.25 kB │ map:    358.93 kB
+dist/assets/AssistantPanel-CcXg5xer.js              192.40 kB │ gzip:  57.74 kB │ map:  1,044.55 kB
+dist/assets/PixiFloorplanRenderer-B9lbvdIB.js       299.63 kB │ gzip:  90.06 kB │ map:  1,337.40 kB
+dist/assets/index-C_UK9fds.js                       505.84 kB │ gzip: 160.48 kB │ map:  2,258.55 kB
+dist/assets/localMonaco-BdRCB3nL.js               1,296.23 kB │ gzip: 326.53 kB │ map:  4,795.82 kB
+dist/assets/editor.api-Dl7mO9Lw.js                2,737.11 kB │ gzip: 706.35 kB │ map: 10,161.92 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 3.53s

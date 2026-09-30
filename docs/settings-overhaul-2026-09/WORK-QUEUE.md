@@ -461,6 +461,22 @@ reviewed on desktop and phone. Type/lint/build pass (the existing bundle-size
 warning remains). These checks do not close the wider viewport/accessibility
 matrix, all widget defaults, remaining field coverage or final reconciliation.
 
+
+### Widget options and persistence — 2026-09-30
+
+[WIDGET-OPTIONS.md](WIDGET-OPTIONS.md) maps all 17 widget types, field defaults,
+legacy representations and renderer behavior. Nine remaining native dropdowns
+now use shared selectors or searchable entity pickers. Numeric options require a
+complete value before Save; price thresholds accept signed decimals. Missing
+references remain visible and repairable, and mode switches retain inactive IDs.
+
+22 native checks pass at each 1440/390 px viewport, with no live commands. The
+expanded existing SQLite test now closes/reopens and exports/restores edited and
+empty option objects for every type, including synthetic private overrides.
+Type/lint/build pass. Captures, driver and exact evidence are linked from the
+option ledger. The remaining gates include backup/recovery races, reference and
+module reconciliation, shared overlays and the wider accessibility matrix.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

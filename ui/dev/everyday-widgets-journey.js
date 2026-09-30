@@ -34,7 +34,37 @@
     dispatchEvent(new PopStateEvent('popstate'));
     await pause();
   };
-  const input = (el, value) => {
+  const input = async (el, value) => {
+    if (el.tagName === 'BUTTON') {
+      el.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
+      );
+      const text =
+        el.getAttribute('aria-label') === 'Sensors shown'
+          ? value === 'all'
+            ? 'All enabled sensors'
+            : 'Selected sensors'
+          : el.getAttribute('aria-label') === 'Rooms shown'
+            ? value === 'all'
+              ? 'All visible rooms'
+              : 'Selected rooms'
+            : 'Selected devices';
+      const option = () =>
+        [
+          ...document.querySelectorAll(
+            '[data-radix-select-viewport] [role=option]',
+          ),
+        ].find((e) => e.textContent.trim() === text);
+      await until(option, 'Shared selector opened');
+      option().dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+      );
+      await until(
+        () => !document.querySelector('[data-radix-select-viewport]'),
+        'Shared selector closed',
+      );
+      return;
+    }
     Object.getOwnPropertyDescriptor(
       el.tagName === 'SELECT'
         ? HTMLSelectElement.prototype
@@ -164,10 +194,12 @@
     'Room widget editor loaded',
   );
   assert(
-    document.querySelector('[aria-label="Rooms shown"]').value === 'selected',
+    document
+      .querySelector('[aria-label="Rooms shown"]')
+      .textContent.includes('Selected rooms'),
     'Room selection survives API round trip',
   );
-  input(document.querySelector('[aria-label="Rooms shown"]'), 'all');
+  await input(document.querySelector('[aria-label="Rooms shown"]'), 'all');
   await pause();
   button('Save changes').click();
   await until(() => !button('Save changes'), 'Room options saved');
@@ -184,7 +216,10 @@
     () => document.querySelector('[aria-label="Activation scope"]'),
     'Scene widget editor loaded',
   );
-  input(document.querySelector('[aria-label="Activation scope"]'), 'devices');
+  await input(
+    document.querySelector('[aria-label="Activation scope"]'),
+    'devices',
+  );
   await pause();
   button('Save changes').click();
   await until(() => !button('Save changes'), 'Empty scope saved');
