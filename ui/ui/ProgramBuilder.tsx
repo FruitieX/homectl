@@ -1039,6 +1039,14 @@ function StepFields({
       return (
         <div className="space-y-3">
           <div className="space-y-2">
+            {step.scenes.length === 0 && (
+              <p
+                id={`cycle-empty-${encodeURIComponent(step.id)}`}
+                className="text-sm text-destructive"
+              >
+                Add at least one scene to this cycle, or remove the action.
+              </p>
+            )}
             {step.scenes.map((entry, index) => (
               <div
                 key={index}
@@ -1204,6 +1212,12 @@ function StepFields({
                   ],
                 })
               }
+              data-field={actionPath + '/scenes'}
+              aria-describedby={
+                step.scenes.length === 0
+                  ? `cycle-empty-${encodeURIComponent(step.id)}`
+                  : undefined
+              }
             >
               Add scene
             </Button>
@@ -1243,9 +1257,6 @@ function StepFields({
                 onChange({ ...step, rollout } as unknown as NativeAction)
               }
             />
-          ) : null}
-          {step.scenes.length === 0 ? (
-            <p className="text-xs text-destructive">Add at least one scene.</p>
           ) : null}
           {step.scenes.some((entry) => !entry.scene_id) ? (
             <p className="text-xs text-destructive">

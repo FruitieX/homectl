@@ -353,6 +353,11 @@ restore evidence, including unknown fields, explicit empty values, stable IDs,
 script declarations and legacy defaults. No production database code changed.
 Widget default mapping, broader recovery and accessibility remain open.
 
+Empty-cycle checkpoint, 2026-09-30: 19 routine-selection checks pass per
+desktop/phone size, including inline repair guidance, focused Save validation
+without writing and Discard. All 237 UI tests, the server cycle-validation test
+and type/lint/build pass. Screenshots are in the comparison gallery.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

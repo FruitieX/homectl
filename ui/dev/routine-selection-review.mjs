@@ -434,6 +434,31 @@ export default async function (cdp, { width, url }) {
           'bedroom',
       'Cycle remove/add saves the full replacement collection',
     );
+    const beforeEmpty = writes;
+    await click(button('Remove', `${entries()}[0]`));
+    await click(button('Remove', `${entries()}[0]`));
+    check(
+      await evaluate(
+        `${node('cycle')}.textContent.includes('Add at least one scene to this cycle')`,
+      ),
+      'Empty cycle explains how to repair or remove the action',
+    );
+    await click(button('Save changes'));
+    check(
+      writes === beforeEmpty &&
+        (await evaluate(
+          `document.activeElement === ${button('Add scene', node('cycle'))}`,
+        )),
+      'Saving an empty cycle focuses Add scene without writing',
+    );
+    await shot('empty-cycle');
+    await click(button('Discard'));
+    check(
+      await evaluate(
+        `${entries()}.length===2 && !${node('cycle')}.textContent.includes('Add at least one scene to this cycle')`,
+      ),
+      'Discard restores the saved cycle and clears its empty-state message',
+    );
     await click(labeled('Dynamic scene selection', node('mapped')));
     await cdp.send('Input.dispatchKeyEvent', {
       type: 'keyDown',
@@ -458,8 +483,8 @@ export default async function (cdp, { width, url }) {
     await cdp.send('Page.reload');
     await loaded;
     await until(
-      `!!${labeled('Scene for __proto__', node('mapped'))}`,
-      'Reloaded mappings',
+      `${labeled('Scene for __proto__', node('mapped'))}?.textContent.includes('Dark')`,
+      'Reloaded mappings and scene catalog',
     );
     check(
       await evaluate(

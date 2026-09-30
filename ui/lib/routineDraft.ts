@@ -154,6 +154,16 @@ export function validateRoutineDraft(routine: Routine): FieldError[] {
         stepPath = `${path}/${index}`;
       if (!step) return;
       checkId(step, stepPath);
+      if (
+        step.action === 'cycle_scenes' &&
+        Array.isArray(step.scenes) &&
+        step.scenes.length === 0
+      )
+        errors.push({
+          field: `step/${step.id}/cycle_scenes/scenes`,
+          message:
+            'Add at least one scene to this cycle, or remove the action.',
+        });
       if (step.action === 'choose' && Array.isArray(step.branches))
         step.branches.forEach((value, index) => {
           const branch = object(value),

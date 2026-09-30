@@ -104,6 +104,48 @@ test('empty logic groups and duplicate nested IDs have visible validation errors
   assert.ok(errors.some((error) => error.message.includes('empty')));
   assert.ok(errors.some((error) => error.message.includes('unique')));
 });
+test('empty scene cycles validate inside branches without reading opaque payloads', () => {
+  const cycle = {
+    id: 'cycle',
+    action: 'cycle_scenes',
+    scenes: [] as unknown[],
+  };
+  const row = {
+    id: 'r',
+    name: 'R',
+    enabled: false,
+    semantics_version: 2,
+    rules: [],
+    actions: [],
+    definition_v2: {
+      program: {
+        kind: 'native',
+        steps: [
+          {
+            id: 'branch',
+            action: 'choose',
+            branches: [
+              {
+                id: 'if',
+                condition: { kind: 'literal', value: true },
+                steps: [cycle],
+              },
+            ],
+          },
+          { id: 'script', action: 'run_script', spec: { future: cycle } },
+        ],
+      },
+    },
+  };
+  assert.deepEqual(validateRoutineDraft(row), [
+    {
+      field: 'step/cycle/cycle_scenes/scenes',
+      message: 'Add at least one scene to this cycle, or remove the action.',
+    },
+  ]);
+  cycle.scenes.push({ scene_id: 'evening' });
+  assert.deepEqual(validateRoutineDraft(row), []);
+});
 test('arbitrary JSON payload identities and unknown fields survive duplication and validation', () => {
   const payload = {
     id: 'customer-reference',
