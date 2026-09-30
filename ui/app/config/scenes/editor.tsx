@@ -92,6 +92,9 @@ export function SceneEditor({ id }: { id?: string }) {
   const captureId = creating ? params.get('capture') : null;
   const key = `${apiEndpoint}/scenes/${id ?? '$new'}${captureId ? '/' + captureId : ''}`;
   const returnTo = params.get('returnTo');
+  const routineReturn = returnTo?.startsWith('/config/routines/')
+    ? returnTo
+    : null;
   const liveReturn =
     returnTo && /^\/(map|groups)(\/|\?|$)/.test(returnTo) ? returnTo : null;
   const href = creating
@@ -532,6 +535,14 @@ export function SceneEditor({ id }: { id?: string }) {
           {captureId
             ? 'Captured requested states. Review targets, then create the scene.'
             : 'Choose what each target sets or follows.'}
+          {creating && routineReturn && (
+            <>
+              {' '}
+              <Link className="settings-link" to={routineReturn}>
+                Return to routine
+              </Link>
+            </>
+          )}
           {liveReturn && (
             <>
               {' '}

@@ -340,6 +340,13 @@ types and hidden true/false/omitted values. [PERSISTENCE-COVERAGE.md](PERSISTENC
 names each exact test and its limits. These are database checks; API recovery,
 raw scene/routine definitions, option defaults and final accessibility remain open.
 
+Scene-return checkpoint, 2026-09-30: 17 native browser checks pass on desktop
+and phone. Both drafts survive related-page navigation; creating selects and
+focuses the originating action without saving the routine. Missing actions and
+deleted scenes have explicit recovery. Opaque script/condition/extension payloads
+are preserved. All 236 UI tests and type/lint/build pass. Evidence is in the
+comparison gallery and FIELD-COVERAGE.md; broader acceptance remains open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

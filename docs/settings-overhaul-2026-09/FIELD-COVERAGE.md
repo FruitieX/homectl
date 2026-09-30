@@ -420,3 +420,21 @@ computation variants/aliases/timing/defaults, sensor ordering, user-timer defini
 floorplan data and everyday widget selections. Helper persistence now exercises all
 four types and visibility values. Browser and database evidence remain separate;
 source evaluation, all per-widget defaults and final recovery gates are not implied.
+
+### Scene creation and routine return
+
+The native browser journey `ui/dev/scene-return-review.mjs` passes 17 checks
+at 1440 and 390 px. Creating a scene from an action retains both drafts,
+returns focus to the originating action, selects the created scene exactly once,
+and leaves the routine unsaved until Create/Save. Returning before scene creation
+retains the scene name and targets. A deleted action produces an honest notice and
+a link to the created scene; a deleted scene stays visibly unavailable until the
+user chooses a replacement. Related-page navigation preserves that repair draft.
+No live HTTP or WebSocket commands were issued.
+
+The return helper only traverses native action/branch lists. Two unit tests cover
+nested selection, missing/changed actions, and preservation of opaque script,
+condition and extension payloads. All 236 UI tests and type/lint/build pass.
+Screenshots and logs: `implementation-evidence/collections/scene-return-*`.
+These are authoring/fixture checks, not proof of scene execution or database
+durability. Other reference/recovery and final acceptance gates remain open.

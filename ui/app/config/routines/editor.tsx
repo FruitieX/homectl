@@ -1,9 +1,10 @@
+import { applyCreatedScene } from '@/lib/routineSceneReturn';
 import { Input } from '@/ui/primitives/input';
 import {
   outcome as activityOutcome,
   summary as activitySummary,
 } from '@/lib/routineActivity';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, Download, Zap, ListFilter, Play } from 'lucide-react';
 import { toast } from 'sonner';
@@ -65,24 +66,6 @@ function newRoutine(): Routine {
     actions: [],
     definition_v2: { triggers: [], program: { kind: 'native', steps: [] } },
   };
-}
-function applyCreatedScene(
-  value: unknown,
-  nodeId: string,
-  sceneId: string,
-): unknown {
-  if (Array.isArray(value))
-    return value.map((item) => applyCreatedScene(item, nodeId, sceneId));
-  if (!value || typeof value !== 'object') return value;
-  const node = value as Record<string, unknown>;
-  if (node.id === nodeId && node.action === 'activate_scene')
-    return { ...node, scene_id: sceneId, select: undefined };
-  return Object.fromEntries(
-    Object.entries(node).map(([key, item]) => [
-      key,
-      applyCreatedScene(item, nodeId, sceneId),
-    ]),
-  );
 }
 export function RoutineEditor({ id }: { id?: string }) {
   const api = useRoutines(),
@@ -182,6 +165,8 @@ export function RoutineEditor({ id }: { id?: string }) {
   const editable = version === 2;
   const requestedNode = params.get('node') ?? params.get('target');
   const [missingNode, setMissingNode] = useState(false);
+  const [unselectedScene, setUnselectedScene] = useState<string>();
+  const handledSceneReturn = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!requestedNode || !hasRoutine) {
       setMissingNode(false);
@@ -203,20 +188,26 @@ export function RoutineEditor({ id }: { id?: string }) {
   useEffect(() => {
     const scene = params.get('scene'),
       node = params.get('sceneNode');
-    if (scene && node && entityDraftStore.get<Routine>(key)) {
-      entityDraftStore.change<Routine>(key, (current) => ({
-        ...current,
-        definition_v2: applyCreatedScene(
-          current.definition_v2,
-          node,
-          scene,
-        ) as RoutineDefinitionV2Body,
-      }));
+    const current = entityDraftStore.get<Routine>(key)?.value;
+    const returnKey = JSON.stringify([key, scene, node]);
+    if (!scene || !node) handledSceneReturn.current = undefined;
+    if (handledSceneReturn.current === returnKey) return;
+    if (scene && node && current) {
+      handledSceneReturn.current = returnKey;
+      const result = applyCreatedScene(current.definition_v2, node, scene);
+      if (result.applied) {
+        entityDraftStore.change<Routine>(key, (value) => ({
+          ...value,
+          definition_v2: result.definition,
+        }));
+        setUnselectedScene(undefined);
+        toast.success('Created scene selected in this routine draft');
+      } else setUnselectedScene(scene);
       const next = new URLSearchParams(params);
       next.delete('scene');
       next.delete('sceneNode');
+      if (result.applied) next.set('node', node);
       setParams(next, { replace: true });
-      toast.success('Created scene selected in this routine draft');
     }
   }, [key, params, setParams, hasRoutine]);
   useEffect(() => {
@@ -339,6 +330,21 @@ export function RoutineEditor({ id }: { id?: string }) {
           : []),
       ]}
     >
+      {unselectedScene && (
+        <p
+          role="status"
+          className="rounded-md border border-border p-3 text-sm"
+        >
+          The scene was created, but the original action is no longer available.
+          Choose the scene in another action.{' '}
+          <Link
+            className="settings-link"
+            to={configItemHref('scene', unselectedScene)}
+          >
+            Open created scene
+          </Link>
+        </p>
+      )}
       {missingNode && (
         <p
           role="status"

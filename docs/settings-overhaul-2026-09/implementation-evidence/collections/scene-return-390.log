@@ -1,0 +1,76 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "New routine defaults to enabled",
+    "passed": true
+   },
+   {
+    "name": "Scene creation retains the originating action ID",
+    "passed": true
+   },
+   {
+    "name": "Return link keeps the routine name and start/action drafts",
+    "passed": true
+   },
+   {
+    "name": "Returning before Create writes neither entity",
+    "passed": true
+   },
+   {
+    "name": "Scene draft and selected target survive the round trip",
+    "passed": true
+   },
+   {
+    "name": "Created scene is selected in the correct action",
+    "passed": true
+   },
+   {
+    "name": "Return consumes creation parameters and identifies the focused action",
+    "passed": true
+   },
+   {
+    "name": "Scene creation does not save the routine or command devices",
+    "passed": true
+   },
+   {
+    "name": "Scene return announces selection once",
+    "passed": true
+   },
+   {
+    "name": "Explicit routine Create saves the selected scene and enable choice",
+    "passed": true
+   },
+   {
+    "name": "Missing return action offers the created scene without claiming selection",
+    "passed": true
+   },
+   {
+    "name": "Missing return action does not write or mutate the saved routine",
+    "passed": true
+   },
+   {
+    "name": "A removed selected scene stays visible as unavailable",
+    "passed": true
+   },
+   {
+    "name": "Repair selection survives related scene navigation",
+    "passed": true
+   },
+   {
+    "name": "Explicit Save repairs the unavailable reference",
+    "passed": true
+   },
+   {
+    "name": "Linked editing fits the viewport",
+    "passed": true
+   },
+   {
+    "name": "The entire linked editing journey issues no live command",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/routines","viewport":{"width":390,"height":844},"problems":[]}
