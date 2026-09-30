@@ -1,6 +1,7 @@
 import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { MapPin } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useMediaQuery } from 'usehooks-ts';
 
 import type { AssistantPlan } from '@/bindings/AssistantPlan';
 import { useImageState } from '@/hooks/useImageState';
@@ -66,6 +67,7 @@ function AffectedEntityList({ plan }: { plan: AssistantPlan }) {
  * so layout edits are not visualized.
  */
 export function FloorplanPreview({ plan }: { plan: AssistantPlan }) {
+  const showDeviceLabels = useMediaQuery('(min-width: 768px)');
   const healthQuery = useDeviceHealth();
   const healthByDevice = healthQuery.isError
     ? undefined
@@ -117,7 +119,7 @@ export function FloorplanPreview({ plan }: { plan: AssistantPlan }) {
       ),
     [displayNames],
   );
-  const scene = useMemo(
+  const fullScene = useMemo(
     () =>
       buildFloorplanScene({
         healthByDevice,
@@ -128,6 +130,23 @@ export function FloorplanPreview({ plan }: { plan: AssistantPlan }) {
         displayNames: displayNameMap,
       }),
     [healthByDevice, selectedFloorplan, image, devices, groups, displayNameMap],
+  );
+  // Entity names remain in the list below; reserve the phone map for room
+  // labels and highlighted markers rather than competing text badges.
+  const scene = useMemo(
+    () =>
+      showDeviceLabels
+        ? fullScene
+        : {
+            ...fullScene,
+            labelVisibility: {
+              ...fullScene.labelVisibility,
+              lights: false,
+              sensors: false,
+              groups: fullScene.labelVisibility?.groups ?? true,
+            },
+          },
+    [fullScene, showDeviceLabels],
   );
 
   const canRender =
@@ -148,7 +167,7 @@ export function FloorplanPreview({ plan }: { plan: AssistantPlan }) {
         </span>
       </div>
       {canRender && selectedFloorplan ? (
-        <div className="relative h-56 overflow-hidden rounded-2xl border border-border bg-muted/20">
+        <div className="relative h-64 overflow-hidden rounded-2xl border border-border bg-muted/20 md:h-[clamp(20rem,42dvh,35rem)]">
           <PixiFloorplanRenderer
             key={selectedFloorplan.id}
             scene={scene}

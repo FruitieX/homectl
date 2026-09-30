@@ -454,7 +454,7 @@ export function AssistantPanel() {
         </span>
       }
       description="Describe a change. The assistant proposes a plan or light change you review and apply before anything is written."
-      className="h-[calc(var(--app-visual-viewport-height,100dvh)-0.5rem)] max-w-3xl md:h-[min(calc(var(--app-visual-viewport-height,100dvh)-4rem),44rem)]"
+      className="h-[calc(var(--app-visual-viewport-height,100dvh)-0.5rem)] max-w-[1280px] md:h-[min(calc(var(--app-visual-viewport-height,100dvh)-3rem),64rem)]"
       sizeToVisualViewport
       hideDescriptionOnMobile
     >

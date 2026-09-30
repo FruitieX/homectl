@@ -17,6 +17,12 @@ and the [mockup versus implementation gallery](implementation-evidence/floorplan
 
 ## Current review
 
+### Assistant floorplan follow-up (implemented)
+
+Larger desktop dialogs and responsive floorplan previews, clearer phone labels,
+and a fix for preview cleanup blanking the live map behind the assistant.
+See [behavior, cause and browser verification](ASSISTANT-FLOORPLAN-PREVIEW.md).
+
 ### Shared navigation · Study 08 (implemented)
 
 [Desktop/phone screenshot comparison](navigation-review.html) ·

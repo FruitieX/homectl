@@ -1,5 +1,6 @@
 import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { useMemo, useState } from 'react';
+import { useMediaQuery } from 'usehooks-ts';
 
 import type { AssistantActionChange } from '@/bindings/AssistantActionChange';
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
@@ -32,6 +33,7 @@ export function ActionFloorplanPreview({
   changes: AssistantActionChange[];
   className?: string;
 }) {
+  const showDeviceLabels = useMediaQuery('(min-width: 768px)');
   const healthQuery = useDeviceHealth();
   const healthByDevice = healthQuery.isError
     ? undefined
@@ -87,7 +89,7 @@ export function ActionFloorplanPreview({
     }
     return map;
   }, [changes]);
-  const scene = useMemo(
+  const fullScene = useMemo(
     () =>
       buildFloorplanScene({
         healthByDevice,
@@ -109,6 +111,23 @@ export function ActionFloorplanPreview({
       overrides,
       placedKeys,
     ],
+  );
+  // The affected-device list supplies names on phones. Keep room labels on
+  // the small map without overlapping them with device-name badges.
+  const scene = useMemo(
+    () =>
+      showDeviceLabels
+        ? fullScene
+        : {
+            ...fullScene,
+            labelVisibility: {
+              ...fullScene.labelVisibility,
+              lights: false,
+              sensors: false,
+              groups: fullScene.labelVisibility?.groups ?? true,
+            },
+          },
+    [fullScene, showDeviceLabels],
   );
   const focusBounds = useMemo(() => {
     if (!selectedFloorplan?.grid || !selection) {

@@ -1,0 +1,136 @@
+{
+  "ui": {
+    "typecheck": "passed",
+    "lint": "passed with existing import/export cleanup warning",
+    "build": "passed with existing chunk-size warnings"
+  },
+  "reviews": [
+    {
+      "passed": true,
+      "width": 1920,
+      "writes": 0,
+      "reviews": [
+        {
+          "kind": "action",
+          "dialog": {
+            "width": 1280,
+            "height": 896,
+            "top": 92,
+            "bottom": 988
+          },
+          "preview": {
+            "width": 1193,
+            "height": 452
+          },
+          "composer": {
+            "top": 822.5,
+            "bottom": 920.5
+          },
+          "viewportHeight": 1080,
+          "noOverflow": true
+        },
+        {
+          "kind": "plan",
+          "dialog": {
+            "width": 1280,
+            "height": 896,
+            "top": 92,
+            "bottom": 988
+          },
+          "preview": {
+            "width": 1193,
+            "height": 452
+          },
+          "composer": {
+            "top": 822.5,
+            "bottom": 920.5
+          },
+          "viewportHeight": 1080,
+          "noOverflow": true
+        },
+        {
+          "map": {
+            "sameCanvas": true,
+            "connected": true,
+            "contextLost": false,
+            "lossEvents": 0,
+            "drawCalls": 716,
+            "globalReleases": 0
+          }
+        }
+      ],
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "problems": []
+    },
+    {
+      "passed": true,
+      "width": 430,
+      "writes": 0,
+      "reviews": [
+        {
+          "kind": "action",
+          "dialog": {
+            "width": 430,
+            "height": 918,
+            "top": 14,
+            "bottom": 932
+          },
+          "preview": {
+            "width": 365,
+            "height": 222
+          },
+          "composer": {
+            "top": 824,
+            "bottom": 862.5
+          },
+          "viewportHeight": 932,
+          "noOverflow": true
+        },
+        {
+          "kind": "plan",
+          "dialog": {
+            "width": 430,
+            "height": 918,
+            "top": 14,
+            "bottom": 932
+          },
+          "preview": {
+            "width": 365,
+            "height": 222
+          },
+          "composer": {
+            "top": 824,
+            "bottom": 862.5
+          },
+          "viewportHeight": 932,
+          "noOverflow": true
+        },
+        {
+          "map": {
+            "sameCanvas": true,
+            "connected": true,
+            "contextLost": false,
+            "lossEvents": 0,
+            "drawCalls": 1304,
+            "globalReleases": 0
+          }
+        }
+      ],
+      "viewport": {
+        "width": 430,
+        "height": 932
+      },
+      "problems": []
+    }
+  ],
+  "negativeControl": {
+    "expectedFailure": true,
+    "forcedPreviousBooleanCleanup": true,
+    "mainMapBlank": true,
+    "uncaughtRenderingError": true,
+    "globalReleases": 4
+  }
+}

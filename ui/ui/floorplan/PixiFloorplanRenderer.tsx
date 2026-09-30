@@ -1383,7 +1383,12 @@ function destroyApplication(app: Application) {
     // Pixi v8 has no Application.stop(): destroying the application stops its
     // ticker. Pausing is done through the ticker below.
     app.ticker?.stop();
-    app.destroy(true, { children: true, texture: false, textureSource: false });
+    // A boolean `true` also releases Pixi's global pools, which are shared by
+    // the main map and any open previews. Destroy only this renderer's view.
+    app.destroy(
+      { removeView: true, releaseGlobalResources: false },
+      { children: true, texture: false, textureSource: false },
+    );
   } catch {
     // Pixi can throw when a WebGL context is lost before initialization has
     // produced a renderer. At that point cleanup should stay best-effort.

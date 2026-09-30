@@ -154,7 +154,7 @@ export function ActionCard({
           changes={action.changes.filter((change) =>
             selected.has(change.deviceKey),
           )}
-          className="h-32"
+          className="h-64 md:h-[clamp(20rem,42dvh,35rem)]"
         />
       ) : null}
 

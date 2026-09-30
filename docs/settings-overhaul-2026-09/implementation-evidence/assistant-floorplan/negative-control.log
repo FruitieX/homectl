@@ -1,0 +1,12 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+{"url":"http://127.0.0.1:3021/map","viewport":{"width":1920,"height":1080},"problems":["exception: Uncaught"]}
+file:///tmp/assistant-floorplan-negative-control.mjs:251
+    throw Error('Main map broke: ' + JSON.stringify(map));
+          ^
+
+Error: Main map broke: {"sameCanvas":true,"connected":true,"contextLost":false,"lossEvents":0,"drawCalls":62,"globalReleases":4}
+    at Module.default (file:///tmp/assistant-floorplan-negative-control.mjs:251:11)
+    at async file:///home/rasse/homectl/ui/dev/cdp-probe.mjs:121:20
+
+Node.js v22.19.0
