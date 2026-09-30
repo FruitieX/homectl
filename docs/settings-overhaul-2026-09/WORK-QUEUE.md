@@ -347,6 +347,12 @@ deleted scenes have explicit recovery. Opaque script/condition/extension payload
 are preserved. All 236 UI tests and type/lint/build pass. Evidence is in the
 comparison gallery and FIELD-COVERAGE.md; broader acceptance remains open.
 
+Raw-definition persistence checkpoint, 2026-09-30: 17 database consistency
+tests pass. Scene and routine definitions now have file-backed restart and JSON
+restore evidence, including unknown fields, explicit empty values, stable IDs,
+script declarations and legacy defaults. No production database code changed.
+Widget default mapping, broader recovery and accessibility remain open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

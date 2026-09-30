@@ -438,3 +438,10 @@ condition and extension payloads. All 236 UI tests and type/lint/build pass.
 Screenshots and logs: `implementation-evidence/collections/scene-return-*`.
 These are authoring/fixture checks, not proof of scene execution or database
 durability. Other reference/recovery and final acceptance gates remain open.
+
+Raw automation persistence follow-up: the database consistency suite now passes
+17 tests. Scene target ordering, links, script text and nullable/empty values, plus
+native/mixed/whole-script routines, stable IDs, revision/version and opaque nested
+fields survive actual connection close/reopen and JSON restore. Legacy defaults
+remain compatible. This proves storage preservation, not compiler acceptance of
+unknown actions or missing references. See PERSISTENCE-COVERAGE.md.

@@ -4170,6 +4170,99 @@ mod consistency_tests {
     }
 
     #[tokio::test]
+    async fn raw_automation_definitions_survive_database_reopen_and_json_restore() {
+        let file = PersistenceFile::new();
+        let db = file.open().await;
+        crate::db::migrations::Migrator::up(&db, None)
+            .await
+            .unwrap();
+        let mut export = db_export_config_from_connection(&db).await.unwrap();
+        // These are storage contracts. Unknown fields and missing references
+        // must survive even when compilation/materialization cannot use them.
+        export.scenes = serde_json::from_value(json!([
+            {"id":"evening","name":"Evening","hidden":false,"script":null,
+             "device_states":{
+                "dummy/off":{"power":false,"brightness":0,"transition":0,"color":null,"future":{"__proto__":{"keep":true}}},
+                "dummy/link":{"scene_id":"missing","device_keys":[],"group_keys":["second","first"],"transition":null},
+                "dummy/source":{"integration_id":"circadian","device_id":"daylight","brightness":0.55}},
+             "group_states":{"first":{},"second":{"power":true,"future":[null,false,0,""]}},
+             "group_state_order":["second","first"]},
+            {"id":"script","name":"Script","hidden":true,"script":"return { actions: [] };\n",
+             "device_states":{},"group_states":{}}
+        ])).unwrap();
+        export.routines = serde_json::from_value(json!([
+            {"id":"native","name":"Native","enabled":false,"semantics_version":2,"revision":7,
+             "rules":[],"actions":[],"definition_v2":{
+                "triggers":[{"id":"manual","kind":"manual"}],
+                "condition":{"kind":"literal","value":false},
+                "future":{"__proto__":{"keep":true},"empty":"","null":null,"zero":0},
+                "program":{"kind":"native","future":false,"steps":[
+                    {"id":"branch","action":"choose","branches":[{"id":"if","condition":{"kind":"literal","value":true},"steps":[
+                        {"id":"activate","action":"activate_scene","scene_id":"evening","targets":{"groups":[],"devices":[{"integration_id":"dummy","device_id":"off"}]},"transition_ms":0,"future":[false,null]},
+                        {"id":"script","action":"run_script","spec":{"api_version":1,"source_body":"return { actions: [] };","declarations":[{"kind":"timer","timer":"off"}],"future":{"keep":true}}}
+                    ]}]},
+                    {"id":"unknown","action":"future_action","payload":{"empty":[]}}
+                ]}}},
+            {"id":"whole-script","name":"Whole script","enabled":true,"semantics_version":2,"revision":3,
+             "rules":[],"actions":[],"definition_v2":{"triggers":[],"program":{"kind":"script","spec":{"api_version":1,"source_body":"return { actions: [] };"}}}},
+            {"id":"legacy","name":"Legacy import","enabled":false,
+             "rules":[{"future":true}],"actions":[{"action":"ActivateScene","scene_id":"evening"}]}
+        ])).unwrap();
+        let expected_scenes = serde_json::to_value(&export.scenes).unwrap();
+        let expected_routines = serde_json::to_value(&export.routines).unwrap();
+        import_config_on(&db, &export).await.unwrap();
+        db.close().await.unwrap();
+
+        let reopened = file.open().await;
+        let saved = db_export_config_from_connection(&reopened).await.unwrap();
+        // Row order is not part of the contract; nested lists and raw JSON are.
+        let keyed = |rows: serde_json::Value| {
+            rows.as_array()
+                .unwrap()
+                .iter()
+                .map(|row| (row["id"].as_str().unwrap().to_owned(), row.clone()))
+                .collect::<std::collections::BTreeMap<_, _>>()
+        };
+        assert_eq!(
+            keyed(serde_json::to_value(&saved.scenes).unwrap()),
+            keyed(expected_scenes.clone())
+        );
+        assert_eq!(
+            keyed(serde_json::to_value(&saved.routines).unwrap()),
+            keyed(expected_routines.clone())
+        );
+        let restored_export: ConfigExport =
+            serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
+        let restored = database().await;
+        import_config_on(&restored, &restored_export).await.unwrap();
+        let result = db_export_config_from_connection(&restored).await.unwrap();
+        assert_eq!(
+            keyed(serde_json::to_value(&result.scenes).unwrap()),
+            keyed(expected_scenes)
+        );
+        assert_eq!(
+            keyed(serde_json::to_value(&result.routines).unwrap()),
+            keyed(expected_routines)
+        );
+        let legacy = result
+            .routines
+            .iter()
+            .find(|row| row.id == "legacy")
+            .unwrap();
+        assert_eq!(legacy.semantics_version, 1);
+        assert_eq!(legacy.revision, 1);
+        assert!(legacy.definition_v2.is_none());
+        assert!(result
+            .scenes
+            .iter()
+            .find(|row| row.id == "script")
+            .unwrap()
+            .group_state_order
+            .is_empty());
+        reopened.close().await.unwrap();
+    }
+
+    #[tokio::test]
     async fn computed_source_fields_survive_database_reopen_and_json_restore() {
         let file = PersistenceFile::new();
         let db = file.open().await;

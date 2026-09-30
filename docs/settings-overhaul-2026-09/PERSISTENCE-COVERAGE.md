@@ -8,12 +8,13 @@ SQLite queries and migrations. They do not command household devices.
 
 Command: `nix develop -c cargo test --manifest-path server/Cargo.toml --lib db::config_queries::consistency_tests`
 
-Result: **16 passed, 0 failed**. Exact output:
+Result: **17 passed, 0 failed**. Exact output:
 [database consistency log](implementation-evidence/collections/authoring-database-consistency.log).
 Test implementations are in `server/src/db/config_queries.rs`.
 
 | Stored contract | Exact test | Scope proved |
 | --- | --- | --- |
+| Raw scene/routine definitions | `raw_automation_definitions_survive_database_reopen_and_json_restore` | File-backed close/reopen and JSON restore preserve scene target maps/order, links/scopes, script text, false/zero/null/omitted values and opaque extension data; native branches, mixed and whole scripts, stable node IDs, routine revision/version and unknown action payloads. Legacy rows retain default v1/revision 1 with no v2 body; old scenes default to empty ordering. Storage accepts raw definitions independently of compiler/resolver validity; this is not runtime acceptance of unknown actions or missing references. |
 | Computed sources | `computed_source_fields_survive_database_reopen_and_json_restore` | Closes a file-backed database, reopens it, exports JSON and imports into a second database. Preserves built-in/custom/pinned computation representations, revision, enabled state, Helsinki zone, 1001 ms refresh, ordered aliases, zero versus omitted brightness, script body and structured parameters including null/false/empty text. Older exports omitting `sources` deserialize empty and replace old source rows. This is storage coverage, not evaluation of the supplied scripts/preset parameters. |
 | Sensors, timers, floorplans and everyday widgets | `everyday_collections_survive_database_reopen_and_json_restore` | Same close/reopen/JSON restore path. Preserves sensor list, group list and member order; disabled sensors and extension data; all three user-timer modes, device/group/scene targets, icons and Helsinki date/repeat settings; multiple floorplans, image bytes/metadata, absent images and grid JSON; stable dashboard IDs, fractional dimensions/order and room/scene/climate/timer options. This does not assert image decoding, live timer execution or widget rendering. |
 | Helper definitions and values | `helper_definitions_and_durable_values_round_trip` | All four types, numeric bounds, false/zero/empty initial values, ordered enum options and hidden true/false/omitted fields. Durable current value/revision exports; session values do not. Missing helper collections default empty. |
@@ -36,7 +37,7 @@ Test implementations are in `server/src/db/config_queries.rs`.
 - Calibration profiles/assignments use
   `db::config_queries::calibration::tests::profiles_and_assignments_round_trip_and_failed_batch_rolls_back`;
   their prior checkpoint is recorded in IMPLEMENTATION.md. They are outside the
-  16-test command above.
+  17-test command above.
 - User-timer runtime checkpoints and routine timer jobs are distinct stores.
   Runtime scheduling/restart behavior has its own tests in `core/user_timers.rs`
   and the timer acceptance ledger; persisting timer definitions is not proof of
@@ -47,6 +48,6 @@ Test implementations are in `server/src/db/config_queries.rs`.
 - Grid/image bytes persisting does not replace floorplan Fit/placement/preview
   tests, already linked from WORK-QUEUE.md.
 - This checkpoint uses SQLite. It neither runs nor claims PostgreSQL coverage.
-- Remaining reconciliation includes complete scene/routine raw-definition
-  persistence, each widget's option defaults, backup lifecycle failures and the
+- Remaining reconciliation includes each widget's option defaults, backup
+  lifecycle failures and the
   named accessibility/viewport gates. The full overhaul is not signed off here.
