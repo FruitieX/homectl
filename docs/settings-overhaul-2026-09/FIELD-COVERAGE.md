@@ -411,3 +411,12 @@ Evidence is under `implementation-evidence/collections/routine-declarations-*`.
 The captures are scrolled to the declarations being reviewed; runtime badges are
 synthetic. These checks cover authoring and fixture serialization; database
 restart/export reconciliation and broader reference/recovery acceptance stay open.
+
+### Database evidence follow-up
+
+[PERSISTENCE-COVERAGE.md](PERSISTENCE-COVERAGE.md) maps the current 16 passing
+SQLite consistency tests. New close/reopen plus JSON restore checks cover source
+computation variants/aliases/timing/defaults, sensor ordering, user-timer definitions,
+floorplan data and everyday widget selections. Helper persistence now exercises all
+four types and visibility values. Browser and database evidence remain separate;
+source evaluation, all per-widget defaults and final recovery gates are not implied.

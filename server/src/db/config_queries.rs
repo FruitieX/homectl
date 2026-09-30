@@ -4141,6 +4141,190 @@ mod consistency_tests {
         db
     }
 
+    // File-backed coverage complements browser fixtures: close the actual
+    // connection, reopen the database, then restore its JSON into another DB.
+    struct PersistenceFile(std::path::PathBuf);
+    impl PersistenceFile {
+        fn new() -> Self {
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            Self(std::env::temp_dir().join(format!(
+                "homectl-ui-persistence-{}-{stamp}.db",
+                std::process::id()
+            )))
+        }
+        async fn open(&self) -> DatabaseConnection {
+            Database::connect(format!("sqlite://{}?mode=rwc", self.0.display()))
+                .await
+                .unwrap()
+        }
+    }
+    impl Drop for PersistenceFile {
+        fn drop(&mut self) {
+            for suffix in ["", "-wal", "-shm"] {
+                let _ = std::fs::remove_file(format!("{}{suffix}", self.0.display()));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn computed_source_fields_survive_database_reopen_and_json_restore() {
+        let file = PersistenceFile::new();
+        let db = file.open().await;
+        crate::db::migrations::Migrator::up(&db, None)
+            .await
+            .unwrap();
+        let mut export = db_export_config_from_connection(&db).await.unwrap();
+        export.sources = serde_json::from_value(json!([
+            {"id":"compat","name":"Daylight","enabled":true,"revision":7,"timezone":"Europe/Helsinki","refresh_interval_ms":1001,
+             "aliases":["circadian/color","old/profile"],"compute":{"kind":"circadian_compat","preset_version":1,"params":{
+                "day_fade_start":"06:00","day_fade_duration_hours":2,"day_color":{"ct":5500},"day_brightness":0,
+                "night_fade_start":"18:00","night_fade_duration_hours":3,"night_color":{"ct":2200}
+             }}},
+            {"id":"custom","name":"Custom","timezone":"Europe/Helsinki","compute":{"kind":"script","source_body":"return {brightness: params.level};","params":{"level":0,"nested":[false,null,""],"__proto__":{"keep":true}}}},
+            {"id":"pinned","name":"Pinned","enabled":false,"revision":3,"timezone":"Europe/Helsinki","refresh_interval_ms":60000,
+             "compute":{"kind":"script","preset":{"id":"circadian","version":1},"params":{"future":true}}}
+        ])).unwrap();
+        let expected = serde_json::to_value(&export.sources).unwrap();
+        import_config_on(&db, &export).await.unwrap();
+        db.close().await.unwrap();
+        let reopened = file.open().await;
+        let saved = db_export_config_from_connection(&reopened).await.unwrap();
+        assert_eq!(serde_json::to_value(&saved.sources).unwrap(), expected);
+        let encoded = serde_json::to_string(&saved).unwrap();
+        let restored_export: ConfigExport = serde_json::from_str(&encoded).unwrap();
+        let restored = database().await;
+        import_config_on(&restored, &restored_export).await.unwrap();
+        assert_eq!(
+            serde_json::to_value(sources_on(&restored).await.unwrap()).unwrap(),
+            expected
+        );
+        // Older backups without the new collection remain valid and replace it
+        // with an empty collection rather than retaining stale DB definitions.
+        let mut legacy = serde_json::to_value(saved).unwrap();
+        legacy.as_object_mut().unwrap().remove("sources");
+        let legacy: ConfigExport = serde_json::from_value(legacy).unwrap();
+        assert!(legacy.sources.is_empty());
+        import_config_on(&restored, &legacy).await.unwrap();
+        assert!(sources_on(&restored).await.unwrap().is_empty());
+        reopened.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn everyday_collections_survive_database_reopen_and_json_restore() {
+        let file = PersistenceFile::new();
+        let db = file.open().await;
+        crate::db::migrations::Migrator::up(&db, None)
+            .await
+            .unwrap();
+        let mut export = db_export_config_from_connection(&db).await.unwrap();
+        export.widget_settings = serde_json::from_value(json!([
+          {"key":"sensor_catalog","config":{"sensors":[
+            {"id":"humidity","name":"Humidity","source":"device","enabled":false,"deviceKey":"dummy/humidity","future":{"zero":0}},
+            {"id":"temperature","name":"Temperature","source":"device","enabled":true,"deviceKey":"dummy/temperature"}],
+            "groups":[{"id":"upstairs","name":"Upstairs","sensorIds":["temperature","humidity"]},{"id":"downstairs","name":"Downstairs","sensorIds":[]}],"future":[false,null]}},
+          {"key":"user_timers","config":{"legacy_migrated":true,"timers":[
+            {"definition":{"id":"countdown","name":"Light timer","icon":"light","enabled":false,"schedule":{"kind":"countdown","minutes":15},"action":{"kind":"device","device_key":"dummy/lamp","power":false},"finish_action":null}},
+            {"definition":{"id":"scheduled","name":"Evening","icon":"timer","enabled":true,"schedule":{"kind":"scheduled","time":"18:30","timezone":"Europe/Helsinki","weekdays":[1,3,5],"date":null,"duration_minutes":null},"action":{"kind":"scene","scene_id":"evening"},"finish_action":null}},
+            {"definition":{"id":"ready","name":"Warm room","icon":"heat","enabled":false,"schedule":{"kind":"ready_by","time":"07:30","timezone":"Europe/Helsinki","date":"2026-10-01","weekdays":[],"warmup_minutes":45},"action":{"kind":"group","group_id":"room","power":true},"finish_action":{"kind":"group","group_id":"room","power":false}}}
+          ]}},
+          {"key":"weather","config":{"latitude":60.1699,"longitude":24.9384,"future":false}}
+        ])).unwrap();
+        export.floorplans = vec![FloorplanExportRow {
+            id:"upstairs".into(), name:"Upstairs".into(), image_data:Some("stored-test-image".into()), image_mime_type:Some("image/png".into()), width:Some(1024), height:Some(768),
+            grid_data:Some(json!({"width":4,"height":2,"tiles":[[0,0,0,0],[0,0,0,0]],"tileSize":32,"deviceScale":1.25,"labelMode":"lights","devices":[{"deviceKey":"dummy/lamp","deviceName":"Lamp","x":2.5,"y":1.25}],"groups":{"room":[{"x":1,"y":0},{"x":2,"y":1}]},"future":{"keep":true}}).to_string()),
+        }, FloorplanExportRow {id:"empty".into(),name:"Empty floor".into(),image_data:None,image_mime_type:None,width:None,height:None,grid_data:None}];
+        export.dashboard_layouts = vec![DashboardLayoutRow {
+            id: 37,
+            name: "Wall screen".into(),
+            is_default: true,
+        }];
+        export.dashboard_widgets = vec![DashboardWidgetRow {
+            id: 42,
+            layout_id: 37,
+            widget_type: "rooms".into(),
+            config: json!({"title":"Rooms","options":{"roomSelection":"selected","groupIds":["upstairs","downstairs"],"showFloorplan":true,"showAttention":false,"future":null}}),
+            grid_x: 0,
+            grid_y: 0,
+            grid_w: 2.25,
+            grid_h: 1.5,
+            sort_order: 3,
+        }];
+        for (id, kind, options) in [
+            (
+                43,
+                "scenes",
+                json!({"sceneSelection":"selected","sceneIds":["evening","night"],"scope":"devices","deviceKeys":["dummy/lamp"],"groupId":""}),
+            ),
+            (
+                44,
+                "indoor_climate",
+                json!({"temperatureSensorId":"temperature","humiditySensorId":"humidity","range":"-24h"}),
+            ),
+            (
+                45,
+                "timers",
+                json!({"timerSelection":"selected","timerIds":["ready","countdown"]}),
+            ),
+        ] {
+            export.dashboard_widgets.push(DashboardWidgetRow {
+                id,
+                layout_id: 37,
+                widget_type: kind.into(),
+                config: json!({"options":options}),
+                grid_x: 0,
+                grid_y: 0,
+                grid_w: 1.0,
+                grid_h: 1.0,
+                sort_order: id,
+            });
+        }
+        let expected_settings = serde_json::to_value(&export.widget_settings).unwrap();
+        let expected_floorplans = serde_json::to_value(&export.floorplans).unwrap();
+        let expected_widgets = serde_json::to_value(&export.dashboard_widgets).unwrap();
+        import_config_on(&db, &export).await.unwrap();
+        db.close().await.unwrap();
+        let reopened = file.open().await;
+        let saved = db_export_config_from_connection(&reopened).await.unwrap();
+        // Settings are keyed rows, so compare independently of database row order.
+        let as_map = |rows: &[WidgetSettingRow]| {
+            rows.iter()
+                .map(|row| (row.key.clone(), row.config.clone()))
+                .collect::<std::collections::BTreeMap<_, _>>()
+        };
+        assert_eq!(
+            as_map(&saved.widget_settings),
+            as_map(&export.widget_settings)
+        );
+        assert_eq!(
+            serde_json::to_value(&saved.floorplans).unwrap(),
+            expected_floorplans
+        );
+        assert_eq!(
+            serde_json::to_value(&saved.dashboard_widgets).unwrap(),
+            expected_widgets
+        );
+        let restored_export: ConfigExport =
+            serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
+        let restored = database().await;
+        import_config_on(&restored, &restored_export).await.unwrap();
+        let result = db_export_config_from_connection(&restored).await.unwrap();
+        let expected_rows: Vec<WidgetSettingRow> =
+            serde_json::from_value(expected_settings).unwrap();
+        assert_eq!(as_map(&result.widget_settings), as_map(&expected_rows));
+        assert_eq!(
+            serde_json::to_value(&result.floorplans).unwrap(),
+            expected_floorplans
+        );
+        assert_eq!(
+            serde_json::to_value(&result.dashboard_widgets).unwrap(),
+            expected_widgets
+        );
+        reopened.close().await.unwrap();
+    }
+
     #[tokio::test]
     async fn backup_restore_replaces_absent_rows_and_rolls_back_the_entire_snapshot() {
         let db = database().await;
@@ -4672,7 +4856,7 @@ mod consistency_tests {
             },
             initial_value: json!("day"),
             persistence: HelperPersistence::Durable,
-            hidden: None,
+            hidden: Some(true),
         };
         let scratch = HelperDefinition {
             id: HelperId("scratch".to_string()),
@@ -4682,7 +4866,24 @@ mod consistency_tests {
             persistence: HelperPersistence::Session,
             hidden: None,
         };
-        for helper in [&mode, &scratch] {
+        let flag = HelperDefinition {
+            initial_value: json!(false),
+            hidden: Some(false),
+            ..HelperDefinition::new("flag", "Flag", HelperKind::Boolean)
+        };
+        let number = HelperDefinition {
+            initial_value: json!(0),
+            hidden: None,
+            ..HelperDefinition::new(
+                "level",
+                "Level",
+                HelperKind::Number {
+                    min: Some(-1.0),
+                    max: Some(1.0),
+                },
+            )
+        };
+        for helper in [&mode, &scratch, &flag, &number] {
             upsert_helper_on(&source, helper).await.unwrap();
         }
         upsert_helper_state_on(&source, "mode", &json!("night"), 4)
@@ -4693,7 +4894,18 @@ mod consistency_tests {
             .unwrap();
 
         let export = db_export_config_from_connection(&source).await.unwrap();
-        assert_eq!(export.helpers.len(), 2);
+        assert_eq!(export.helpers.len(), 4);
+        for expected in [&mode, &scratch, &flag, &number] {
+            let saved = export
+                .helpers
+                .iter()
+                .find(|row| row.id == expected.id)
+                .unwrap();
+            assert_eq!(
+                serde_json::to_value(saved).unwrap(),
+                serde_json::to_value(expected).unwrap()
+            );
+        }
         assert_eq!(export.helper_values.len(), 1);
         assert_eq!(export.helper_values[0].id, "mode");
         assert_eq!(export.helper_values[0].value, json!("night"));
@@ -4719,7 +4931,7 @@ mod consistency_tests {
         );
         assert_eq!(
             helpers_on(&target).await.unwrap().len(),
-            2,
+            4,
             "definitions are queryable"
         );
 
@@ -4889,7 +5101,7 @@ mod consistency_tests {
             "timer jobs are runtime state, not exported configuration"
         );
 
-        clear_timer_jobs_on(&db).await.unwrap();
+        import_config_on(&db, &export).await.unwrap();
         assert!(timer_jobs_on(&db).await.unwrap().is_empty());
     }
 }

@@ -332,6 +332,14 @@ Conversion preserves program extensions and remaps declaration draft paths.
 All 234 UI tests, three compiler tests and type/lint/build pass. Remaining:
 reference/recovery, persistence, named accessibility cases and final gate cleanup.
 
+Database acceptance checkpoint, 2026-09-30: all 16 configuration consistency
+tests pass. New file-backed SQLite tests close/reopen and JSON-export/import
+computed sources, sensor ordering, user-timer definitions, floorplan/image data
+and room/scene/climate/timer widget options. Helper coverage now includes all four
+types and hidden true/false/omitted values. [PERSISTENCE-COVERAGE.md](PERSISTENCE-COVERAGE.md)
+names each exact test and its limits. These are database checks; API recovery,
+raw scene/routine definitions, option defaults and final accessibility remain open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

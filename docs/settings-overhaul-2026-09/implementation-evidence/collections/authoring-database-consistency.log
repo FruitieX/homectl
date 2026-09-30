@@ -1,0 +1,28 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+   Compiling homectl-server v0.9.5 (/home/rasse/homectl/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.16s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/homectl_server-deb79e13f06b027d)
+
+running 16 tests
+test db::config_queries::consistency_tests::dashboard_arrangement_transaction_rolls_back_sizes_order_and_removals ... ok
+test db::config_queries::consistency_tests::routine_history_round_trips_and_prunes_to_newest_entries ... ok
+test db::config_queries::consistency_tests::integration_reporting_policy_failure_rolls_back_connection_settings ... ok
+test db::config_queries::consistency_tests::routine_rename_failure_rolls_back_new_row_and_references ... ok
+test db::config_queries::consistency_tests::timer_jobs_upsert_delete_and_import_clears ... ok
+test db::config_queries::consistency_tests::device_settings_save_is_atomic_and_preserves_sensor_payload ... ok
+test db::config_queries::consistency_tests::service_setting_failure_rolls_back_core_and_prior_settings ... ok
+test db::config_queries::consistency_tests::helper_definitions_and_durable_values_round_trip ... ok
+test db::config_queries::consistency_tests::reporting_policy_database_export_import_round_trip_and_validation ... ok
+test db::config_queries::consistency_tests::color_calibration_database_export_import_round_trip ... ok
+test db::config_queries::consistency_tests::scenario_suite_database_export_import_round_trip ... ok
+test db::config_queries::consistency_tests::dashboard_assigned_ids_and_widget_selections_round_trip ... ok
+test db::config_queries::consistency_tests::shared_settings_preferences_database_export_import_round_trip ... ok
+test db::config_queries::consistency_tests::backup_restore_replaces_absent_rows_and_rolls_back_the_entire_snapshot ... ok
+test db::config_queries::consistency_tests::computed_source_fields_survive_database_reopen_and_json_restore ... ok
+test db::config_queries::consistency_tests::everyday_collections_survive_database_reopen_and_json_restore ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 796 filtered out; finished in 1.80s
+
