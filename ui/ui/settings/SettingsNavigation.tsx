@@ -68,9 +68,10 @@ export function SettingsBreadcrumbs() {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const resolved = configSectionAliases[pathname] ?? pathname;
-  const section = configSections.find((entry) =>
-    resolved.startsWith(`${entry.href}/`),
-  );
+  const section =
+    pathname === '/config/floorplan'
+      ? configSections.find((entry) => entry.href === resolved)
+      : configSections.find((entry) => resolved.startsWith(`${entry.href}/`));
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -95,9 +96,13 @@ export function SettingsBreadcrumbs() {
         {section && (
           <>
             <ChevronRight aria-hidden className="size-3 shrink-0" />
-            <Link className="truncate" to={section.href}>
-              {section.label}
-            </Link>
+            {pathname === '/config/floorplan' ? (
+              <span className="truncate">Floorplan editor</span>
+            ) : (
+              <Link className="truncate" to={section.href}>
+                {section.label}
+              </Link>
+            )}
           </>
         )}
       </nav>

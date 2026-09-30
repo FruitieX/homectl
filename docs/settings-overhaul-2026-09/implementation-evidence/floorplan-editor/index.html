@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Floorplan editor · implementation comparison</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #f5f7f5;
+        color: #243c32;
+        font:
+          14px/1.6 system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 1640px;
+        margin: auto;
+        padding: 32px 28px 64px;
+      }
+      header {
+        max-width: 850px;
+      }
+      h1 {
+        font-size: 32px;
+        line-height: 1.2;
+        letter-spacing: -0.7px;
+      }
+      h2 {
+        margin: 36px 0 8px;
+        font-size: 22px;
+      }
+      p {
+        color: #62756b;
+      }
+      a {
+        color: #24634e;
+      }
+      nav {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .comparison {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+      figure {
+        margin: 0;
+        border: 1px solid #dce4df;
+        background: white;
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      figcaption {
+        padding: 12px 16px;
+        font-weight: 600;
+      }
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-top: 1px solid #e5eae6;
+      }
+      .phone img {
+        max-width: 390px;
+        margin: auto;
+      }
+      .extra {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr;
+        gap: 18px;
+      }
+      .extra .phone img {
+        max-width: 360px;
+      }
+      footer {
+        margin-top: 36px;
+        color: #62756b;
+      }
+      @media (max-width: 850px) {
+        main {
+          padding: 24px 14px;
+        }
+        .comparison,
+        .extra {
+          grid-template-columns: 1fr;
+        }
+        h1 {
+          font-size: 27px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Floorplan editor · implementation comparison</h1>
+        <p>
+          The approved docked workspace beside the implemented editor, captured
+          on 30 September 2026. These are real UI screenshots against an
+          isolated fixture: no live household configuration was changed.
+        </p>
+        <nav>
+          <a href="../../FLOORPLAN-EDITOR-IMPLEMENTATION.md"
+            >Implementation and verification</a
+          ><a href="../../floorplan-editor-review.html"
+            >Original design review</a
+          ><a href="../../floorplan-editor.html?layout=docked"
+            >Interactive prototype</a
+          >
+        </nav>
+        <p>
+          The synthetic architectural image is shared between the study and
+          implementation. Production uses the existing application theme and
+          actual fixture catalog, so names, room colors, device states and
+          shared control sizes differ. The prototype study toolbar is absent
+          from production.
+        </p>
+      </header>
+      <section>
+        <h2>Devices</h2>
+        <p>
+          Device library and placement properties flank the canvas. Color and
+          brightness indicators reflect the fixture’s current device states.
+        </p>
+        <div class="comparison">
+          <figure>
+            <figcaption>Approved mockup · Devices</figcaption>
+            <a href="../../previews/floorplan-editor/docked-devices.png"
+              ><img
+                loading="lazy"
+                src="../../previews/floorplan-editor/docked-devices.png"
+                alt="Approved mockup · Devices"
+            /></a>
+          </figure>
+          <figure>
+            <figcaption>Implemented · Devices</figcaption>
+            <a href="desktop-devices.png"
+              ><img
+                loading="lazy"
+                src="desktop-devices.png"
+                alt="Implemented · Devices"
+            /></a>
+          </figure>
+        </div>
+      </section>
+      <section>
+        <h2>Room areas</h2>
+        <p>
+          Room masks use the same canvas and tool options, with room membership
+          and related settings in the inspector.
+        </p>
+        <div class="comparison">
+          <figure>
+            <figcaption>Approved mockup · Room areas</figcaption>
+            <a href="../../previews/floorplan-editor/docked-rooms.png"
+              ><img
+                loading="lazy"
+                src="../../previews/floorplan-editor/docked-rooms.png"
+                alt="Approved mockup · Room areas"
+            /></a>
+          </figure>
+          <figure>
+            <figcaption>Implemented · Room areas</figcaption>
+            <a href="desktop-rooms.png"
+              ><img
+                loading="lazy"
+                src="desktop-rooms.png"
+                alt="Implemented · Room areas"
+            /></a>
+          </figure>
+        </div>
+      </section>
+      <section>
+        <h2>Walls</h2>
+        <p>
+          Materials and drawing controls belong to the active tool. A completed
+          stroke is one undo step.
+        </p>
+        <div class="comparison">
+          <figure>
+            <figcaption>Approved mockup · Walls</figcaption>
+            <a href="../../previews/floorplan-editor/docked-walls.png"
+              ><img
+                loading="lazy"
+                src="../../previews/floorplan-editor/docked-walls.png"
+                alt="Approved mockup · Walls"
+            /></a>
+          </figure>
+          <figure>
+            <figcaption>Implemented · Walls</figcaption>
+            <a href="desktop-walls.png"
+              ><img
+                loading="lazy"
+                src="desktop-walls.png"
+                alt="Implemented · Walls"
+            /></a>
+          </figure>
+        </div>
+      </section>
+      <section>
+        <h2>Layout</h2>
+        <p>
+          Background and document settings stay in the library; grid dimensions
+          and resize actions are available without scrolling the page.
+        </p>
+        <div class="comparison">
+          <figure>
+            <figcaption>Approved mockup · Layout</figcaption>
+            <a href="../../previews/floorplan-editor/docked-layout.png"
+              ><img
+                loading="lazy"
+                src="../../previews/floorplan-editor/docked-layout.png"
+                alt="Approved mockup · Layout"
+            /></a>
+          </figure>
+          <figure>
+            <figcaption>Implemented · Layout</figcaption>
+            <a href="desktop-layout.png"
+              ><img
+                loading="lazy"
+                src="desktop-layout.png"
+                alt="Implemented · Layout"
+            /></a>
+          </figure>
+        </div>
+      </section>
+      <section>
+        <h2>Phone canvas</h2>
+        <p>
+          The canvas remains fixed while all seven tools are available along the
+          bottom. Pinch and pan navigate without painting.
+        </p>
+        <div class="comparison phone">
+          <figure>
+            <figcaption>Approved mockup · Phone canvas</figcaption>
+            <a href="../../previews/floorplan-editor/phone-canvas.png"
+              ><img
+                loading="lazy"
+                src="../../previews/floorplan-editor/phone-canvas.png"
+                alt="Approved mockup · Phone canvas"
+            /></a>
+          </figure>
+          <figure>
+            <figcaption>Implemented · Phone canvas</figcaption>
+            <a href="phone-canvas.png"
+              ><img
+                loading="lazy"
+                src="phone-canvas.png"
+                alt="Implemented · Phone canvas"
+            /></a>
+          </figure>
+        </div>
+      </section>
+      <section>
+        <h2>Phone device library</h2>
+        <p>
+          A single contextual tray holds search, filters and placed/unplaced
+          devices. The overview remains visible above it.
+        </p>
+        <div class="comparison phone">
+          <figure>
+            <figcaption>Approved mockup · Phone device library</figcaption>
+            <a href="../../previews/floorplan-editor/phone-library.png"
+              ><img
+                loading="lazy"
+                src="../../previews/floorplan-editor/phone-library.png"
+                alt="Approved mockup · Phone device library"
+            /></a>
+          </figure>
+          <figure>
+            <figcaption>Implemented · Phone device library</figcaption>
+            <a href="phone-library.png"
+              ><img
+                loading="lazy"
+                src="phone-library.png"
+                alt="Implemented · Phone device library"
+            /></a>
+          </figure>
+        </div>
+      </section>
+      <section>
+        <h2>Phone placement inspector</h2>
+        <p>
+          Selecting a placement restores a readable scale and positions the
+          selection above the tray. Coordinates and the related device link are
+          directly accessible.
+        </p>
+        <div class="comparison phone">
+          <figure>
+            <figcaption>Approved mockup · Phone placement inspector</figcaption>
+            <a href="../../previews/floorplan-editor/phone-inspector.png"
+              ><img
+                loading="lazy"
+                src="../../previews/floorplan-editor/phone-inspector.png"
+                alt="Approved mockup · Phone placement inspector"
+            /></a>
+          </figure>
+          <figure>
+            <figcaption>Implemented · Phone placement inspector</figcaption>
+            <a href="phone-inspector.png"
+              ><img
+                loading="lazy"
+                src="phone-inspector.png"
+                alt="Implemented · Phone placement inspector"
+            /></a>
+          </figure>
+        </div>
+      </section>
+      <section>
+        <h2>Phone room areas</h2>
+        <p>
+          Room properties use the same tray structure and remain separate from
+          wall painting.
+        </p>
+        <div class="comparison phone">
+          <figure>
+            <figcaption>Approved mockup · Phone room areas</figcaption>
+            <a href="../../previews/floorplan-editor/phone-rooms.png"
+              ><img
+                loading="lazy"
+                src="../../previews/floorplan-editor/phone-rooms.png"
+                alt="Approved mockup · Phone room areas"
+            /></a>
+          </figure>
+          <figure>
+            <figcaption>Implemented · Phone room areas</figcaption>
+            <a href="phone-rooms.png"
+              ><img
+                loading="lazy"
+                src="phone-rooms.png"
+                alt="Implemented · Phone room areas"
+            /></a>
+          </figure>
+        </div>
+      </section>
+      <section>
+        <h2>Additional implementation states</h2>
+        <p>
+          Both side panels can collapse. A new phone document opens Layout
+          immediately; the same tools fit a 360 px viewport.
+        </p>
+        <div class="extra">
+          <figure>
+            <figcaption>Desktop · panels collapsed</figcaption>
+            <a href="desktop-canvas.png"
+              ><img
+                loading="lazy"
+                src="desktop-canvas.png"
+                alt="Desktop · panels collapsed"
+            /></a>
+          </figure>
+          <div class="phone">
+            <figure>
+              <figcaption>Phone · new document</figcaption>
+              <a href="phone-new.png"
+                ><img
+                  loading="lazy"
+                  src="phone-new.png"
+                  alt="Phone · new document"
+              /></a>
+            </figure>
+          </div>
+          <div class="phone">
+            <figure>
+              <figcaption>Phone · 360 px viewport</figcaption>
+              <a href="narrow-canvas.png"
+                ><img
+                  loading="lazy"
+                  src="narrow-canvas.png"
+                  alt="Phone · 360 px viewport"
+              /></a>
+            </figure>
+          </div>
+        </div>
+      </section>
+      <footer>
+        Verification: 256 UI tests, type check, lint and production build; 70
+        desktop/phone browser acceptance checks. Images link to their
+        full-resolution captures.
+      </footer>
+    </main>
+  </body>
+</html>

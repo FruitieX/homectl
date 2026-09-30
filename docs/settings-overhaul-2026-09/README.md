@@ -4,7 +4,7 @@ Start with [the visual gallery](review.html), then [the interactive studies](ind
 
 **The HTML studies are design prototypes.** Their entities, reports, logs and catalog entries are synthetic. They make no API calls; saves affect the current tab and reload discards them. Production implementation is now active: see [IMPLEMENTATION.md](IMPLEMENTATION.md) for progress, verification and outstanding acceptance, and `implementation-evidence/` for screenshots of the implemented UI against isolated fixtures.
 
-## Floorplan editor · Study 06 (new design review)
+## Floorplan editor · Study 06 (implemented)
 
 [Floorplan editor screenshot gallery](floorplan-editor-review.html) ·
 [Interactive editor](floorplan-editor.html) ·
@@ -12,7 +12,8 @@ Start with [the visual gallery](review.html), then [the interactive studies](ind
 
 Compares docked versus floating panels around a fixed canvas, with separate
 Devices, Room areas and Walls modes and responsive phone trays. This study is
-planning only; the production floorplan settings route is not changed.
+now implemented. See [verification and handoff](FLOORPLAN-EDITOR-IMPLEMENTATION.md)
+and the [mockup versus implementation gallery](implementation-evidence/floorplan-editor/index.html).
 
 ## Current review
 

@@ -37,7 +37,7 @@ export const HomectlBottomNavigation = () => {
   const [developerMode] = useDeveloperMode();
   const openPalette = useSetAtom(commandPaletteOpenAtom);
 
-  if (isFullscreen) {
+  if (isFullscreen || pathname === '/config/floorplan') {
     return null;
   }
 
@@ -139,6 +139,43 @@ export const HomectlNavigationRail = () => {
   const openPalette = useSetAtom(commandPaletteOpenAtom);
 
   if (isFullscreen) return null;
+  if (pathname === '/config/floorplan')
+    return (
+      <aside
+        className="hidden w-[60px] shrink-0 flex-col items-center gap-3 border-r border-border bg-background py-4 lg:flex"
+        aria-label="Application navigation"
+      >
+        {[
+          { href: '/', label: 'Home', icon: House },
+          { href: '/map', label: 'Map', icon: Map },
+          { href: '/config', label: 'Settings', icon: Cog },
+        ].map((item) => (
+          <Button
+            key={item.href}
+            asChild
+            variant="ghost"
+            size="icon"
+            title={item.label}
+            className={
+              item.href === '/config' ? 'bg-primary/10 text-primary' : ''
+            }
+          >
+            <Link to={item.href} aria-label={item.label}>
+              <item.icon />
+            </Link>
+          </Button>
+        ))}
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Search · Ctrl K"
+          aria-label="Search"
+          onClick={() => openPalette(true)}
+        >
+          <Search />
+        </Button>
+      </aside>
+    );
   if (pathname.startsWith('/config')) return <SettingsNavigation />;
 
   const items = [

@@ -1,0 +1,109 @@
+{
+  "driven": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "Fixed document, crisp canvas and no document overflow",
+        "passed": true
+      },
+      {
+        "name": "Wheel zoom changes the transform without dirtying the draft",
+        "passed": true
+      },
+      {
+        "name": "Middle-drag pans even in Walls mode without painting",
+        "passed": true
+      },
+      {
+        "name": "A mouse or touch stroke edits only the draft",
+        "passed": true
+      },
+      {
+        "name": "Drawing leaves the saved revision untouched",
+        "passed": true
+      },
+      {
+        "name": "One Undo reverses the complete stroke",
+        "passed": true
+      },
+      {
+        "name": "Redo restores the stroke",
+        "passed": true
+      },
+      {
+        "name": "Discard restores the saved document",
+        "passed": true
+      },
+      {
+        "name": "Keyboard tile navigation and Enter edit the focused tile",
+        "passed": true
+      },
+      {
+        "name": "Keyboard painting participates in draft Undo",
+        "passed": true
+      },
+      {
+        "name": "Unplaced catalog entry arms canvas placement",
+        "passed": true
+      },
+      {
+        "name": "Canvas placement opens the position inspector",
+        "passed": true
+      },
+      {
+        "name": "Fractional coordinate editing stays unsaved",
+        "passed": true
+      },
+      {
+        "name": "Placement save preserves unknown grid extensions",
+        "passed": true
+      },
+      {
+        "name": "Fractional coordinates survive the API round trip",
+        "passed": true
+      },
+      {
+        "name": "Room mask painting edits the draft",
+        "passed": true
+      },
+      {
+        "name": "Room mask stroke is one undo step",
+        "passed": true
+      },
+      {
+        "name": "Two-finger pinch changes zoom",
+        "passed": true
+      },
+      {
+        "name": "A second finger cancels painting before pinch navigation",
+        "passed": true
+      },
+      {
+        "name": "Reviewed resize edits draft only",
+        "passed": true
+      },
+      {
+        "name": "Discard restores pre-resize dimensions",
+        "passed": true
+      },
+      {
+        "name": "Conflicting save keeps the draft and exposes review",
+        "passed": true
+      },
+      {
+        "name": "Conflict review can adopt the saved document",
+        "passed": true
+      }
+    ]
+  },
+  "browser": {
+    "url": "http://127.0.0.1:3021/config/floorplan?id=ground_floor",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "problems": [
+      "log: Failed to load resource: the server responded with a status of 409 (Conflict)"
+    ]
+  }
+}

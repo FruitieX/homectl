@@ -1,0 +1,32 @@
+{
+  "evaluated": {
+    "passed": true,
+    "checks": [
+      "Name, imported layout and uploaded image stay unsaved",
+      "Related navigation retains the floorplan draft",
+      "Imported layout, name and image survive navigation",
+      "One atomic Save persists name, image and complete imported layout",
+      "Removing a background is staged",
+      "Discard restores the saved background",
+      "Invalid import reports an error and retains the canvas",
+      "Metadata save preserves unsupported layout byte for byte",
+      "Canceling reset preserves unsupported data",
+      "New documents use explicit atomic creation",
+      "Canceling deletion keeps the floorplan",
+      "Confirmed deletion removes only its document",
+      "Document controls fit the fixed viewport"
+    ]
+  },
+  "browser": {
+    "url": "http://127.0.0.1:3021/config/floorplan?id=ground_floor",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "problems": [
+      "log: Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "log: Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "log: Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ]
+  }
+}

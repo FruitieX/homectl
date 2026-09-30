@@ -23,6 +23,7 @@ export function EntitySaveBar<T extends object>({
   createLabel,
   sensitivePaths = [],
   inline = false,
+  compact = false,
   disabled = false,
   saveDisabled = false,
 }: {
@@ -30,6 +31,8 @@ export function EntitySaveBar<T extends object>({
   createLabel?: string;
   sensitivePaths?: readonly string[];
   inline?: boolean;
+  /** Editor document bar: always show Saved/Save while retaining conflict review. */
+  compact?: boolean;
   disabled?: boolean;
   saveDisabled?: boolean;
 }) {
@@ -41,7 +44,8 @@ export function EntitySaveBar<T extends object>({
   }, []);
   if (
     (!inline && !host) ||
-    (!draft.dirty &&
+    (!compact &&
+      !draft.dirty &&
       !createLabel &&
       !draft.saving &&
       !draft.conflict &&
@@ -50,7 +54,11 @@ export function EntitySaveBar<T extends object>({
     return null;
   const entry = draft.entry;
   const content = (
-    <div className="settings-savebar" aria-label="Save configuration">
+    <div
+      className="settings-savebar"
+      aria-label="Save configuration"
+      data-dirty={draft.dirty}
+    >
       {draft.errors.length > 0 && (
         <div className="settings-save-errors" role="alert">
           {draft.errors.map((error, i) => (
@@ -75,14 +83,20 @@ export function EntitySaveBar<T extends object>({
               ? 'Saving…'
               : createLabel
                 ? 'New configuration'
-                : 'Unsaved changes'}
+                : draft.dirty
+                  ? 'Unsaved changes'
+                  : 'Saved'}
           </strong>
           <p className="truncate text-muted-foreground">{entry?.label}</p>
         </div>
         <Button
           type="button"
           variant="outline"
-          disabled={draft.saving || disabled}
+          disabled={
+            draft.saving ||
+            disabled ||
+            (compact && !draft.dirty && !draft.conflict)
+          }
           onClick={draft.discard}
         >
           Discard
@@ -101,12 +115,21 @@ export function EntitySaveBar<T extends object>({
         ) : (
           <Button
             type="button"
-            disabled={draft.saving || disabled || saveDisabled}
+            disabled={
+              draft.saving ||
+              disabled ||
+              saveDisabled ||
+              (compact && !draft.dirty && !createLabel)
+            }
             onClick={() => void draft.save()}
           >
             {draft.saving && <LoaderCircle className="size-4 animate-spin" />}
             {createLabel ??
-              (draft.errors.length ? 'Retry save' : 'Save changes')}
+              (draft.errors.length
+                ? 'Retry save'
+                : compact
+                  ? 'Save'
+                  : 'Save changes')}
           </Button>
         )}
       </div>

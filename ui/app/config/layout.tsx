@@ -14,6 +14,7 @@ export default function ConfigLayout({
   children: React.ReactNode;
 }) {
   const pathname = useLocation().pathname;
+  const editorWorkspace = pathname === '/config/floorplan';
   const contentRef = useSettingsPageContext();
   const writeWarnings = useConfigWriteWarnings();
   const { data: runtimeStatus } = useRuntimeStatus(5000);
@@ -65,7 +66,11 @@ export default function ConfigLayout({
         ref={contentRef}
         key={pathname}
         animate={{ opacity: 1, y: 0 }}
-        className="min-h-0 flex-1 overflow-auto p-4 sm:p-6"
+        className={
+          editorWorkspace
+            ? 'min-h-0 flex-1 overflow-hidden'
+            : 'min-h-0 flex-1 overflow-auto p-4 sm:p-6'
+        }
         initial={reduceMotion ? false : { opacity: 0, y: 8 }}
         transition={{ duration: 0.18, ease: 'easeOut' }}
       >

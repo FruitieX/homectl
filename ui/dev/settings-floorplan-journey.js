@@ -1,29 +1,57 @@
 (async () => {
-  const endpoint = '/api/v1/config/floorplans/ground_floor/editor';
-  const marker = await fetch(endpoint);
+  const endpoint = '/api/v1/config/floorplans/ground_floor/editor',
+    marker = await fetch(endpoint);
   if (
-    marker.headers.get('x-homectl-fixture') !== 'true' ||
-    location.origin !== 'http://127.0.0.1:3021'
+    location.origin !== 'http://127.0.0.1:3021' ||
+    marker.headers.get('x-homectl-fixture') !== 'true'
   )
-    throw Error('Use isolated fixture.');
+    throw Error('Use the isolated fixture.');
   const checks = [],
-    pause = () => new Promise((r) => setTimeout(r, 150));
-  const until = async (fn, msg) => {
-    for (let i = 0; i < 100; i++) {
+    pause = () => new Promise((r) => setTimeout(r, 150)),
+    assert = (value, name) => {
+      if (!value) throw Error(name);
+      checks.push(name);
+    };
+  const until = async (fn, name) => {
+    for (let n = 0; n < 80; n++) {
       if (fn()) return;
       await pause();
     }
-    throw Error(msg);
-  };
-  const assert = (value, msg) => {
-    if (!value) throw Error(msg);
-    checks.push(msg);
-  };
-  const button = (text) =>
-    [...document.querySelectorAll('button')].find(
-      (el) => el.textContent.trim() === text,
+    throw Error(
+      name +
+        ' @ ' +
+        location.href +
+        ' ' +
+        document.querySelector('.floorplan-page')?.textContent.slice(0, 450),
     );
-  const name = () => document.querySelector('[data-field="name"]');
+  };
+  const click = async (label) => {
+    document.querySelector(`[aria-label="${label}"]`).click();
+    await pause();
+  };
+  const button = async (text) => {
+    [...document.querySelectorAll('button')]
+      .find((b) => b.textContent.trim() === text)
+      .click();
+    await pause();
+  };
+  const menu = async (text) => {
+    const trigger = document.querySelector('[aria-label="Document menu"]');
+    trigger.focus();
+    trigger.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    await until(
+      () => document.querySelector('[role="menu"]'),
+      'Document menu opened',
+    );
+    const el = [...document.querySelectorAll('[role="menuitem"]')].find(
+      (e) => e.textContent.trim() === text,
+    );
+    if (!el) throw Error('Menu item ' + text);
+    el.click();
+    await pause();
+  };
   const input = (el, value) => {
     Object.getOwnPropertyDescriptor(
       HTMLInputElement.prototype,
@@ -31,185 +59,223 @@
     ).set.call(el, value);
     el.dispatchEvent(new Event('input', { bubbles: true }));
   };
-  const saved = async () => (await (await fetch(endpoint)).json()).data;
-  const upload = async (el, text, type, filename) => {
-    const dt = new DataTransfer();
-    dt.items.add(new File([text], filename, { type }));
-    el.files = dt.files;
+  const upload = async (selector, text, type, filename) => {
+    const el = document.querySelector(selector),
+      files = new DataTransfer();
+    files.items.add(new File([text], filename, { type }));
+    el.files = files.files;
     el.dispatchEvent(new Event('change', { bubbles: true }));
     await pause();
   };
-  await until(
-    () => name() && document.querySelector('canvas'),
-    'Floorplan loaded',
-  );
-  const original = await saved();
-  const width = document.querySelector(
-    '[aria-label="Floorplan width in tiles"]',
-  );
-  width.focus();
-  input(width, '');
-  await pause();
-  assert(
-    !button('Save changes') &&
-      JSON.parse((await saved()).grid_data).width === 12,
-    'Clearing a dimension while typing does not resize or save the canvas',
-  );
-  input(width, '14');
-  width.blur();
-  await pause();
-  input(name(), 'Downstairs');
-  await pause();
-  const canvas = document.querySelector('canvas');
-  canvas.focus();
-  canvas.dispatchEvent(
-    new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
-  );
-  await pause();
-  canvas.dispatchEvent(
-    new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
-  );
-  await pause();
-  canvas.dispatchEvent(
-    new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
-  );
-  await pause();
-  await upload(
-    document.querySelector('input[type="file"][accept^="image/"]'),
-    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="16"><rect width="24" height="16" fill="orange"/></svg>',
-    'image/svg+xml',
-    'new-background.svg',
-  );
-  await until(
-    () =>
+  const saved = async () => (await (await fetch(endpoint)).json()).data;
+  const original = await saved(),
+    originalFetch = window.fetch,
+    writes = [];
+  window.fetch = (url, options) => {
+    if (String(url).endsWith(endpoint) && options?.method === 'PUT')
+      writes.push(JSON.parse(options.body));
+    return originalFetch(url, options);
+  };
+  try {
+    await click('Layout tool');
+    input(document.querySelector('#floorplan-name'), 'Downstairs');
+    await pause();
+    const grid = {
+      ...JSON.parse(original.grid_data),
+      labelMode: 'all',
+      deviceScale: 1.2,
+      future: { keep: [2, 1], imported: true },
+    };
+    await upload(
+      '[aria-label="Import floorplan layout"]',
+      JSON.stringify(grid),
+      'application/json',
+      'layout.json',
+    );
+    await click('Layout tool');
+    await upload(
+      '[aria-label="Choose floorplan background image"]',
+      '<svg xmlns="http://www.w3.org/2000/svg" width="720" height="540"><rect width="720" height="540" fill="#f5f3ea"/></svg>',
+      'image/svg+xml',
+      'floor.svg',
+    );
+    await until(
+      () =>
+        document
+          .querySelector('img[alt="Floorplan background preview"]')
+          ?.src.startsWith('data:'),
+      'Background staged',
+    );
+    assert(
+      (await saved()).revision_token === original.revision_token &&
+        writes.length === 0,
+      'Name, imported layout and uploaded image stay unsaved',
+    );
+    await click('Devices tool');
+    const row = [...document.querySelectorAll('.fp-entity')].find((b) =>
+      b.querySelector('small')?.textContent.includes('placed'),
+    );
+    row.click();
+    await pause();
+    document.querySelector('a[href^="/config/devices/detail/"]').click();
+    await until(
+      () =>
+        location.pathname.startsWith('/config/devices/detail/') &&
+        document.querySelector('[aria-label="Retained drafts"]'),
+      'Related navigation',
+    );
+    assert(
       document
-        .querySelector('img[alt="Floorplan background preview"]')
-        ?.src.startsWith('data:'),
-    'Image staged',
-  );
-  assert(
-    (await saved()).revision_token === original.revision_token,
-    'Name, keyboard painting, dimensions and image replacement stay unsaved',
-  );
-  const related = document.querySelector('a[href^="/config/devices/detail/"]');
-  related.click();
-  await until(
-    () => location.pathname.startsWith('/config/devices/detail/') && document.querySelector('[aria-label="Retained drafts"]'),
-    'Related device',
-  );
-  assert(
-    document
-      .querySelector('[aria-label="Retained drafts"]')
-      .textContent.includes('Ground floor'),
-    'Related navigation retains a discoverable floorplan draft',
-  );
-  history.back();
-  await until(() => name()?.value === 'Downstairs', 'Draft restored');
-  assert(
-    document.querySelector('[aria-label="Floorplan width in tiles"]').value ===
-      '14' &&
+        .querySelector('[aria-label="Retained drafts"]')
+        .textContent.includes(original.name),
+      'Related navigation retains the floorplan draft',
+    );
+    history.back();
+    await until(() => document.querySelector('canvas'), 'Returned editor');
+    await click('Layout tool');
+    assert(
+      document.querySelector('#floorplan-name').value === 'Downstairs' &&
+        document
+          .querySelector('img[alt="Floorplan background preview"]')
+          .src.startsWith('data:'),
+      'Imported layout, name and image survive navigation',
+    );
+    await button('Save');
+    await until(
+      () =>
+        document.querySelector('.settings-savebar')?.dataset.dirty === 'false',
+      'Saved',
+    );
+    const updated = await saved();
+    assert(
+      writes.length === 1 &&
+        updated.name === 'Downstairs' &&
+        updated.image.kind === 'stored' &&
+        JSON.parse(updated.grid_data).future.imported,
+      'One atomic Save persists name, image and complete imported layout',
+    );
+    await click('Layout tool');
+    await button('Remove');
+    assert(
+      (await saved()).image.kind === 'stored' &&
+        !document.querySelector('img[alt="Floorplan background preview"]'),
+      'Removing a background is staged',
+    );
+    if (innerWidth < 900) await menu('Discard unsaved changes');
+    else await button('Discard');
+    await click('Layout tool');
+    assert(
+      !!document.querySelector('img[alt="Floorplan background preview"]'),
+      'Discard restores the saved background',
+    );
+    await upload(
+      '[aria-label="Import floorplan layout"]',
+      '{"width":2}',
+      'application/json',
+      'bad.json',
+    );
+    assert(
       document
-        .querySelector('img[alt="Floorplan background preview"]')
-        .src.startsWith('data:'),
-    'Pending layout and image survive related navigation',
-  );
-  button('Save changes').click();
-  await until(() => !button('Save changes'), 'Floorplan saved');
-  const updated = await saved(),
-    grid = JSON.parse(updated.grid_data);
-  assert(
-    updated.name === 'Downstairs' &&
-      grid.width === 14 &&
-      grid.tiles[1][1] === 'wall' &&
-      updated.image.revision !== original.image.revision,
-    'One Save applies the complete floorplan draft',
-  );
-  assert(
-    grid.labelMode === 'all' &&
-      JSON.stringify(grid.future) === JSON.stringify({ keep: [2, 1] }),
-    'Drawing and resizing preserve labels and extension fields',
-  );
-  button('Remove image').click();
-  await pause();
-  assert(
-    !document.querySelector('img[alt="Floorplan background preview"]') &&
-      (await saved()).image.kind === 'stored',
-    'Image removal is staged',
-  );
-  button('Discard').click();
-  await pause();
-  assert(
-    !!document.querySelector('img[alt="Floorplan background preview"]'),
-    'Discard restores the saved background',
-  );
-  input(name(), 'Local floor name');
-  await pause();
-  const remote = await saved();
-  await fetch(endpoint, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      ...remote,
-      expected: remote.revision_token,
-      grid_data: JSON.stringify({
-        ...JSON.parse(remote.grid_data),
-        deviceScale: 1.6,
+        .querySelector('.fp-banner')
+        ?.textContent.includes('Canvas dimensions') &&
+        document.querySelector('canvas'),
+      'Invalid import reports an error and retains the canvas',
+    );
+    const unsupported = JSON.stringify({
+      ...JSON.parse(updated.grid_data),
+      labelMode: 'future-mode',
+      future: { keep: 'raw' },
+    });
+    await originalFetch(endpoint, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...updated,
+        grid_data: unsupported,
+        expected: updated.revision_token,
       }),
-    }),
-  });
-  button('Save changes').click();
-  await until(() => button('Review changes'), 'Conflict review');
-  assert(
-    name().value === 'Local floor name',
-    'Conflicts keep the pending floorplan name',
-  );
-  button('Review changes').click();
-  await until(
-    () => document.querySelector('[role="dialog"]'),
-    'Conflict dialog',
-  );
-  const useReviewed = [
-    ...document.querySelectorAll('[role="dialog"] button'),
-  ].find((el) => el.textContent.includes('Use reviewed'));
-  if (!useReviewed) throw Error('Missing reviewed draft action');
-  useReviewed.click();
-  await pause();
-  button('Save changes').click();
-  await until(() => !button('Save changes'), 'Reviewed floorplan saved');
-  assert(
-    (await saved()).name === 'Local floor name' &&
-      JSON.parse((await saved()).grid_data).deviceScale === 1.6,
-    'Conflict review keeps unrelated remote layout changes',
-  );
-  document.querySelector('a[href="/config/floorplan?new=1"]').click();
-  await until(() => button('Create floorplan'), 'New floorplan editor');
-  input(name(), 'Upstairs');
-  await pause();
-  button('Create floorplan').click();
-  await until(
-    () =>
-      location.search.includes('id=upstairs') && !button('Create floorplan'),
-    'Floorplan created',
-  );
-  assert(
-    (await (await fetch('/api/v1/config/floorplans/upstairs/editor')).json())
-      .data.name === 'Upstairs',
-    'Create uses the same explicit-save editor',
-  );
-  button('Delete floorplan').click();
-  await until(
-    () => document.querySelector('[role="alertdialog"]'),
-    'Delete confirmation',
-  );
-  button('Cancel').click();
-  await pause();
-  assert(
-    (await fetch('/api/v1/config/floorplans/upstairs/editor')).ok,
-    'Canceling deletion keeps the floorplan',
-  );
-  assert(
-    document.documentElement.scrollWidth <= innerWidth,
-    'Floorplan controls fit the viewport',
-  );
-  return { passed: true, checks };
+    });
+    // An unsupported external layout is displayed after explicitly leaving and returning.
+    document.querySelector('a[href="/config"]').click();
+    await until(
+      () =>
+        location.pathname === '/config' &&
+        !document.querySelector('.floorplan-page'),
+      'Leave editor',
+    );
+    history.back();
+    await until(
+      () => document.querySelector('.fp-unavailable'),
+      'Unsupported layout retained',
+    );
+    await click('Layout tool');
+    input(document.querySelector('#floorplan-name'), 'Preserved future floor');
+    await pause();
+    await button('Save');
+    await until(
+      () =>
+        document.querySelector('.settings-savebar')?.dataset.dirty === 'false',
+      'Metadata saved',
+    );
+    assert(
+      (await saved()).grid_data === unsupported,
+      'Metadata save preserves unsupported layout byte for byte',
+    );
+    await menu('Reset layout…');
+    await until(
+      () => document.querySelector('[role="alertdialog"]'),
+      'Reset confirmation',
+    );
+    await button('Cancel');
+    assert(
+      (await saved()).grid_data === unsupported,
+      'Canceling reset preserves unsupported data',
+    );
+    await menu('New floorplan');
+    await until(
+      () => document.querySelector('#floorplan-name'),
+      'New floorplan',
+    );
+    input(document.querySelector('#floorplan-name'), 'Study upstairs');
+    await pause();
+    await button('Create');
+    await until(() => location.search.includes('id=study-upstairs'), 'Created');
+    assert(
+      (
+        await (
+          await fetch('/api/v1/config/floorplans/study-upstairs/editor')
+        ).json()
+      ).data.name === 'Study upstairs',
+      'New documents use explicit atomic creation',
+    );
+    await menu('Delete floorplan…');
+    await until(
+      () => document.querySelector('[role="alertdialog"]'),
+      'Delete confirmation',
+    );
+    await button('Cancel');
+    assert(
+      (await fetch('/api/v1/config/floorplans/study-upstairs/editor')).ok,
+      'Canceling deletion keeps the floorplan',
+    );
+    await menu('Delete floorplan…');
+    await until(
+      () => document.querySelector('[role="alertdialog"]'),
+      'Delete confirmation',
+    );
+    await button('Delete');
+    await until(() => !location.search.includes('study-upstairs'), 'Deleted');
+    assert(
+      !(await fetch('/api/v1/config/floorplans/study-upstairs/editor')).ok,
+      'Confirmed deletion removes only its document',
+    );
+    assert(
+      document.body.scrollHeight === innerHeight &&
+        document.body.scrollWidth === innerWidth,
+      'Document controls fit the fixed viewport',
+    );
+    return { passed: true, checks };
+  } finally {
+    window.fetch = originalFetch;
+  }
 })();

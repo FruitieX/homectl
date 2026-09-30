@@ -37,6 +37,7 @@ export function useFloorplanEditor(id: string, creating: boolean) {
         )
       ).data!,
     refetchInterval: 30000,
+    refetchOnMount: 'always',
   });
   return {
     apiEndpoint,

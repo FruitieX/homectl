@@ -1,6 +1,6 @@
 # Floorplan editor workspace — Study 06
 
-Status: **design review; production implementation has not started**.
+Status: **approved and implemented**. See [implementation and verification](FLOORPLAN-EDITOR-IMPLEMENTATION.md) and the [comparison gallery](implementation-evidence/floorplan-editor/index.html).
 Updated: 2026-09-30.
 
 Request: replace the scrolling `/config/floorplan` form with a proper editor
@@ -34,8 +34,8 @@ Confirmed by the user on 2026-09-30:
 
 Earlier confirmed preferences still apply: phone and desktop equally matter,
 shared save-per-page behavior, useful advanced details and Compact styling.
-The outstanding design choice is **docked versus floating panels**. Docked is
-recommended as the default; panel collapse can supply a canvas-focused view.
+The user approved implementation of the study. **Docked panels are the default**;
+panel collapse supplies a canvas-focused view. The floating study remains an archive.
 
 ## Workspace
 
