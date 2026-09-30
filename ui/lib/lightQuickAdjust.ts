@@ -1,10 +1,48 @@
 import type { DeviceColor } from '../bindings/DeviceColor';
+import type { Device } from '../bindings/Device';
+import { isDeviceReadOnly } from './deviceCapabilities.ts';
 
 export type LightAdjustment = {
   power?: boolean;
   brightness?: number;
   color?: DeviceColor;
 };
+
+/** Shared controls never issue an unsupported command to part of a selection. */
+export function quickLightSelection(devices: Device[]) {
+  const writable = devices.filter((device) => !isDeviceReadOnly(device));
+  const capabilities = writable.flatMap((device) =>
+    'Controllable' in device.data
+      ? [device.data.Controllable.capabilities]
+      : [],
+  );
+  const colored =
+    capabilities.length > 0 &&
+    capabilities.every((caps) => caps.hs || caps.xy || caps.rgb);
+  const temperatures = capabilities.flatMap((caps) =>
+    caps.ct ? [caps.ct] : [],
+  );
+  const start = Math.max(...temperatures.map((range) => range.start));
+  const end = Math.min(...temperatures.map((range) => range.end));
+  return {
+    writable,
+    skipped: devices.length - writable.length,
+    caps: {
+      hs: colored,
+      xy: false,
+      rgb: false,
+      brightness:
+        capabilities.length > 0 &&
+        capabilities.every((caps) => caps.brightness === true),
+      ct:
+        capabilities.length > 0 &&
+        temperatures.length === capabilities.length &&
+        start < end
+          ? { start, end }
+          : null,
+    },
+  };
+}
 
 /** Send the newest drag value at a bounded rate; never overlap device writes. */
 export function createLightAdjustmentQueue({

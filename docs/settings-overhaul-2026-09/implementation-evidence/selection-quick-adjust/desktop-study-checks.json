@@ -1,0 +1,34 @@
+{
+  "driven": {
+    "passed": true,
+    "width": 1440,
+    "checks": [
+      "moat: initial color movement preserves brightness",
+      "moat: ordinary edge crossing does not switch control",
+      "moat: deliberate handoff arms brightness without changing its value or lifting",
+      "moat: brightness movement changes only brightness",
+      "moat: returns to color, adjusts it and releases with the popover still open",
+      "moat: power hold dismisses without toggling",
+      "tabs: initial color movement preserves brightness",
+      "tabs: ordinary edge crossing does not switch control",
+      "tabs: deliberate handoff arms brightness without changing its value or lifting",
+      "tabs: brightness movement changes only brightness",
+      "tabs: returns to color, adjusts it and releases with the popover still open",
+      "tabs: power hold dismisses without toggling",
+      "rail: initial color movement preserves brightness",
+      "rail: ordinary edge crossing does not switch control",
+      "rail: deliberate handoff arms brightness without changing its value or lifting",
+      "rail: brightness movement changes only brightness",
+      "rail: returns to color, adjusts it and releases with the popover still open",
+      "rail: power hold dismisses without toggling"
+    ]
+  },
+  "browser": {
+    "url": "http://127.0.0.1:3024/quick-adjust-study.html",
+    "viewport": {
+      "width": 1440,
+      "height": 1060
+    },
+    "problems": []
+  }
+}

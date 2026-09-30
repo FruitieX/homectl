@@ -2,8 +2,71 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   createLightAdjustmentQueue,
+  quickLightSelection,
   type LightAdjustment,
 } from './lightQuickAdjust.ts';
+import type { Device } from '../bindings/Device';
+import type { Capabilities } from '../bindings/Capabilities';
+
+const light = (capabilities: Partial<Capabilities>, disabled = false): Device =>
+  ({
+    id: 'test',
+    integration_id: 'dummy',
+    name: 'Light',
+    data: {
+      Controllable: {
+        capabilities: {
+          brightness: true,
+          hs: true,
+          rgb: false,
+          xy: false,
+          ct: { start: 2000, end: 6500 },
+          ...capabilities,
+        },
+        disabled,
+        managed: 'Full',
+        state: { power: true, brightness: 0.5, color: { h: 120, s: 0.8 } },
+      },
+    },
+  }) as Device;
+
+test('selection controls use shared capabilities and overlapping temperature ranges', () => {
+  const result = quickLightSelection([
+    light({}),
+    light({ hs: false, rgb: true, ct: { start: 2700, end: 5000 } }),
+  ]);
+  assert.equal(result.caps.hs, true);
+  assert.equal(result.caps.brightness, true);
+  assert.deepEqual(result.caps.ct, { start: 2700, end: 5000 });
+  const switchSelection = quickLightSelection([
+    light({}),
+    light({ brightness: false, hs: false, ct: null }),
+  ]);
+  assert.equal(switchSelection.caps.hs, false);
+  assert.equal(switchSelection.caps.brightness, false);
+  assert.equal(switchSelection.caps.ct, null);
+});
+
+test('read-only devices and sensors are excluded, and incompatible temperature ranges have no shared wheel', () => {
+  const sensor = { data: { Sensor: { value: true } } } as Device;
+  const result = quickLightSelection([
+    light({}),
+    light({ brightness: false }, true),
+    sensor,
+  ]);
+  assert.equal(result.writable.length, 1);
+  assert.equal(result.skipped, 2);
+  assert.equal(result.caps.brightness, true);
+  assert.equal(
+    quickLightSelection([
+      light({ ct: { start: 2000, end: 3000 } }),
+      light({ ct: { start: 4000, end: 6500 } }),
+    ]).caps.ct,
+    null,
+  );
+  assert.equal(quickLightSelection([sensor]).caps.hs, false);
+  assert.equal(quickLightSelection([]).caps.brightness, false);
+});
 
 const settle = async () => {
   await Promise.resolve();

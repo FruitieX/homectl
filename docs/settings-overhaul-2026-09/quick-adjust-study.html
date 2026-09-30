@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Quick adjust gestures · homectl</title>
+    <link rel="stylesheet" href="quick-adjust-study.css" />
+    <script src="quick-adjust-study.js" defer></script>
+  </head>
+  <body>
+    <header class="study-bar">
+      <a href="index.html">h. <span>homectl / interaction studies</span></a
+      ><span>Local prototype · no device commands</span>
+    </header>
+    <main>
+      <div class="intro">
+        <div>
+          <p class="eyebrow">DEVICE QUICK CONTROLS</p>
+          <h1>One finger. Two adjustments.</h1>
+          <p>
+            Explore ways to change color and brightness in one continuous
+            gesture, with an intentional switch between them.
+          </p>
+        </div>
+        <button id="reset-all">Reset all</button>
+      </div>
+      <nav class="directions" aria-label="Gesture concepts">
+        <a href="#all">Compare all</a><a href="#moat">A · Guarded ring</a
+        ><a href="#tabs">B · Mode buttons</a
+        ><a href="#rail">C · Pull-out rail</a>
+      </nav>
+      <div class="concepts">
+        <article data-concept="moat">
+          <header class="concept-heading">
+            <span class="letter">A</span>
+            <div>
+              <h2>Guarded ring</h2>
+              <p>Keep the familiar circular layout</p>
+            </div>
+            <span class="tag">Closest to today</span>
+          </header>
+          <div class="stage">
+            <div class="map-label">Living room</div>
+            <svg class="map" viewBox="0 0 400 450" aria-hidden="true">
+              <path
+                class="walls"
+                d="M24 94H376V418H24ZM24 291H107M195 291H376M267 291V418"
+              />
+              <path class="area" d="M37 108H363V277H37Z" />
+              <rect
+                class="sofa"
+                x="283"
+                y="123"
+                width="65"
+                height="116"
+                rx="12"
+              />
+              <rect
+                class="table"
+                x="300"
+                y="318"
+                width="45"
+                height="62"
+                rx="12"
+              />
+              <circle class="lamp" cx="83" cy="358" r="14" />
+              <circle class="lamp" cx="223" cy="358" r="14" />
+            </svg>
+          </div>
+          <div class="explanation">
+            <h3>Pause to change controls</h3>
+            <p>
+              Color stays active as you leave the wheel. Pause in the ring for
+              320 ms to arm brightness, then move around it. Pause back inside
+              the wheel to return to color.
+            </p>
+            <div class="tradeoff">
+              <span class="good">✓ No sudden brightness jump</span
+              ><span>Switching adds a short pause</span>
+            </div>
+          </div>
+          <footer>
+            <button data-demo>Play gesture</button
+            ><span data-result>H 32° · S 64% · 62%</span>
+          </footer>
+        </article>
+        <article data-concept="tabs">
+          <header class="concept-heading">
+            <span class="letter">B</span>
+            <div>
+              <h2>Mode buttons</h2>
+              <p>Switch through a visible target</p>
+            </div>
+            <span class="tag">Most explicit</span>
+          </header>
+          <div class="stage">
+            <div class="map-label">Living room</div>
+            <svg class="map" viewBox="0 0 400 450" aria-hidden="true">
+              <path
+                class="walls"
+                d="M24 94H376V418H24ZM24 291H107M195 291H376M267 291V418"
+              />
+              <path class="area" d="M37 108H363V277H37Z" />
+              <rect
+                class="sofa"
+                x="283"
+                y="123"
+                width="65"
+                height="116"
+                rx="12"
+              />
+              <rect
+                class="table"
+                x="300"
+                y="318"
+                width="45"
+                height="62"
+                rx="12"
+              />
+              <circle class="lamp" cx="83" cy="358" r="14" />
+              <circle class="lamp" cx="223" cy="358" r="14" />
+            </svg>
+          </div>
+          <div class="explanation">
+            <h3>Slide to Brightness, then continue</h3>
+            <p>
+              Move the held finger onto the Brightness button for 180 ms, then
+              back to the dial. The whole dial now adjusts brightness. Slide to
+              Color to return.
+            </p>
+            <div class="tradeoff">
+              <span class="good">✓ Crossing the ring never switches modes</span
+              ><span>Finger must travel to the top buttons</span>
+            </div>
+          </div>
+          <footer>
+            <button data-demo>Play gesture</button
+            ><span data-result>H 32° · S 64% · 62%</span>
+          </footer>
+        </article>
+        <article data-concept="rail">
+          <header class="concept-heading">
+            <span class="letter">C</span>
+            <div>
+              <h2>Pull-out rail</h2>
+              <p>A separate lane for brightness</p>
+            </div>
+            <span class="tag recommended">Worth trying first</span>
+          </header>
+          <div class="stage">
+            <div class="map-label">Living room</div>
+            <svg class="map" viewBox="0 0 400 450" aria-hidden="true">
+              <path
+                class="walls"
+                d="M24 94H376V418H24ZM24 291H107M195 291H376M267 291V418"
+              />
+              <path class="area" d="M37 108H363V277H37Z" />
+              <rect
+                class="sofa"
+                x="283"
+                y="123"
+                width="65"
+                height="116"
+                rx="12"
+              />
+              <rect
+                class="table"
+                x="300"
+                y="318"
+                width="45"
+                height="62"
+                rx="12"
+              />
+              <circle class="lamp" cx="83" cy="358" r="14" />
+              <circle class="lamp" cx="223" cy="358" r="14" />
+            </svg>
+          </div>
+          <div class="explanation">
+            <h3>Pull the handle, then slide vertically</h3>
+            <p>
+              Drag through the right-hand handle and pull 14 px farther out to
+              open the brightness rail. Slide up or down. Pull through the
+              handle again to return to color.
+            </p>
+            <div class="tradeoff">
+              <span class="good">✓ Separate movements for separate values</span
+              ><span>Uses extra horizontal space</span>
+            </div>
+          </div>
+          <footer>
+            <button data-demo>Play gesture</button
+            ><span data-result>H 32° · S 64% · 62%</span>
+          </footer>
+        </article>
+      </div>
+      <section class="notes">
+        <div>
+          <h2>Try it with a finger</h2>
+          <p>
+            Press the color wheel and keep holding while you switch and adjust.
+            “Play gesture” traces the same continuous path. Values are local to
+            this page.
+          </p>
+        </div>
+        <div>
+          <h2>Shared behavior</h2>
+          <p>
+            Only the active control changes. Switching freezes the other value
+            and never jumps brightness. Release keeps the popover open; tap
+            outside to dismiss. Hold the center power button to dismiss. The
+            three-light selection is preserved.
+          </p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -4,7 +4,7 @@ import type { LightHold } from '@/lib/lightQuickAdjust';
 import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal, MousePointer2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   useDevicesByKeysState,
@@ -61,6 +61,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
   const [quickLight, setQuickLight] = useState<{
     key: string;
     hold: LightHold;
+    keys?: string[];
   } | null>(null);
   const healthQuery = useDeviceHealth();
   const healthByDevice = healthQuery.isError
@@ -483,8 +484,10 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                     Tap a device or group to open controls. Drag to pan and
                     pinch to zoom. Hold a light for quick controls; with a
-                    device sheet open, hold to select lights. Ctrl-click also
-                    selects. Hold a group to select its devices.
+                    selection active, hold a selected light to adjust the
+                    selection. Use Select in quick controls or the device panel
+                    to start selecting. Ctrl-click also selects. Hold a group to
+                    select its devices.
                   </p>
                 </details>
               </PopoverContent>
@@ -503,12 +506,15 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
             quickLight.hold.y
           }
           device={devicesState[quickLight.key]!}
+          devices={quickLight.keys?.flatMap((key) =>
+            devicesState[key] ? [devicesState[key]!] : [],
+          )}
           anchor={quickLight.hold}
           hold={quickLight.hold}
           displayNames={deviceDisplayNameMap}
           onClose={() => setQuickLight(null)}
-          onDetails={() => openDevice([quickLight.key])}
-          onSelect={() => selectLight(quickLight.key)}
+          onDetails={() => openDevice(quickLight.keys ?? [quickLight.key])}
+          onSelect={selecting ? undefined : () => selectLight(quickLight.key)}
         />
       )}
       {quickSensor && devicesState?.[quickSensor.key] && (
@@ -541,14 +547,15 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
             }
             onDeviceHold={(key, hold) => {
               setQuickSensor(null);
-              if (deviceOpen || activeSensorKey || selecting) selectLight(key);
-              else setQuickLight({ key, hold });
+              setQuickLight({
+                key,
+                hold,
+                keys:
+                  selecting && selectedDevices.includes(key)
+                    ? selectedDevices
+                    : undefined,
+              });
               setActiveSensorKey(null);
-            }}
-            onDeviceLongPress={(key) => {
-              setSelecting(true);
-              setActiveSensorKey(null);
-              toggleSelectedDevice(key);
             }}
             onSensorHold={(key, hold) => {
               setQuickLight(null);
@@ -657,6 +664,27 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
             : 'contents'
         }
       >
+        {deviceOpen &&
+          presentation === 'floorplan' &&
+          !selecting &&
+          sheetDeviceKeys.some(
+            (key) =>
+              devicesState?.[key] && 'Controllable' in devicesState[key]!.data,
+          ) && (
+            <div className="flex justify-end border-t border-border bg-background px-3 py-1 md:border-l md:border-t-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedDevices(sheetDeviceKeys);
+                  setSelecting(true);
+                  setActiveSensorKey(null);
+                }}
+              >
+                <MousePointer2 className="size-4" /> Select devices
+              </Button>
+            </div>
+          )}
         {selecting && (
           <div className="flex shrink-0 items-center gap-2 border-t border-border bg-background px-3 py-2 md:border-l md:border-t-0">
             <span className="min-w-0 flex-1 text-sm">
@@ -694,6 +722,11 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
         <GroupPanel
           key={activeGroupId}
           groupId={activeGroupId}
+          onSelect={(keys) => {
+            setSelectedDevices(keys);
+            setSelecting(true);
+            setActiveSensorKey(null);
+          }}
           onClose={() => setGroupPanelOpen(false)}
         />
       ) : null}

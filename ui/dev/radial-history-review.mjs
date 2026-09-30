@@ -136,6 +136,18 @@ export default async function (cdp, { width, url }) {
     })),
     groups: {},
   };
+  // Each viewport starts from the same fixture state; selection tests toggle
+  // both lights and must not leave the next viewport dependent on their order.
+  const initialDevices = (await (await fetch(base + '/api/v1/devices')).json())
+    .devices;
+  for (const id of ['living_room_lamp', 'living_room_floor_lamp']) {
+    const device = initialDevices.find((device) => device.id === id);
+    device.data.Controllable.state.power = true;
+    device.data.Controllable.state.brightness = 0.62;
+    device.data.Controllable.state.color =
+      id === 'living_room_lamp' ? { h: 32, s: 0.64 } : { h: 240, s: 0.4 };
+    await request('/api/v1/devices/' + id, device, 'PUT');
+  }
   grid.devices.push(
     {
       deviceKey: 'dummy/review_button',
@@ -510,9 +522,113 @@ export default async function (cdp, { width, url }) {
     await pause(620);
     await pointer('up', p);
     await until(
-      `document.body.innerText.includes('2 selected')&&!${pop}`,
-      'Hold with sheet enters selection and preserves first light',
+      `!!document.querySelector('[aria-label="Floor lamp quick controls"]')&&!document.body.innerText.includes("selected")`,
+      'Holding with a sheet open shows quick controls without entering selection',
     );
+    await key('Escape', 27);
+    await click(button('Select devices'));
+    await until(
+      'document.body.innerText.includes("1 selected")',
+      'Side-panel button starts selection with its current light',
+    );
+    p = await point(8, 8);
+    await pointer('down', p);
+    await pointer('up', p);
+    await until(
+      'document.body.innerText.includes("2 selected")',
+      'Tap adds a light to the selection',
+    );
+    const groupPop = `document.querySelector('[aria-label="2 selected lights quick controls"]')`;
+    const groupBefore = (await commands()).length;
+    p = await point();
+    await pointer('down', p);
+    await pause(620);
+    await pointer('up', p);
+    await until(
+      '!!' + groupPop + '&&document.body.innerText.includes("2 selected")',
+      'Holding a selected light opens selection quick controls without deselecting',
+    );
+    if ((await commands()).length !== groupBefore)
+      throw Error('Opening selection popover issued a command');
+    const groupCenter = await evaluate(
+      '(()=>{const r=' +
+        groupPop +
+        '.querySelector(".relative.rounded-full").getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()',
+    );
+    await pointer('down', { x: groupCenter.x + 119, y: groupCenter.y });
+    await pointer('up', { x: groupCenter.x + 119, y: groupCenter.y });
+    await pause(350);
+    const selectionCommands = (await commands())
+      .slice(groupBefore)
+      .map((entry) => entry.DeviceCommand);
+    if (
+      selectionCommands.length !== 2 ||
+      ![
+        'zigbee2mqtt/living_room_lamp',
+        'zigbee2mqtt/living_room_floor_lamp',
+      ].every((key) =>
+        selectionCommands.some(
+          (command) =>
+            command.device_key === key && command.brightness === 0.25,
+        ),
+      )
+    )
+      throw Error(
+        'Selection brightness did not reach exactly both selected lights',
+      );
+    checks.push(
+      'Selection brightness sends exactly one command per selected light',
+    );
+    await shot('selection');
+    const other = (
+      await (await fetch(base + '/api/v1/devices')).json()
+    ).devices.find((device) => device.id === 'living_room_floor_lamp');
+    other.data.Controllable.state.power = false;
+    await request('/api/v1/devices/living_room_floor_lamp', other, 'PUT');
+    await pause(200);
+    const hueBefore = (await commands()).length;
+    await pointer('down', { x: groupCenter.x + 80, y: groupCenter.y });
+    await pointer('up', { x: groupCenter.x + 80, y: groupCenter.y });
+    await pause(350);
+    const hueCommands = (await commands())
+      .slice(hueBefore)
+      .map((entry) => entry.DeviceCommand);
+    if (
+      hueCommands.length !== 2 ||
+      !hueCommands.every(
+        (command) => command.color?.h === 90 && command.brightness == null,
+      ) ||
+      hueCommands.find((command) =>
+        command.device_key.endsWith('/living_room_floor_lamp'),
+      )?.power !== false
+    )
+      throw Error(
+        'Selection hue must preserve each target power and brightness',
+      );
+    checks.push(
+      'Selection hue reaches both lights while preserving their individual power and brightness',
+    );
+    const powerBefore = (await commands()).length;
+    await click(groupPop + `.querySelector('button[aria-label^="Turn "]')`);
+    const powerCommands = (await commands())
+      .slice(powerBefore)
+      .map((entry) => entry.DeviceCommand);
+    if (
+      powerCommands.length !== 2 ||
+      !powerCommands.every(
+        (command) =>
+          command.power === false &&
+          command.color == null &&
+          command.brightness == null,
+      )
+    )
+      throw Error(
+        'Selection power did not toggle both devices without changing other fields',
+      );
+    checks.push(
+      'Selection power toggles both lights and preserves their other fields',
+    );
+    await key('Escape', 27);
     p = await point();
     await pointer('down', p);
     await pointer('up', p);

@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom';
+import { MousePointer2 } from 'lucide-react';
+import { Button } from '@/ui/primitives/button';
 import { useDevicesState, useGroupsState } from '@/hooks/websocket';
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { resolveGroupDeviceKeys } from '@/lib/group-floorplan-preview';
@@ -14,9 +16,11 @@ import { SceneList } from './[id]/SceneList';
 export function GroupPanel({
   groupId,
   onClose,
+  onSelect,
 }: {
   groupId: string;
   onClose: () => void;
+  onSelect?: (keys: string[]) => void;
 }) {
   const groups = useGroupsState(),
     state = useDevicesState();
@@ -46,7 +50,22 @@ export function GroupPanel({
               : ''}
           </span>
         </div>
-        <div className="flex flex-wrap gap-4 text-sm">
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          {onSelect && controls.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                onSelect(
+                  controls.map(
+                    (device) => `${device.integration_id}/${device.id}`,
+                  ),
+                )
+              }
+            >
+              <MousePointer2 className="size-4" /> Select devices
+            </Button>
+          )}
           <Link
             className="text-primary underline"
             to={`/groups/${encodeURIComponent(groupId)}`}

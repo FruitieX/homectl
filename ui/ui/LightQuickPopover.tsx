@@ -14,11 +14,8 @@ import { useConnectionStatus } from '@/hooks/websocket';
 import { useLiveDeviceControls } from '@/hooks/useLiveDeviceControls';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import {
-  isDeviceReadOnly,
-  supportsDeviceBrightness,
-} from '@/lib/deviceCapabilities';
-import {
   createLightAdjustmentQueue,
+  quickLightSelection,
   ringBrightness,
   type LightHold,
   type LightAdjustment,
@@ -35,7 +32,8 @@ const BRIGHTNESS_WIDTH = 24;
 const BRIGHTNESS_RADIUS = 119;
 /** One radial surface for map and row indicators, with coalesced live updates. */
 export function LightQuickPopover({
-  device,
+  device: anchorDevice,
+  devices,
   anchor,
   hold,
   onClose,
@@ -44,6 +42,7 @@ export function LightQuickPopover({
   displayNames = {},
 }: {
   device: Device;
+  devices?: Device[];
   anchor: { x: number; y: number };
   hold?: LightHold;
   onClose: () => void;
@@ -54,14 +53,21 @@ export function LightQuickPopover({
   const helpId = useId();
   const setState = useLiveDeviceControls();
   const connected = useConnectionStatus() === 'connected';
+  const targets = devices ?? [anchorDevice];
+  const selection = quickLightSelection(targets);
+  const device =
+    selection.writable.find(
+      (target) =>
+        target.id === anchorDevice.id &&
+        target.integration_id === anchorDevice.integration_id,
+    ) ??
+    selection.writable[0] ??
+    anchorDevice;
   const state =
     'Controllable' in device.data ? device.data.Controllable.state : null;
-  const caps =
-    'Controllable' in device.data
-      ? device.data.Controllable.capabilities
-      : null;
+  const caps = selection.caps;
   const colored = Boolean(caps?.hs || caps?.xy || caps?.rgb);
-  const dimmable = supportsDeviceBrightness(device);
+  const dimmable = caps.brightness;
   const [mode, setMode] = useState<'hs' | 'ct'>(() =>
     state?.color && 'ct' in state.color && caps?.ct
       ? 'ct'
@@ -74,7 +80,7 @@ export function LightQuickPopover({
   const [draft, setDraft] = useState<LightAdjustment | null>(null),
     [pending, setPending] = useState(false),
     [dragging, setDragging] = useState(false);
-  const enabled = connected && !isDeviceReadOnly(device);
+  const enabled = connected && selection.writable.length > 0;
   const root = useRef<HTMLDivElement>(null),
     returnFocus = useRef(document.activeElement);
   const surface = useRef<HTMLDivElement>(null);
@@ -117,7 +123,20 @@ export function LightQuickPopover({
   useEffect(() => () => clearTimeout(powerPress.current.timer), []);
   const cx = Math.max(140, Math.min(innerWidth - 140, anchor.x));
   const cy = Math.min(innerHeight - 146, Math.max(228, anchor.y));
-  const label = getDeviceDisplayLabel(device, displayNames);
+  const label = devices
+    ? `${selection.writable.length} selected ${selection.writable.length === 1 ? 'light' : 'lights'}`
+    : getDeviceDisplayLabel(device, displayNames);
+  const mixed = selection.writable.some(
+    (target) =>
+      'Controllable' in target.data &&
+      ((draft?.brightness === undefined &&
+        target.data.Controllable.state.brightness !== state?.brightness) ||
+        (draft?.color === undefined &&
+          JSON.stringify(target.data.Controllable.state.color) !==
+            JSON.stringify(state?.color)) ||
+        (draft?.power === undefined &&
+          target.data.Controllable.state.power !== state?.power)),
+  );
   const latest = useRef({
     enabled,
     device,
@@ -127,6 +146,7 @@ export function LightQuickPopover({
     mode,
     caps,
     dimmable,
+    targets: selection.writable,
   });
   latest.current = {
     enabled,
@@ -137,6 +157,7 @@ export function LightQuickPopover({
     mode,
     caps,
     dimmable,
+    targets: selection.writable,
   };
   const resetDraft = () => {
     draftRef.current = null;
@@ -144,13 +165,23 @@ export function LightQuickPopover({
   };
   useEffect(() => {
     const commands = createLightAdjustmentQueue({
-      send: (value) =>
-        latest.current.setState(
-          latest.current.device,
-          value.power ?? latest.current.power,
-          value.brightness === undefined ? undefined : value.brightness / 100,
-          value.color,
-        ),
+      send: async (value) => {
+        const results = await Promise.all(
+          latest.current.targets.map((target) =>
+            latest.current.setState(
+              target,
+              value.power ??
+                ('Controllable' in target.data &&
+                  target.data.Controllable.state.power),
+              value.brightness === undefined
+                ? undefined
+                : value.brightness / 100,
+              value.color,
+            ),
+          ),
+        );
+        return results.every(Boolean);
+      },
       onBusy: setPending,
       onFailure: () => {
         draftRef.current = null;
@@ -165,28 +196,38 @@ export function LightQuickPopover({
   }, [device.integration_id, device.id]);
   useEffect(() => {
     if (!draft || !state || dragging || !queue.current?.idle) return;
-    const reportedRgb = getColor(device.data).rgb().array();
-    const colorMatches =
-      draft.color === undefined ||
-      (draft.color && 'h' in draft.color && state.color && 'h' in state.color
-        ? Math.abs(((draft.color.h - state.color.h + 540) % 360) - 180) < 0.2 &&
-          Math.abs(draft.color.s - state.color.s) < 0.002
-        : color
-            .rgb()
-            .array()
-            .every(
-              (channel, index) => Math.abs(channel - reportedRgb[index]) < 0.5,
-            ));
-    const confirmed =
-      (draft.power === undefined || draft.power === state.power) &&
-      (draft.brightness === undefined ||
-        Math.abs(draft.brightness - (state.brightness ?? 1) * 100) < 0.1) &&
-      colorMatches;
+    const confirmed = selection.writable.every((target) => {
+      if (!('Controllable' in target.data)) return false;
+      const reported = target.data.Controllable.state;
+      const reportedRgb = getColor(target.data).rgb().array();
+      const colorMatches =
+        draft.color === undefined ||
+        (draft.color &&
+        'h' in draft.color &&
+        reported.color &&
+        'h' in reported.color
+          ? Math.abs(((draft.color.h - reported.color.h + 540) % 360) - 180) <
+              0.2 && Math.abs(draft.color.s - reported.color.s) < 0.002
+          : color
+              .rgb()
+              .array()
+              .every(
+                (channel, index) =>
+                  Math.abs(channel - reportedRgb[index]) < 0.5,
+              ));
+      return (
+        (draft.power === undefined || draft.power === reported.power) &&
+        (draft.brightness === undefined ||
+          Math.abs(draft.brightness - (reported.brightness ?? 1) * 100) <
+            0.1) &&
+        colorMatches
+      );
+    });
     if (confirmed) {
       draftRef.current = null;
       setDraft(null);
     }
-  }, [draft, state, pending, dragging, color, device.data]);
+  }, [draft, state, pending, dragging, color, device.data, selection.writable]);
   const adjust = (value: LightAdjustment, immediate = false) => {
     if (!latest.current.enabled) return;
     const next = { ...draftRef.current, ...value };
@@ -345,9 +386,11 @@ export function LightQuickPopover({
       : `radial-gradient(circle, white ${COLOR_MIN_RADIUS}px, transparent ${COLOR_MAX_RADIUS}px),conic-gradient(from 0deg, #f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)`;
   const status = !connected
     ? 'Reconnecting…'
-    : isDeviceReadOnly(device)
+    : !selection.writable.length
       ? 'Disabled or read-only'
-      : null;
+      : selection.skipped
+        ? `${selection.skipped} read-only or sensor ${selection.skipped === 1 ? 'device' : 'devices'} skipped`
+        : null;
   return createPortal(
     <div
       ref={root}
@@ -361,6 +404,7 @@ export function LightQuickPopover({
       <div className="absolute -top-[80px] left-0 w-full">
         <p className="mb-2 inline-block max-w-full truncate rounded-full border border-border bg-card/95 px-3 py-1 text-xs font-medium shadow-sm backdrop-blur-md">
           {label}
+          {mixed ? ' · Mixed' : ''}
         </p>
         <div className="flex justify-center gap-1 rounded-full">
           {colored && (

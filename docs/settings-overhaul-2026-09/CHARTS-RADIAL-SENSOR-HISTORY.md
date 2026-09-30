@@ -2,6 +2,12 @@
 
 Updated: 2026-09-30.
 
+Latest selection update: [selection quick controls and gesture study](QUICK-ADJUST-GESTURES.md).
+Holding a selected light now adjusts the selected lights together. Holding with
+a device sheet open opens quick controls; selection starts through the popover,
+device/room panel buttons, Ctrl-click or a held room. This supersedes the earlier
+sheet-open hold-to-select behavior described in the historical checks below.
+
 ## Follow-up: selection, off appearance and action buttons
 
 The latest quick-control requirements are implemented:

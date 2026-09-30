@@ -17,6 +17,18 @@ and the [mockup versus implementation gallery](implementation-evidence/floorplan
 
 ## Current review
 
+### Quick adjust · Study 07
+
+[Interactive continuous-gesture study](quick-adjust-study.html) ·
+[Desktop and phone gallery](quick-adjust-review.html) ·
+[Selection behavior and gesture tradeoffs](QUICK-ADJUST-GESTURES.md).
+
+Selected lights can now be adjusted together from the floorplan popover, with
+selection entry buttons in device and room panels. The study explores three
+single-finger handoffs between color and brightness: a guarded ring, explicit
+mode buttons and a pull-out brightness rail. These gestures await direction
+selection; all prototype adjustments remain local.
+
 The Compact baseline is approved. Study 04 responds to the preference for the earlier routine canvas and desktop scene table. The complex controls are retained within those layouts:
 
 | Study | Interactive example | Screenshots |

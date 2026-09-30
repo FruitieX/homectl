@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Quick adjust · screenshot review</title>
+    <link rel="stylesheet" href="quick-adjust-study.css" />
+    <style>
+      .comparison {
+        display: block;
+        width: 100%;
+        border: 1px solid #dce4dc;
+        border-radius: 12px;
+        margin: 22px 0 32px;
+      }
+      .phones {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 24px;
+      }
+      .phones section {
+        min-width: 0;
+      }
+      .phones img {
+        display: block;
+        width: 100%;
+        border: 1px solid #dce4dc;
+        border-radius: 12px;
+        margin: 12px 0;
+      }
+      .phones p {
+        font-size: 12px;
+        color: #63735e;
+      }
+      .phones h2 {
+        font-size: 16px;
+      }
+      .phones a.link {
+        font-size: 12px;
+        color: #426d49;
+        text-decoration: underline;
+      }
+      .intro > a {
+        padding: 10px 14px;
+        background: #e5ede6;
+        border-radius: 9px;
+        white-space: nowrap;
+        font-size: 12px;
+      }
+      @media (max-width: 700px) {
+        .phones {
+          grid-template-columns: 1fr;
+          gap: 30px;
+        }
+        .intro {
+          flex-direction: column;
+          gap: 15px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="study-bar">
+      <a href="index.html">h. <span>homectl / quick adjust review</span></a
+      ><span>Concept screenshots · synthetic home</span>
+    </header>
+    <main>
+      <div class="intro">
+        <div>
+          <p class="eyebrow">CONTINUOUS TOUCH GESTURES</p>
+          <h1>Three ways to keep adjusting.</h1>
+          <p>
+            The selection controls are implemented. These switching gestures are
+            alternatives to try before choosing one for the app.
+          </p>
+        </div>
+        <a href="quick-adjust-study.html">Open interactive study ↗</a>
+      </div>
+      <a href="previews/quick-adjust-study/desktop-compare.png"
+        ><img
+          class="comparison"
+          src="previews/quick-adjust-study/desktop-compare.png"
+          alt="Desktop comparison of guarded ring, mode buttons and pull-out rail. The latter two show their brightness mode."
+          width="1440"
+          height="1160"
+      /></a>
+      <div class="phones">
+        <section>
+          <h2>A · Guarded ring</h2>
+          <p>
+            Pause on the other control to switch. The circular layout remains
+            familiar.
+          </p>
+          <a href="previews/quick-adjust-study/phone-moat.png"
+            ><img
+              src="previews/quick-adjust-study/phone-moat.png"
+              alt="Guarded ring phone mockup"
+              width="430"
+              height="1160"
+              loading="lazy" /></a
+          ><a class="link" href="quick-adjust-study.html#moat"
+            >Try guarded ring ↗</a
+          >
+        </section>
+        <section>
+          <h2>B · Mode buttons</h2>
+          <p>
+            Slide onto Color or Brightness. The dial changes to the chosen
+            control.
+          </p>
+          <a href="previews/quick-adjust-study/phone-tabs.png"
+            ><img
+              src="previews/quick-adjust-study/phone-tabs.png"
+              alt="Mode buttons phone mockup in brightness mode"
+              width="430"
+              height="1160"
+              loading="lazy" /></a
+          ><a class="link" href="quick-adjust-study.html#tabs"
+            >Try mode buttons ↗</a
+          >
+        </section>
+        <section>
+          <h2>C · Pull-out rail</h2>
+          <p>
+            Pull through a deliberate handle, then adjust brightness vertically
+            beside the color wheel.
+          </p>
+          <a href="previews/quick-adjust-study/phone-rail.png"
+            ><img
+              src="previews/quick-adjust-study/phone-rail.png"
+              alt="Pull-out rail phone mockup with the brightness rail open"
+              width="430"
+              height="1160"
+              loading="lazy" /></a
+          ><a class="link" href="quick-adjust-study.html#rail"
+            >Try pull-out rail ↗</a
+          >
+        </section>
+      </div>
+      <section class="notes">
+        <div>
+          <h2>My starting preference</h2>
+          <p>
+            Try C first: its vertical brightness gesture differs clearly from
+            the color wheel's angle and radius. A changes the existing layout
+            the least; B has the clearest visible mode switch.
+          </p>
+        </div>
+        <div>
+          <h2>Choose by feel</h2>
+          <p>
+            Use a physical phone and keep the finger down throughout. All three
+            hold the inactive value during adjustment. They differ in how you
+            reach and confirm the switch, and how much travel or space that
+            takes.
+          </p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

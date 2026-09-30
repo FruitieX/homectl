@@ -1,0 +1,18 @@
+{
+  "evaluated": {
+    "passed": true,
+    "checks": [
+      "moat: animated gesture switches to brightness and back, retains edits and ends in color",
+      "tabs: animated gesture switches to brightness and back, retains edits and ends in color",
+      "rail: animated gesture switches to brightness and back, retains edits and ends in color"
+    ]
+  },
+  "browser": {
+    "url": "http://127.0.0.1:3024/quick-adjust-study.html",
+    "viewport": {
+      "width": 1440,
+      "height": 1060
+    },
+    "problems": []
+  }
+}
