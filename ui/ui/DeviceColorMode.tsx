@@ -6,6 +6,7 @@ import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 import { useDeviceColorCalibrations } from '@/hooks/useConfig';
 import { Slider } from '@/ui/primitives/slider';
 import { Button } from '@/ui/primitives/button';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import Color, { type ColorInstance } from 'color';
 
 type Color = ColorInstance;
@@ -301,26 +302,21 @@ export function DeviceColorMode({
       {!temperatureOnly && (
         <label className="flex items-center justify-between gap-3 text-sm">
           <span>Color mode</span>
-          <select
+          <SettingsSelect
             aria-label="Color mode"
-            className="min-h-10 rounded-md border border-border bg-background px-3"
+            className="w-48"
             disabled={!connected}
-            value={options.some(([v]) => v === mode) ? mode : ''}
-            onChange={(e) => apply(initial(e.target.value as Mode))}
-          >
-            <option value="" disabled>
-              Mixed / unknown
-            </option>
-            {options.map(([value, label]) => (
-              <option
-                key={value}
-                value={value}
-                disabled={value === 'ct' && min > max}
-              >
-                {label}
-              </option>
-            ))}
-          </select>
+            value={options.some(([v]) => v === mode) ? mode : 'unknown'}
+            onValueChange={(value) => apply(initial(value as Mode))}
+            options={[
+              { value: 'unknown', label: 'Mixed / unknown', disabled: true },
+              ...options.map(([value, label]) => ({
+                value,
+                label,
+                disabled: value === 'ct' && min > max,
+              })),
+            ]}
+          />
         </label>
       )}
       {channels

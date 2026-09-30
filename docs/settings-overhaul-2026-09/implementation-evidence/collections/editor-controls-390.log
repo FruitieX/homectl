@@ -1,0 +1,81 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Empty scene color remains an explicit choice",
+    "passed": true
+   },
+   {
+    "name": "Cancel restores original scene color",
+    "passed": true
+   },
+   {
+    "name": "Apply changes the page draft only",
+    "passed": true
+   },
+   {
+    "name": "Boolean assumption retains False",
+    "passed": true
+   },
+   {
+    "name": "Numeric assumption starts with its correct value",
+    "passed": true
+   },
+   {
+    "name": "JSON assumption has a visible valid starting value",
+    "passed": true
+   },
+   {
+    "name": "Returning to boolean shows the new default",
+    "passed": true
+   },
+   {
+    "name": "Searching without selection never changes the room to paint",
+    "passed": true
+   },
+   {
+    "name": "Explicit room selection updates the paint target",
+    "passed": true
+   },
+   {
+    "name": "Floorplan toolbar fits without squeezing its description",
+    "passed": true
+   },
+   {
+    "name": "Placement filters compose without editing the map",
+    "passed": true
+   },
+   {
+    "name": "Clearing room filter retains the device type",
+    "passed": true
+   },
+   {
+    "name": "Label changes require Save",
+    "passed": true
+   },
+   {
+    "name": "Live controls scope selects the named device",
+    "passed": true
+   },
+   {
+    "name": "Live scope can return to the original selection",
+    "passed": true
+   },
+   {
+    "name": "Everyday filter uses the shared selector",
+    "passed": true
+   },
+   {
+    "name": "Page fits its viewport",
+    "passed": true
+   },
+   {
+    "name": "Selection and local drafts send no writes or live commands",
+    "passed": true
+   }
+  ],
+  "scope": "Marked local fixture; all configuration drafts discarded"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":390,"height":844},"problems":[]}

@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { TriggerSpec } from '@/bindings/TriggerSpec';
 import type { RoutineDefinitionV2Body } from '@/hooks/useConfig';
@@ -241,42 +242,44 @@ export function RoutineWhatIfPreview({
               <div className="min-w-0 space-y-2 text-xs">
                 <label className="grid gap-2">
                   Value type
-                  <select
-                    className="settings-select"
+                  <SettingsSelect
+                    aria-label="Assumption value type"
                     value={row.type}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       patchAssumption(row.id, {
-                        type: event.target.value as typeof row.type,
+                        type: value as typeof row.type,
                         text:
-                          event.target.value === 'boolean'
+                          value === 'boolean'
                             ? 'true'
-                            : event.target.value === 'number'
+                            : value === 'number'
                               ? '0'
-                              : event.target.value === 'json'
+                              : value === 'json'
                                 ? 'null'
                                 : '',
                       })
                     }
-                  >
-                    <option value="boolean">On / off</option>
-                    <option value="number">Number</option>
-                    <option value="text">Text</option>
-                    <option value="json">JSON</option>
-                  </select>
+                    options={[
+                      { value: 'boolean', label: 'On / off' },
+                      { value: 'number', label: 'Number' },
+                      { value: 'text', label: 'Text' },
+                      { value: 'json', label: 'JSON' },
+                    ]}
+                  />
                 </label>
                 <label className="grid gap-2">
                   Assumed value
                   {row.type === 'boolean' ? (
-                    <select
-                      className="settings-select"
+                    <SettingsSelect
+                      aria-label="Assumed value"
                       value={row.text}
-                      onChange={(event) =>
-                        patchAssumption(row.id, { text: event.target.value })
+                      onValueChange={(value) =>
+                        patchAssumption(row.id, { text: value })
                       }
-                    >
-                      <option value="true">True</option>
-                      <option value="false">False</option>
-                    </select>
+                      options={[
+                        { value: 'true', label: 'True' },
+                        { value: 'false', label: 'False' },
+                      ]}
+                    />
                   ) : (
                     <Input
                       value={row.text}

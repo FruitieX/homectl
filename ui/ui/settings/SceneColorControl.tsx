@@ -21,6 +21,7 @@ import {
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { StatePreview } from './StatePreview';
+import { SettingsSelect } from './SettingsSelect';
 const MODES: DeviceColorMode[] = ['ct', 'hs', 'rgb', 'xy'];
 export function SceneColorControl({
   color,
@@ -88,33 +89,33 @@ export function SceneColorControl({
           </div>
           <label className="grid gap-2 text-sm">
             Color mode
-            <select
+            <SettingsSelect
               aria-label="Color mode"
-              className="settings-select"
-              value={mode ?? ''}
-              onChange={(event) =>
+              value={mode ?? 'unspecified'}
+              onValueChange={(value) =>
                 setPending(
-                  event.target.value
-                    ? defaultColorFor(event.target.value as DeviceColorMode)
+                  value !== 'unspecified'
+                    ? defaultColorFor(value as DeviceColorMode)
                     : undefined,
                 )
               }
-            >
-              <option value="">Not specified</option>
-              {MODES.filter(
-                (candidate) =>
-                  supported(candidate) ||
-                  candidate === mode ||
-                  candidate === getColorMode(color),
-              ).map((candidate) => (
-                <option key={candidate} value={candidate}>
-                  {COLOR_MODE_LABELS[candidate]}
-                  {!supported(candidate)
-                    ? ' · not supported by these targets'
-                    : ''}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: 'unspecified', label: 'Not specified' },
+                ...MODES.filter(
+                  (candidate) =>
+                    supported(candidate) ||
+                    candidate === mode ||
+                    candidate === getColorMode(color),
+                ).map((candidate) => ({
+                  value: candidate,
+                  label:
+                    COLOR_MODE_LABELS[candidate] +
+                    (!supported(candidate)
+                      ? ' · not supported by these targets'
+                      : ''),
+                })),
+              ]}
+            />
           </label>
           {pending && (
             <div className="grid gap-4">

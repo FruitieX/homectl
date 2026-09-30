@@ -390,3 +390,34 @@ and the existing 17-check journey pass at each 390/1440 px; 251 UI tests and
 11 Rust history tests pass. See [the work queue](WORK-QUEUE.md#routine-activity-references-and-outcomes--2026-09-30)
 for evidence and limits. Runtime suppression end-to-end and broader accessibility
 acceptance remain open.
+
+### Remaining selectors and obsolete editors — 2026-09-30
+
+Shared selectors now cover scene color mode, live-control scope, routine what-if
+values, everyday device filtering, floorplan device type/labels and room choices.
+The floorplan combines room search and selection in one picker: searching alone
+no longer changes the selected paint target. Room filters use an empty selection
+for All rooms, leaving the literal group ID `all` available as a real group.
+Disabled color-mode choices remain disabled in the shared selector.
+
+Screenshot review exposed a pre-existing phone overflow: the floorplan Layout
+actions squeezed the description into a thin column. Shared section headings
+now wrap long action groups below readable descriptions. Reviewed phone and
+desktop captures show the corrected layout and color/scope dialogs.
+
+Eighteen native browser checks pass at each 390/1440 px, covering Cancel/Apply/
+Discard, typed assumptions, search without selection, composed placement filters,
+label drafts, modal scope and no writes or live commands. The phone placement
+regression also passes (exact placement/drag, Fit, persistence and Undo).
+All 251 UI tests and type/lint/build pass with the existing backup-effect and
+bundle-size warnings. No browser errors occur. Evidence: `ui/dev/editor-controls-review.mjs`,
+`implementation-evidence/collections/editor-controls-*` and the
+[comparison gallery](implementation-evidence/comparison/index.html#editor-controls).
+
+The import audit found no callers for seven obsolete files: ActionBuilder,
+RuleBuilder, routine-summary, SceneDeviceStateEditor, SceneColorEditor,
+SourceParamsForm and SourceColorField. They are removed; current legacy review/
+conversion remains in the routine editor. No JSX native select elements remain
+in the UI source. This closes the identified selector/obsolete-editor inventory;
+restore/restart, MQTT transport, activity-runtime and broader accessibility/final
+reconciliation remain open.

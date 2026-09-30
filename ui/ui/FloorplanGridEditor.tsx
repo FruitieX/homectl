@@ -1,3 +1,5 @@
+import { SearchablePicker } from '@/ui/SearchablePicker';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import {
   getFloorplanGroupFill,
   getFloorplanGroupStroke,
@@ -26,9 +28,6 @@ import {
   FloorplanLegend,
   FloorplanModeBar,
 } from '@/ui/floorplan/FloorplanEditorControls';
-
-const selectClassName =
-  'h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 
 export type TileType = 'empty' | 'floor' | 'wall' | 'door' | 'window';
 
@@ -772,7 +771,6 @@ export function FloorplanGridEditor({
     useState<VerticalResizeDirection>('bottom');
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
-  const [groupQuery, setGroupQuery] = useState('');
   const [groupPaintMode, setGroupPaintMode] = useState<GroupPaintMode>('paint');
   const [isPainting, setIsPainting] = useState(false);
   const [draggingDevice, setDraggingDevice] = useState<string | null>(null);
@@ -787,7 +785,7 @@ export function FloorplanGridEditor({
   const [deviceTypeFilter, setDeviceTypeFilter] = useState<
     'all' | FloorplanDeviceType
   >('all');
-  const [deviceGroupFilter, setDeviceGroupFilter] = useState('all');
+  const [deviceGroupFilter, setDeviceGroupFilter] = useState('');
   const [viewZoom, setViewZoom] = useState(1);
   const [placementTab, setPlacementTab] = useState<'unplaced' | 'placed'>(
     'unplaced',
@@ -960,29 +958,12 @@ export function FloorplanGridEditor({
     }
     return left.name.localeCompare(right.name);
   });
-  const normalizedGroupQuery = groupQuery.trim().toLowerCase();
-  const matchingGroups = normalizedGroupQuery
-    ? sortedGroups.filter((group) =>
-        group.name.toLowerCase().includes(normalizedGroupQuery),
-      )
-    : sortedGroups;
 
   useEffect(() => {
     if (!selectedGroup && sortedGroups[0]) {
       setSelectedGroup(sortedGroups[0].id);
     }
   }, [selectedGroup, sortedGroups]);
-
-  useEffect(() => {
-    if (
-      normalizedGroupQuery &&
-      selectedGroup &&
-      !matchingGroups.some((group) => group.id === selectedGroup) &&
-      matchingGroups[0]
-    ) {
-      setSelectedGroup(matchingGroups[0].id);
-    }
-  }, [matchingGroups, normalizedGroupQuery, selectedGroup]);
 
   const pushUndoSnapshot = useCallback((snapshot: FloorplanGrid) => {
     setUndoStack((previousStack) => {
@@ -1719,7 +1700,7 @@ export function FloorplanGridEditor({
     }
 
     if (
-      deviceGroupFilter !== 'all' &&
+      deviceGroupFilter !== '' &&
       !device.groupIds.includes(deviceGroupFilter)
     ) {
       return false;
@@ -1744,7 +1725,7 @@ export function FloorplanGridEditor({
         return matchesDeviceFilters(info);
       }
 
-      return normalizedDeviceSearch.length === 0 && deviceGroupFilter === 'all';
+      return normalizedDeviceSearch.length === 0 && deviceGroupFilter === '';
     })
     .sort((left, right) => left.deviceName.localeCompare(right.deviceName));
   const drawShapeControl = (
@@ -1873,30 +1854,19 @@ export function FloorplanGridEditor({
 
           <div className="flex flex-wrap gap-3 items-center">
             <label className="space-y-2 w-full max-w-sm">
-              <span className="text-sm font-medium">Find a room</span>
-              <Input
-                type="search"
-                className="h-10"
-                placeholder="Type part of a room name"
-                value={groupQuery}
-                onChange={(event) => setGroupQuery(event.target.value)}
-              />
-            </label>
-            <label className="space-y-2 w-full max-w-sm">
               <span className="text-sm font-medium">Group</span>
-              <select
-                className={selectClassName}
+              <SearchablePicker
+                ariaLabel="Room to paint"
+                clearable={false}
                 value={selectedGroup ?? ''}
-                onChange={(e) => setSelectedGroup(e.target.value)}
-              >
-                <option value="">Select group...</option>
-                {matchingGroups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                    {group.hidden ? ' (hidden)' : ''}
-                  </option>
-                ))}
-              </select>
+                onChange={setSelectedGroup}
+                placeholder="Choose a room or group"
+                options={sortedGroups.map((group) => ({
+                  value: group.id,
+                  label: group.name + (group.hidden ? ' (hidden)' : ''),
+                  detail: group.id,
+                }))}
+              />
             </label>
 
             <div className="flex rounded-2xl bg-muted p-1">
@@ -1992,49 +1962,46 @@ export function FloorplanGridEditor({
 
             <label className="w-full max-w-48 space-y-2">
               <span className="text-sm font-medium">Type</span>
-              <select
-                className={selectClassName}
+              <SettingsSelect
+                aria-label="Placement device type"
                 value={deviceTypeFilter}
-                onChange={(e) =>
-                  setDeviceTypeFilter(
-                    e.target.value as 'all' | FloorplanDeviceType,
-                  )
+                onValueChange={(value) =>
+                  setDeviceTypeFilter(value as 'all' | FloorplanDeviceType)
                 }
-              >
-                <option value="all">All devices</option>
-                <option value="controllable">Lights / devices</option>
-                <option value="sensor">Sensors</option>
-                <option value="other">Other</option>
-              </select>
+                options={[
+                  { value: 'all', label: 'All devices' },
+                  { value: 'controllable', label: 'Lights / devices' },
+                  { value: 'sensor', label: 'Sensors' },
+                  { value: 'other', label: 'Other' },
+                ]}
+              />
             </label>
 
             <label className="space-y-2 w-full max-w-xs">
               <span className="text-sm font-medium">Group</span>
-              <select
-                className={selectClassName}
+              <SearchablePicker
+                ariaLabel="Placement room filter"
                 value={deviceGroupFilter}
-                onChange={(e) => setDeviceGroupFilter(e.target.value)}
-              >
-                <option value="all">All groups</option>
-                {sortedGroups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                    {group.hidden ? ' (hidden)' : ''}
-                  </option>
-                ))}
-              </select>
+                onChange={setDeviceGroupFilter}
+                placeholder="All rooms & groups"
+                options={sortedGroups.map((group) => ({
+                  value: group.id,
+                  label: group.name + (group.hidden ? ' (hidden)' : ''),
+                  detail: group.id,
+                }))}
+              />
             </label>
 
             {(deviceSearch ||
               deviceTypeFilter !== 'all' ||
-              deviceGroupFilter !== 'all') && (
+              deviceGroupFilter !== '') && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => {
                   setDeviceSearch('');
                   setDeviceTypeFilter('all');
-                  setDeviceGroupFilter('all');
+                  setDeviceGroupFilter('');
                 }}
               >
                 Clear Filters
@@ -2455,21 +2422,23 @@ export function FloorplanGridEditor({
           />
           <label className="flex items-center justify-between gap-3 text-sm">
             Device labels
-            <select
-              className="h-10 rounded-md border border-input bg-background px-3"
+            <SettingsSelect
+              aria-label="Device labels"
+              className="w-48"
               value={grid.labelMode ?? 'sensors'}
-              onChange={(event) =>
+              onValueChange={(value) =>
                 onChange({
                   ...grid,
-                  labelMode: event.target.value as FloorplanGrid['labelMode'],
+                  labelMode: value as FloorplanGrid['labelMode'],
                 })
               }
-            >
-              <option value="none">Hidden</option>
-              <option value="sensors">Sensors</option>
-              <option value="lights">Lights</option>
-              <option value="all">All devices</option>
-            </select>
+              options={[
+                { value: 'none', label: 'Hidden' },
+                { value: 'sensors', label: 'Sensors' },
+                { value: 'lights', label: 'Lights' },
+                { value: 'all', label: 'All devices' },
+              ]}
+            />
           </label>
 
           {backgroundImageUrl ? (

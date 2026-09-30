@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronRight, Search, SlidersHorizontal } from 'lucide-react';
@@ -167,16 +168,17 @@ export default function Page() {
         {view === 'devices' && (
           <label className="flex items-center gap-3 text-sm">
             Device type
-            <select
+            <SettingsSelect
               aria-label="Device type"
-              className="h-11 rounded-md border border-input bg-background px-3"
+              className="w-56"
               value={deviceType}
-              onChange={(e) => setDeviceType(e.target.value)}
-            >
-              <option value="all">All devices</option>
-              <option value="lights">Lights &amp; switches</option>
-              <option value="sensors">Sensors</option>
-            </select>
+              onValueChange={setDeviceType}
+              options={[
+                { value: 'all', label: 'All devices' },
+                { value: 'lights', label: 'Lights & switches' },
+                { value: 'sensors', label: 'Sensors' },
+              ]}
+            />
           </label>
         )}
         {!state || !groups ? (

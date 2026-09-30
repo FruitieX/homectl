@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { useUserTimers } from '@/hooks/useUserTimers';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -163,29 +164,34 @@ export function ColorPickerModal() {
         {initialSelection.current.length > 1 && (
           <label className="block text-xs text-muted-foreground">
             Apply controls to
-            <select
+            <SettingsSelect
               aria-label="Apply controls to"
-              className="mt-1 h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
-              value={modal.state.length === 1 ? modal.state[0] : 'selection'}
-              onChange={(e) =>
+              className="mt-1"
+              value={
+                modal.state.length === 1
+                  ? 'device:' + modal.state[0]
+                  : 'selection'
+              }
+              onValueChange={(value) =>
                 modal.setState(
-                  e.target.value === 'selection'
+                  value === 'selection'
                     ? initialSelection.current
-                    : [e.target.value],
+                    : [value.slice(7)],
                 )
               }
-            >
-              <option value="selection">
-                All {initialSelection.current.length} selected devices
-              </option>
-              {initialSelection.current.map((key) => (
-                <option key={key} value={key}>
-                  {devices?.[key]
+              options={[
+                {
+                  value: 'selection',
+                  label: `All ${initialSelection.current.length} selected devices`,
+                },
+                ...initialSelection.current.map((key) => ({
+                  value: 'device:' + key,
+                  label: devices?.[key]
                     ? getDeviceDisplayLabel(devices[key]!, names)
-                    : key + ' · unavailable'}
-                </option>
-              ))}
-            </select>
+                    : key + ' · unavailable',
+                })),
+              ]}
+            />
           </label>
         )}
         <DeviceQuickControls key={modal.state.join(',')} devices={selected} />

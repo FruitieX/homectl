@@ -1,0 +1,20 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   "Fit shows a tall floorplan without canvas scrolling or undersized backing pixels",
+   "Zoom-out reaches 50% of Fit",
+   "Cancelled native touch placement restores the draft",
+   "Native input places the selected light in the exact cell",
+   "Placement remains an unsaved draft",
+   "Native dragging moves a placed light and Undo restores its cell",
+   "Moving at 200% zoom preserves grid coordinates",
+   "Remove and consecutive Undo restore exact placements",
+   "Explicit Save persists the placement and preserves other devices/extensions",
+   "Fit recomputes after viewport resizing",
+   "Canvas and placement controls remain within the page"
+  ],
+  "width": 390
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":390,"height":844},"problems":[]}
