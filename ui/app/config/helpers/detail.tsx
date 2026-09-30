@@ -16,6 +16,7 @@ import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { entityDraftStore } from '@/lib/entityDraft';
 import { routineReferences } from '@/lib/configUsage';
+import { HelperWidgetUsage } from './widget-usage';
 import { configItemHref } from '@/lib/configItemHref';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
@@ -294,8 +295,9 @@ export default function HelperDetailPage() {
             <SettingsSection
               id="usage"
               title="Used by"
-              description="Native routine references. Scripts may also read this helper."
+              description="Widgets and native routine references. Scripts may also read this helper."
             >
+              <h3 className="text-xs font-medium">Routines</h3>
               {routines.error ? (
                 <p role="alert">
                   Could not load routine references.{' '}
@@ -326,6 +328,7 @@ export default function HelperDetailPage() {
                   No native routine references.
                 </p>
               )}
+              <HelperWidgetUsage helperId={id!} />
             </SettingsSection>
           )}
           <EntitySaveBar

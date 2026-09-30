@@ -831,6 +831,40 @@ recovery reconciliation, full restore/restart, MQTT transport/discovery, activit
 accessibility and superseded-surface cleanup. This checkpoint does not claim a
 complete dependency index or automatic script-body analysis.
 
+### Helper visibility and widget consumers — 2026-09-30
+
+Helper details now link to matching Mode / helper widgets across every dashboard
+layout, including nested and legacy flat option storage. Per-layout queries reuse
+the widget editor caches, retain known references on errors and offer independent
+Retry. A failed layout cannot hide a successful layout's references.
+
+Hidden helpers remain editable in settings and usable by existing widgets. New
+widget choices omit hidden helpers; the currently selected hidden helper remains
+identifiable with an explanation. Hidden state changes still require Save, and
+Discard restores the saved state. The widget helper selector now reports catalog
+failures and supports Retry while keeping the selected helper and widget draft.
+
+Fifteen browser checks pass at each 390/1440 px, covering partial catalog failure,
+both option representations, direct widget links, draft retention, hidden/unhidden
+saves, Discard, existing/new selection rules, failed helper reads and Retry. Only
+the two explicit helper saves write configuration; no preview/live commands occur.
+Expected 503s are injected fixture failures; there are no page exceptions.
+The database helper-definition/durable-value round-trip test passes, including
+hidden true/false/omitted representations. Type/lint/build pass with the existing
+backup-effect, bundle-size and Rust future-compatibility warnings.
+
+Evidence: `ui/dev/helper-visibility-review.mjs`,
+`implementation-evidence/collections/helper-visibility-*` and the
+[comparison gallery](implementation-evidence/comparison/index.html#helper-visibility).
+Screenshots were inspected. Temporary fixture helpers/widgets/layout are deleted
+after each run; household configuration is untouched.
+
+The control audit also found active native dropdowns in routine activity, list
+filters, floorplan settings, dashboard editing preferences and color/preview
+controls. Resolve these in the shared-control/cleanup pass, distinguishing them
+from unreferenced legacy editors. Activity trace, restore/restart, MQTT transport,
+broader recovery/accessibility and final reconciliation remain open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

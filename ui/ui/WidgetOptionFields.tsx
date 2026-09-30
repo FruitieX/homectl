@@ -263,13 +263,28 @@ function HelperOptionField({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const { data: helpers } = useHelpers();
+  const { data: helpers, error, loading, refetch } = useHelpers();
+  const hiddenSelection =
+    helpers.find((helper) => helper.id === value)?.hidden === true;
 
   return (
     <ConfigField
       label="Helper"
       description="The mode widget shows this helper's current value and writes new values to it."
     >
+      {error && (
+        <p role="alert" className="text-sm">
+          Could not refresh helpers. Your selection is kept.{' '}
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            Retry helpers
+          </Button>
+        </p>
+      )}
+      {loading && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading helpers…
+        </p>
+      )}
       <SearchablePicker
         ariaLabel="Helper"
         value={value}
@@ -280,9 +295,19 @@ function HelperOptionField({
           .map((helper) => ({
             value: helper.id,
             label: helper.name || helper.id,
-            detail: helper.id + ' · ' + helper.kind.kind,
+            detail:
+              helper.id +
+              ' · ' +
+              helper.kind.kind +
+              (helper.hidden ? ' · Hidden' : ''),
           }))}
       />
+      {hiddenSelection && (
+        <p className="text-xs text-muted-foreground">
+          This helper is hidden from new selections. Existing widgets keep using
+          it.
+        </p>
+      )}
       {value && (
         <Link
           className="settings-link text-xs"

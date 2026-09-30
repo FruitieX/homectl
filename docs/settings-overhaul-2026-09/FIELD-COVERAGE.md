@@ -595,3 +595,13 @@ lookalikes, retained drafts and related links. All 250 UI tests and type/lint/bu
 pass. See the [work queue checkpoint](WORK-QUEUE.md#source-and-helper-reference-audit--2026-09-30)
 for evidence; visibility, widget-consumer and wider recovery/accessibility gates
 remain open.
+
+### Helper visibility / widget consumers — 2026-09-30
+
+The visibility and widget-reference gap is closed by 15 native checks at each
+390/1440 px plus the database helper-definition/durable-value round trip. Hidden
+helpers remain editable and usable by existing widgets; new selections omit them.
+Widget links cover every layout and both option representations, with independent
+Retry and retained drafts. Type/lint/build pass. See the
+[work queue checkpoint](WORK-QUEUE.md#helper-visibility-and-widget-consumers--2026-09-30)
+for evidence and scope; broader recovery/accessibility remains open.

@@ -1,0 +1,69 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "A failed layout does not hide known widget references",
+    "passed": true
+   },
+   {
+    "name": "Widget Retry preserves helper draft",
+    "passed": true
+   },
+   {
+    "name": "Visibility and name changes are staged until Save",
+    "passed": true
+   },
+   {
+    "name": "Discard restores visibility and name",
+    "passed": true
+   },
+   {
+    "name": "Explicit Save persists hidden without changing initial value",
+    "passed": true
+   },
+   {
+    "name": "Existing widget retains its hidden helper with explanation",
+    "passed": true
+   },
+   {
+    "name": "Picker keeps selected hidden helper but excludes other hidden helpers",
+    "passed": true
+   },
+   {
+    "name": "New widget excludes every hidden helper",
+    "passed": true
+   },
+   {
+    "name": "Helper read failure preserves selected helper and widget draft",
+    "passed": true
+   },
+   {
+    "name": "Helper Retry preserves widget draft",
+    "passed": true
+   },
+   {
+    "name": "Hidden helper remains editable in settings",
+    "passed": true
+   },
+   {
+    "name": "Unhide removes the optional flag instead of saving a false default",
+    "passed": true
+   },
+   {
+    "name": "Only explicit visibility saves write; previews and reference reads issue no commands",
+    "passed": true
+   },
+   {
+    "name": "No page exceptions",
+    "passed": true
+   },
+   {
+    "name": "No horizontal overflow",
+    "passed": true
+   }
+  ],
+  "scope": "Temporary fixture helpers/widgets/layout, injected catalog failures, no household changes"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)"]}

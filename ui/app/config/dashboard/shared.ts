@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppConfig } from '@/hooks/appConfig';
 import { readApiResponse } from '@/hooks/useConfig';
 import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
@@ -66,4 +66,32 @@ export function useDashboardConfig(layoutId?: string) {
     return result.data!;
   };
   return { layouts, widgets, write, endpoint };
+}
+
+/** Reuse per-layout editor caches while finding references across dashboards. */
+export function useDashboardWidgetCatalog() {
+  const { layouts, endpoint } = useDashboardConfig();
+  const { apiEndpoint } = useAppConfig();
+  const widgets = useQueries({
+    queries: (layouts.data ?? []).map((layout) => ({
+      queryKey: [
+        'config',
+        apiEndpoint,
+        'dashboard',
+        'widgets',
+        String(layout.id),
+      ],
+      queryFn: async ({ signal }: { signal: AbortSignal }) =>
+        (
+          await readApiResponse<DashboardWidgetRow[]>(
+            await fetch(`${endpoint}/layouts/${layout.id}/widgets`, {
+              signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
+            }),
+            'Could not load widget references',
+          )
+        ).data!,
+      refetchInterval: 30000,
+    })),
+  });
+  return { layouts, widgets };
 }

@@ -293,7 +293,7 @@ export function HelperPersistenceFields({
       </ConfigField>
       <ConfigToggleRow
         label="Hidden"
-        description="Hidden helpers stay usable but are omitted from widget pickers."
+        description="Hidden helpers stay usable. New widgets won’t offer them; existing selections are kept."
       >
         <input
           type="checkbox"
