@@ -40,12 +40,6 @@ tasks:
     options:
       persistent: true
 
-  simulate:
-    command: 'cargo run -p homectl-server -- simulate --config prod-config.toml'
-    local: true
-    options:
-      persistent: true
-
   clippy:
     command: 'cargo clippy -p homectl-server -- -D warnings'
     inputs:

@@ -44,8 +44,6 @@ pub struct TestServerConfig {
     pub working_dir: Option<PathBuf>,
     /// Whether the working directory should be deleted when the server handle is dropped.
     pub cleanup_working_dir: bool,
-    /// If set, start in simulation mode using this TOML config file path
-    pub simulate_config: Option<PathBuf>,
     /// Additional environment variables to pass to the server process.
     pub extra_env: Vec<(String, String)>,
 }
@@ -59,7 +57,6 @@ impl Default for TestServerConfig {
             database_url: None,
             working_dir: None,
             cleanup_working_dir: true,
-            simulate_config: None,
             extra_env: Vec::new(),
         }
     }
@@ -110,8 +107,8 @@ impl TestServer {
             // Reserve a port
             let (listener, port) = reserve_port()?;
 
-            // Generate config file with this port (not needed for simulation mode)
-            if config.simulate_config.is_none() && use_config_file {
+            // Generate config file with this port when requested.
+            if use_config_file {
                 let config_content = config
                     .config_content
                     .clone()
@@ -135,29 +132,16 @@ impl TestServer {
                 cmd.env(key, value);
             }
 
-            if let Some(ref sim_config) = config.simulate_config {
-                // Simulation mode: run from workspace root (where prod-config.toml lives)
-                let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .parent()
-                    .unwrap_or(Path::new(env!("CARGO_MANIFEST_DIR")));
-                cmd.current_dir(workspace_root)
-                    .arg("simulate")
-                    .arg("--config")
-                    .arg(sim_config)
-                    .arg("--port")
-                    .arg(port.to_string());
-            } else {
-                cmd.current_dir(&temp_dir)
-                    .arg("--port")
-                    .arg(port.to_string());
+            cmd.current_dir(&temp_dir)
+                .arg("--port")
+                .arg(port.to_string());
 
-                if use_config_file {
-                    cmd.arg("--config").arg(&config_path);
-                }
+            if use_config_file {
+                cmd.arg("--config").arg(&config_path);
+            }
 
-                if let Some(database_url) = config.database_url.as_deref() {
-                    cmd.arg("--database-url").arg(database_url);
-                }
+            if let Some(database_url) = config.database_url.as_deref() {
+                cmd.arg("--database-url").arg(database_url);
             }
 
             let mut child = match cmd.spawn() {
@@ -169,11 +153,7 @@ impl TestServer {
             };
 
             let base_url = format!("http://127.0.0.1:{}", port);
-            let timeout = if config.simulate_config.is_some() {
-                Duration::from_secs(30)
-            } else {
-                Duration::from_secs(15)
-            };
+            let timeout = Duration::from_secs(15);
 
             match wait_for_ready(&mut child, &base_url, timeout) {
                 Ok(()) => {
