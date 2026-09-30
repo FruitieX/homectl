@@ -15,7 +15,7 @@ import type { AssistantThreadOutcome } from '@/bindings/AssistantThreadOutcome';
 import type { AssistantThreadSummary } from '@/bindings/AssistantThreadSummary';
 import type { AssistantUsage } from '@/bindings/AssistantUsage';
 import {
-  parseAssistantSseEvents,
+  readAssistantStream,
   type AssistantSseEvent,
 } from '@/lib/assistant-stream';
 
@@ -195,6 +195,8 @@ export function useAssistantChat() {
       setIsStreaming(true);
 
       const dispatch = (event: AssistantSseEvent) => {
+        if (controller.signal.aborted || abortRef.current !== controller)
+          return;
         switch (event.type) {
           case 'status':
             callbacks.onStatus?.(event);
@@ -234,29 +236,12 @@ export function useAssistantChat() {
           },
         );
         if (!response.ok || !response.body) {
-          callbacks.onError?.(await readAssistantError(response));
+          const message = await readAssistantError(response);
+          if (!controller.signal.aborted && abortRef.current === controller)
+            callbacks.onError?.(message);
           return;
         }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) {
-            break;
-          }
-          buffer += decoder.decode(value, { stream: true });
-          const parsed = parseAssistantSseEvents(buffer);
-          buffer = parsed.rest;
-          for (const event of parsed.events) {
-            dispatch(event);
-          }
-        }
-        buffer += decoder.decode();
-        for (const event of parseAssistantSseEvents(buffer).events) {
-          dispatch(event);
-        }
+        await readAssistantStream(response.body, controller.signal, dispatch);
       } catch (error) {
         if (controller.signal.aborted) {
           return;

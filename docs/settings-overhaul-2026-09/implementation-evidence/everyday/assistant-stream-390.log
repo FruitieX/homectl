@@ -1,0 +1,56 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Stream progress and provider text appear before completion",
+    "passed": true
+   },
+   {
+    "name": "Stream disables another Send while Cancel remains available",
+    "passed": true
+   },
+   {
+    "name": "History remains reachable while a reply streams",
+    "passed": true
+   },
+   {
+    "name": "Closing the panel preserves the in-flight turn",
+    "passed": true
+   },
+   {
+    "name": "Cancel closes the real local HTTP response",
+    "passed": true
+   },
+   {
+    "name": "Cancel restores the composer without a spurious failure",
+    "passed": true
+   },
+   {
+    "name": "Premature EOF shows a recoverable error instead of a completed answer",
+    "passed": true
+   },
+   {
+    "name": "Successful reply clears progress and restores input",
+    "passed": true
+   },
+   {
+    "name": "Usage is rendered for the completed reply",
+    "passed": true
+   },
+   {
+    "name": "Three read turns issue no configuration or live apply request",
+    "passed": true
+   },
+   {
+    "name": "Stream and recovery controls fit the viewport",
+    "passed": true
+   },
+   {
+    "name": "Interception completed without errors",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":390,"height":844},"problems":[]}

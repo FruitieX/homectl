@@ -8,9 +8,116 @@ import {
   describeAssistantActionChange,
   formatTokenCount,
   parseAssistantSseEvents,
+  readAssistantStream,
 } from './assistant-stream.ts';
 
 import type { AssistantActionChange } from '../bindings/AssistantActionChange.ts';
+
+test('streaming reads split UTF-8 and finishes once at the terminal result', async () => {
+  const bytes = new TextEncoder().encode(
+    'event: delta\r\ndata: {"text":"Hyvää"}\r\n\r\nevent: answer\ndata: {"text":"Ready"}\n\nevent: answer\ndata: {"text":"Duplicate"}\n\n',
+  );
+  const events: unknown[] = [];
+  let canceled = false;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const byte of bytes) controller.enqueue(Uint8Array.of(byte));
+    },
+    cancel() {
+      canceled = true;
+    },
+  });
+  await readAssistantStream(body, new AbortController().signal, (event) =>
+    events.push(event),
+  );
+  assert.deepEqual(events, [
+    { type: 'delta', text: 'Hyvää' },
+    { type: 'answer', text: 'Ready' },
+  ]);
+  assert.equal(canceled, true);
+  assert.equal(body.locked, false);
+});
+
+test('an incomplete stream reports failure instead of treating deltas as an answer', async () => {
+  for (const text of [
+    '',
+    'event: delta\ndata: {"text":"Partial"}\n\n',
+    'event: answer\ndata: {"text":"truncated',
+  ]) {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(text));
+        controller.close();
+      },
+    });
+    await assert.rejects(
+      readAssistantStream(body, new AbortController().signal, () => {}),
+      /ended before it finished/,
+    );
+    assert.equal(body.locked, false);
+  }
+});
+
+test('cancellation stops buffered events and releases a pending reader', async () => {
+  const abort = new AbortController(),
+    events: string[] = [];
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(
+        new TextEncoder().encode(
+          'event: delta\ndata: {"text":"Partial"}\n\nevent: answer\ndata: {"text":"Too late"}\n\n',
+        ),
+      );
+    },
+  });
+  await assert.rejects(
+    readAssistantStream(body, abort.signal, (event) => {
+      events.push(event.type);
+      abort.abort();
+    }),
+    { name: 'AbortError' },
+  );
+  assert.deepEqual(events, ['delta']);
+  assert.equal(body.locked, false);
+  const pendingAbort = new AbortController();
+  let canceled = false;
+  const pending = new ReadableStream<Uint8Array>({
+    cancel() {
+      canceled = true;
+    },
+  });
+  const result = readAssistantStream(pending, pendingAbort.signal, () =>
+    assert.fail('No events expected'),
+  );
+  pendingAbort.abort();
+  await assert.rejects(result, { name: 'AbortError' });
+  assert.equal(canceled, true);
+  assert.equal(pending.locked, false);
+});
+
+test('all terminal kinds complete without an extra transport error', async () => {
+  for (const type of ['plan', 'action', 'answer', 'error']) {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(`event: ${type}\ndata: {}\n\n`),
+        );
+        controller.close();
+      },
+    });
+    const events: string[] = [];
+    await readAssistantStream(body, new AbortController().signal, (event) =>
+      events.push(event.type),
+    );
+    assert.deepEqual(events, [type]);
+  }
+  assert.deepEqual(
+    parseAssistantSseEvents(
+      'event: status\ndata: null\n\nevent: delta\ndata: []\n\n',
+    ).events,
+    [],
+  );
+});
 
 test('parseAssistantSseEvents parses complete frames and buffers partial ones', () => {
   const first = parseAssistantSseEvents(

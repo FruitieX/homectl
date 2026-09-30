@@ -40,6 +40,8 @@ function parseFrame(frame: string): AssistantSseEvent | null {
   } catch {
     return null;
   }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    return null;
   switch (event) {
     case 'status':
       return {
@@ -108,6 +110,52 @@ export function parseAssistantSseEvents(text: string): {
     boundary = rest.indexOf('\n\n');
   }
   return { events, rest };
+}
+
+/** Read one assistant turn; a closed transport alone is not a completed reply. */
+export async function readAssistantStream(
+  body: ReadableStream<Uint8Array>,
+  signal: AbortSignal,
+  onEvent: (event: AssistantSseEvent) => void,
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const abort = () => {
+    void reader.cancel().catch(() => {});
+  };
+  signal.addEventListener('abort', abort, { once: true });
+  try {
+    for (;;) {
+      signal.throwIfAborted();
+      const { done, value } = await reader.read();
+      signal.throwIfAborted();
+      buffer += done
+        ? decoder.decode()
+        : decoder.decode(value, { stream: true });
+      const parsed = parseAssistantSseEvents(buffer);
+      buffer = parsed.rest;
+      for (const event of parsed.events) {
+        signal.throwIfAborted();
+        onEvent(event);
+        if (
+          event.type === 'plan' ||
+          event.type === 'action' ||
+          event.type === 'answer' ||
+          event.type === 'error'
+        )
+          return;
+      }
+      if (done)
+        throw new Error(
+          'The assistant response ended before it finished. Send your request again.',
+        );
+    }
+  } finally {
+    signal.removeEventListener('abort', abort);
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
 }
 
 export interface AssistantHistoryEntry {

@@ -395,6 +395,28 @@ Evidence: `ui/dev/assistant-read-recovery.mjs` and `everyday/assistant-reads-*`.
 Type/lint/build pass; this is browser response recovery, not a provider execution
 test. Streaming/cancellation, reconnect and wider accessibility remain open.
 
+
+### Assistant stream lifecycle — 2026-09-30
+
+12 native checks pass at 1440/390 px. Status/deltas render while streaming;
+Send is disabled and Cancel stays available. Browsing history and closing/reopening
+the panel preserve the in-flight turn. Cancel closes a real local HTTP response,
+restores input and does not append a false failure. Premature EOF now produces
+a visible error; a subsequent request completes and updates usage normally.
+No apply/configuration/device requests are issued. The driver runs a temporary
+loopback SSE server and redirects only fixture chat requests to it.
+
+Four new unit tests cover fragmented UTF-8/CRLF, missing terminal events, buffered
+and pending cancellation, terminal event kinds, and malformed envelope handling.
+A turn stops after its first terminal event; canceled/superseded callbacks are
+ignored and readers are released. All 241 UI tests and type/lint/build pass.
+The targeted Rust test `dropping_chat_response_cancels_pending_provider_stream`
+passes: after bytes from a local provider reach the stream parser, dropping the
+response body stops provider work with Cancelled. No external provider is used.
+Evidence: `ui/dev/assistant-stream-review.mjs`, `everyday/assistant-stream-*`.
+Remaining everyday gates include navigation/reconnect, widget option defaults,
+overlay consistency and the named accessibility matrix.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

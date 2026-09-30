@@ -6491,6 +6491,62 @@ mod tests {
         assert!(matches!(drain_sse_frames(&mut buffer)[0], SseFrame::Ignore));
     }
 
+    #[tokio::test]
+    async fn dropping_chat_response_cancels_pending_provider_stream() {
+        use futures_util::StreamExt;
+        let provider = warp::any().map(|| {
+            let initial = futures_util::stream::once(async {
+                Ok::<_, Infallible>(Bytes::from_static(
+                    b"data: {\"choices\":[{\"delta\":{\"content\":\"Still thinking\"}}]}\n\n",
+                ))
+            });
+            let stream =
+                initial.chain(futures_util::stream::pending::<Result<Bytes, Infallible>>());
+            warp::http::Response::builder()
+                .header("content-type", "text/event-stream")
+                .body(warp::hyper::Body::wrap_stream(stream))
+                .unwrap()
+        });
+        let (addr, server) = warp::serve(provider).bind_ephemeral(([127, 0, 0, 1], 0));
+        let provider_task = tokio::spawn(server);
+        let mut config = test_config();
+        config.base_url = format!("http://{addr}/v1");
+        config.timeout_ms = 30_000;
+        let (tx, mut rx) = mpsc::channel(8);
+        let (cancel_tx, cancel_rx) = watch::channel(false);
+        let response_body = warp::hyper::Body::wrap_stream(CancelOnDrop {
+            inner: futures_util::stream::pending::<Result<Bytes, Infallible>>(),
+            cancel: cancel_tx,
+        });
+        let work = tokio::spawn(async move {
+            let mut sink = EventSink {
+                tx,
+                cancel: cancel_rx,
+            };
+            let mut options = ChatOptions {
+                json_mode: true,
+                reasoning_effort: false,
+            };
+            chat_streaming(&mut sink, &config, &[], &mut options, "cancel-test").await
+        });
+        // Wait for actual provider bytes to pass through the stream parser.
+        let delta = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(std::str::from_utf8(&delta)
+            .unwrap()
+            .contains("Still thinking"));
+        drop(response_body);
+        let result = tokio::time::timeout(Duration::from_secs(2), work)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(matches!(result, Err(ChatStreamError::Cancelled)));
+        assert!(rx.recv().await.is_none());
+        provider_task.abort();
+    }
+
     #[test]
     fn usage_falls_back_to_a_character_estimate() {
         let config = test_config();
