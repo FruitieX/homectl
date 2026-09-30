@@ -52,6 +52,8 @@ export function TimeSeriesPlot({
   showUnit = true,
   legendItems = [],
   valueLabels,
+  xAxis = 'time',
+  yAxis = 'ticks',
 }: {
   series: PlotSeries[];
   width: number;
@@ -64,6 +66,8 @@ export function TimeSeriesPlot({
   showUnit?: boolean;
   legendItems?: PlotLegendItem[];
   valueLabels?: Record<number, string>;
+  xAxis?: 'time' | 'day-time';
+  yAxis?: 'ticks' | 'range';
 }) {
   const id = useId();
   const [keyboardInspect, setKeyboardInspect] = useState(false);
@@ -119,9 +123,9 @@ export function TimeSeriesPlot({
         )
       : 44,
     right = 12,
-    top = 16,
-    bottom = 30;
-  const svgHeight = Math.max(70, height - (showLegend ? 32 : 0));
+    top = height < 150 ? 8 : 16,
+    bottom = xAxis === 'day-time' ? 40 : 30;
+  const svgHeight = Math.max(1, height - (showLegend ? 32 : 0));
   const plotWidth = Math.max(1, width - left - right),
     plotHeight = Math.max(1, svgHeight - top - bottom);
   const minTime = times[0] ?? Date.now();
@@ -156,14 +160,34 @@ export function TimeSeriesPlot({
     range: [left, left + plotWidth],
   });
   // Time-scale tick counts are approximate; enforce spacing in screen pixels.
-  const xTicks = x
-    .ticks(Math.max(2, Math.floor(plotWidth / 58)))
-    .reduce<Date[]>((ticks, tick) => {
-      const previous = ticks.at(-1);
-      if ((!previous || x(tick) - x(previous) >= 58) && x(tick) <= width - 24)
-        ticks.push(tick);
-      return ticks;
-    }, []);
+  const forecastTickCount = Math.min(
+    times.length,
+    plotWidth >= 300 ? 4 : plotWidth >= 130 ? 3 : 2,
+  );
+  const xTicks =
+    xAxis === 'day-time'
+      ? Array.from(
+          { length: forecastTickCount },
+          (_, index) =>
+            new Date(
+              times[
+                Math.round(
+                  (index * (times.length - 1)) / (forecastTickCount - 1 || 1),
+                )
+              ],
+            ),
+        )
+      : x
+          .ticks(Math.max(2, Math.floor(plotWidth / 58)))
+          .reduce<Date[]>((ticks, tick) => {
+            const previous = ticks.at(-1);
+            if (
+              (!previous || x(tick) - x(previous) >= 58) &&
+              x(tick) <= width - 24
+            )
+              ticks.push(tick);
+            return ticks;
+          }, []);
   const y = scaleLinear({
     domain: enforceMinimumSpan(
       Number.isFinite(low) ? (zero && low >= 0 ? 0 : low - padding) : 0,
@@ -208,6 +232,19 @@ export function TimeSeriesPlot({
   const format = (value: number) =>
     valueLabels?.[value] ??
     value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const rangeValues = points.map((point) => point.value);
+  const rangeTicks = [
+    ...new Set([Math.min(...rangeValues), Math.max(...rangeValues)]),
+  ].filter(Number.isFinite);
+  const yTicks = valueLabels
+    ? Object.keys(valueLabels).map(Number)
+    : yAxis === 'range'
+      ? rangeTicks
+      : y.ticks(Math.max(2, Math.min(4, Math.floor(plotHeight / 26))));
+  const rangeLabelsTooClose =
+    yAxis === 'range' &&
+    rangeTicks.length === 2 &&
+    Math.abs(y(rangeTicks[0]) - y(rangeTicks[1])) < 24;
   const inspect = (event: React.PointerEvent<SVGSVGElement>) => {
     if (times.length === 0) return;
     const box = event.currentTarget.getBoundingClientRect();
@@ -349,43 +386,78 @@ export function TimeSeriesPlot({
             <rect x={left} y={top} width={plotWidth} height={plotHeight} />
           </clipPath>
         </defs>
-        {(valueLabels ? Object.keys(valueLabels).map(Number) : y.ticks(4)).map(
-          (tick) => (
-            <g key={tick}>
-              <line
-                x1={left}
-                x2={width - right}
-                y1={y(tick)}
-                y2={y(tick)}
-                className="stroke-border"
-                strokeOpacity={0.65}
-              />
-              <text
-                x={left - 7}
-                y={y(tick) + 4}
-                textAnchor="end"
-                className="fill-muted-foreground text-[11px]"
-              >
-                {format(tick)}
-              </text>
-            </g>
-          ),
-        )}
-        {xTicks.map((tick) => (
+        {yTicks.map((tick, index) => (
+          <g key={tick}>
+            <line
+              x1={left}
+              x2={width - right}
+              y1={y(tick)}
+              y2={y(tick)}
+              className="stroke-border"
+              strokeOpacity={0.65}
+            />
+            <text
+              x={left - 7}
+              y={
+                rangeLabelsTooClose
+                  ? top + (index === 0 ? plotHeight - 2 : 9)
+                  : y(tick) + 4
+              }
+              textAnchor="end"
+              data-axis="y"
+              className="fill-muted-foreground text-[11px]"
+            >
+              {yAxis === 'range' && (
+                <title>{`${index === 0 ? 'Low' : 'High'} ${format(tick)} ${unit} · ${timeLabel(points.find((point) => point.value === tick)!.time)}`}</title>
+              )}
+              {yAxis === 'range'
+                ? `${tick.toLocaleString(undefined, { maximumFractionDigits: rangeTicks.length === 2 && rangeTicks[1] - rangeTicks[0] < 0.1 ? 2 : 1 })}${unit === '°C' ? '°' : ''}`
+                : format(tick)}
+            </text>
+          </g>
+        ))}
+        {xTicks.map((tick, index) => (
           <text
             key={tick.getTime()}
             x={x(tick)}
-            y={svgHeight - 9}
-            textAnchor="middle"
+            y={svgHeight - (xAxis === 'day-time' ? 23 : 9)}
+            textAnchor={
+              xAxis === 'day-time'
+                ? index === 0
+                  ? 'start'
+                  : index === xTicks.length - 1
+                    ? 'end'
+                    : 'middle'
+                : 'middle'
+            }
+            data-axis="x"
             className="fill-muted-foreground text-[11px]"
           >
-            {tick.getHours() === 0 && tick.getMinutes() === 0
-              ? tick.toLocaleDateString(undefined, { weekday: 'short' })
-              : tick.toLocaleTimeString(undefined, {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: false,
-                })}
+            {xAxis === 'day-time' ? (
+              <>
+                <tspan x={x(tick)}>
+                  {tick.toLocaleDateString(undefined, {
+                    weekday: 'short',
+                    day: 'numeric',
+                  })}
+                </tspan>
+                <tspan x={x(tick)} dy="14">
+                  {tick.toLocaleTimeString(undefined, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                  })}
+                </tspan>
+              </>
+            ) : tick.getHours() === 0 && tick.getMinutes() === 0 ? (
+              tick.toLocaleDateString(undefined, { weekday: 'short' })
+            ) : (
+              tick.toLocaleTimeString(undefined, {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+              })
+            )}
           </text>
         ))}
         <g clipPath={`url(#${id})`}>

@@ -202,3 +202,51 @@ Verification:
 
 Delivery is committed and pushed with the implementation batch; see Git history
 for the conventional commit covering charts, radial controls and sensor activity.
+
+## Follow-up: sensor and weather widget sizing
+
+Requested after the floorplan editor implementation; delivered 2026-09-30.
+
+- [x] Compact sensor previews earlier so their sparklines remain readable at
+  smaller heights. Cards up to 280 px use a single, horizontally scrollable row
+  that retains every selected sensor; previews share spare width. Individual
+  short chips reduce name/value spacing and hide humidity before losing their
+  chart band. The climate detail view still includes both measurements.
+- [x] Temperature forecasts label only the actual low and high on the y-axis.
+  Labels stay separated for nearly constant temperatures; a completely flat
+  forecast has one label. The minimum temperature scale span is preserved.
+  Each extreme's native tooltip includes its value and time.
+- [x] Forecast x-axes show three or four spaced readings with a day/date and
+  time on separate lines, including both ends. Especially narrow plots use
+  two labels. This also applies to weather detail charts; the larger hourly
+  icon strip includes the weekday.
+- [x] Reserve the weather chart's space at different sizes. Below roughly
+  220 px, the current temperature moves into the heading. The icon strip only
+  appears when both height and width permit it. Cards below roughly 143 px
+  use the current-weather summary. The SVG uses its actual available height
+  instead of a minimum that could overflow and clip the axis.
+- [x] Preserve inline hover, touch drag and keyboard inspection, plus access
+  to weather details. Empty sensor status wrappers no longer reserve space.
+
+### Verification and evidence
+
+Type checking, production build and all **256 UI tests** passed. Lint reports
+only the existing import/export cleanup warning. **79 browser checks passed**
+(46 desktop, 33 phone), with no browser errors. The fixture browser batch
+checks 240/360/520 px widths on desktop and two widths on phone, with card
+heights of 120, 144, 170, 220, 280, 360 and 420 px. It verifies chart geometry,
+axis bounds and overlap, retained sensor previews, compact summaries, native
+hover/touch/keyboard inspection, weather detail axes and nearly flat forecasts.
+
+[Desktop and phone screenshots](implementation-evidence/widget-chart-sizing/index.html).
+The screenshot fixtures are synthetic. No live configuration or devices were
+changed. Reproduce the complete batch on the isolated fixture UI:
+
+```sh
+CDP_PORT=9337 node ui/dev/cdp-probe.mjs \
+  --url http://127.0.0.1:3021/ --width 1440 --height 1000 \
+  --driver-file ui/dev/widget-chart-sizing-review.mjs
+CDP_PORT=9337 node ui/dev/cdp-probe.mjs \
+  --url http://127.0.0.1:3021/ --width 390 --height 844 \
+  --driver-file ui/dev/widget-chart-sizing-review.mjs
+```

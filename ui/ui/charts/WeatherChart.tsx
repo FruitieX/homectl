@@ -43,6 +43,8 @@ export function WeatherChart({
       unit={temperature ? '°C' : precipitation ? 'mm / period' : 'm/s'}
       width={width}
       height={height}
+      xAxis="day-time"
+      yAxis={temperature ? 'range' : 'ticks'}
       zero={!temperature}
       legendItems={legendItems}
       series={[

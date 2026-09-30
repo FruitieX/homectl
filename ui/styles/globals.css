@@ -1430,11 +1430,111 @@ html[data-density='comfortable'] {
   }
 }
 @container dashboard-widget (max-height: 10rem) {
-  .dashboard-weather-trend {
-    display: none;
-  }
   .dashboard-sensor-temperature {
     font-size: 1rem;
+  }
+}
+
+/* Reserve chart space before readings and forecast strips can squeeze it out. */
+.dashboard-sensors-card .dashboard-widget-status:empty {
+  display: none;
+}
+.dashboard-sensors-card .dashboard-sensor-chip {
+  container: sensor-chip / size;
+}
+@container sensor-chip (max-height: 160px) {
+  .dashboard-sensor-name {
+    margin-bottom: 2px;
+  }
+  .dashboard-sensor-temperature {
+    font-size: 1.25rem;
+    line-height: 1.5rem;
+  }
+  .dashboard-sensor-humidity {
+    display: none;
+  }
+  .dashboard-sensor-sparkline-band {
+    margin-top: 4px;
+  }
+}
+@container dashboard-widget (max-height: 280px) {
+  .dashboard-sensors-card > div {
+    padding: 8px;
+  }
+  .dashboard-sensors-heading {
+    margin-bottom: 8px;
+  }
+  .dashboard-sensors-preview {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+  .dashboard-sensor-chip {
+    flex: 1 0 7rem;
+    padding: 6px 8px;
+  }
+}
+.dashboard-weather-card .dashboard-widget-heading,
+.dashboard-weather-card .dashboard-weather-current,
+.dashboard-weather-card .dashboard-weather-hours,
+.dashboard-weather-card .dashboard-widget-status {
+  flex-shrink: 0;
+}
+.dashboard-weather-card .dashboard-weather-current .dashboard-weather-icon {
+  width: 40px;
+  height: 40px;
+}
+.dashboard-weather-card .dashboard-weather-trend {
+  flex: 1 1 0;
+  min-height: 0;
+}
+@container dashboard-widget (max-height: 360px) {
+  .dashboard-weather-hours {
+    display: none;
+  }
+  .dashboard-weather-card .dashboard-weather-body {
+    gap: 8px;
+    padding-top: 8px;
+  }
+  .dashboard-weather-card .dashboard-weather-current .dashboard-weather-icon {
+    width: 32px;
+    height: 32px;
+  }
+}
+@container dashboard-widget (max-width: 320px) {
+  .dashboard-weather-hours {
+    display: none;
+  }
+}
+@container dashboard-widget (max-height: 220px) {
+  .dashboard-weather-card .dashboard-weather-main {
+    padding: 8px;
+  }
+  .dashboard-weather-card .dashboard-weather-body {
+    gap: 4px;
+    padding-top: 4px;
+  }
+  .dashboard-weather-card[data-forecast='true'] .dashboard-weather-current {
+    display: none;
+  }
+  .dashboard-weather-card[data-forecast='true']
+    .dashboard-widget-heading-compact-value {
+    display: inline-flex;
+  }
+  .dashboard-weather-card .dashboard-weather-heading-value {
+    display: inline;
+  }
+}
+@container dashboard-widget (max-height: 140px) {
+  .dashboard-weather-card .dashboard-weather-trend {
+    display: none;
+  }
+  .dashboard-weather-card[data-forecast='true'] .dashboard-weather-current {
+    display: flex;
+  }
+  .dashboard-weather-card .dashboard-weather-current .dashboard-weather-meta {
+    display: none;
   }
 }
 @container dashboard-widget (max-height: 5rem) {

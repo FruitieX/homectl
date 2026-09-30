@@ -405,7 +405,10 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <WidgetCard className="dashboard-weather-card col-span-1">
+      <WidgetCard
+        className="dashboard-weather-card col-span-1"
+        data-forecast={showWidgetForecast && hourlyData.length > 1}
+      >
         <div className="group relative flex h-full w-full text-left">
           <button
             type="button"
@@ -413,7 +416,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
             className="absolute inset-0 rounded-[inherit] hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring"
             onClick={toggleDetailsModal}
           />
-          <CardContent className="pointer-events-none relative flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
+          <CardContent className="dashboard-weather-main pointer-events-none relative flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
             <WidgetHeading
               icon={<CloudSun />}
               label={widget?.title || 'Weather'}
@@ -426,7 +429,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
               }
               detail
             />
-            <div className="dashboard-weather-body flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-3">
+            <div className="dashboard-weather-body flex min-h-0 flex-1 flex-col gap-3 pt-3">
               <div
                 className={clsx(
                   'dashboard-weather-current flex items-center justify-between gap-3',
@@ -467,9 +470,11 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
                           className="grid justify-items-center gap-1 text-xs tabular-nums"
                         >
                           <span className="text-muted-foreground">
-                            {parseTime(series.time).toLocaleTimeString([], {
+                            {parseTime(series.time).toLocaleString([], {
+                              weekday: 'short',
                               hour: '2-digit',
                               minute: '2-digit',
+                              hour12: false,
                             })}
                           </span>
                           <img
@@ -497,41 +502,9 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
                     className="dashboard-weather-trend pointer-events-auto relative min-h-0 flex-1"
                     aria-label="Forecast temperature trend"
                   >
-                    <div className="flex justify-between gap-2 text-[11px] text-muted-foreground">
-                      {['Low', 'High'].map((name, i) => {
-                        const point = hourlyData.reduce(
-                          (best, row) =>
-                            i === 0
-                              ? row.data.instant.details.air_temperature <
-                                best.data.instant.details.air_temperature
-                                ? row
-                                : best
-                              : row.data.instant.details.air_temperature >
-                                  best.data.instant.details.air_temperature
-                                ? row
-                                : best,
-                          hourlyData[0],
-                        );
-                        return (
-                          <span key={name}>
-                            {name}{' '}
-                            {point.data.instant.details.air_temperature.toFixed(
-                              1,
-                            )}
-                            ° ·{' '}
-                            {parseTime(point.time).toLocaleString([], {
-                              weekday: 'short',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: false,
-                            })}
-                          </span>
-                        );
-                      })}
-                    </div>
                     <ResponsiveChart
                       fit
-                      className="absolute inset-x-0 bottom-0 top-5 overflow-hidden"
+                      className="absolute inset-0 overflow-hidden"
                     >
                       {({ width, height }) => (
                         <TimeSeriesPlot
@@ -541,6 +514,8 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
                           unit="°C"
                           showLegend={false}
                           showUnit={false}
+                          xAxis="day-time"
+                          yAxis="range"
                           series={[
                             {
                               name: 'Temperature',

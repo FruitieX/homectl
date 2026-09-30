@@ -44,7 +44,7 @@ export function SensorChip({
   const humidityStale = isOffline(sensor.latest_humidity_time, 15, current);
   const content = (
     <>
-      <div className="mb-2 truncate text-xs font-medium">
+      <div className="dashboard-sensor-name mb-2 truncate text-xs font-medium">
         {sensor.device_name}
       </div>
       <div
@@ -147,14 +147,19 @@ export function SensorChip({
           type="button"
           onClick={onOpen}
           className={cn(
-            'flex w-full flex-1 flex-col text-left',
+            'dashboard-sensor-content flex min-h-0 w-full flex-1 flex-col text-left',
             onCheckedChange && 'pl-5',
           )}
         >
           {content}
         </button>
       ) : (
-        <div className={cn('flex flex-1 flex-col', onCheckedChange && 'pl-5')}>
+        <div
+          className={cn(
+            'dashboard-sensor-content flex min-h-0 flex-1 flex-col',
+            onCheckedChange && 'pl-5',
+          )}
+        >
           {content}
         </div>
       )}

@@ -183,7 +183,7 @@ export default async function (cdp, { width, url }) {
     await new Promise((r) => setTimeout(r, 250));
     if (
       !(await evaluate(
-        `document.querySelector('.dashboard-weather-card').innerText.includes('Low')&&document.querySelector('.dashboard-weather-card').innerText.includes('High')`,
+        `(()=>{const labels=[...document.querySelectorAll('.dashboard-weather-card [data-axis="y"] title')];return labels.length===2&&labels[0].textContent.includes('Low')&&labels[1].textContent.includes('High')&&labels.every(e=>e.textContent.includes(' · '));})()`,
       ))
     )
       throw Error('Weather extremes');
