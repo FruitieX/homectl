@@ -216,6 +216,36 @@ test('dummy initial readings support all sensor variants and retain false, zero,
   );
 });
 
+test('ESPHome compares white endpoints using server defaults only in its active profile', () => {
+  const validate = (config: Record<string, unknown>) =>
+    validateIntegrationDraft({
+      id: 'test',
+      plugin: 'mqtt',
+      enabled: false,
+      config: { mode: 'esphome', ...config },
+    });
+  assert.deepEqual(validate({}), []);
+  assert.deepEqual(
+    validate({
+      esphome_warm_white_kelvin: 2200,
+      esphome_cold_white_kelvin: 7000,
+    }),
+    [],
+  );
+  assert.ok(validate({ esphome_warm_white_kelvin: 6500 }).length > 0);
+  assert.ok(validate({ esphome_cold_white_kelvin: 2700 }).length > 0);
+  assert.ok(
+    validate({
+      esphome_warm_white_kelvin: null,
+      esphome_cold_white_kelvin: 2200,
+    }).length > 0,
+  );
+  assert.deepEqual(
+    validate({ mode: 'generic', esphome_warm_white_kelvin: 7000 }),
+    [],
+  );
+});
+
 test('malformed dummy collections and initial states stay invalid until explicitly repaired', () => {
   const validate = (devices: unknown) =>
     validateIntegrationDraft({
@@ -242,6 +272,10 @@ test('malformed dummy collections and initial states stay invalid until explicit
     { Sensor: { value: null } },
     { Sensor: { value: Infinity } },
     { Sensor: { power: false, brightness: 2 } },
+    { Sensor: { power: false, color: true } },
+    { Sensor: { power: false, color: { ct: 'warm' } } },
+    { Controllable: { state: { power: false, color: [0, null] } } },
+    { Controllable: { state: { power: false, color: { Future: {} } } } },
     { Controllable: { state: {} } },
     { Controllable: { state: { power: false }, capabilities: null } },
     { Sensor: { value: false }, Controllable: { state: { power: false } } },

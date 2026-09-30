@@ -408,6 +408,12 @@ function buildIntegrationSchemas() {
               description:
                 'Discover devices and capabilities from Zigbee2MQTT bridge metadata.',
             },
+            {
+              label: 'ESPHome',
+              value: 'esphome',
+              description:
+                'ESPHome MQTT JSON lights using standard ESPHome light topics.',
+            },
           ],
         }),
         field({
@@ -441,6 +447,38 @@ function buildIntegrationSchemas() {
           section: 'Zigbee2MQTT',
           visible_when: { key: 'mode', equals: 'zigbee2mqtt' },
         }),
+        // Match the ESPHome profile fields in core/integrations/mod.rs.
+        ...[
+          ['esphome_base_topic', 'Base topic', 'esphome'],
+          ['esphome_light_object_id', 'Light object ID', 'light'],
+          ['esphome_discovery_prefix', 'Discovery prefix', 'homeassistant'],
+          ['esphome_warm_white_kelvin', 'Warm white', 2700],
+          ['esphome_cold_white_kelvin', 'Cold white', 6500],
+        ].map(([key, label, default_value]) =>
+          field({
+            key,
+            label,
+            default_value,
+            description: {
+              esphome_base_topic: 'ESPHome MQTT topic prefix.',
+              esphome_light_object_id:
+                'ESPHome light object id used in the normal MQTT light topic layout.',
+              esphome_discovery_prefix:
+                'Home Assistant MQTT discovery prefix published by ESPHome.',
+              esphome_warm_white_kelvin:
+                'Warm white endpoint of the ESPHome CWWW light.',
+              esphome_cold_white_kelvin:
+                'Cold white endpoint of the ESPHome CWWW light.',
+            }[key],
+            kind: typeof default_value === 'number' ? 'number' : 'text',
+            placeholder: String(default_value),
+            ...(typeof default_value === 'number'
+              ? { min: 1, max: 65535, step: 1 }
+              : {}),
+            section: 'ESPHome',
+            visible_when: { key: 'mode', equals: 'esphome' },
+          }),
+        ),
         field({
           key: 'sensor_value_fields',
           label: 'Sensor value fields',
@@ -492,6 +530,7 @@ function buildIntegrationSchemas() {
           kind: 'json',
           section: 'Payload mapping',
           advanced: true,
+          visible_when: { key: 'mode', equals: 'generic' },
         }),
         field({
           key: 'capabilities_override',
@@ -499,6 +538,7 @@ function buildIntegrationSchemas() {
           kind: 'json',
           section: 'Payload mapping',
           advanced: true,
+          visible_when: { key: 'mode', equals: 'generic' },
         }),
       ],
     },

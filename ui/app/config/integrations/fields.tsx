@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import type { IntegrationConfigFieldSchema } from '@/hooks/useConfig';
 import type { DeviceColor } from '@/bindings/DeviceColor';
+import { isDeviceColor } from '@/lib/deviceColor';
 import { Input } from '@/ui/primitives/input';
 import { Button } from '@/ui/primitives/button';
 import { confirmDialog } from '@/ui/primitives/confirm-dialog';
@@ -242,6 +243,45 @@ export function CapabilitiesFields({
     </div>
   );
 }
+function InitialColorField({
+  color,
+  brightness,
+  onChange,
+  draftKey,
+  path,
+}: {
+  color: unknown;
+  brightness: unknown;
+  onChange: (value: unknown) => void;
+  draftKey: string;
+  path: string;
+}) {
+  if (color != null && !isDeviceColor(color))
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-destructive">
+          Stored color needs repair. Its original value is kept until you change
+          it. Choose Use default to remove it, or correct its fields.
+        </p>
+        <JsonValueEditor
+          value={color}
+          label="Initial color"
+          draftKey={draftKey}
+          path={path}
+          allowUnset
+          onChange={onChange}
+        />
+      </div>
+    );
+  return (
+    <SceneColorControl
+      color={color as DeviceColor | null | undefined}
+      brightness={typeof brightness === 'number' ? brightness : undefined}
+      field={path}
+      onChange={onChange}
+    />
+  );
+}
 function DummySensorFields({
   value,
   onChange,
@@ -375,10 +415,11 @@ function DummySensorFields({
               }
             />
           </label>
-          <SceneColorControl
-            color={value.color as DeviceColor | undefined}
-            brightness={value.brightness as number | undefined}
-            field={path + '/color'}
+          <InitialColorField
+            color={value.color}
+            brightness={value.brightness}
+            draftKey={draftKey}
+            path={path + '/color'}
             onChange={(color) => onChange({ ...value, color })}
           />
         </>
@@ -609,10 +650,11 @@ function DummyDevices({
                         }
                       />
                     </label>
-                    <SceneColorControl
-                      color={state.color as DeviceColor | undefined}
-                      brightness={state.brightness as number | undefined}
-                      field={`config.devices.${id}.color`}
+                    <InitialColorField
+                      color={state.color}
+                      brightness={state.brightness}
+                      draftKey={draftKey}
+                      path={`${slot}/color`}
                       onChange={(color) =>
                         patch({
                           init_state: {

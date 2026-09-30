@@ -1,0 +1,53 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Malformed device collection is visible without coercion",
+    "passed": true
+   },
+   {
+    "name": "Collection repair is staged",
+    "passed": true
+   },
+   {
+    "name": "Discard restores the original malformed collection",
+    "passed": true
+   },
+   {
+    "name": "Explicit collection repair saves an empty map and keeps extensions",
+    "passed": true
+   },
+   {
+    "name": "Malformed entries, unknown variants and colors remain inspectable",
+    "passed": true
+   },
+   {
+    "name": "Discard restores the malformed color exactly",
+    "passed": true
+   },
+   {
+    "name": "Inspecting and discarding sends no writes",
+    "passed": true
+   },
+   {
+    "name": "Incomplete repairs are not written",
+    "passed": true
+   },
+   {
+    "name": "Explicit repairs survive Save/reload without changing siblings",
+    "passed": true
+   },
+   {
+    "name": "Repair controls fit the viewport",
+    "passed": true
+   },
+   {
+    "name": "No page exceptions",
+    "passed": true
+   }
+  ],
+  "scope": "Owned disabled fixture integration; no integration execution"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":1440,"height":1080},"problems":[]}

@@ -50,8 +50,8 @@ Save/reload and database persistence.
 | Source `aliases[]` | `app/config/sources/detail.tsx`: repeatable text rows, add/remove, validation of unique full keys | Preserve array; aliases have no execution sequence | `dev/source-editor-review.mjs` edits, removes/adds and reloads multiple/empty aliases; duplicate keys are blocked. `source-repair-review.mjs` explicitly repairs a malformed null value. Source creation/color/conflict coverage remains in the existing journey. |
 | Helper enum `options[]` | `app/config/helpers/fields.tsx`: direct rows, add/remove/up/down; invalid initial selection must be repaired explicitly | Display order retained | `dev/helper-editor-review.mjs` edits/reorders/removes options; validates empty/duplicate lists and removed initial values; verifies Cancel and confirmed reset when the current choice is removed. Existing helper journey additionally covers creation and conflict review. |
 | MQTT `sensor_value_fields[]`, `disabled_device_ids[]` | `app/config/integrations/fields.tsx` `StringEntries`: repeatable rows, add/remove/up/down; malformed values use typed JSON fallback | Preserve configured order | `dev/mqtt-editor-review.mjs` edits both collections, adds/removes/reorders entries, blocks invalid pointers/blank device IDs, saves empty arrays and reloads. `lib/integrationDraft.test.ts` checks every pointer. Malformed non-list repair remains a separate open case. |
-| Legacy cron schedules map | `app/config/integrations/detail.tsx`: visible read-only definition and current-format destination/offline conversion guidance | Preserved until explicit conversion | Deliberately not editable. **Open:** identify conversion round-trip test for multi-schedule legacy input. |
-| Dummy `devices` map | `app/config/integrations/fields.tsx` `DummyDevices`: keyed add/remove, direct initial-state and capability fields | Keyed identity; no semantic order | `dev/dummy-editor-review.mjs` saves/reloads multiple default/controllable/sensor devices, all four sensor variants and empty maps; remove/recreate clears metadata. Rust tests confirm shapes and null defaults. **Open:** browser repair of unknown/malformed states. |
+| Legacy cron schedules map | `app/config/integrations/detail.tsx`: visible read-only definition and current-format destination/offline conversion guidance | Preserved until explicit conversion | Deliberately not editable. `server/tests/convert.rs` verifies two Helsinki schedules, exact persisted v2 definitions and enabled states, disabling the converted cron integration, idempotent reporting, and restoring every original schedule from the archive. |
+| Dummy `devices` map | `app/config/integrations/fields.tsx` `DummyDevices`: keyed add/remove, direct initial-state and capability fields | Keyed identity; no semantic order | `dev/dummy-editor-review.mjs` saves/reloads multiple default/controllable/sensor devices, all four sensor variants and empty maps; remove/recreate clears metadata. Rust tests confirm shapes and null defaults. `dev/dummy-repair-review.mjs` adds 11 checks per size for malformed collections/entries, unknown initial variants and invalid colors; explicit repair, Discard and exact sibling preservation are covered. |
 | Sensor catalog `sensors[]`, `groups[]`, group `sensor_ids[]` | `app/config/sensors/page.tsx`: catalog/group/member row controls, empty selections supported | Three independent presentation orders | `dev/sensor-order-input.mjs` verifies saved orders, independent memberships, widgets and group charts; catalog journey covers configuration editing. |
 | Dashboard layouts/widgets and per-widget selections | `app/config/dashboard/widget.tsx` and designer: type gallery, sources, size/order, retained per-type options | Layout order, sizes and explicit selection order | `dev/widget-design-journey.js`, `widget-preview-input.mjs`, `sensor-order-input.mjs`. All 17 types and defaults are mapped in WIDGET-OPTIONS.md with edited/empty SQLite reopen/restore payloads. The new 22-check browser journey covers missing scene/room/sensor/timer repair and numeric/selection behavior; remaining external-source/helper recovery follows the cross-family gate. |
 | Calibration profile assignments | Calibration configuration and bulk selection flows | Keyed device assignment; profile data preserved | `dev/calibration-bulk-journey.js` checks exact assignment/removal and unchanged profiles. **Open:** remaining capability/missing-catalog fixtures from implementation ledger. |
@@ -527,3 +527,49 @@ unavailable reference repair, exact Save/reload, Discard and picker focus. The
 phone selection regression also passes 19 checks. See the
 [work queue checkpoint](WORK-QUEUE.md#routine-reference-recovery--2026-09-30)
 for evidence and limitations; broader cross-family gates remain open.
+
+### Integration repair, ESPHome and legacy conversion — 2026-09-30
+
+Malformed dummy colors no longer enter a color preview that assumes a supported
+shape. Both controllable and color-sensor values expose the original value in
+typed repair controls, with an explicit default/removal choice. Validation blocks
+unsupported colors until repaired. The existing malformed collection and unknown
+variant controls now have browser evidence: 11 checks at each 1440/390 px cover
+inspection, staged replacement, Discard, blocked incomplete repairs and exact
+Save/reload of repaired values with unrelated false/zero/null/extension data kept.
+
+ESPHome uses the schema-driven shared inputs. The five profile-specific fields are:
+
+| API key | Control | Runtime default | Edited/reloaded value |
+| --- | --- | --- | --- |
+| `esphome_base_topic` | Base topic | `esphome` | `fixture/esp` |
+| `esphome_light_object_id` | Light object ID | `light` | `ceiling` |
+| `esphome_discovery_prefix` | Discovery prefix | `homeassistant` | `fixture/discovery` |
+| `esphome_warm_white_kelvin` | Warm white, integer 1–65535 | 2700 | 2200 |
+| `esphome_cold_white_kelvin` | Cold white, integer 1–65535 | 6500 | 7200 |
+
+The UI now checks warm < cold using the same omitted/null defaults as
+`integrations/mqtt/mod.rs`. Fourteen browser checks per size cover all five edits,
+invalid endpoints without a write, generic/Zigbee2MQTT/ESPHome switching, retained
+navigation drafts, Discard, Save/reload and removing all five optional overrides.
+Inactive profile settings and extension data remain intact. The isolated fixture
+now includes these real schema fields, bounds, defaults and descriptions. Existing
+MQTT collection/management/password evidence remains recorded above; these new
+checks do not claim broker discovery or hardware execution.
+
+The previously open multi-schedule legacy conversion item is covered by
+`server/tests/convert.rs`. The test uses file-backed SQLite, two cron schedules
+with distinct enabled states and Europe/Helsinki, plus convertible/manual routines.
+It checks persisted definitions and enabled states, disables the converted legacy
+integration, reports the second pass without duplicate conversions, then restores
+the original schedules exactly and removes generated routines from an archive.
+This respects the decision that legacy entries are read-only in the UI.
+
+Evidence: `implementation-evidence/collections/dummy-repair-*`,
+`esphome-editor-*` and `legacy-conversion.log`, with captures in the
+[comparison gallery](implementation-evidence/comparison/index.html#integration-repair).
+246 UI tests, type checking, lint, build and the conversion test pass. Existing
+backup-effect lint, build chunk-size and Rust future-compatibility warnings remain.
+No household configuration was changed. Remaining integration work includes
+malformed MQTT collection/range repair reconciliation and the broader module and
+recovery audit; this checkpoint does not close the entire field gate.

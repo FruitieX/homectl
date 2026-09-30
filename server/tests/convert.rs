@@ -162,6 +162,15 @@ async fn conversion_applies_convertible_rows_and_archive_restores_them() {
     let after = db::config_queries::db_export_config()
         .await
         .expect("export after apply");
+    for expected in &rows {
+        let stored = after
+            .routines
+            .iter()
+            .find(|row| row.id == expected.id)
+            .expect("every converted routine is persisted");
+        assert_eq!(stored.definition_v2, expected.definition_v2);
+        assert_eq!(stored.enabled, expected.enabled);
+    }
     let converted = after
         .routines
         .iter()
@@ -227,6 +236,16 @@ async fn conversion_applies_convertible_rows_and_archive_restores_them() {
         .find(|integration| integration.id == "morning")
         .expect("cron integration present");
     assert!(restored_cron.enabled, "restore re-enables the integration");
+    assert_eq!(
+        restored_cron.config,
+        export
+            .integrations
+            .iter()
+            .find(|row| row.id == "morning")
+            .unwrap()
+            .config,
+        "archive restore retains every original schedule and its enabled choice"
+    );
 
     std::fs::remove_dir_all(&temp_dir).expect("remove temp dir");
 }

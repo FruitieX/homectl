@@ -1,0 +1,65 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Unset endpoints show server defaults without writing them",
+    "passed": true
+   },
+   {
+    "name": "Inverted endpoints explain the repair",
+    "passed": true
+   },
+   {
+    "name": "Invalid endpoints never write",
+    "passed": true
+   },
+   {
+    "name": "Retained esphome_base_topic",
+    "passed": true
+   },
+   {
+    "name": "Retained esphome_light_object_id",
+    "passed": true
+   },
+   {
+    "name": "Retained esphome_discovery_prefix",
+    "passed": true
+   },
+   {
+    "name": "Retained esphome_warm_white_kelvin",
+    "passed": true
+   },
+   {
+    "name": "Retained esphome_cold_white_kelvin",
+    "passed": true
+   },
+   {
+    "name": "Profile changes and navigation stage edits only",
+    "passed": true
+   },
+   {
+    "name": "All edited ESPHome fields and inactive profiles persist",
+    "passed": true
+   },
+   {
+    "name": "Discard restores the saved endpoint",
+    "passed": true
+   },
+   {
+    "name": "Default reset omits all five overrides after reload",
+    "passed": true
+   },
+   {
+    "name": "Fields fit the viewport",
+    "passed": true
+   },
+   {
+    "name": "No page exceptions",
+    "passed": true
+   }
+  ],
+  "scope": "Owned disabled fixture integration; no broker connection"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":1440,"height":1080},"problems":[]}

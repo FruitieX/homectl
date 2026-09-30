@@ -356,3 +356,15 @@ unavailable reference repair, exact Save/reload, Discard and picker focus. The
 phone selection regression also passes 19 checks. See the
 [work queue checkpoint](WORK-QUEUE.md#routine-reference-recovery--2026-09-30)
 for evidence and limitations; broader cross-family gates remain open.
+
+### Integration repair and profile checkpoint — 2026-09-30
+
+Dummy-device malformed collection/state/color repair passes 11 browser checks
+at each 1440/390 px; invalid colors now render preserved repair controls instead
+of crashing the preview. ESPHome passes 14 checks per size for all five profile
+overrides, retained switching/navigation, default reset and endpoint validation.
+The multi-schedule legacy conversion database test passes with exact persisted
+definition and restored schedule assertions. See
+[the field ledger](FIELD-COVERAGE.md#integration-repair-esphome-and-legacy-conversion--2026-09-30)
+for defaults, evidence and limitations. 246 UI tests and type/lint/build pass.
+Broader field/recovery/accessibility gates remain open.

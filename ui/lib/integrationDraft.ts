@@ -4,6 +4,7 @@ import type {
   IntegrationConfigSchema,
 } from '../hooks/useConfig';
 import type { FieldError } from './configSection.ts';
+import { isDeviceColor } from './deviceColor.ts';
 export const readConfigPath = (config: unknown, path: string): unknown =>
   path
     .split('.')
@@ -118,6 +119,15 @@ export function validateIntegrationDraft(
         message: `${field.replaceAll('_', ' ')} needs a minimum smaller than its maximum.`,
       });
   }
+  if (value.plugin === 'mqtt' && integrationMode(value.config) === 'esphome') {
+    const warm = value.config.esphome_warm_white_kelvin ?? 2700;
+    const cold = value.config.esphome_cold_white_kelvin ?? 6500;
+    if (typeof warm === 'number' && typeof cold === 'number' && warm >= cold)
+      errors.push({
+        field: 'config.esphome_warm_white_kelvin',
+        message: 'Warm white must be lower than cold white (kelvin).',
+      });
+  }
   for (const key of ['sensor_value_fields', 'disabled_device_ids']) {
     const entries = value.config[key];
     if (
@@ -214,6 +224,10 @@ export function validateIntegrationDraft(
             `${id}: initial ${key} must be ${key === 'brightness' ? 'between 0 and 1' : 'a non-negative number'}.`,
           );
       }
+      if (state.color != null && !isDeviceColor(state.color))
+        error(
+          `${id}: initial color needs valid color fields or must be removed.`,
+        );
     };
     if (!object(devices))
       error('Dummy devices must be an object keyed by device ID.');

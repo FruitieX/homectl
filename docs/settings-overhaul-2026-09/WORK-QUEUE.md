@@ -683,6 +683,18 @@ execution. Type checking, lint and production build pass; existing backup-effect
 lint and large-chunk build warnings remain. The broader schema, persistence,
 recovery and accessibility gates remain open.
 
+### Integration repair and profile checkpoint — 2026-09-30
+
+Dummy-device malformed collection/state/color repair passes 11 browser checks
+at each 1440/390 px; invalid colors now render preserved repair controls instead
+of crashing the preview. ESPHome passes 14 checks per size for all five profile
+overrides, retained switching/navigation, default reset and endpoint validation.
+The multi-schedule legacy conversion database test passes with exact persisted
+definition and restored schedule assertions. See
+[the field ledger](FIELD-COVERAGE.md#integration-repair-esphome-and-legacy-conversion--2026-09-30)
+for defaults, evidence and limitations. 246 UI tests and type/lint/build pass.
+Broader field/recovery/accessibility gates remain open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before
