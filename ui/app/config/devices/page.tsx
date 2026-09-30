@@ -11,6 +11,8 @@ import { isDimmableDevice } from '@/lib/brightnessCalibration';
 import { configItemHref } from '@/lib/configItemHref';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { Button } from '@/ui/primitives/button';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
+import { SearchablePicker } from '@/ui/SearchablePicker';
 import { ConfigPageHeader } from '../page-header';
 import {
   DeviceStatePreview,
@@ -126,45 +128,46 @@ function DeviceList() {
           </p>
         )}
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          className="settings-select max-w-full"
+        <SettingsSelect
+          className="w-full sm:w-48"
           aria-label="Device type"
           value={type}
-          onChange={(event) => patchQuery('type', event.target.value)}
-        >
-          <option value="all">All devices</option>
-          <option value="controllable">Lights & controls</option>
-          <option value="sensor">Sensors</option>
-          <option value="other">Other</option>
-        </select>
-        <select
-          className="settings-select max-w-full"
-          aria-label="Integration"
-          value={integration}
-          onChange={(event) => patchQuery('integration', event.target.value)}
-        >
-          <option value="">All integrations</option>
-          {[...new Set(catalog.devices.map((device) => device.integration_id))]
-            .sort()
-            .map((id) => (
-              <option key={id} value={id}>
-                {id}
-              </option>
-            ))}
-        </select>
-        <select
-          className="settings-select max-w-full"
-          aria-label="Room or group"
-          value={group}
-          onChange={(event) => patchQuery('group', event.target.value)}
-        >
-          <option value="">All rooms & groups</option>
-          {Object.entries(groups).map(([id, row]) => (
-            <option key={id} value={id}>
-              {row.name}
-            </option>
-          ))}
-        </select>
+          onValueChange={(value) => patchQuery('type', value)}
+          options={[
+            { value: 'all', label: 'All devices' },
+            { value: 'controllable', label: 'Lights & controls' },
+            { value: 'sensor', label: 'Sensors' },
+            { value: 'other', label: 'Other' },
+          ]}
+        />
+        <div className="w-full sm:w-56">
+          <SearchablePicker
+            ariaLabel="Integration"
+            value={integration}
+            placeholder="All integrations"
+            onChange={(value) => patchQuery('integration', value)}
+            options={[
+              ...new Set(
+                catalog.devices.map((device) => device.integration_id),
+              ),
+            ]
+              .sort()
+              .map((id) => ({ value: id, label: id }))}
+          />
+        </div>
+        <div className="w-full sm:w-56">
+          <SearchablePicker
+            ariaLabel="Room or group"
+            value={group}
+            placeholder="All rooms & groups"
+            onChange={(value) => patchQuery('group', value)}
+            options={Object.entries(groups).map(([id, row]) => ({
+              value: id,
+              label: row.name,
+              detail: id,
+            }))}
+          />
+        </div>
         <span className="text-xs text-muted-foreground">
           {visible.length} devices
         </span>

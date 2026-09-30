@@ -17,6 +17,7 @@ import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { SearchablePicker, SearchableMultiPicker } from '@/ui/SearchablePicker';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { ConfigPageHeader } from '../page-header';
 
@@ -229,24 +230,33 @@ export default function SensorCatalogPage() {
                       {sensor.source !== 'influxdb' && (
                         <label className="grid content-start gap-1.5 text-xs">
                           Source
-                          <select
-                            className="settings-select"
+                          <SettingsSelect
+                            aria-label={`Source for ${sensor.name || 'sensor ' + (index + 1)}`}
                             {...entityFieldProps(
                               draft,
                               `sensors.${index}.source`,
                             )}
-                            value={sensor.source}
-                            onChange={(event) =>
-                              patchSensor(index, { source: event.target.value })
+                            value={
+                              sensor.source
+                                ? `source:${sensor.source}`
+                                : 'missing'
                             }
-                          >
-                            <option value="influxdb">InfluxDB</option>
-                            {sensor.source !== 'influxdb' && (
-                              <option value={sensor.source}>
-                                {sensor.source || '(missing source)'}
-                              </option>
-                            )}
-                          </select>
+                            onValueChange={(value) =>
+                              patchSensor(index, {
+                                source:
+                                  value === 'missing' ? '' : value.slice(7),
+                              })
+                            }
+                            options={[
+                              { value: 'source:influxdb', label: 'InfluxDB' },
+                              {
+                                value: sensor.source
+                                  ? `source:${sensor.source}`
+                                  : 'missing',
+                                label: sensor.source || '(missing source)',
+                              },
+                            ]}
+                          />
                         </label>
                       )}
                       <label className="flex min-h-9 items-center gap-2 text-xs">

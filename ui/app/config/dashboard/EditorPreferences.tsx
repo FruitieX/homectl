@@ -9,6 +9,7 @@ import { useEntityDraft } from '@/hooks/useEntityDraft';
 import { ConfigApiError } from '@/hooks/useConfig';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 export function EditorPreferences({ href }: { href: string }) {
   const [saved, setSaved] = useDashboardEditingSettings();
   const draft = useEntityDraft({
@@ -35,40 +36,32 @@ export function EditorPreferences({ href }: { href: string }) {
       <div className="grid gap-4 md:grid-cols-2">
         <label className="block space-y-2 text-sm">
           Resize snap
-          <select
-            className="settings-select"
-            value={draft.value!.gridSnap}
-            onChange={(event) =>
+          <SettingsSelect
+            aria-label="Resize snap"
+            value={String(draft.value!.gridSnap)}
+            onValueChange={(value) =>
               draft.patch({
-                gridSnap: Number(event.target.value) as DashboardGridSnap,
+                gridSnap: Number(value) as DashboardGridSnap,
               })
             }
-          >
-            {DASHBOARD_GRID_SNAP_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            options={DASHBOARD_GRID_SNAP_OPTIONS.map((option) => ({
+              ...option,
+              value: String(option.value),
+            }))}
+          />
         </label>
         <label className="block space-y-2 text-sm">
           Screen preview
-          <select
-            className="settings-select"
+          <SettingsSelect
+            aria-label="Screen preview"
             value={draft.value!.screenSimulation}
-            onChange={(event) =>
+            onValueChange={(value) =>
               draft.patch({
-                screenSimulation: event.target
-                  .value as DashboardScreenSimulation,
+                screenSimulation: value as DashboardScreenSimulation,
               })
             }
-          >
-            {DASHBOARD_SCREEN_SIMULATION_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            options={DASHBOARD_SCREEN_SIMULATION_OPTIONS}
+          />
         </label>
       </div>
       <EntitySaveBar draft={draft} />

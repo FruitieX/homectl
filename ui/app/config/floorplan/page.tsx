@@ -31,6 +31,7 @@ import {
 } from '@/ui/FloorplanGridEditor';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
+import { SearchablePicker } from '@/ui/SearchablePicker';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { useFloorplanEditor, type FloorplanDraft } from './shared';
 
@@ -96,21 +97,19 @@ export default function FloorplanPage() {
       {!creating && floorplans.data.length > 0 && (
         <label className="flex flex-wrap items-center gap-3 text-sm">
           Floorplan
-          <select
-            aria-label="Select floorplan"
-            className="settings-select min-w-0 max-w-full"
-            value={id}
-            onChange={(event) => setParams({ id: event.target.value })}
-          >
-            {!floorplans.data.some((row) => row.id === id) && (
-              <option value={id}>Unavailable floorplan · {id}</option>
-            )}
-            {floorplans.data.map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.name}
-              </option>
-            ))}
-          </select>
+          <div className="w-full sm:w-64">
+            <SearchablePicker
+              ariaLabel="Select floorplan"
+              clearable={false}
+              value={id}
+              onChange={(value) => setParams({ id: value })}
+              options={floorplans.data.map((row) => ({
+                value: row.id,
+                label: row.name,
+                detail: row.id,
+              }))}
+            />
+          </div>
         </label>
       )}
       {creating || id ? (

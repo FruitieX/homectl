@@ -1,4 +1,5 @@
 import { CalibrationAssignment } from '@/ui/settings/CalibrationAssignment';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -241,13 +242,12 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
                 <>
                   <label className="grid gap-2 text-xs">
                     Sensor controls
-                    <select
-                      className="settings-select"
+                    <SettingsSelect
+                      aria-label="Sensor controls"
                       value={kind}
                       disabled={!knownSensor}
-                      onChange={(event) => {
-                        const nextKind = event.target
-                          .value as SensorInteractionKind;
+                      onValueChange={(selected) => {
+                        const nextKind = selected as SensorInteractionKind;
                         draft.patch({
                           sensor: entityDraftStore.switchVariant(
                             key,
@@ -265,16 +265,13 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
                           ),
                         });
                       }}
-                    >
-                      {SENSOR_INTERACTION_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                      {!knownSensor && (
-                        <option value={kind}>{kind} (unsupported)</option>
-                      )}
-                    </select>
+                      options={[
+                        ...SENSOR_INTERACTION_OPTIONS,
+                        ...(!knownSensor
+                          ? [{ value: kind, label: `${kind} (unsupported)` }]
+                          : []),
+                      ]}
+                    />
                   </label>
                   <p className="text-xs text-muted-foreground">
                     Changes the controls used to simulate sensor input. Auto

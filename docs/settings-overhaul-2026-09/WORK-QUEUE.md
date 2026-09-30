@@ -892,6 +892,31 @@ Evidence: `ui/dev/activity-traces-review.mjs`,
 Browser traces are synthetic retained records; real runtime suppression coverage
 and broader accessibility remain separate open acceptance items.
 
+### Shared collection controls — 2026-09-30
+
+Device and routine filters, floorplan selection, dashboard editor preferences,
+device sensor controls and preserved sensor-source repair now use shared
+selectors. Integration, room and floorplan lists are searchable. Clearing one
+filter retains the others; unavailable entity IDs and empty/unknown sensor
+sources remain visible until explicitly changed. Dashboard preference values
+retain their original numeric/string types and require Save.
+
+Seventeen native keyboard browser checks pass at each 390/1440 px, including
+exact URL state, selection clearing, unavailable floorplans, retained preferences,
+Discard and sensor source repair. Type checking, lint and build pass with the
+existing backup-effect and bundle-size warnings. No configuration writes or
+page exceptions occur. The expected 404 is the intentionally unavailable
+floorplan. Screenshots were inspected; preference captures show saved defaults.
+
+Evidence: `ui/dev/shared-list-controls-review.mjs`,
+`implementation-evidence/collections/shared-list-controls-*`,
+`shared-controls-{tsc,lint,build}.log` and the
+[comparison gallery](implementation-evidence/comparison/index.html#shared-list-controls).
+Remaining shared-control work includes active color/preview controls and the
+floorplan placement tool. Unreferenced legacy editors still need removal or
+separation from reused read-only summary helpers. Other acceptance gates remain
+open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

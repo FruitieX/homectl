@@ -10,6 +10,7 @@ import { matchesConfigSearch } from '@/lib/configSearch';
 import { configItemHref } from '@/lib/configItemHref';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { Button } from '@/ui/primitives/button';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,17 +81,18 @@ export default function RoutinesPage() {
             placeholder="Search routines"
           />
         </div>
-        <select
+        <SettingsSelect
           aria-label="Filter routines"
-          className="settings-select"
+          className="w-full sm:w-44"
           value={filter}
-          onChange={(event) => changeParam('filter', event.target.value)}
-        >
-          <option value="all">All routines</option>
-          <option value="enabled">Enabled</option>
-          <option value="disabled">Disabled</option>
-          <option value="legacy">Legacy</option>
-        </select>
+          onValueChange={(value) => changeParam('filter', value)}
+          options={[
+            { value: 'all', label: 'All routines' },
+            { value: 'enabled', label: 'Enabled' },
+            { value: 'disabled', label: 'Disabled' },
+            { value: 'legacy', label: 'Legacy' },
+          ]}
+        />
         <span className="text-xs text-muted-foreground">
           {visible.length} routines
         </span>

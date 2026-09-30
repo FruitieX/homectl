@@ -1,0 +1,77 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Device kind updates its URL",
+    "passed": true
+   },
+   {
+    "name": "Searchable integration retains other filters",
+    "passed": true
+   },
+   {
+    "name": "Room picker uses exact group identity",
+    "passed": true
+   },
+   {
+    "name": "Clearing a room preserves the other filters",
+    "passed": true
+   },
+   {
+    "name": "Routine status updates its URL",
+    "passed": true
+   },
+   {
+    "name": "Floorplan picker selects the exact ID",
+    "passed": true
+   },
+   {
+    "name": "Unavailable floorplan selection is kept",
+    "passed": true
+   },
+   {
+    "name": "Preference changes remain drafts",
+    "passed": true
+   },
+   {
+    "name": "Preference draft survives navigation",
+    "passed": true
+   },
+   {
+    "name": "Discard leaves saved browser preferences intact",
+    "passed": true
+   },
+   {
+    "name": "Sensor control choice makes a draft",
+    "passed": true
+   },
+   {
+    "name": "Unknown and empty sensor sources remain visible",
+    "passed": true
+   },
+   {
+    "name": "Explicit source repair creates a draft",
+    "passed": true
+   },
+   {
+    "name": "Discard restores the original missing source",
+    "passed": true
+   },
+   {
+    "name": "Touched page has no native dropdowns",
+    "passed": true
+   },
+   {
+    "name": "Narrow layout has no page overflow",
+    "passed": true
+   },
+   {
+    "name": "No configuration writes or page exceptions",
+    "passed": true
+   }
+  ],
+  "scope": "Local fixture; all configuration/preference drafts discarded"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 404 (Not Found)"]}
