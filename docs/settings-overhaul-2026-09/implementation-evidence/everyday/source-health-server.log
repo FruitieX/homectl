@@ -1,0 +1,24 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+   Compiling homectl-server v0.9.5 (/home/rasse/homectl/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 28.57s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/homectl_server-deb79e13f06b027d)
+
+running 12 tests
+test core::device_health::tests::warmup_and_first_observation_get_grace_and_multiple_issues_count_once ... ok
+test core::device_health::tests::event_only_defaults_do_not_invent_timeouts_and_device_override_wins ... ok
+test core::device_health::tests::ignore_suppresses_silence_but_not_offline_and_fresh_receipt_recovers ... ok
+test core::device_health::tests::resumed_monitoring_gets_grace_without_losing_receipt_history ... ok
+test core::device_health::tests::retained_reports_and_wall_clock_jumps_do_not_postpone_deadlines ... ok
+test core::device_health::tests::identical_sensor_reports_refresh_evidence_without_changing_sensor_value ... ok
+test core::device_health::tests::source_failure_before_first_output_is_visible_and_recovers_without_inventing_a_device ... ok
+test types::device_health::export_bindings_devicehealthissue ... ok
+test types::device_health::export_bindings_reportingpolicy ... ok
+test types::device_health::export_bindings_effectivereportingpolicy ... ok
+test types::device_health::export_bindings_devicehealth ... ok
+test types::device_health::export_bindings_devicehealthsnapshot ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 805 filtered out; finished in 0.03s
+

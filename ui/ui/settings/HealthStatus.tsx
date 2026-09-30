@@ -125,6 +125,12 @@ export function AttentionDevices({ integration }: { integration?: string }) {
   const keys = (query.data?.attention_device_keys ?? []).filter(
     (key) => !integration || key.startsWith(integration + '/'),
   );
+  const includesSources = keys.some((key) => key.startsWith('computed/'));
+  const itemKind = includesSources
+    ? keys.every((key) => key.startsWith('computed/'))
+      ? 'source'
+      : 'item'
+    : 'device';
   if (query.isError)
     return (
       <p role="alert" className="text-sm">
@@ -147,14 +153,18 @@ export function AttentionDevices({ integration }: { integration?: string }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold">
           {keys.length
-            ? `${keys.length} ${keys.length === 1 ? 'device needs' : 'devices need'} attention`
+            ? `${keys.length} ${itemKind}${keys.length === 1 ? ' needs' : 's need'} attention`
             : 'No device warnings'}
         </h2>
         <Link
           className="text-xs text-primary underline"
-          to={`/config/devices?attention=1${integration ? `&integration=${encodeURIComponent(integration)}` : ''}`}
+          to={
+            includesSources
+              ? '/config/diagnostics'
+              : `/config/devices?attention=1${integration ? `&integration=${encodeURIComponent(integration)}` : ''}`
+          }
         >
-          View devices
+          {includesSources ? 'View issues' : 'View devices'}
         </Link>
       </div>
       {query.data?.warming_up && (
@@ -171,7 +181,9 @@ export function AttentionDevices({ integration }: { integration?: string }) {
             className="flex items-start gap-3 rounded-md border border-border p-3 hover:bg-muted/30"
             to={
               health
-                ? configItemHref('device', key)
+                ? health.integration_id === 'computed'
+                  ? configItemHref('source', key.slice('computed/'.length))
+                  : configItemHref('device', key)
                 : `/config/diagnostics?q=${encodeURIComponent(key)}`
             }
           >

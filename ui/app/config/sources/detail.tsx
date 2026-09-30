@@ -12,6 +12,7 @@ import {
   type SourceComputeConfig,
 } from '@/hooks/useConfig';
 import { useDevicesState } from '@/hooks/websocket';
+import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { useAppConfig } from '@/hooks/appConfig';
 import { useEntityDraft } from '@/hooks/useEntityDraft';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
@@ -45,6 +46,7 @@ export default function SourceDetailPage() {
     creating = id === 'new',
     navigate = useNavigate();
   const api = useSources(),
+    health = useDeviceHealth(),
     presets = useSourcePresets(),
     scenes = useScenes(),
     devices = useDevicesState();
@@ -52,6 +54,7 @@ export default function SourceDetailPage() {
     { advanced } = useSettingsPreferences();
   const saved = api.data.find((row) => row.id === id),
     empty = useMemo(() => sourceDefaults(), []);
+  const sourceHealth = health.data?.devices?.[`computed/${id}`];
   const key = `${apiEndpoint}/sources/${creating ? '$new' : id}`;
   const draft = useEntityDraft({
     key,
@@ -274,6 +277,42 @@ export default function SourceDetailPage() {
                   </Link>
                 )}
               </div>
+              {health.isError ? (
+                <div
+                  role="alert"
+                  className="flex flex-wrap items-center gap-2 text-sm"
+                >
+                  Source health is unavailable.
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void health.refetch()}
+                  >
+                    Retry health
+                  </Button>
+                </div>
+              ) : sourceHealth?.issues.length ? (
+                <div
+                  role="alert"
+                  className="space-y-2 text-sm text-amber-700 dark:text-amber-400"
+                >
+                  {live && (
+                    <p>
+                      The last published value is retained; it is not a fresh
+                      computation.
+                    </p>
+                  )}
+                  {sourceHealth.issues.map((issue) => (
+                    <p key={issue.code}>{issue.message}</p>
+                  ))}
+                  <Link
+                    className="text-primary underline"
+                    to={`/config/logs?device=${encodeURIComponent(`computed/${id}`)}`}
+                  >
+                    Related logs
+                  </Link>
+                </div>
+              ) : null}
             </SettingsSection>
           )}
           <SettingsSection id="details" title="Details">

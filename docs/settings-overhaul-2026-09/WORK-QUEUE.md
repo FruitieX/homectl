@@ -695,6 +695,51 @@ definition and restored schedule assertions. See
 for defaults, evidence and limitations. 246 UI tests and type/lint/build pass.
 Broader field/recovery/accessibility gates remain open.
 
+### Computed-source health before first output — 2026-09-30
+
+A source that failed before its first successful computation previously had no
+output/device entry, so its error could disappear from the health summary. The
+source registry now retains its latest failure independently of its last good
+output. Unchanged definitions retain the error; success, a new revision or removal
+clears it. Runtime failures remain observations, not database configuration.
+
+The shared health evaluator includes configured source identities without
+inventing output devices, values or fresh-report timestamps. Warmup and disabled
+sources keep their existing suppression rules. After startup, initial failures
+appear under their canonical computed device key and contribute once to attention.
+Diagnostics uses a source entity and links directly to its editor; related logs
+still use the canonical device key. The overview directs source attention to the
+source editor and its View issues link includes sources with no device row.
+
+Source list/detail pages show runtime errors. A retained last published value is
+identified when an issue is present; a source with no value continues to say so.
+Failed health reads offer Retry and preserve the configuration draft. Eleven
+browser checks at each 1440/390 px verify overview/editor/diagnostics/log links,
+no invented output, retained drafts, explicit Retry, catalog error visibility and
+clearing old error evidence. The driver uses an owned fixture source and intercepts
+health/diagnostics responses; its expected 503s do not represent a live source run.
+
+Seven health tests pass, including unchanged sensor receipts, retained messages,
+monotonic deadlines, startup/re-enable/reconnect grace, stale epoch rejection,
+Ignore/offline semantics and the new first-failure lifecycle. Seven diagnostics
+tests pass, including aliases and missing-reference behavior. The registry's
+last-good-output test now also covers initial failure retention, unchanged/revised
+loads, success and deletion. Binding export tests pass and the UI binding was
+regenerated. Type checking, lint and production build pass with the existing
+backup-effect, large-chunk and Rust future-compatibility warnings.
+
+Evidence: `ui/dev/source-health-review.mjs`,
+`implementation-evidence/everyday/source-health-*` and the
+[comparison gallery](implementation-evidence/comparison/index.html#source-health).
+No household configuration was changed. Live MQTT transport/discovery coverage
+and the broader recovery/accessibility gates remain open.
+
+The actual Warp health/diagnostics API regression also passes: a first-failing
+source plus a scene referencing its unavailable output contributes only one
+canonical source key to attention. Diagnostics retain both explanations and
+return the source entity ID and device-key log reference. This closes the
+previous API deduplication gap; it does not claim a live MQTT session.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

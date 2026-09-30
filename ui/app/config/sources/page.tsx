@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronRight, Plus } from 'lucide-react';
 import { useSources } from '@/hooks/useConfig';
 import { useDevicesState } from '@/hooks/websocket';
+import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { useCreateDeepLink } from '@/hooks/useDeepLink';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
@@ -17,6 +18,7 @@ import { ConfigPageHeader } from '../page-header';
 import { computationLabel } from './shared';
 export default function SourcesConfigPage() {
   const api = useSources(),
+    health = useDeviceHealth(),
     devices = useDevicesState(),
     { advanced } = useSettingsPreferences();
   const [params, setParams] = useSearchParams(),
@@ -61,6 +63,18 @@ export default function SourcesConfigPage() {
         filteredCount={visible.length}
         placeholder="Search computed sources"
       />
+      {health.isError && (
+        <div role="alert" className="flex flex-wrap items-center gap-2 text-sm">
+          Source health is unavailable.
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void health.refetch()}
+          >
+            Retry health
+          </Button>
+        </div>
+      )}
       {api.error ? (
         <div role="alert">
           {api.error}
@@ -108,6 +122,16 @@ export default function SourcesConfigPage() {
                     {row.enabled ? 'Enabled' : 'Disabled'}
                     {advanced ? ` · ${row.id}` : ''}
                   </span>
+                  {health.data?.devices?.[`computed/${row.id}`]?.issues.map(
+                    (issue) => (
+                      <p
+                        key={issue.code}
+                        className="mt-1 text-xs text-amber-700 dark:text-amber-400"
+                      >
+                        {issue.message}
+                      </p>
+                    ),
+                  )}
                 </div>
                 <ChevronRight className="size-4 shrink-0" />
               </Link>

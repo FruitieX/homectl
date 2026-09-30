@@ -5113,6 +5113,74 @@ mod tests {
     use ordered_float::OrderedFloat;
 
     #[tokio::test]
+    async fn health_api_deduplicates_source_failure_and_unavailable_scene_reference() {
+        use crate::core::state::actor::spawn_state_actor;
+        let (mut state, _events) = crate::core::event::tests::test_state();
+        let source: crate::types::automation_source::SourceDefinition = serde_json::from_value(serde_json::json!({
+            "id":"failed_source", "name":"Failed daylight", "enabled":true, "revision":1,
+            "timezone":"Europe/Helsinki", "refresh_interval_ms":60000, "aliases":[],
+            "compute":{"kind":"script","source_body":"throw new Error('missing parameter');", "params":{}}
+        })).unwrap();
+        state.runtime_config.sources = vec![source.clone()];
+        state.runtime_config.scenes = vec![serde_json::from_value(serde_json::json!({
+            "id":"following", "name":"Following source", "hidden":false,
+            "device_states":{"dummy/lamp":{"integration_id":"computed","device_id":"failed_source"}},
+            "group_states":{}, "group_state_order":[]
+        })).unwrap()];
+        state.sources.load_rows(vec![source.clone()]);
+        state
+            .sources
+            .record_failure(&source.id, "missing parameter".into(), 1000);
+        state.warming_up = false;
+        state.refresh_device_health(true);
+        state.publish_snapshot(crate::core::snapshot::SnapshotChanges::all());
+        let snapshot = state.snapshot.clone();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = spawn_state_actor(state, snapshot.clone(), tx);
+        let routes = config(&snapshot, &handle);
+        let response = warp::test::request()
+            .path("/config/device-health")
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        let keys = body["data"]["attention_device_keys"].as_array().unwrap();
+        assert_eq!(
+            keys.iter()
+                .filter(|key| *key == "computed/failed_source")
+                .count(),
+            1
+        );
+        assert_eq!(
+            body["data"]["devices"]["computed/failed_source"]["status"],
+            "error"
+        );
+        assert!(
+            body["data"]["devices"]["computed/failed_source"]["last_fresh_report_ms"].is_null()
+        );
+        let response = warp::test::request()
+            .path("/config/diagnostics")
+            .reply(&routes)
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(response.body()).unwrap();
+        let issues = body["data"]["issues"].as_array().unwrap();
+        assert!(issues
+            .iter()
+            .any(|issue| issue["code"] == "missing_device_link"));
+        let failure = issues
+            .iter()
+            .find(|issue| issue["code"] == "source_error")
+            .unwrap();
+        assert_eq!(failure["entity"], "source");
+        assert_eq!(failure["entity_id"], "failed_source");
+        assert_eq!(
+            failure["device_keys"],
+            serde_json::json!(["computed/failed_source"])
+        );
+    }
+
+    #[tokio::test]
     async fn core_settings_compare_saved_values_and_distinguish_null_from_omission() {
         use crate::core::state::actor::spawn_state_actor;
         let (mut state, _events) = crate::core::event::tests::test_state();

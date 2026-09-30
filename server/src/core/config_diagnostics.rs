@@ -317,16 +317,30 @@ pub fn inspect_config(snapshot: &RuntimeSnapshot) -> ConfigDiagnostics {
     }
     for health in snapshot.device_health.devices.values() {
         for issue in &health.issues {
+            let source_id = (health.integration_id == "computed")
+                .then(|| health.device_key.strip_prefix("computed/"))
+                .flatten();
             check.issue(
-                Device,
-                &health.device_key,
+                if source_id.is_some() {
+                    DiagnosticEntity::Source
+                } else {
+                    Device
+                },
+                source_id.unwrap_or(&health.device_key),
                 &health.name,
                 &issue.code,
                 &health.device_key,
                 Warning,
                 issue.message.clone(),
-                "Check the device, its integration and its reporting policy.",
+                if source_id.is_some() {
+                    "Review the computed source and its most recent evaluation error."
+                } else {
+                    "Check the device, its integration and its reporting policy."
+                },
             );
+            if source_id.is_some() {
+                check.attach_device(&health.device_key);
+            }
         }
     }
     check.issues.sort_by(|a, b| {

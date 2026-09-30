@@ -206,6 +206,8 @@ pub fn synthetic_device(definition: &SourceDefinition, profile: &LightProfile) -
 pub struct Sources {
     definitions: BTreeMap<SourceId, SourceDefinition>,
     outputs: BTreeMap<SourceId, SourceOutput>,
+    /// Latest failed attempt, including sources with no successful output yet.
+    failures: BTreeMap<SourceId, String>,
     last_attempt_wall_ms: BTreeMap<SourceId, i64>,
     /// Script sources with an invocation in flight, keyed by dispatch time so
     /// a lost result cannot wedge the cadence forever.
@@ -266,6 +268,11 @@ impl Sources {
                 .get(id)
                 .is_some_and(|definition| previous_revisions.get(id) == Some(&definition.revision))
         });
+        self.failures.retain(|id, _| {
+            self.definitions
+                .get(id)
+                .is_some_and(|definition| previous_revisions.get(id) == Some(&definition.revision))
+        });
 
         removed
     }
@@ -280,6 +287,10 @@ impl Sources {
 
     pub fn outputs(&self) -> &BTreeMap<SourceId, SourceOutput> {
         &self.outputs
+    }
+
+    pub fn failures(&self) -> &BTreeMap<SourceId, String> {
+        &self.failures
     }
 
     /// Enabled sources whose refresh cadence has elapsed (or that have never
@@ -359,6 +370,7 @@ impl Sources {
         self.last_attempt_wall_ms
             .insert(definition.id.clone(), computed_at_ms);
         self.script_pending.remove(&definition.id);
+        self.failures.remove(&definition.id);
         self.outputs.insert(
             definition.id.clone(),
             SourceOutput {
@@ -375,6 +387,7 @@ impl Sources {
         self.last_attempt_wall_ms
             .insert(id.clone(), attempted_at_ms);
         self.script_pending.remove(id);
+        self.failures.insert(id.clone(), message.clone());
         if let Some(output) = self.outputs.get_mut(id) {
             output.quality = SourceQuality::Stale { message };
         }
@@ -490,6 +503,31 @@ mod tests {
         sources.load_rows(vec![source.clone(), fresh.clone()]);
         sources.record_failure(&fresh.id, "never computed".to_string(), 3_000_000);
         assert!(sources.output(&fresh.id).is_none());
+        assert_eq!(sources.failures()[&fresh.id], "never computed");
+        sources.load_rows(vec![source.clone(), fresh.clone()]);
+        assert_eq!(
+            sources.failures().len(),
+            2,
+            "unchanged definitions retain failures"
+        );
+        let mut edited = fresh.clone();
+        edited.revision += 1;
+        sources.load_rows(vec![source.clone(), edited]);
+        assert!(
+            !sources.failures().contains_key(&fresh.id),
+            "edited definitions drop old failures"
+        );
+        sources.record_success(&source, LightProfile::default(), None, 3_000_001);
+        assert!(
+            sources.failures().is_empty(),
+            "success clears the latest failure"
+        );
+        sources.record_failure(&source.id, "removed".into(), 3_000_002);
+        sources.load_rows(vec![]);
+        assert!(
+            sources.failures().is_empty(),
+            "removed definitions leave no stale failure"
+        );
     }
 
     /// D09: the adapter publishes a read-only color sensor under the

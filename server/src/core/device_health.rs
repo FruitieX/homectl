@@ -200,9 +200,22 @@ impl HealthMonitor {
             ..Default::default()
         };
         let mut logs = Vec::new();
-        for (key, device) in &devices.0 {
-            let key = key.to_string();
-            let integration = device.integration_id.to_string();
+        // Source failures may happen before a synthetic output device exists.
+        // Include their identity, never manufacture a device value or receipt.
+        let mut identities = devices
+            .0
+            .iter()
+            .map(|(key, device)| (key.clone(), device.name.clone()))
+            .collect::<BTreeMap<_, _>>();
+        for source in &config.sources {
+            identities.insert(
+                crate::core::automation::sources::source_device_key(&source.id),
+                source.name.clone(),
+            );
+        }
+        for (device_key, default_name) in identities {
+            let key = device_key.to_string();
+            let integration = device_key.integration_id.to_string();
             let observation = self
                 .observations
                 .entry(key.clone())
@@ -215,7 +228,7 @@ impl HealthMonitor {
                 .iter()
                 .find(|row| row.device_key == key)
                 .map(|row| row.display_name.clone())
-                .unwrap_or_else(|| device.name.clone());
+                .unwrap_or(default_name);
             let effective = effective_policy(config, &key, &integration);
             let disabled = config
                 .integrations
@@ -225,14 +238,14 @@ impl HealthMonitor {
                     !row.enabled
                         || crate::types::integration::device_is_disabled(
                             &row.config,
-                            &device.id.to_string(),
+                            &device_key.device_id.to_string(),
                         )
                 })
                 || (integration == "computed"
                     && config
                         .sources
                         .iter()
-                        .any(|row| row.id.0 == device.id.to_string() && !row.enabled));
+                        .any(|row| row.id.0 == device_key.device_id.to_string() && !row.enabled));
             // A resumed device gets the same reporting grace as a newly seen
             // device. Keep historical receipt evidence visible.
             if !disabled
@@ -343,7 +356,7 @@ impl HealthMonitor {
                     }
                     .into(),
                     entity_id: if integration == "computed" {
-                        device.id.to_string()
+                        device_key.device_id.to_string()
                     } else {
                         integration.clone()
                     },
@@ -395,6 +408,9 @@ impl crate::core::state::AppState {
         let wall = self.clock.wall_ms();
         let mono = self.clock.monotonic_ms();
         let mut errors = BTreeMap::new();
+        for (id, message) in self.sources.failures() {
+            errors.insert(format!("computed/{}", id.0), message.clone());
+        }
         for integration in &self.runtime_config.integrations {
             if let Some(epoch) =
                 self.integrations
@@ -482,6 +498,94 @@ mod tests {
         ReportingPolicy::Custom {
             expected_interval_seconds: seconds,
         }
+    }
+    #[test]
+    fn source_failure_before_first_output_is_visible_and_recovers_without_inventing_a_device() {
+        use crate::core::{clock::ManualClock, snapshot::SnapshotChanges};
+        use crate::types::{
+            automation_source::{LightProfile, SourceDefinition},
+            config_diagnostics::DiagnosticEntity,
+        };
+        let (mut state, _events) = crate::core::event::tests::test_state();
+        state.clock = std::sync::Arc::new(ManualClock::new(1000));
+        let source: SourceDefinition = serde_json::from_value(serde_json::json!({
+            "id":"broken", "name":"Daylight profile", "enabled":true, "revision":1,
+            "timezone":"Europe/Helsinki", "refresh_interval_ms":60000, "aliases":[],
+            "compute":{"kind":"script","source_body":"throw new Error('no output');", "params":{}}
+        }))
+        .unwrap();
+        state.runtime_config.sources = vec![source.clone()];
+        state.sources.load_rows(vec![source.clone()]);
+        state
+            .sources
+            .record_failure(&source.id, "no output".into(), 1000);
+        state.warming_up = true;
+        state.refresh_device_health(true);
+        let key = "computed/broken";
+        assert!(state.device_health.snapshot.devices[key].issues.is_empty());
+        assert_eq!(state.device_health.snapshot.devices[key].status, "waiting");
+        state.warming_up = false;
+        state.refresh_device_health(true);
+        let health = &state.device_health.snapshot.devices[key];
+        assert_eq!(health.status, "error");
+        assert_eq!(health.issues[0].code, "source_error");
+        assert_eq!(health.last_fresh_report_ms, None);
+        assert!(state.sources.output(&source.id).is_none());
+        assert!(!state.devices.get_state().0.contains_key(
+            &crate::core::automation::sources::source_device_key(&source.id)
+        ));
+        assert_eq!(
+            state.device_health.snapshot.attention_device_keys,
+            vec![key]
+        );
+        state.publish_snapshot(SnapshotChanges::all());
+        let diagnostics = crate::core::config_diagnostics::inspect_config(&state.snapshot.load());
+        let issue = diagnostics
+            .issues
+            .iter()
+            .find(|issue| issue.code == "source_error")
+            .unwrap();
+        assert_eq!(issue.entity, DiagnosticEntity::Source);
+        assert_eq!(issue.entity_id, "broken");
+        assert_eq!(issue.device_keys, vec![key]);
+        let logs = state.device_health.evaluate(
+            &state.runtime_config,
+            state.devices.get_state(),
+            false,
+            1000,
+            0,
+            true,
+            &BTreeMap::from([(key.to_owned(), "no output".into())]),
+        );
+        assert!(
+            logs.is_empty(),
+            "unchanged failure does not repeat its warning"
+        );
+        state
+            .sources
+            .record_success(&source, LightProfile::default(), None, 1001);
+        state.refresh_device_health(true);
+        assert_eq!(state.device_health.snapshot.devices[key].status, "healthy");
+        assert!(state
+            .device_health
+            .snapshot
+            .attention_device_keys
+            .is_empty());
+        assert_eq!(
+            state.device_health.snapshot.devices[key].last_fresh_report_ms,
+            Some(1001)
+        );
+        state
+            .sources
+            .record_failure(&source.id, "failed again".into(), 1002);
+        state.runtime_config.sources[0].enabled = false;
+        state.refresh_device_health(true);
+        assert_eq!(state.device_health.snapshot.devices[key].status, "disabled");
+        assert!(state.device_health.snapshot.devices[key].issues.is_empty());
+        state.runtime_config.sources.clear();
+        state.sources.load_rows(vec![]);
+        state.refresh_device_health(true);
+        assert!(!state.device_health.snapshot.devices.contains_key(key));
     }
     #[test]
     fn event_only_defaults_do_not_invent_timeouts_and_device_override_wins() {

@@ -566,3 +566,17 @@ unsupported definitions. Other cross-family recovery/accessibility gates remain
 open.
 
 Passing browser runs: 390 px: 16 checks; 1440 px: 16 checks.
+
+### Source-health reconciliation — 2026-09-30
+
+The initial source failure, source-error/alias and retained-health-draft gaps from
+the earlier health checkpoint now have implementation and evidence in the
+[work queue](WORK-QUEUE.md#computed-source-health-before-first-output--2026-09-30).
+The named receipt/startup/Ignore/reconnect-grace tests pass again. The remaining
+transport/discovery and broad accessibility gates stay open.
+
+The actual Warp health/diagnostics API regression also passes: a first-failing
+source plus a scene referencing its unavailable output contributes only one
+canonical source key to attention. Diagnostics retain both explanations and
+return the source entity ID and device-key log reference. This closes the
+previous API deduplication gap; it does not claim a live MQTT session.

@@ -12,7 +12,12 @@ import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
 import { ConfigPageHeader } from '../page-header';
 
-const labels = { group: 'room', scene: 'scene', device: 'device' };
+const labels = {
+  group: 'room',
+  scene: 'scene',
+  device: 'device',
+  source: 'source',
+};
 
 function Issue({
   issue,
@@ -46,10 +51,10 @@ function Issue({
           >
             Open {labels[issue.entity] ?? issue.entity}
           </Link>
-          {issue.entity === 'device' && (
+          {(issue.entity === 'device' || issue.entity === 'source') && (
             <Link
               className="settings-link"
-              to={`/config/logs?device=${encodeURIComponent(issue.entity_id)}`}
+              to={`/config/logs?device=${encodeURIComponent(issue.entity === 'source' ? `computed/${issue.entity_id}` : issue.entity_id)}`}
             >
               Related logs
             </Link>
@@ -191,8 +196,9 @@ export default function DiagnosticsPage() {
                   No issues found by these checks
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Checks cover groups, scene references, and current device
-                  assignments. Scripts and routine behavior are not evaluated.
+                  Checks cover groups, scene references, current assignments and
+                  device/source health. These checks do not execute scripts or
+                  routines.
                 </p>
               </div>
             </div>

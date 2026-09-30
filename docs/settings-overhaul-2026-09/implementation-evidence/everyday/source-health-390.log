@@ -1,0 +1,53 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Source without an output is counted once and links to its editor",
+    "passed": true
+   },
+   {
+    "name": "Failure is explained without inventing an output device",
+    "passed": true
+   },
+   {
+    "name": "Source error links to canonical device-key logs",
+    "passed": true
+   },
+   {
+    "name": "Failed health read keeps source draft",
+    "passed": true
+   },
+   {
+    "name": "Retry restores error evidence without discarding edits",
+    "passed": true
+   },
+   {
+    "name": "Diagnostics use the source editor and canonical related logs",
+    "passed": true
+   },
+   {
+    "name": "Diagnostic return retains draft",
+    "passed": true
+   },
+   {
+    "name": "Source catalog includes runtime error evidence",
+    "passed": true
+   },
+   {
+    "name": "A cleared error does not invent a successful value",
+    "passed": true
+   },
+   {
+    "name": "Health review performs no configuration writes",
+    "passed": true
+   },
+   {
+    "name": "No page exceptions",
+    "passed": true
+   }
+  ],
+  "scope": "Owned fixture source with intercepted health and diagnostics; no source execution"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)"]}

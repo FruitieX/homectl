@@ -16,6 +16,7 @@ pub enum DiagnosticEntity {
     Group,
     Scene,
     Device,
+    Source,
 }
 
 #[derive(Debug, Serialize, TS)]

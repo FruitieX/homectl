@@ -1,0 +1,22 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/homectl_server-deb79e13f06b027d)
+
+running 11 tests
+test core::config_diagnostics::tests::cycles_include_only_members_not_parents_and_traversal_terminates ... ok
+test core::config_diagnostics::tests::empty_groups_are_informational_and_missing_links_are_warnings ... ok
+test core::config_diagnostics::tests::malformed_link_does_not_fall_back_to_an_empty_state ... ok
+test core::config_diagnostics::tests::warmup_defers_device_availability_checks_but_not_structural_checks ... ok
+test core::config_diagnostics::tests::missing_scene_and_device_sources_are_reported_and_legacy_links_normalize ... ok
+test core::config_diagnostics::tests::stale_scene_assignment_and_readonly_target_are_reported_without_mutation ... ok
+test core::config_diagnostics::tests::source_aliases_satisfy_links_groups_and_scene_targets ... ok
+test types::config_diagnostics::export_bindings_diagnosticentity ... ok
+test types::config_diagnostics::export_bindings_diagnosticseverity ... ok
+test types::config_diagnostics::export_bindings_configdiagnostic ... ok
+test types::config_diagnostics::export_bindings_configdiagnostics ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 806 filtered out; finished in 0.02s
+
