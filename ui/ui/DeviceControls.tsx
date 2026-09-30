@@ -7,7 +7,10 @@ import { useEffect, useRef, useState } from 'react';
 
 import { toast } from 'sonner';
 import { createUuid } from '@/lib/uuid';
-import { sendSceneCommand } from '@/lib/deviceCommands';
+import {
+  MANUAL_TRANSITION_SECONDS,
+  sendSceneCommand,
+} from '@/lib/deviceCommands';
 import { LoaderCircle, Power, SlidersHorizontal } from 'lucide-react';
 import { LightQuickIndicator } from '@/ui/LightQuickIndicator';
 import type { Device } from '@/bindings/Device';
@@ -240,8 +243,8 @@ export function DeviceQuickControls({
             scene_id,
             device_keys,
             group_keys: null,
-            use_scene_transition: true,
-            transition: null,
+            use_scene_transition: false,
+            transition: MANUAL_TRANSITION_SECONDS,
           }),
         ),
       );

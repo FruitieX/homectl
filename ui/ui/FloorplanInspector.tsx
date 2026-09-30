@@ -14,10 +14,12 @@ export function FloorplanInspector({
   title,
   children,
   onClose,
+  actions,
 }: {
   title: ReactNode;
   children: ReactNode;
   onClose: () => void;
+  actions?: ReactNode;
 }) {
   const [viewportHeight, setViewportHeight] = useState(
     () => window.visualViewport?.height ?? window.innerHeight,
@@ -113,6 +115,7 @@ export function FloorplanInspector({
         <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">
           {title}
         </h2>
+        {actions}
         <Button
           variant="ghost"
           size="icon"

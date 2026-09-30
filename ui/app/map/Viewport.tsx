@@ -26,7 +26,6 @@ import {
   useStoredFloorplan,
 } from '@/hooks/useStoredFloorplan';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
-import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
 import { getDeviceKey } from '@/lib/device';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import {
@@ -49,9 +48,9 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import { Slider } from '@/ui/primitives/slider';
 import { SettingsSelect } from '@/ui/settings/SettingsSelect';
+import { floorplanLabels, type FloorplanLayers } from '@/lib/floorplan-labels';
+import { FloorplanLayerToggles } from '@/ui/floorplan/FloorplanLayerToggles';
 import { GroupPanel } from '../groups/GroupPanel';
-
-type FloorplanMode = 'all' | 'lights' | 'sensors';
 
 export const Viewport = ({ groupId }: { groupId?: string }) => {
   const [quickSensor, setQuickSensor] = useState<{
@@ -78,18 +77,20 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
   const [pixiFallbackReason, setPixiFallbackReason] = useState<string | null>(
     null,
   );
-  const [floorplanMode, setFloorplanMode] = useState<FloorplanMode>('all');
-  const [selecting, setSelecting] = useState(false);
+  const [visibleLayers, setVisibleLayers] = useState<FloorplanLayers>({
+    lights: true,
+    sensors: true,
+    groups: true,
+  });
   const [viewOpen, setViewOpen] = useState(false);
-  const [labelMode, setLabelMode] = useState<
-    'default' | 'none' | 'sensors' | 'lights' | 'all'
-  >('default');
+  const [labelOverrides, setLabelOverrides] = useState<
+    Partial<FloorplanLayers>
+  >({});
   const [activeSensorKey, setActiveSensorKey] = useState<string | null>(null);
   const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
   const [tabs, setTabs] = useState<HTMLElement | null>(null);
   const [selectedDevices, setSelectedDevices] = useSelectedDevices();
   const toggleSelectedDevice = useToggleSelectedDevice();
-  const { setOpen: setSaveSceneOpen } = useSaveSceneModalState();
   const {
     state: sheetDeviceKeys,
     open: deviceOpen,
@@ -97,6 +98,8 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
     setState: setDeviceModalState,
     setOpen: setDeviceModalOpen,
     setPresentation,
+    selecting,
+    setSelecting,
   } = useDeviceModalState();
 
   useEffect(() => {
@@ -112,6 +115,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
     effectiveSelectedFloorplanId ?? undefined,
   );
   const { grid: floorplanGrid, imageUrl } = storedFloorplan;
+  const labels = { ...floorplanLabels(floorplanGrid), ...labelOverrides };
   const floorplanImage = useImageState(imageUrl);
   const placedDeviceKeys = useMemo(
     () => floorplanGrid?.devices.map((device) => device.deviceKey) ?? [],
@@ -135,7 +139,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
     setActiveSensorKey(null);
     setSelecting(false);
     setSelectedDevices([]);
-  }, [groupId, setSelectedDevices]);
+  }, [groupId, setSelectedDevices, setSelecting]);
   const groupDeviceKeys = useMemo(
     () =>
       groupFilterId
@@ -159,10 +163,10 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
   const visibleDevices = allDevices.filter(
     (device) =>
       (!groupFilterKeys || groupFilterKeys.has(getDeviceKey(device))) &&
-      (floorplanMode === 'lights'
-        ? 'Controllable' in device.data
-        : floorplanMode === 'sensors'
-          ? 'Sensor' in device.data
+      ('Controllable' in device.data
+        ? visibleLayers.lights
+        : 'Sensor' in device.data
+          ? visibleLayers.sensors
           : true),
   );
   const deviceDisplayNameMap = useMemo(
@@ -186,8 +190,9 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
     devices: visibleDevices,
     groups,
     displayNames: deviceDisplayNameMap,
+    includeGroups: visibleLayers.groups,
   });
-  if (labelMode !== 'default') floorplanScene.labelMode = labelMode;
+  floorplanScene.labelVisibility = labels;
   const activeSensor = activeSensorKey
     ? (devicesState?.[activeSensorKey] ?? null)
     : null;
@@ -207,12 +212,14 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
     return () => {
       setDeviceModalOpen(false);
       setSelectedDevices([]);
+      setSelecting(false);
     };
-  }, [setDeviceModalOpen, setSelectedDevices]);
+  }, [setDeviceModalOpen, setSelectedDevices, setSelecting]);
 
   // Selection changes update the existing inspector instead of opening another panel.
   useEffect(() => {
     if (!selecting) return;
+    setGroupPanelOpen(false);
     setDeviceModalState(selectedDevices);
     setPresentation('floorplan');
     setDeviceModalOpen(selectedDevices.length > 0);
@@ -247,7 +254,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
       setSelecting(false);
       setDeviceModalOpen(false);
     }
-  }, [selecting, selectedDevices, setDeviceModalOpen]);
+  }, [selecting, selectedDevices, setDeviceModalOpen, setSelecting]);
   const selectLight = (key: string) => {
     setActiveSensorKey(null);
     const current = selecting
@@ -331,29 +338,32 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
                   className="relative"
                 >
                   <SlidersHorizontal />
-                  {floorplanMode !== 'all' ? (
+                  {Object.values(visibleLayers).some((visible) => !visible) ? (
                     <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary" />
                   ) : null}
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="space-y-4">
-                <label className="flex items-center justify-between gap-3 text-sm">
-                  Device labels
-                  <SettingsSelect
-                    aria-label="Device labels"
-                    value={labelMode}
-                    onValueChange={(value) =>
-                      setLabelMode(value as typeof labelMode)
-                    }
-                    options={[
-                      { value: 'default', label: 'Floorplan default' },
-                      { value: 'none', label: 'Hidden' },
-                      { value: 'sensors', label: 'Sensors' },
-                      { value: 'lights', label: 'Lights' },
-                      { value: 'all', label: 'All devices' },
-                    ]}
-                  />
-                </label>
+                <FloorplanLayerToggles
+                  label="Show on floorplan"
+                  value={visibleLayers}
+                  onChange={setVisibleLayers}
+                />
+                <FloorplanLayerToggles
+                  label="Labels"
+                  value={labels}
+                  onChange={(next) => setLabelOverrides(next)}
+                />
+                {Object.keys(labelOverrides).length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setLabelOverrides({})}
+                  >
+                    Use floorplan label defaults
+                  </Button>
+                )}
                 {Object.keys(groups).length > 0 ? (
                   <label className="block space-y-2 text-sm">
                     <span>Group filter</span>
@@ -424,30 +434,6 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
                     ]}
                   />
                 </label>
-                <div
-                  role="group"
-                  aria-label="Visible devices"
-                  className="flex gap-1"
-                >
-                  {(['all', 'lights', 'sensors'] as const).map((mode) => (
-                    <Button
-                      key={mode}
-                      size="sm"
-                      variant={mode === floorplanMode ? 'secondary' : 'ghost'}
-                      aria-pressed={mode === floorplanMode}
-                      onClick={() => {
-                        setFloorplanMode(mode);
-                        setViewOpen(false);
-                      }}
-                    >
-                      {mode === 'all'
-                        ? 'All'
-                        : mode === 'lights'
-                          ? 'Lights'
-                          : 'Sensors'}
-                    </Button>
-                  ))}
-                </div>
                 <Button
                   variant="outline"
                   className="w-full"
@@ -628,10 +614,11 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
                     ([key, device]) =>
                       device &&
                       (!groupFilterKeys || groupFilterKeys.has(key)) &&
-                      (floorplanMode === 'all' ||
-                        (floorplanMode === 'lights'
-                          ? 'Controllable' in device.data
-                          : 'Sensor' in device.data)),
+                      ('Controllable' in device.data
+                        ? visibleLayers.lights
+                        : 'Sensor' in device.data
+                          ? visibleLayers.sensors
+                          : true),
                   )
                   .map(
                     ([key, device]) =>
@@ -685,30 +672,6 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
               </Button>
             </div>
           )}
-        {selecting && (
-          <div className="flex shrink-0 items-center gap-2 border-t border-border bg-background px-3 py-2 md:border-l md:border-t-0">
-            <span className="min-w-0 flex-1 text-sm">
-              {selectedDevices.length > 0
-                ? `${selectedDevices.length} selected`
-                : 'Tap devices to select'}
-            </span>
-            {selectedDevices.length > 0 && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setDeviceModalOpen(false);
-                  setSaveSceneOpen(true);
-                }}
-              >
-                Save scene
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" onClick={clearSelection}>
-              Done
-            </Button>
-          </div>
-        )}
         <div
           id="floorplan-inspector"
           className={

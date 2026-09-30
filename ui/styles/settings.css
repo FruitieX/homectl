@@ -11,7 +11,9 @@
   min-width: 0;
 }
 .settings-categories a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 13px;

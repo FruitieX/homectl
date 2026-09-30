@@ -130,4 +130,6 @@ export type LightHold = {
   pointerId: number;
   x: number;
   y: number;
+  /** Actual press location, independent of the marker/popover anchor. */
+  origin?: { x: number; y: number };
 };

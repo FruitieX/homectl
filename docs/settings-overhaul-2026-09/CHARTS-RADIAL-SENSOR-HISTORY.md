@@ -2,6 +2,79 @@
 
 Updated: 2026-09-30.
 
+## Follow-up: selection header, layer switches, wrapped labels and settings icons
+
+Requested 2026-09-30 and implemented as one batch with the held-touch and
+Restore scene fixes below:
+
+- [x] Floorplan selection has a single **X selected** header. **Save scene** and
+  one close button sit in that header. Closing clears every selection, exits
+  selection mode and dismisses the panel. The underlying room panel does not
+  reopen. Remove the duplicate title, Done button and second capture action.
+- [x] Save scene retains the selected targets while its review dialog is open;
+  cancelling returns to the same selection. The header count reflects the full
+  selection even when the control scope is narrowed to one selected device.
+- [x] Replace All / Lights / Sensors with independent **Lights / Sensors /
+  Groups** visibility switches. Switching any of them keeps view options open.
+- [x] Replace the device-label dropdown with a matching **Lights / Sensors /
+  Groups** labels row. Hiding a layer preserves its label preference. A reset
+  button restores the floorplan's saved label defaults.
+- [x] The editor's Layout panel uses the same labels row, saved with the layout
+  through the existing database-backed floorplan editor API. The optional
+  `labelVisibility` object takes precedence over legacy `labelMode`; layouts
+  without it keep their existing defaults. API and authoring readers validate
+  its three booleans. No deployment configuration or migration is needed.
+- [x] Both map and editor wrap group names inside a rectangle contained in the
+  actual painted mask. The shared layout considers contiguous spans, including
+  concave/disconnected areas, rather than a bounding box spanning empty cells.
+  Map labels prefer space away from device markers. Names can use up to four
+  lines; cramped areas truncate with an ellipsis or omit an unreadable label.
+- [x] All 18 settings categories have one shared icon definition, reused in
+  desktop navigation, the phone category menu and landing-page category links.
+  Overview has its own grid icon. Icons are decorative; text labels remain.
+
+### Verification
+
+- UI type check, lint, all **278 tests**, and production build pass. The existing
+  import/export cleanup warning and build chunk-size warnings remain.
+- The two floorplan editor Rust tests pass, including old layouts without the
+  new field, invalid values and saved API round-tripping. The existing database
+  reopen/export/import test now also verifies independent label preferences.
+- Native Chromium mouse/touch batches pass at **1440 × 1000** and **430 × 932**:
+  hold jitter, center dead zone, live drag, Restore scene, selected-light fanout,
+  one header/close, capture cancellation, clearing selection, all six switches,
+  and sensor event/history regressions. A second batch checks settings icons,
+  editor saves and reloads, inherited map defaults and screenshots of wrapped
+  labels in an L-shaped room. No browser console/page errors were reported.
+- Browser checks use guarded loopback fixtures; no household configuration or
+  physical devices were changed. Screenshots and browser results are in
+  [floorplan controls evidence](implementation-evidence/floorplan-controls/).
+
+## Fix: held touches and Restore scene transitions
+
+Requested 2026-09-30 and implemented:
+
+- [x] Treat the center power hub as a neutral area for color and temperature
+  gestures. Moving within it, or returning to it after a color adjustment, does
+  not send a color command. In particular, touch jitter must not send zero
+  saturation and turn the light white.
+- [x] Keep the original contact position separately from the popover's marker
+  anchor. The opening hold needs movement beyond the shared 10 px tolerance
+  before becoming a color drag. Small movements stay inert even when the
+  popover is repositioned near a screen edge or is animating open. This applies
+  to map markers and shared room/dashboard light indicators.
+- [x] Restore scene uses `MANUAL_TRANSITION_SECONDS` (0.4 seconds) explicitly,
+  with `use_scene_transition: false`. It retains the original scene/device scope
+  and existing acknowledgement/error handling. Saved scene transitions and
+  automation behavior are unchanged.
+
+The root causes were a color handler that mapped the hub's radius to zero
+saturation, and Restore scene explicitly requesting the scene's own transition.
+The browser regression batch includes opening-hold jitter, deliberate movement
+inside the hub, returning into the hub, and a paused light whose saved scene has
+a 60-second transition. The fixture honors explicit transition overrides so the
+restored state can also be inspected after acknowledgement.
+
 Latest selection update: [selection quick controls and gesture study](QUICK-ADJUST-GESTURES.md).
 Holding a selected light now adjusts the selected lights together. Holding with
 a device sheet open opens quick controls; selection starts through the popover,

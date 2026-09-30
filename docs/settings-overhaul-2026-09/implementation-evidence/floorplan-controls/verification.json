@@ -1,0 +1,40 @@
+{
+  "date": "2026-09-30",
+  "environment": "Guarded loopback fixtures, Chromium mouse/touch; no live household changes",
+  "ui": {
+    "typecheck": "passed",
+    "lint": "passed with existing import/export cleanup warning",
+    "tests": 278,
+    "build": "passed with existing chunk-size warnings"
+  },
+  "rust": {
+    "floorplan_editor_tests": 2,
+    "database_reopen_export_import_tests": 1
+  },
+  "browser": [
+    {
+      "file": "floorplan-controls-desktop.log",
+      "passed": true,
+      "width": 1440,
+      "checks": 88
+    },
+    {
+      "file": "floorplan-controls-phone.log",
+      "passed": true,
+      "width": 430,
+      "checks": 88
+    },
+    {
+      "file": "floorplan-labels-desktop.log",
+      "passed": true,
+      "width": 1440,
+      "checks": 14
+    },
+    {
+      "file": "floorplan-labels-phone.log",
+      "passed": true,
+      "width": 430,
+      "checks": 14
+    }
+  ]
+}

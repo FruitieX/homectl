@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { ChevronRight, House, Menu, Search } from 'lucide-react';
+import { ChevronRight, House, Menu, Search, LayoutGrid } from 'lucide-react';
 import { useSetAtom } from 'jotai';
 import { configSections, configSectionAliases } from 'app/config/sections';
 import { commandPaletteOpenAtom } from '@/ui/CommandPalette';
@@ -18,6 +18,7 @@ function Categories({ close }: { close?: () => void }) {
   return (
     <nav aria-label="Settings categories" className="settings-categories">
       <NavLink end to="/config" onClick={close}>
+        <LayoutGrid aria-hidden className="size-4 shrink-0" />
         Overview
       </NavLink>
       {(['Your home', 'Automations', 'Appearance', 'Maintenance'] as const).map(
@@ -30,6 +31,7 @@ function Categories({ close }: { close?: () => void }) {
               .filter((section) => section.group === group)
               .map((section) => (
                 <NavLink key={section.href} to={section.href} onClick={close}>
+                  <section.icon aria-hidden className="size-4 shrink-0" />
                   {section.label}
                 </NavLink>
               ))}

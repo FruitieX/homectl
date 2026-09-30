@@ -2683,6 +2683,9 @@ server.on('upgrade', (req, socket) => {
                   )
                 ) {
                   device.data.Controllable.state = value;
+                  if (command.transition != null)
+                    device.data.Controllable.state.transition =
+                      command.transition;
                   device.data.Controllable.scene_id = command.scene_id;
                   device.data.Controllable.scene_paused = false;
                   affected++;

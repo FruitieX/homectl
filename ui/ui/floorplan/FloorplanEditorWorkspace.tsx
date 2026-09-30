@@ -63,6 +63,8 @@ import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { deepEqual } from '@/lib/configSection';
 import { snapDevicePoint, type DeviceSnap } from '@/lib/floorplan-snapping';
 import './floorplan-editor.css';
+import { floorplanLabels } from '@/lib/floorplan-labels';
+import { FloorplanLayerToggles } from './FloorplanLayerToggles';
 const tools = [
   { id: 'select', name: 'Select', icon: MousePointer2, key: 'V' },
   { id: 'devices', name: 'Devices', icon: Lightbulb, key: 'D' },
@@ -801,30 +803,13 @@ export function FloorplanEditorWorkspace({
                         }
                       />
                     </label>
-                    <label className="fp-field">
-                      Labels
-                      <SettingsSelect
-                        aria-label="Marker labels"
-                        value={grid.labelMode ?? 'sensors'}
-                        onValueChange={(v) =>
-                          discrete({
-                            ...grid,
-                            labelMode: v as FloorplanGrid['labelMode'],
-                          })
-                        }
-                        options={(
-                          ['none', 'sensors', 'lights', 'all'] as const
-                        ).map((value) => ({
-                          value,
-                          label: {
-                            none: 'No labels',
-                            sensors: 'Sensors',
-                            lights: 'Lights',
-                            all: 'All devices',
-                          }[value],
-                        }))}
-                      />
-                    </label>
+                    <FloorplanLayerToggles
+                      label="Labels"
+                      value={floorplanLabels(grid)}
+                      onChange={(labelVisibility) =>
+                        discrete({ ...grid, labelVisibility })
+                      }
+                    />
                     {advanced && (
                       <label className="fp-field">
                         Tile size · pixels

@@ -28,6 +28,7 @@ import { Button } from '@/ui/primitives/button';
 /** One shared control composition for rooms, widgets and floorplan selections. */
 export function ColorPickerModal() {
   const modal = useDeviceModalState();
+  const selecting = modal.presentation === 'floorplan' && modal.selecting;
   const devices = useDevicesState();
   const timers = useUserTimers({ enabled: modal.open });
   const groups = useGroupsState();
@@ -40,7 +41,7 @@ export function ColorPickerModal() {
     overrides.map((row) => [row.device_key, row.display_name]),
   );
   const capture = useSaveSceneModalState();
-  const [, setSelectedDevices] = useSelectedDevices();
+  const [selectedDeviceKeys, setSelectedDevices] = useSelectedDevices();
   const [showAll, setShowAll] = useState(false);
   const [overridePending, setOverridePending] = useState<boolean | null>(null);
   const [overrideError, setOverrideError] = useState('');
@@ -63,13 +64,14 @@ export function ColorPickerModal() {
       keys.every((key) => modal.state.includes(key))
     );
   });
-  const title =
-    activeGroup?.[1]?.name ??
-    (modal.state.length === 1
-      ? selected[0]
-        ? getDeviceDisplayLabel(selected[0], names)
-        : 'Unavailable device'
-      : `${modal.state.length} devices`);
+  const title = selecting
+    ? `${selectedDeviceKeys.length} selected`
+    : (activeGroup?.[1]?.name ??
+      (modal.state.length === 1
+        ? selected[0]
+          ? getDeviceDisplayLabel(selected[0], names)
+          : 'Unavailable device'
+        : `${modal.state.length} devices`));
   const withScenes = writable.filter(
     (d) =>
       'Controllable' in d.data &&
@@ -125,12 +127,30 @@ export function ColorPickerModal() {
       }),
     );
   }
-  const close = () => modal.setOpen(false);
+  const close = () => {
+    if (modal.presentation === 'floorplan') {
+      modal.setSelecting(false);
+      setSelectedDevices([]);
+    }
+    modal.setOpen(false);
+  };
   return (
     <ResponsiveOverlay
       open={modal.open}
-      onOpenChange={modal.setOpen}
+      onOpenChange={(open) => (open ? modal.setOpen(true) : close())}
       title={title}
+      headerActions={
+        selecting ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!writable.length}
+            onClick={() => capture.setOpen(true)}
+          >
+            Save scene
+          </Button>
+        ) : undefined
+      }
       desktopPresentation={modal.presentation}
       className="max-w-2xl"
       description={`${modal.state.length} selected ${modal.state.length === 1 ? 'device' : 'devices'}. Controls apply immediately.`}
@@ -201,18 +221,20 @@ export function ColorPickerModal() {
         >
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">Scenes</h3>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={!writable.length}
-              onClick={() => {
-                setSelectedDevices(modal.state);
-                close();
-                capture.setOpen(true);
-              }}
-            >
-              Capture scene
-            </Button>
+            {!selecting && (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={!writable.length}
+                onClick={() => {
+                  setSelectedDevices(modal.state);
+                  modal.setOpen(false);
+                  capture.setOpen(true);
+                }}
+              >
+                Capture scene
+              </Button>
+            )}
           </div>
           <SceneList deviceKeys={modal.state} showAll={showAll} compact />
           <label className="flex min-h-11 items-center gap-2 text-xs text-muted-foreground">

@@ -4486,7 +4486,7 @@ mod consistency_tests {
         ])).unwrap();
         export.floorplans = vec![FloorplanExportRow {
             id:"upstairs".into(), name:"Upstairs".into(), image_data:Some("stored-test-image".into()), image_mime_type:Some("image/png".into()), width:Some(1024), height:Some(768),
-            grid_data:Some(json!({"width":4,"height":2,"tiles":[[0,0,0,0],[0,0,0,0]],"tileSize":32,"deviceScale":1.25,"labelMode":"lights","devices":[{"deviceKey":"dummy/lamp","deviceName":"Lamp","x":2.5,"y":1.25}],"groups":{"room":[{"x":1,"y":0},{"x":2,"y":1}]},"future":{"keep":true}}).to_string()),
+            grid_data:Some(json!({"width":4,"height":2,"tiles":[[0,0,0,0],[0,0,0,0]],"tileSize":32,"deviceScale":1.25,"labelMode":"lights","labelVisibility":{"lights":true,"sensors":false,"groups":true},"devices":[{"deviceKey":"dummy/lamp","deviceName":"Lamp","x":2.5,"y":1.25}],"groups":{"room":[{"x":1,"y":0},{"x":2,"y":1}]},"future":{"keep":true}}).to_string()),
         }, FloorplanExportRow {id:"empty".into(),name:"Empty floor".into(),image_data:None,image_mime_type:None,width:None,height:None,grid_data:None}];
         export.dashboard_layouts = vec![DashboardLayoutRow {
             id: 37,

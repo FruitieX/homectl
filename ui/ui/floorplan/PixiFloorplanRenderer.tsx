@@ -10,6 +10,8 @@ import {
 import { useEffect, useRef } from 'react';
 
 import { cn } from '@/lib/cn';
+import { floorplanLabels } from '@/lib/floorplan-labels';
+import { getGroupLabelLayout } from '@/lib/floorplan-group-label';
 import { getGroupOutline } from '@/lib/floorplan-group-outline';
 import {
   type FloorplanScene,
@@ -536,35 +538,24 @@ function syncGroupLabel(
   label.scale.set(1 / (textureScale * scale));
   label.visible = false;
   if (!visible) return;
-  const rows = getGroupOutline(group.cells).labelRows;
-  const maxWidth = rows.reduce(
-    (max, row) => Math.max(max, row.width * scene.tileWidth - 12 / scale),
-    0,
-  );
-  if (maxWidth < 20 / scale) return;
-  const characters = Array.from(group.name);
-  while (label.width > maxWidth && characters.length > 3) {
-    characters.pop();
-    label.text = characters.join('') + '…';
-  }
-  const markers = [...scene.lights, ...scene.sensors];
-  for (const row of rows) {
-    const available = row.width * scene.tileWidth - 12 / scale;
-    if (available < label.width) continue;
-    const x = (row.x + row.width / 2) * scene.tileWidth,
-      y = row.y * scene.tileHeight;
-    if (
-      markers.some(
-        (p) =>
-          Math.abs(p.x - x) < label.width / 2 + 24 / scale &&
-          Math.abs(p.y - y) < 28 / scale,
-      )
-    )
-      continue;
-    label.position.set(x, y);
-    label.visible = true;
-    break;
-  }
+  label.style.align = 'center';
+  label.style.lineHeight = 13 * textureScale;
+  const layout = getGroupLabelLayout({
+    cells: group.cells,
+    text: group.name,
+    tileWidth: scene.tileWidth,
+    tileHeight: scene.tileHeight,
+    scale,
+    measure: (text) => {
+      label.text = text;
+      return label.width * scale;
+    },
+    avoid: [...scene.lights, ...scene.sensors],
+  });
+  if (!layout) return;
+  label.text = layout.lines.join('\n');
+  label.position.set(layout.x, layout.y);
+  label.visible = true;
 }
 
 function syncGroups(
@@ -618,7 +609,7 @@ function syncGroups(
       group,
       scene,
       viewScale,
-      renderLabels && scene.labelMode !== 'none',
+      renderLabels && floorplanLabels(scene).groups,
     );
   }
 
@@ -960,10 +951,10 @@ function syncSensorLabel(
 }
 
 function sceneLabels(scene: FloorplanScene): FloorplanScene['sensors'] {
-  const mode = scene.labelMode ?? 'sensors';
+  const labels = floorplanLabels(scene);
   return [
-    ...(mode === 'sensors' || mode === 'all' ? scene.sensors : []),
-    ...(mode === 'lights' || mode === 'all'
+    ...(labels.sensors ? scene.sensors : []),
+    ...(labels.lights
       ? scene.lights.map((light) => ({
           deviceKey: light.deviceKey,
           x: light.x,
@@ -1544,6 +1535,7 @@ export function PixiFloorplanRenderer({
                 activeGesture.target.key,
                 {
                   pointerId: event.pointerId,
+                  origin: { x: event.clientX, y: event.clientY },
                   x:
                     rect.left +
                     (light ? light.x * view.scale + view.x : point.x),

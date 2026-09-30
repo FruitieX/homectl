@@ -1,3 +1,5 @@
+import { validFloorplanLayers } from './floorplan-labels.ts';
+
 export type TileType = 'empty' | 'floor' | 'wall' | 'door' | 'window';
 
 export interface DevicePosition {
@@ -43,6 +45,7 @@ export interface AvailableFloorplanDevice {
 export interface FloorplanGrid {
   [field: string]: unknown;
   labelMode?: 'none' | 'sensors' | 'lights' | 'all';
+  labelVisibility?: { lights: boolean; sensors: boolean; groups: boolean };
   width: number;
   height: number;
   tiles: TileType[][];
@@ -674,6 +677,9 @@ export function deserializeGrid(json: string): FloorplanGrid | null {
       deviceScale,
       devices,
       groups: normalizeGroupMasks(parsed.groups, width, height),
+      ...(validFloorplanLayers(parsed.labelVisibility)
+        ? { labelVisibility: parsed.labelVisibility }
+        : {}),
       labelMode: ['none', 'sensors', 'lights', 'all'].includes(
         parsed.labelMode ?? '',
       )

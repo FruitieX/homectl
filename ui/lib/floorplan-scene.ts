@@ -1,3 +1,4 @@
+import { floorplanLabels } from '@/lib/floorplan-labels';
 import { deviceReachability } from '@/lib/deviceReachability';
 import type { DeviceHealth } from '@/bindings/DeviceHealth';
 import { type Device } from '@/bindings/Device';
@@ -55,6 +56,7 @@ export interface FloorplanSceneGroupMask {
 
 export interface FloorplanScene {
   labelMode?: FloorplanGrid['labelMode'];
+  labelVisibility?: FloorplanGrid['labelVisibility'];
   layoutKey: string;
   width: number;
   height: number;
@@ -554,6 +556,7 @@ export function buildFloorplanScene({
   return {
     layoutKey: staticScene.key,
     labelMode: grid?.labelMode ?? 'sensors',
+    labelVisibility: floorplanLabels(grid),
     width: staticScene.width,
     height: staticScene.height,
     ...(image ? { backgroundImage: image } : {}),

@@ -21,6 +21,7 @@ import {
   type LightAdjustment,
 } from '@/lib/lightQuickAdjust';
 import { getColor } from '@/lib/colors';
+import { exceedsLongPressTolerance } from '@/lib/longPress';
 import { Button } from './primitives/button';
 
 const SURFACE_SIZE = 268;
@@ -270,12 +271,19 @@ export function LightQuickPopover({
     pointerId: number,
     region: 'brightness' | 'color',
     initial?: PointerEvent,
+    origin?: { x: number; y: number },
   ) => {
     setDragging(true);
     let value: LightAdjustment | null = null,
       previous: number | null = null;
+    let movedFromHold = !origin;
     const move = (e: PointerEvent) => {
       if (e.pointerId !== pointerId || !latest.current.enabled) return;
+      if (!movedFromHold && origin) {
+        if (!exceedsLongPressTolerance(origin, { x: e.clientX, y: e.clientY }))
+          return;
+        movedFromHold = true;
+      }
       const bounds = surface.current?.getBoundingClientRect();
       if (!bounds?.width) return;
       // DOM coordinates include the opening animation and browser/UI scaling.
@@ -286,6 +294,9 @@ export function LightQuickPopover({
           ((e.clientY - bounds.top - bounds.height / 2) * SURFACE_SIZE) /
           bounds.height,
         r = Math.hypot(dx, dy);
+      // Touch jitter and travel back into the power hub are not color input.
+      // In particular, they must never send zero saturation (white).
+      if (region === 'color' && r <= COLOR_MIN_RADIUS) return;
       if (
         region === 'brightness' &&
         r < BRIGHTNESS_RADIUS - BRIGHTNESS_WIDTH / 2
@@ -365,7 +376,12 @@ export function LightQuickPopover({
     if (!hold) return;
     // The opening pointer stays a color gesture even outside the hue disk.
     // Brightness always needs a fresh pointerdown on its own ring.
-    const cleanup = start(hold.pointerId, 'color');
+    const cleanup = start(
+      hold.pointerId,
+      'color',
+      undefined,
+      hold.origin ?? hold,
+    );
     return cleanup;
   }, [hold]);
   if (!state) return null;

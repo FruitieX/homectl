@@ -236,6 +236,10 @@ export default function ConfigHomePage() {
                     to={section.href}
                     className="flex min-h-16 items-center gap-4 px-4 py-3 hover:bg-accent/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   >
+                    <section.icon
+                      aria-hidden
+                      className="size-5 shrink-0 text-muted-foreground"
+                    />
                     <span className="min-w-0 flex-1">
                       <span className="text-sm font-medium">
                         {section.label}

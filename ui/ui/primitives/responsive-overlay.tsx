@@ -26,6 +26,7 @@ interface ResponsiveOverlayProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: ReactNode;
+  headerActions?: ReactNode;
   description?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -113,6 +114,7 @@ export function ResponsiveOverlay({
   open,
   onOpenChange,
   title,
+  headerActions,
   description,
   children,
   className,
@@ -189,7 +191,11 @@ export function ResponsiveOverlay({
 
   if (desktopPresentation === 'floorplan') {
     return open ? (
-      <FloorplanInspector title={title} onClose={() => handleOpenChange(false)}>
+      <FloorplanInspector
+        title={title}
+        actions={headerActions}
+        onClose={() => handleOpenChange(false)}
+      >
         {children}
       </FloorplanInspector>
     ) : null;

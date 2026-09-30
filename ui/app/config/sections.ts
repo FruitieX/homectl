@@ -1,4 +1,27 @@
+import {
+  Activity,
+  Timer,
+  ShieldAlert,
+  Plug,
+  House,
+  Lightbulb,
+  Palette,
+  Workflow,
+  Variable,
+  History,
+  Calculator,
+  Radio,
+  Database,
+  Map,
+  LayoutDashboard,
+  Settings,
+  ScrollText,
+  ArchiveRestore,
+  type LucideIcon,
+} from 'lucide-react';
+
 export type ConfigSection = {
+  icon: LucideIcon;
   description: string;
   group: 'Your home' | 'Automations' | 'Appearance' | 'Maintenance';
   href: string;
@@ -9,6 +32,7 @@ export type ConfigSection = {
 export const configSections = [
   {
     href: '/config/sensor-history',
+    icon: Activity,
     label: 'Sensor activity',
     description: 'Inspect recorded value changes across your sensors.',
     group: 'Maintenance',
@@ -16,6 +40,7 @@ export const configSections = [
   },
   {
     href: '/config/timers',
+    icon: Timer,
     label: 'Timers',
     description: 'Countdowns, scheduled actions and ready-by times.',
     group: 'Automations',
@@ -23,6 +48,7 @@ export const configSections = [
   },
   {
     href: '/config/diagnostics',
+    icon: ShieldAlert,
     label: 'Check for problems',
     description: 'Find broken links and get a next step for each issue.',
     group: 'Maintenance',
@@ -37,6 +63,7 @@ export const configSections = [
   },
   {
     href: '/config/integrations',
+    icon: Plug,
     label: 'Connections & services',
     description: 'Connect devices, schedules, and virtual services.',
     group: 'Your home',
@@ -52,6 +79,7 @@ export const configSections = [
   },
   {
     href: '/config/groups',
+    icon: House,
     label: 'Rooms & groups',
     description: 'Organize devices and control them together.',
     group: 'Your home',
@@ -59,6 +87,7 @@ export const configSections = [
   },
   {
     href: '/config/devices',
+    icon: Lightbulb,
     label: 'Devices',
     description: 'Name, inspect, and organize your devices and sensors.',
     group: 'Your home',
@@ -66,6 +95,7 @@ export const configSections = [
   },
   {
     href: '/config/scenes',
+    icon: Palette,
     label: 'Scenes',
     description: 'Save the lighting or device state you want to recall.',
     group: 'Automations',
@@ -73,6 +103,7 @@ export const configSections = [
   },
   {
     href: '/config/routines',
+    icon: Workflow,
     label: 'Routines',
     description: 'Choose what starts an automation and what it does.',
     group: 'Automations',
@@ -87,6 +118,7 @@ export const configSections = [
   },
   {
     href: '/config/helpers',
+    icon: Variable,
     label: 'Helpers',
     description: 'Store values that automations can read and change.',
     group: 'Automations',
@@ -103,6 +135,7 @@ export const configSections = [
   },
   {
     href: '/config/routine-history',
+    icon: History,
     label: 'Routine activity',
     description: 'See what ran, what was blocked and the recorded reasons.',
     group: 'Automations',
@@ -110,6 +143,7 @@ export const configSections = [
   },
   {
     href: '/config/sources',
+    icon: Calculator,
     label: 'Computed sources',
     description: 'Use calculated values such as time-based light color.',
     group: 'Automations',
@@ -125,6 +159,7 @@ export const configSections = [
   },
   {
     href: '/config/sensors',
+    icon: Radio,
     label: 'Sensor catalog',
     description: 'Name dashboard sensors and organize their groups.',
     group: 'Your home',
@@ -139,6 +174,7 @@ export const configSections = [
   },
   {
     href: '/config/widget-sources',
+    icon: Database,
     label: 'Widget sources',
     description:
       'Connect weather, calendar, transport and historical sensor data.',
@@ -155,6 +191,7 @@ export const configSections = [
   },
   {
     href: '/config/floorplan',
+    icon: Map,
     label: 'Floorplan',
     description: 'Place devices and rooms on a map of your home.',
     group: 'Appearance',
@@ -162,6 +199,7 @@ export const configSections = [
   },
   {
     href: '/config/dashboard',
+    icon: LayoutDashboard,
     label: 'Dashboards',
     description: 'Manage layouts and the widgets shown on each display.',
     group: 'Appearance',
@@ -169,6 +207,7 @@ export const configSections = [
   },
   {
     href: '/config/settings',
+    icon: Settings,
     label: 'App & system',
     description: 'Adjust appearance, startup behavior, and assistant settings.',
     group: 'Appearance',
@@ -192,6 +231,7 @@ export const configSections = [
   },
   {
     href: '/config/logs',
+    icon: ScrollText,
     label: 'Logs',
     description: 'Inspect technical events when troubleshooting.',
     group: 'Maintenance',
@@ -199,6 +239,7 @@ export const configSections = [
   },
   {
     href: '/config/import-export',
+    icon: ArchiveRestore,
     label: 'Backups & restore',
     description: 'Save, restore, or import your configuration.',
     group: 'Maintenance',

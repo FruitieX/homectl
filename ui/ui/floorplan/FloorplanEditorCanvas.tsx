@@ -21,6 +21,8 @@ import {
   moveDeviceOnGrid,
   placeSelectedDeviceOnGrid,
 } from '@/lib/floorplan-editor';
+import { floorplanLabels } from '@/lib/floorplan-labels';
+import { getGroupLabelLayout } from '@/lib/floorplan-group-label';
 import { getFloorplanRenderMetrics } from '@/lib/floorplan-metrics';
 import {
   effectiveDeviceSnap,
@@ -403,23 +405,37 @@ export function FloorplanEditorCanvas({
           ctx.lineWidth = 1 / view.scale;
           for (const p of points) ctx.strokeRect(p.x * tw, p.y * th, tw, th);
         }
-        if (points.length && !(mobile && tray === 'library')) {
-          const anchor = points.reduce(
-            (best, p) =>
-              p.y < best.y || (p.y === best.y && p.x < best.x) ? p : best,
-            points[0],
-          );
+        if (
+          floorplanLabels(grid).groups &&
+          points.length &&
+          !(mobile && tray === 'library')
+        ) {
           ctx.save();
-          ctx.translate(anchor.x * tw, anchor.y * th);
-          ctx.scale(1 / view.scale, 1 / view.scale);
-          ctx.font = mobile ? '500 9px system-ui' : '500 11px system-ui';
-          ctx.textAlign = 'left';
-          ctx.fillStyle = getFloorplanGroupStroke(id);
-          ctx.fillText(
-            groups.find((g) => g.id === id)?.name ?? id,
-            7,
-            mobile ? 10 : 15,
-          );
+          const fontSize = mobile ? 9 : 11;
+          ctx.font = '500 ' + fontSize + 'px system-ui';
+          const label = getGroupLabelLayout({
+            cells: points,
+            text: groups.find((g) => g.id === id)?.name ?? id,
+            tileWidth: tw,
+            tileHeight: th,
+            scale: view.scale,
+            fontSize,
+            measure: (text) => ctx.measureText(text).width,
+          });
+          if (label) {
+            ctx.translate(label.x, label.y);
+            ctx.scale(1 / view.scale, 1 / view.scale);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = getFloorplanGroupStroke(id);
+            label.lines.forEach((line, i) =>
+              ctx.fillText(
+                line,
+                0,
+                (i - (label.lines.length - 1) / 2) * (fontSize + 3),
+              ),
+            );
+          }
           ctx.restore();
         }
       }
@@ -502,13 +518,12 @@ export function FloorplanEditorCanvas({
         ctx.textBaseline = 'middle';
         ctx.fillText(info?.type === 'sensor' ? 'S' : info ? '●' : '?', 0, 1);
       }
-      const labels = grid.labelMode ?? 'sensors';
+      const labels = floorplanLabels(grid);
       if (
         (!mobile || key === selected) &&
         (key === selected ||
-          labels === 'all' ||
-          (labels === 'sensors' && info?.type === 'sensor') ||
-          (labels === 'lights' && info?.type === 'controllable'))
+          (labels.sensors && info?.type === 'sensor') ||
+          (labels.lights && info?.type === 'controllable'))
       ) {
         ctx.font = '500 10px system-ui';
         ctx.textAlign = 'center';

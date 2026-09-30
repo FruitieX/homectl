@@ -43,7 +43,14 @@ export function LightQuickIndicator({
           const timer = setTimeout(() => {
             cleanup();
             suppressClick.current = true;
-            setQuick({ anchor, hold: { ...anchor, pointerId } });
+            setQuick({
+              anchor,
+              hold: {
+                ...anchor,
+                pointerId,
+                origin: { x: clientX, y: clientY },
+              },
+            });
           }, 500);
           const move = (next: PointerEvent) => {
             if (

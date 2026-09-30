@@ -9,6 +9,7 @@ export default async function (cdp, { width, url }) {
   )
     throw Error('Isolated fixture required');
   const id = 'radial_review_' + Date.now();
+  const restoreSceneId = id + '_restore';
   const checks = [];
   const sensorWrites = [];
   cdp.on('Network.requestWillBeSent', ({ request }) => {
@@ -140,12 +141,39 @@ export default async function (cdp, { width, url }) {
   // both lights and must not leave the next viewport dependent on their order.
   const initialDevices = (await (await fetch(base + '/api/v1/devices')).json())
     .devices;
+  const initialLight = initialDevices.find(
+    (device) => device.id === 'living_room_lamp',
+  );
+  const initialScene = {
+    scene_id: initialLight.data.Controllable.scene_id,
+    scene_paused: initialLight.data.Controllable.scene_paused,
+  };
+  await request('/api/v1/config/scenes', {
+    id: restoreSceneId,
+    name: 'Slow restore regression',
+    hidden: true,
+    script: null,
+    device_states: {
+      'zigbee2mqtt/living_room_lamp': {
+        power: true,
+        brightness: 0.8,
+        color: { h: 32, s: 0.4 },
+        transition: 60,
+      },
+    },
+    group_states: {},
+    group_state_order: [],
+  });
   for (const id of ['living_room_lamp', 'living_room_floor_lamp']) {
     const device = initialDevices.find((device) => device.id === id);
     device.data.Controllable.state.power = true;
     device.data.Controllable.state.brightness = 0.62;
     device.data.Controllable.state.color =
       id === 'living_room_lamp' ? { h: 32, s: 0.64 } : { h: 240, s: 0.4 };
+    if (id === 'living_room_lamp') {
+      device.data.Controllable.scene_id = restoreSceneId;
+      device.data.Controllable.scene_paused = true;
+    }
     await request('/api/v1/devices/' + id, device, 'PUT');
   }
   grid.devices.push(
@@ -248,6 +276,27 @@ export default async function (cdp, { width, url }) {
     );
     if (!sameRow) throw Error('Tabs must share AppBar before assistant');
     checks.push('Tabs share AppBar before assistant without overflow');
+    await click(
+      `document.querySelector('[aria-label="Floorplan view options"]')`,
+    );
+    for (const row of ['Show on floorplan', 'Labels']) {
+      for (const name of ['Lights', 'Sensors', 'Groups']) {
+        const target = `[...document.querySelector('[role="group"][aria-label="${row}"]').querySelectorAll('button')].find(b=>b.textContent.trim()==='${name}')`;
+        await click(target);
+        await until(
+          `!!document.querySelector('[role="group"][aria-label="${row}"]')&&${target}.getAttribute('aria-pressed')==='false'`,
+          `${row}: ${name} toggles off and the options stay open`,
+        );
+        await click(target);
+        await until(
+          `${target}.getAttribute('aria-pressed')==='true'`,
+          `${row}: ${name} toggles back on independently`,
+        );
+      }
+    }
+    await shot('view-options');
+    await click(button('Use floorplan label defaults'));
+    await key('Escape', 27);
     const point = async (x = 3, y = 3) => {
       await pause(350);
       return evaluate(
@@ -263,6 +312,13 @@ export default async function (cdp, { width, url }) {
     await pointer('down', p);
     await pause(620);
     await until(`!!${pop}`, 'Hold opens radial control');
+    await pointer('move', { x: p.x + 2, y: p.y + 1 });
+    await pause(200);
+    if ((await commands()).length !== before)
+      throw Error('Opening hold jitter changed the light');
+    checks.push(
+      'Small movement during the opening hold sends no color or power command',
+    );
     await pointer('up', p);
     await until(
       `!!${pop}&&!document.body.innerText.includes('1 selected')`,
@@ -366,12 +422,22 @@ export default async function (cdp, { width, url }) {
       );
     }
     await evaluate(`document.documentElement.dataset.density='compact'`);
+    await until(
+      `${pop}.getAttribute('aria-busy')==='false'`,
+      'Quadrant adjustments are acknowledged before the delayed-command check',
+    );
     await request('/api/__fixture/live-controls', { delay: 400 });
     const colorBefore = (await commands()).length;
     await pointer('down', { x: center.x + 84, y: center.y });
     await pause(180);
     if ((await commands()).length !== colorBefore + 1)
-      throw Error('Color must apply while held');
+      throw Error(
+        'Color must apply while held: ' +
+          JSON.stringify({
+            before: colorBefore,
+            after: (await commands()).length,
+          }),
+      );
     const dot = await evaluate(
       `${pop}.querySelector('[data-color-indicator]').style.cssText`,
     );
@@ -449,6 +515,13 @@ export default async function (cdp, { width, url }) {
     await pause(850);
     await until(`!!${pop}`, 'Direct hold drag reopens radial');
     const heldBefore = (await commands()).length;
+    await pointer('move', { x: center.x + 24, y: center.y });
+    await pause(180);
+    if ((await commands()).length !== heldBefore)
+      throw Error('Movement inside the power hub changed color');
+    checks.push(
+      'Movement within the center power circle never turns the light white',
+    );
     await pointer('move', { x: center.x + 70, y: center.y });
     await pause(180);
     const heldColor = (await commands()).at(-1)?.DeviceCommand;
@@ -462,6 +535,12 @@ export default async function (cdp, { width, url }) {
       throw Error(
         'Opening hold must apply color before release, without changing brightness',
       );
+    const returningBefore = (await commands()).length;
+    await pointer('move', center);
+    await pause(180);
+    if ((await commands()).length !== returningBefore)
+      throw Error('Returning a color drag to the power hub changed its color');
+    checks.push('Returning to the power hub retains the last chosen color');
     await pointer('move', { x: center.x + 119, y: center.y });
     await pointer('up', { x: center.x + 119, y: center.y });
     await pause(300);
@@ -517,6 +596,41 @@ export default async function (cdp, { width, url }) {
       `!!document.querySelector('[aria-label="Floorplan inspector"]')`,
       'Tap opens full device sheet',
     );
+    await until(
+      `!!${button('Restore scene')}`,
+      'Paused light exposes Restore scene',
+    );
+    const restoreBefore = (await commands()).length;
+    await click(button('Restore scene'));
+    const restore = (await commands()).slice(restoreBefore);
+    if (
+      restore.length !== 1 ||
+      restore[0].SceneCommand?.transition !== 0.4 ||
+      restore[0].SceneCommand?.use_scene_transition !== false ||
+      restore[0].SceneCommand?.scene_id !== restoreSceneId ||
+      JSON.stringify(restore[0].SceneCommand?.device_keys) !==
+        JSON.stringify(['zigbee2mqtt/living_room_lamp'])
+    )
+      throw Error(
+        'Restore must use the manual transition and keep its device scope',
+      );
+    checks.push(
+      'Restore scene overrides a 60-second scene transition with the shared 0.4-second UI transition',
+    );
+    const restoredLight = (
+      await (await fetch(base + '/api/v1/devices')).json()
+    ).devices.find((device) => device.id === 'living_room_lamp');
+    if (
+      restoredLight.data.Controllable.scene_paused ||
+      restoredLight.data.Controllable.state.transition !== 0.4 ||
+      restoredLight.data.Controllable.state.brightness !== 0.8
+    )
+      throw Error(
+        'Restore did not immediately publish the restored state and transition',
+      );
+    checks.push(
+      'Restore publishes scene values immediately and clears the pause',
+    );
     p = await point(8, 8);
     await pointer('down', p);
     await pause(620);
@@ -537,6 +651,22 @@ export default async function (cdp, { width, url }) {
     await until(
       'document.body.innerText.includes("2 selected")',
       'Tap adds a light to the selection',
+    );
+    const inspector = `document.querySelector('[aria-label="Floorplan inspector"]')`;
+    await until(
+      `(()=>{const p=${inspector};return p?.querySelectorAll('h2').length===1&&p.querySelector('h2').textContent==='2 selected'&&p.querySelectorAll('[aria-label="Close controls"]').length===1&&![...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='Done')&&![...p.querySelectorAll('button')].some(b=>b.textContent.trim()==='Capture scene')})()`,
+      'Selection has one title, one close button and no duplicate capture action',
+    );
+    await shot('selection-panel');
+    await click(button('Save scene'));
+    await until(
+      `document.body.innerText.includes('2 controllable devices captured by stable device ID.')`,
+      'Save scene retains both selected targets',
+    );
+    await click(button('Cancel'));
+    await until(
+      `!!${inspector}&&${inspector}.querySelector('h2').textContent==='2 selected'&&!document.querySelector('[role="dialog"]')`,
+      'Cancel capture returns to the same selection',
     );
     const groupPop = `document.querySelector('[aria-label="2 selected lights quick controls"]')`;
     const groupBefore = (await commands()).length;
@@ -673,6 +803,23 @@ export default async function (cdp, { width, url }) {
     );
     if ((await commands()).length !== beforeSelection)
       throw Error('Selection must not change a device');
+    await click(`${inspector}.querySelector('[aria-label="Close controls"]')`);
+    await until(
+      `!${inspector}&&!document.body.innerText.includes('1 selected')`,
+      'Closing the selection panel clears all devices and dismisses it',
+    );
+    p = await point();
+    await pointer('down', p);
+    await pointer('up', p);
+    await until(
+      `${inspector}?.querySelector('h2').textContent==='Living room lamp'`,
+      'The next tap opens regular controls after selection close',
+    );
+    await click(button('Select devices'));
+    await until(
+      `${inspector}?.querySelector('h2').textContent==='1 selected'`,
+      'Selection can be started again after closing',
+    );
     await pointer('down', await point());
     await pointer('up', await point());
     await until(
@@ -881,6 +1028,14 @@ export default async function (cdp, { width, url }) {
     throw e;
   } finally {
     await request('/api/__fixture/live-controls', { delay: 0, reject: false });
+    const latestLight = (
+      await (await fetch(base + '/api/v1/devices')).json()
+    ).devices.find((device) => device.id === 'living_room_lamp');
+    Object.assign(latestLight.data.Controllable, initialScene);
+    await request('/api/v1/devices/living_room_lamp', latestLight, 'PUT');
+    await fetch(base + `/api/v1/config/scenes/${restoreSceneId}`, {
+      method: 'DELETE',
+    });
     await fetch(base + `/api/v1/config/floorplans/${id}`, { method: 'DELETE' });
   }
 }

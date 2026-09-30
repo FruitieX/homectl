@@ -1,3 +1,4 @@
+import { validFloorplanLayers } from './floorplan-labels.ts';
 import type { FloorplanGrid } from '../ui/FloorplanGridEditor';
 const object = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
@@ -96,6 +97,13 @@ export function readFloorplanDraft(raw: string): {
       throw Error('Device scale must be positive.');
     if (!['none', 'sensors', 'lights', 'all'].includes(String(labelMode)))
       throw Error('This layout uses an unsupported label mode.');
+    if (
+      value.labelVisibility !== undefined &&
+      !validFloorplanLayers(value.labelVisibility)
+    )
+      throw Error(
+        'Label visibility must specify lights, sensors and groups as on/off values.',
+      );
     return {
       grid: {
         ...value,

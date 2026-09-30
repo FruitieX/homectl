@@ -1,0 +1,25 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+{
+ "driven": {
+  "passed": true,
+  "width": 1440,
+  "checks": [
+   "Settings categories loaded",
+   "Every settings landing category has an icon",
+   "Every settings sidebar/mobile menu item has an icon",
+   "Label fixture loaded in editor",
+   "Editor offers independent labels for lights, sensors and groups",
+   "Label defaults saved",
+   "Editor stores the independent defaults through the floorplan API",
+   "Saved editor reopened",
+   "Reload preserves all three label defaults",
+   "Group labels enabled and saved",
+   "New floorplan appears in map tabs",
+   "Map displays wrapped room label",
+   "Map inherits saved light, sensor and group label defaults",
+   "Hiding groups preserves their separate label preference and keeps options open"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":1440,"height":1000},"problems":[]}

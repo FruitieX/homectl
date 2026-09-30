@@ -189,6 +189,17 @@ fn validate_grid(raw: &str) -> Result<(), String> {
             return Err("This layout uses an unsupported label mode.".into());
         }
     }
+    if let Some(labels) = value.get("labelVisibility") {
+        if !labels.is_object()
+            || ["lights", "sensors", "groups"]
+                .iter()
+                .any(|key| !labels[*key].is_boolean())
+        {
+            return Err(
+                "Label visibility must specify lights, sensors and groups as on/off values.".into(),
+            );
+        }
+    }
     Ok(())
 }
 pub(super) fn routes(
@@ -356,7 +367,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     fn grid() -> String {
-        json!({"width":2,"height":2,"tileSize":20,"tiles":[["wall","window"],["floor","door"]],"devices":[],"groups":{},"labelMode":"all","future":{"keep":[2,1]}}).to_string()
+        json!({"width":2,"height":2,"tileSize":20,"tiles":[["wall","window"],["floor","door"]],"devices":[],"groups":{},"labelMode":"all","labelVisibility":{"lights":true,"sensors":false,"groups":true},"future":{"keep":[2,1]}}).to_string()
     }
     #[tokio::test]
     async fn floorplan_editor_saves_one_scope_preserves_unknown_grid_and_checks_image_conflicts() {
@@ -465,6 +476,15 @@ mod tests {
     fn floorplan_editor_validates_placement_without_dropping_extensions() {
         assert!(validate_grid(&grid()).is_ok());
         let mut value: Value = serde_json::from_str(&grid()).unwrap();
+        value["labelVisibility"] = json!({"lights":false,"sensors":true,"groups":true});
+        assert!(validate_grid(&value.to_string()).is_ok());
+        value["labelVisibility"]["groups"] = json!("yes");
+        assert!(validate_grid(&value.to_string()).is_err());
+        value.as_object_mut().unwrap().remove("labelVisibility");
+        assert!(
+            validate_grid(&value.to_string()).is_ok(),
+            "Older layouts need no label visibility field"
+        );
         value["devices"] =
             json!([{"deviceKey":"dummy/lamp","deviceName":"Lamp","x":1,"y":0,"future":42}]);
         assert!(validate_grid(&value.to_string()).is_ok());
