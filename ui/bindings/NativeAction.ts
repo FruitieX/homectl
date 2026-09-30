@@ -18,6 +18,12 @@ import type { JsonValue } from './serde_json/JsonValue';
  * One typed native action with a stable node ID.
  */
 export type NativeAction =
+  | {
+      action: 'call_block';
+      id: NodeId;
+      block_id: string;
+      inputs: { [key in string]: JsonValue };
+    }
   | { action: 'run_script'; id: NodeId; spec: ScriptSpec }
   | {
       action: 'activate_scene';

@@ -11,6 +11,7 @@ const SECTION_BY_ENTITY: Record<string, string> = {
   routine: 'routines',
   integration: 'integrations',
   helper: 'helpers',
+  block: 'blocks',
   source: 'sources',
 };
 
@@ -21,6 +22,7 @@ export function configItemHref(entity: string, entityId: string): string {
     case 'scene':
     case 'routine':
     case 'helper':
+    case 'block':
     case 'source':
     case 'integration':
       return `/config/${SECTION_BY_ENTITY[entity]}/${encoded}`;

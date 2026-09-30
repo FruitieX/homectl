@@ -299,3 +299,10 @@ pub enum ValueHistory {
     ChangedAtMs,
     Value,
 }
+
+#[derive(Clone, Copy, Iden)]
+pub enum AutomationBlocks {
+    Table,
+    Id,
+    Document,
+}

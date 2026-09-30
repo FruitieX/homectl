@@ -1,10 +1,10 @@
 use crate::db::schema::{
-    AssistantThreads, AutomationSources, AutomationTimerJobs, AutomationValueState,
-    AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets,
-    DeviceColorCalibrations, DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans,
-    GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, RoutineHistory, Routines,
-    ScenarioSuites, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, UiState,
-    ValueHistory, WidgetSettings,
+    AssistantThreads, AutomationBlocks, AutomationSources, AutomationTimerJobs,
+    AutomationValueState, AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts,
+    DashboardWidgets, DeviceColorCalibrations, DeviceDisplayOverrides, DeviceSensorConfigs,
+    Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups, Integrations,
+    RoutineHistory, Routines, ScenarioSuites, SceneDeviceStates, SceneGroupStates, SceneOverrides,
+    Scenes, UiState, ValueHistory, WidgetSettings,
 };
 use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm_migration::prelude::*;
@@ -39,6 +39,7 @@ impl MigratorTrait for Migrator {
             Box::new(group_links::RepairableGroupLinks),
             Box::new(calibration_brightness::DeviceCalibrationBrightness),
             Box::new(config_initialized::ConfigInitialized),
+            Box::new(AutomationBlocksMigration),
         ]
     }
 }
@@ -1681,5 +1682,37 @@ mod tests {
             row.try_get::<String>("", "actions").unwrap(),
             "[{\"action\":\"noop\"}]"
         );
+    }
+}
+
+struct AutomationBlocksMigration;
+impl MigrationName for AutomationBlocksMigration {
+    fn name(&self) -> &str {
+        "m20260930000000_automation_blocks"
+    }
+}
+#[async_trait::async_trait]
+impl MigrationTrait for AutomationBlocksMigration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(AutomationBlocks::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(AutomationBlocks::Id)
+                            .text()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(AutomationBlocks::Document).text().not_null())
+                    .to_owned(),
+            )
+            .await
+    }
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(AutomationBlocks::Table).to_owned())
+            .await
     }
 }

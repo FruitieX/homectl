@@ -21,6 +21,8 @@ const ConfigGroupDetailPage = lazy(() => import('../app/config/groups/detail'));
 const ConfigSceneDetailPage = lazy(() => import('../app/config/scenes/detail'));
 const ConfigSceneNewPage = lazy(() => import('../app/config/scenes/new'));
 const ConfigGroupNewPage = lazy(() => import('../app/config/groups/new'));
+const ConfigBlocksPage = lazy(() => import('../app/config/blocks/page'));
+const ConfigBlockDetailPage = lazy(() => import('../app/config/blocks/detail'));
 const ConfigHelpersPage = lazy(() => import('../app/config/helpers/page'));
 const ConfigHelperDetailPage = lazy(
   () => import('../app/config/helpers/detail'),
@@ -226,6 +228,11 @@ export const router = createBrowserRouter([
           {
             path: 'migration',
             element: withSuspense(<ConfigMigrationPage />),
+          },
+          { path: 'blocks', element: withSuspense(<ConfigBlocksPage />) },
+          {
+            path: 'blocks/:id',
+            element: withSuspense(<ConfigBlockDetailPage />),
           },
           {
             path: 'helpers',

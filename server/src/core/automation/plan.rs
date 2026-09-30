@@ -410,7 +410,8 @@ fn predicate_device(predicate: &ConditionExpr) -> Option<DeviceKey> {
         ConditionExpr::Not { condition } => predicate_device(condition),
         ConditionExpr::Comparison { .. }
         | ConditionExpr::Group { .. }
-        | ConditionExpr::Literal { .. } => None,
+        | ConditionExpr::Literal { .. }
+        | ConditionExpr::Block { .. } => None,
     }
 }
 
@@ -639,6 +640,9 @@ impl Planner<'_> {
     fn plan_action(&mut self, action: &NativeAction) {
         let kind = action_kind(action);
         match action {
+            NativeAction::CallBlock { .. } => {
+                self.suppress(action, kind, Vec::new(), "unexpanded_block".into())
+            }
             NativeAction::ActivateScene {
                 scene_id,
                 select,
@@ -1073,6 +1077,7 @@ fn device_key(reference: &DeviceRef) -> DeviceKey {
 
 pub fn action_kind(action: &NativeAction) -> &'static str {
     match action {
+        NativeAction::CallBlock { .. } => "call_block",
         NativeAction::RunScript { .. } => "run_script",
         NativeAction::ActivateScene { .. } => "activate_scene",
         NativeAction::CycleScenes { .. } => "cycle_scenes",

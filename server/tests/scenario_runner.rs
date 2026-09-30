@@ -636,3 +636,39 @@ async fn scenario_seeds_a_color_source_used_by_a_linked_scene() {
         .expect("scenario suite should run");
     assert!(report.scenarios[0].passed, "{report:#?}");
 }
+
+#[tokio::test]
+async fn reusable_blocks_preserve_production_event_execution_and_fixture_discovery() {
+    let mut config = stairs_config();
+    let actions = config.routines[0].definition_v2.as_ref().unwrap()["program"]["steps"].clone();
+    config.blocks=serde_json::from_value(json!([
+        {"id":"off","name":"Off","kind":"condition","inputs":{"group":{"label":"Group","kind":{"kind":"group"}}},"body":{"kind":"group","group_id":{"$input":"group"},"quantifier":"none","power":true}},
+        {"id":"lights","name":"Lights","kind":"action","body":actions},
+        {"id":"outer","name":"Outer","kind":"action","body":[{"action":"call_block","id":"inner","block_id":"lights","inputs":{}}]}
+    ])).unwrap();
+    let def = config.routines[0].definition_v2.as_mut().unwrap();
+    def["condition"] = json!({"kind":"block","block_id":"off","inputs":{"group":"upstairs"}});
+    def["program"]["steps"] =
+        json!([{"action":"call_block","id":"call","block_id":"outer","inputs":{}}]);
+    let report = run_scenario_suite(&config, &stairs_suite()).await.unwrap();
+    assert_eq!(report.failed_count(), 0, "{report:#?}");
+    assert_eq!(report.passed_count(), 2);
+    let mut missing = stairs_suite();
+    missing.scenarios[0].initial_state.retain(|state| !matches!(state,homectl_server::core::scenario::ScenarioDevice::Light {device,..} if device.device_id.to_string()=="kids_left"));
+    missing.scenarios[0].expect.commands.clear();
+    missing.scenarios[0].expect.final_state.clear();
+    missing.scenarios[0].expect.unchanged = missing.scenarios[0]
+        .initial_state
+        .iter()
+        .map(|state| {
+            use homectl_server::core::scenario::ScenarioDevice;
+            match state {
+                ScenarioDevice::Light { device, .. }
+                | ScenarioDevice::Sensor { device, .. }
+                | ScenarioDevice::ColorSource { device, .. } => device.clone(),
+            }
+        })
+        .collect();
+    let error = run_scenario_suite(&config, &missing).await.unwrap_err();
+    assert!(error.to_string().contains("required devices"), "{error:#}");
+}

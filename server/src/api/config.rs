@@ -390,6 +390,7 @@ fn validate_routine_catalog(
     runtime_config: &ConfigExport,
     catalog: &ConfigCatalog,
 ) -> color_eyre::Result<()> {
+    automation::blocks::validate_catalog(catalog)?;
     for row in &runtime_config.routines {
         match automation::row_semantics(row) {
             RoutineSemantics::V1 => {}
@@ -1675,6 +1676,7 @@ pub fn config(
                 .or(routines_routes(snapshot, handle))
                 .or(helpers_routes(snapshot, handle))
                 .or(sources_routes(snapshot, handle))
+                .or(blocks::routes(snapshot, handle))
                 .or(assistant_routes(snapshot, handle))
                 .or(floorplans_routes(snapshot, handle))
                 .or(floorplan_routes(snapshot, handle))
@@ -3390,6 +3392,7 @@ use scenes::scenes_routes;
 mod routines;
 use routines::routines_routes;
 
+mod blocks;
 mod sources;
 use sources::sources_routes;
 
@@ -4301,6 +4304,7 @@ impl MigratePreviewResult {
             scenes: self.scenes.clone(),
             routines: self.routines.clone(),
             scenario_suite: None,
+            blocks: Vec::new(),
             helpers: Vec::new(),
             helper_values: Vec::new(),
             sources: Vec::new(),
@@ -6056,6 +6060,7 @@ devices = [
             scenes: Vec::new(),
             routines: Vec::new(),
             scenario_suite: None,
+            blocks: Vec::new(),
             helpers: Vec::new(),
             helper_values: Vec::new(),
             sources: Vec::new(),

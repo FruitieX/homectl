@@ -285,6 +285,11 @@ pub struct ScheduleSpec {
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(export)]
 pub enum ConditionExpr {
+    Block {
+        block_id: String,
+        #[serde(default)]
+        inputs: std::collections::BTreeMap<String, serde_json::Value>,
+    },
     Literal {
         value: bool,
     },
@@ -444,6 +449,12 @@ pub struct NativeProgram {
 #[serde(tag = "action", rename_all = "snake_case")]
 #[ts(export)]
 pub enum NativeAction {
+    CallBlock {
+        id: NodeId,
+        block_id: String,
+        #[serde(default)]
+        inputs: std::collections::BTreeMap<String, serde_json::Value>,
+    },
     /// Pure sandboxed handler whose returned actions are inserted at this
     /// position. All handlers finish and validate before any effects dispatch.
     RunScript { id: NodeId, spec: ScriptSpec },
@@ -581,7 +592,8 @@ pub enum NativeAction {
 impl NativeAction {
     pub fn id(&self) -> &NodeId {
         match self {
-            Self::RunScript { id, .. }
+            Self::CallBlock { id, .. }
+            | Self::RunScript { id, .. }
             | Self::ActivateScene { id, .. }
             | Self::CycleScenes { id, .. }
             | Self::SetPower { id, .. }

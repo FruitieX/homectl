@@ -15,6 +15,7 @@ fn blank_backup_config() -> Value {
         "groups": [],
         "scenes": [],
         "routines": [],
+        "blocks": [],
         "helpers": [],
         "helper_values": [],
         "sources": [],
@@ -1292,6 +1293,7 @@ fn sample_config_export() -> Value {
                 ]
             }
         ],
+        "blocks": [],
         "helpers": [],
         "helper_values": [],
         "sources": [],
@@ -4967,4 +4969,79 @@ fn reviewed_backup_restore_survives_restart_and_clears_replaced_collections() {
         canonical(cleared),
         "Removed entries must not return after restart"
     );
+}
+
+#[test]
+fn reusable_block_edits_persist_with_caller_revisions_and_guard_deletion() {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir =
+        std::env::temp_dir().join(format!("homectl_blocks_{}_{}", std::process::id(), unique));
+    let start = || {
+        TestServer::with_config(TestServerConfig {
+            working_dir: Some(dir.clone()),
+            cleanup_working_dir: false,
+            config_content: Some(blank_backup_config().to_string()),
+            ..Default::default()
+        })
+        .unwrap()
+    };
+    let mut server = start();
+    let block = json!({"id":"ready","name":"Ready","kind":"condition","inputs":{"flag":{"label":"Flag","kind":{"kind":"boolean"},"default":true}},"body":{"kind":"literal","value":{"$input":"flag"}},"create_only":true});
+    let response = put_json(&server.base_url, "/api/v1/config/blocks/ready", &block);
+    assert_eq!(response.status(), StatusCode::OK);
+    let saved = response.json::<Value>().unwrap()["data"].clone();
+    let routine = json!({"id":"block_caller","name":"Block caller","enabled":true,"semantics_version":2,"rules":[],"actions":[],"definition_v2":{"triggers":[{"kind":"manual","id":"manual"}],"condition":{"kind":"block","block_id":"ready","inputs":{}},"program":{"kind":"native","steps":[{"action":"cancel_timer","id":"cancel","timer":"off"}]}}});
+    let response = post_json(&server.base_url, "/api/v1/config/routines", &routine);
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let caller = get_json(&server.base_url, "/api/v1/config/routines")["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == "block_caller")
+        .unwrap()
+        .clone();
+    let mut edited = saved.clone();
+    edited["name"] = json!("Updated ready");
+    edited["expected"] = saved.clone();
+    let response = put_json(&server.base_url, "/api/v1/config/blocks/ready", &edited);
+    assert_eq!(response.status(), StatusCode::OK);
+    let result = response.json::<Value>().unwrap();
+    assert_eq!(result["write"]["persistence"], "persisted");
+    let persisted = result["data"].clone();
+    assert_eq!(
+        put_json(&server.base_url, "/api/v1/config/blocks/ready", &edited).status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        delete(&server.base_url, "/api/v1/config/blocks/ready").status(),
+        StatusCode::CONFLICT
+    );
+    server.stop();
+    drop(server);
+    let server = start();
+    let restored = get_json(&server.base_url, "/api/v1/config/export")["data"].clone();
+    assert_eq!(restored["blocks"][0], persisted);
+    let routine = restored["routines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == "block_caller")
+        .unwrap();
+    assert_eq!(
+        routine["revision"].as_i64().unwrap(),
+        caller["revision"].as_i64().unwrap_or(1) + 1
+    );
+    assert_eq!(
+        delete(&server.base_url, "/api/v1/config/routines/block_caller").status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        delete(&server.base_url, "/api/v1/config/blocks/ready").status(),
+        StatusCode::OK
+    );
+    drop(server);
+    std::fs::remove_dir_all(dir).unwrap();
 }

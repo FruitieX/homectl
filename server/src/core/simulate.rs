@@ -325,6 +325,7 @@ async fn export_from_legacy_source_db<C: ConnectionTrait>(db: &C) -> Result<Conf
         scenes,
         routines,
         scenario_suite: None,
+        blocks: Vec::new(),
         helpers: Vec::new(),
         helper_values: Vec::new(),
         sources: Vec::new(),
@@ -899,7 +900,14 @@ pub fn convert_mqtt_to_dummy(config: &mut ConfigExport) -> Result<()> {
                 let definition = routine
                     .definition_v2
                     .as_ref()
-                    .and_then(crate::core::automation::parse_definition);
+                    .and_then(|v| {
+                        crate::core::automation::blocks::expand_definition(
+                            v,
+                            &crate::core::automation::ConfigCatalog::from_export(config),
+                        )
+                        .ok()
+                    })
+                    .and_then(|v| crate::core::automation::parse_definition(&v));
                 if let Some(definition) = definition {
                     for device_ref in crate::core::automation::referenced_devices(&definition) {
                         let crate::types::device::DeviceRef::Id(id_ref) = device_ref;

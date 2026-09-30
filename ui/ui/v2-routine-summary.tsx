@@ -1,3 +1,4 @@
+import { useBlocks } from '@/hooks/useConfig';
 import type { ConditionEvaluation } from '@/bindings/ConditionEvaluation';
 import type { ConditionTraceNode } from '@/bindings/ConditionTraceNode';
 import type { DevicesState } from '@/bindings/DevicesState';
@@ -122,6 +123,8 @@ export function describeNativeAction(
       return `Set helper ${step.helper || '?'} to ${JSON.stringify(step.value)}`;
     case 'invoke_routine':
       return `Run routine “${nameFor(routines, step.routine_id)}”`;
+    case 'call_block':
+      return `Run block “${step.block_id}”`;
     case 'choose':
       return `Choose between ${step.branches.length} branch${step.branches.length === 1 ? '' : 'es'}`;
   }
@@ -372,10 +375,12 @@ export function ConditionReadView({
     );
   };
   const error = evaluation?.error;
+  const { data: blocks } = useBlocks();
   const narrative = describeConditionNarrative(condition as never, {
     devices,
     groups,
     deviceNames: deviceDisplayNameMap,
+    blocks,
   });
   return (
     <div className="space-y-3">
@@ -470,6 +475,7 @@ export function ThenReadList({
   deviceDisplayNameMap: Record<string, string>;
   onEdit?: () => void;
 }) {
+  const { data: blocks } = useBlocks();
   if (!program || (program.kind !== 'native' && program.kind !== 'script')) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -509,14 +515,19 @@ export function ThenReadList({
                 {index + 1}
               </span>
               <span className="min-w-0 flex-1">
-                {describeNativeAction(
-                  step,
-                  devices,
-                  groups,
-                  scenes,
-                  routines,
-                  deviceDisplayNameMap,
-                )}
+                {step.action === 'call_block'
+                  ? 'Run block “' +
+                    (blocks.find((b) => b.id === step.block_id)?.name ??
+                      step.block_id) +
+                    '”'
+                  : describeNativeAction(
+                      step,
+                      devices,
+                      groups,
+                      scenes,
+                      routines,
+                      deviceDisplayNameMap,
+                    )}
                 {disposition ? (
                   <span className="ml-2 align-middle">
                     <StatusBadge

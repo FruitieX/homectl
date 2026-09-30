@@ -117,6 +117,21 @@ export const configSections = [
     ],
   },
   {
+    href: '/config/blocks',
+    icon: Workflow,
+    label: 'Blocks',
+    description: 'Reuse conditions and actions across automations.',
+    group: 'Automations',
+    keywords: [
+      'block',
+      'reusable',
+      'logic',
+      'parameters',
+      'actions',
+      'conditions',
+    ],
+  },
+  {
     href: '/config/helpers',
     icon: Variable,
     label: 'Helpers',

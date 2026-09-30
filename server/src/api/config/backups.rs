@@ -15,6 +15,7 @@ const COLLECTIONS: &[(&str, &str, &str)] = &[
     ("groups", "Rooms & groups", "id"),
     ("scenes", "Scenes", "id"),
     ("routines", "Routines", "id"),
+    ("blocks", "Blocks", "id"),
     ("helpers", "Helpers", "id"),
     ("helper_values", "Saved helper values", "id"),
     ("sources", "Computed sources", "id"),

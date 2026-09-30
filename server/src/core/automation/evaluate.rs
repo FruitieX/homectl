@@ -815,6 +815,13 @@ fn evaluate_condition_node(
     }
 
     match condition {
+        ConditionExpr::Block { .. } => ConditionTraceNode {
+            path: path.to_string(),
+            truth: TruthValue::Unknown,
+            evaluated: true,
+            error: Some("Unexpanded block condition.".into()),
+            ..Default::default()
+        },
         ConditionExpr::Literal { value } => ConditionTraceNode {
             path: path.to_string(),
             truth: TruthValue::from_bool(*value),

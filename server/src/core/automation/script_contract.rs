@@ -324,6 +324,11 @@ fn normalize_script_action(action: &Value, index: usize) -> Result<NativeAction,
 
 fn validate_script_action_rollout(action: &NativeAction, path: &str) -> Result<(), String> {
     match action {
+        NativeAction::CallBlock { .. } => {
+            return Err(format!(
+                "{path}: block calls must be declared in the native program before compilation."
+            ))
+        }
         NativeAction::RunScript { .. } => {
             return Err(format!(
                 "{path}: a script cannot return another script action"

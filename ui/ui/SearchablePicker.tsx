@@ -209,7 +209,7 @@ export function SearchableMultiPicker({
   value: string[];
   onChange: (value: string[]) => void;
   placeholder?: string;
-  hrefFor?: (key: string) => string;
+  hrefFor?: (key: string) => string | undefined;
   ordered?: boolean;
 }) {
   const selected = value.map(
@@ -238,9 +238,9 @@ export function SearchableMultiPicker({
                   }
                 />
               )}
-              {hrefFor ? (
+              {hrefFor?.(option.value) ? (
                 <Link
-                  to={hrefFor(option.value)}
+                  to={hrefFor(option.value)!}
                   className="truncate hover:underline"
                 >
                   {option.label}

@@ -204,3 +204,70 @@ test('routine usage ignores lookalikes in arbitrary JSON, scripts and future nod
   ])
     assert.equal(routineReferences(malformed).devices.size, 0);
 });
+
+test('usage resolves shared block arguments and defaults without inspecting literal payloads', () => {
+  const blocks = [
+    {
+      id: 'inner',
+      name: 'Inner',
+      description: '',
+      kind: 'action',
+      revision: 1n,
+      inputs: {
+        helper: {
+          label: 'Helper',
+          kind: { kind: 'helper' },
+          default: 'default',
+        },
+      },
+      body: [
+        {
+          action: 'set_helper',
+          id: 'set',
+          helper: { $input: 'helper' },
+          value: false,
+        },
+      ],
+    },
+    {
+      id: 'outer',
+      name: 'Outer',
+      description: '',
+      kind: 'action',
+      revision: 1n,
+      inputs: {},
+      body: [
+        {
+          action: 'call_block',
+          id: 'call',
+          block_id: 'inner',
+          inputs: { helper: 'actual' },
+        },
+      ],
+    },
+  ] as import('../bindings/AutomationBlock').AutomationBlock[];
+  const refs = routineReferences(
+    {
+      program: {
+        kind: 'native',
+        steps: [
+          { action: 'call_block', id: 'outer', block_id: 'outer', inputs: {} },
+        ],
+      },
+    },
+    blocks,
+  );
+  assert.deepEqual([...refs.helpers], ['actual']);
+  const literal = routineReferences(
+    {
+      condition: {
+        kind: 'comparison',
+        source: { kind: 'helper', helper: 'payload' },
+        operator: 'eq',
+        value: { action: 'call_block', block_id: 'inner' },
+      },
+    },
+    blocks,
+  );
+  assert.deepEqual([...literal.helpers], ['payload']);
+});

@@ -63,6 +63,7 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         manifest_dir.join("../ui/bindings"),
     ] {
         let cfg = Config::new().with_out_dir(output_dir);
+        homectl_server::types::automation_block::AutomationBlock::export_all(&cfg)?;
         Action::export_all(&cfg)?;
         UserTimers::export_all(&cfg)?;
         DeviceHealthSnapshot::export_all(&cfg)?;

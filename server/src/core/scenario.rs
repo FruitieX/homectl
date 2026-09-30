@@ -592,7 +592,7 @@ fn validate_tested_routines(
                 ));
             }
         }
-        for helper in referenced_helpers(routine)? {
+        for helper in referenced_helpers(config, routine)? {
             let helper_id = HelperId(helper.clone());
             if state.helpers.definition(&helper_id).is_none() {
                 return Err(eyre!(
@@ -615,8 +615,17 @@ fn validate_tested_routines(
     Ok(())
 }
 
-fn referenced_helpers(routine: &crate::db::config_queries::RoutineRow) -> Result<HashSet<String>> {
-    let value = serde_json::to_value(routine)?;
+fn referenced_helpers(
+    config: &ConfigExport,
+    routine: &crate::db::config_queries::RoutineRow,
+) -> Result<HashSet<String>> {
+    let mut value = serde_json::to_value(routine)?;
+    if let Some(definition) = &routine.definition_v2 {
+        value["definition_v2"] = crate::core::automation::blocks::expand_definition(
+            definition,
+            &ConfigCatalog::from_export(config),
+        )?;
+    }
     let mut helpers = HashSet::new();
     collect_string_fields(&value, &["helper"], &mut helpers);
     Ok(helpers)
@@ -626,7 +635,13 @@ fn referenced_devices(
     config: &ConfigExport,
     routine: &crate::db::config_queries::RoutineRow,
 ) -> Result<HashSet<DeviceKey>> {
-    let routine_value = serde_json::to_value(routine)?;
+    let mut routine_value = serde_json::to_value(routine)?;
+    if let Some(definition) = &routine.definition_v2 {
+        routine_value["definition_v2"] = crate::core::automation::blocks::expand_definition(
+            definition,
+            &ConfigCatalog::from_export(config),
+        )?;
+    }
     let mut devices = HashSet::new();
     let mut group_ids = HashSet::new();
     let mut scene_ids = HashSet::new();

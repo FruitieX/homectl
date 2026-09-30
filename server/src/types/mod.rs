@@ -28,3 +28,5 @@ pub mod websockets;
 pub mod config_write;
 
 pub mod device_command;
+
+pub mod automation_block;

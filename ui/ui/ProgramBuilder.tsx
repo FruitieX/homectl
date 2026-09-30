@@ -1,3 +1,4 @@
+import { BlockCallEditor } from '@/ui/BlockCallEditor';
 import {
   Palette,
   Power,
@@ -56,6 +57,7 @@ import { RoutineScriptDeclarations } from '@/ui/RoutineScriptDeclarations';
 type StepKind = NativeAction['action'];
 
 const stepKindOptions: Array<{ value: StepKind; label: string }> = [
+  { value: 'call_block', label: 'Run reusable block' },
   { value: 'activate_scene', label: 'Activate scene' },
   { value: 'cycle_scenes', label: 'Cycle scenes' },
   { value: 'set_power', label: 'Set device power' },
@@ -70,8 +72,26 @@ const stepKindOptions: Array<{ value: StepKind; label: string }> = [
   { value: 'run_script', label: 'Sandboxed script' },
 ];
 
+function useStepKindOptions() {
+  const { blockId } = useRoutineAuthoring();
+  return blockId === undefined
+    ? stepKindOptions
+    : stepKindOptions.filter(
+        (o) =>
+          ![
+            'schedule_timer',
+            'replace_timer',
+            'cancel_timer',
+            'run_script',
+            'invoke_routine',
+          ].includes(o.value),
+      );
+}
+
 function defaultStep(kind: StepKind, id: string): NativeAction {
   switch (kind) {
+    case 'call_block':
+      return { action: 'call_block', id, block_id: '', inputs: {} };
     case 'run_script':
       return {
         action: 'run_script',
@@ -360,6 +380,7 @@ function ChooseStepEditor({
   existingIds: string[];
 }) {
   const { draftKey } = useRoutineAuthoring();
+  const allowedStepKinds = useStepKindOptions();
   const updateBranch = (index: number, branch: ChooseBranch) =>
     onChange({
       ...step,
@@ -464,7 +485,7 @@ function ChooseStepEditor({
             ))}
             <AddFlowBlock
               label="Add branch action"
-              options={stepKindOptions}
+              options={allowedStepKinds}
               onAdd={(kind) =>
                 updateBranch(index, {
                   ...branch,
@@ -884,6 +905,22 @@ function StepFields({
       encodeURIComponent(step.id)
     : undefined;
   switch (step.action) {
+    case 'call_block':
+      return (
+        <BlockCallEditor
+          path={`step/${step.id}/call_block`}
+          kind="action"
+          blockId={step.block_id}
+          inputs={step.inputs}
+          onChange={(block_id, inputs) =>
+            onChange({ ...step, block_id, inputs })
+          }
+          devices={devices}
+          groups={groups}
+          scenes={scenes}
+          helpers={helpers}
+        />
+      );
     case 'run_script':
       return (
         <div className="space-y-3">
@@ -1699,6 +1736,7 @@ function StepEditor({
   onDuplicate?: () => void;
 }) {
   const { draftKey } = useRoutineAuthoring();
+  const allowedStepKinds = useStepKindOptions();
   if (!step || typeof step !== 'object')
     return <UnknownFlowValue value={step} />;
   const known =
@@ -1867,6 +1905,7 @@ export function ProgramBuilder({
   helpers: HelperRuntimeStatus[];
 }) {
   const { draftKey } = useRoutineAuthoring();
+  const allowedStepKinds = useStepKindOptions();
   const steps =
     program?.kind === 'native' && Array.isArray(program.steps)
       ? program.steps

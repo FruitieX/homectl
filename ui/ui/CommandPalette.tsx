@@ -37,6 +37,7 @@ import {
 import {
   useDeviceDisplayNames,
   useHelpers,
+  useBlocks,
   useIntegrations,
   useRoutines,
   useSources,
@@ -150,6 +151,8 @@ export function CommandPalette() {
   const groupsState = useGroupsState();
   const routinesQuery = useRoutines();
   const helpersQuery = useHelpers();
+  const blocksQuery = useBlocks();
+  const { data: blocks } = blocksQuery;
   const integrationsQuery = useIntegrations();
   const sourcesQuery = useSources();
   const { data: routines } = routinesQuery;
@@ -162,6 +165,7 @@ export function CommandPalette() {
     { label: 'Device names', ...namesQuery },
     { label: 'Routines', ...routinesQuery },
     { label: 'Helpers', ...helpersQuery },
+    { label: 'Blocks', ...blocksQuery },
     { label: 'Integrations', ...integrationsQuery },
     { label: 'Computed sources', ...sourcesQuery },
   ];
@@ -420,6 +424,17 @@ export function CommandPalette() {
       });
     }
 
+    for (const block of blocks)
+      result.push({
+        key: 'block:' + block.id,
+        label: block.name,
+        description: block.description || 'Reusable ' + block.kind + ' block',
+        keywords: block.id + ' block ' + block.kind,
+        group: 'Blocks',
+        icon: <Activity />,
+        run: () => go('block:' + block.id, configItemHref('block', block.id)),
+      });
+
     for (const source of sources) {
       result.push({
         key: `source:${source.id}`,
@@ -446,6 +461,7 @@ export function CommandPalette() {
     routines,
     scenesState,
     sources,
+    blocks,
     setDensity,
     setOpen,
     setThemeMode,

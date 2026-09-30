@@ -32,6 +32,11 @@ export function editableValueSource(value: unknown): value is ValueSource {
 export function editableCondition(value: unknown): value is ConditionExpr {
   if (!record(value)) return false;
   switch (value.kind) {
+    case 'block':
+      return (
+        typeof value.block_id === 'string' &&
+        (value.inputs === undefined || record(value.inputs))
+      );
     case 'literal':
       return typeof value.value === 'boolean';
     case 'all':

@@ -10,6 +10,7 @@ import {
   useScenes,
   useGroups,
   useRoutines,
+  useBlocks,
   type SourceConfig,
   type SourceComputeConfig,
 } from '@/hooks/useConfig';
@@ -58,6 +59,7 @@ export default function SourceDetailPage() {
     scenes = useScenes(),
     groups = useGroups(),
     routines = useRoutines(),
+    blocks = useBlocks(),
     devices = useDevicesState();
   const { apiEndpoint } = useAppConfig(),
     { advanced } = useSettingsPreferences();
@@ -231,7 +233,7 @@ export default function SourceDetailPage() {
       label: 'Routines',
       query: routines,
       rows: routines.data.filter((row) => {
-        const refs = routineReferences(row.definition_v2);
+        const refs = routineReferences(row.definition_v2, blocks.data);
         return (
           refs.sources.has(id ?? '') ||
           [...refs.devices].some((key) => keys.has(key))

@@ -1,3 +1,6 @@
+import type { AutomationBlock } from '../bindings/AutomationBlock';
+import type { JsonValue } from '../bindings/serde_json/JsonValue';
+import { materializeBlock } from './automationBlocks.ts';
 // Inspect declared fields only. JSON operands, script bodies and extension data
 // can resemble references without declaring a dependency.
 const object = (value: unknown): Record<string, unknown> =>
@@ -33,7 +36,10 @@ export function groupUsesDeviceKeys(value: unknown, keys: ReadonlySet<string>) {
     )
   );
 }
-export function routineReferences(value: unknown) {
+export function routineReferences(
+  value: unknown,
+  blocks: AutomationBlock[] = [],
+) {
   const helpers = new Set<string>(),
     sources = new Set<string>(),
     devices = new Set<string>();
@@ -43,9 +49,31 @@ export function routineReferences(value: unknown) {
   const device = (value: unknown) => add(devices, deviceKey(value));
   const targets = (value: unknown) =>
     list(object(value).devices).forEach(device);
+  const active = new Set<string>();
+  const call = (
+    row: Record<string, unknown>,
+    kind: AutomationBlock['kind'],
+    visit: (body: unknown) => void,
+  ) => {
+    const block = blocks.find((b) => b.id === row.block_id && b.kind === kind);
+    if (!block || active.has(block.id) || active.size >= 8) return;
+    active.add(block.id);
+    try {
+      visit(
+        materializeBlock(
+          block.body,
+          block.inputs,
+          object(row.inputs) as Record<string, JsonValue>,
+        ),
+      );
+    } finally {
+      active.delete(block.id);
+    }
+  };
   const condition = (value: unknown) => {
     const row = object(value);
-    if (row.kind === 'all' || row.kind === 'any')
+    if (row.kind === 'block') call(row, 'condition', condition);
+    else if (row.kind === 'all' || row.kind === 'any')
       list(row.conditions).forEach(condition);
     else if (row.kind === 'not') condition(row.condition);
     else if (row.kind === 'comparison') {
@@ -64,6 +92,9 @@ export function routineReferences(value: unknown) {
   const action = (value: unknown) => {
     const row = object(value);
     switch (row.action) {
+      case 'call_block':
+        call(row, 'action', (body) => list(body).forEach(action));
+        break;
       case 'activate_scene':
         if (object(row.select).kind === 'helper_enum')
           add(helpers, object(row.select).helper);

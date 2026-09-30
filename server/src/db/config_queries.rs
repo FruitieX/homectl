@@ -9,11 +9,12 @@ use super::get_db_connection;
 pub mod calibration;
 use super::schema::DeviceColorCalibrations;
 use super::schema::{
-    AssistantThreads, AutomationSources, AutomationTimerJobs, AutomationValueState,
-    AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets,
-    DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks,
-    GroupPositions, Groups, Integrations, RoutineHistory, Routines, ScenarioSuites,
-    SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, ValueHistory, WidgetSettings,
+    AssistantThreads, AutomationBlocks, AutomationSources, AutomationTimerJobs,
+    AutomationValueState, AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts,
+    DashboardWidgets, DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans,
+    GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, RoutineHistory, Routines,
+    ScenarioSuites, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, ValueHistory,
+    WidgetSettings,
 };
 use crate::core::color_calibration::DeviceColorCalibration;
 use crate::types::assistant::{AssistantHistoryMessage, AssistantThread, AssistantThreadSummary};
@@ -287,6 +288,8 @@ pub struct ConfigExport {
     pub groups: Vec<GroupRow>,
     pub scenes: Vec<SceneRow>,
     pub routines: Vec<RoutineRow>,
+    #[serde(default)]
+    pub blocks: Vec<crate::types::automation_block::AutomationBlock>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scenario_suite: Option<serde_json::Value>,
     #[serde(default)]
@@ -2394,6 +2397,7 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
     let helper_values = helper_states_on(db, &helpers).await?;
 
     let sources = sources_on(db).await?;
+    let blocks = blocks_on(db).await?;
 
     let floorplan = one(
         db,
@@ -2556,6 +2560,7 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
         helpers,
         helper_values,
         sources,
+        blocks,
         floorplan,
         floorplans,
         group_positions,
@@ -2577,6 +2582,15 @@ pub async fn db_import_config(config: &ConfigExport) -> Result<()> {
 }
 
 fn validate_import_config(config: &ConfigExport) -> Result<()> {
+    let mut ids = std::collections::HashSet::new();
+    for block in &config.blocks {
+        if !ids.insert(&block.id) {
+            return Err(eyre!("Duplicate block ID: {}", block.id));
+        }
+    }
+    crate::core::automation::blocks::validate_catalog(
+        &crate::core::automation::ConfigCatalog::from_export(config),
+    )?;
     for setting in &config.widget_settings {
         crate::core::user_timers::validate_setting(&setting.key, &setting.config)?;
         crate::types::device_health::ReportingPolicy::validate_setting(
@@ -2620,6 +2634,7 @@ async fn import_config_on<C: ConnectionTrait + TransactionTrait>(
         AutomationValueState::Table,
         AutomationValues::Table,
         AutomationSources::Table,
+        AutomationBlocks::Table,
         Floorplans::Table,
         DeviceDisplayOverrides::Table,
         DeviceSensorConfigs::Table,
@@ -2656,6 +2671,9 @@ async fn import_config_on<C: ConnectionTrait + TransactionTrait>(
     }
     for routine in &config.routines {
         upsert_routine_on(&txn, routine).await?;
+    }
+    for block in &config.blocks {
+        upsert_block_on(&txn, block).await?;
     }
     for helper in &config.helpers {
         upsert_helper_on(&txn, helper).await?;
@@ -2780,6 +2798,7 @@ pub async fn db_has_config() -> Result<bool> {
         || !db_get_routines().await?.is_empty()
         || !db_get_helpers().await?.is_empty()
         || !db_get_sources().await?.is_empty()
+        || !db_get_blocks().await?.is_empty()
         || !db_get_group_positions().await?.is_empty()
         || !db_get_device_display_overrides().await?.is_empty()
         || !calibration::profiles(get_db_connection()?)
@@ -5435,6 +5454,40 @@ mod consistency_tests {
         import_config_on(&db, &export).await.unwrap();
         assert!(timer_jobs_on(&db).await.unwrap().is_empty());
     }
+    #[tokio::test]
+    async fn blocks_survive_database_reopen_restore_and_legacy_empty_import() {
+        let file = PersistenceFile::new();
+        let db = file.open().await;
+        crate::db::migrations::Migrator::up(&db, None)
+            .await
+            .unwrap();
+        let mut export = db_export_config_from_connection(&db).await.unwrap();
+        export.blocks=serde_json::from_value(json!([
+            {"id":"action","name":"Power","revision":4,"kind":"action","inputs":{"room":{"label":"Room","kind":{"kind":"group"}}},"body":[{"action":"dim","id":"power","targets":{"groups":[{"$input":"room"}]},"step":0.1,"future":[false,null,0]}]},
+            {"id":"condition","name":"Ready","revision":3,"kind":"condition","inputs":{"enabled":{"label":"Enabled","kind":{"kind":"boolean"},"default":false}},"body":{"kind":"literal","value":{"$input":"enabled"}}}
+        ])).unwrap();
+        import_config_on(&db, &export).await.unwrap();
+        db.close().await.unwrap();
+        let reopened = file.open().await;
+        let saved = db_export_config_from_connection(&reopened).await.unwrap();
+        assert_eq!(saved.blocks, export.blocks);
+        let restored = database().await;
+        let restored_export: ConfigExport =
+            serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
+        import_config_on(&restored, &restored_export).await.unwrap();
+        assert_eq!(blocks_on(&restored).await.unwrap(), export.blocks);
+        let mut legacy = serde_json::to_value(saved).unwrap();
+        legacy.as_object_mut().unwrap().remove("blocks");
+        let legacy: ConfigExport = serde_json::from_value(legacy).unwrap();
+        assert!(legacy.blocks.is_empty());
+        import_config_on(&restored, &legacy).await.unwrap();
+        assert!(blocks_on(&restored).await.unwrap().is_empty());
+        let mut duplicate = export.clone();
+        duplicate.blocks.push(export.blocks[0].clone());
+        assert!(import_config_on(&restored, &duplicate).await.is_err());
+        assert!(blocks_on(&restored).await.unwrap().is_empty());
+        reopened.close().await.unwrap();
+    }
 }
 
 fn device_color_calibration_from_row(row: QueryResult) -> Result<DeviceColorCalibration> {
@@ -5446,4 +5499,75 @@ fn device_color_calibration_from_row(row: QueryResult) -> Result<DeviceColorCali
     };
     calibration.validate().map_err(|error| eyre!(error))?;
     Ok(calibration)
+}
+
+pub async fn db_get_blocks() -> Result<Vec<crate::types::automation_block::AutomationBlock>> {
+    blocks_on(get_db_connection()?).await
+}
+async fn blocks_on<C: ConnectionTrait>(
+    db: &C,
+) -> Result<Vec<crate::types::automation_block::AutomationBlock>> {
+    all(
+        db,
+        Query::select()
+            .column(AutomationBlocks::Document)
+            .from(AutomationBlocks::Table)
+            .order_by(AutomationBlocks::Id, Order::Asc)
+            .to_owned(),
+    )
+    .await?
+    .into_iter()
+    .map(|row| serde_json::from_str(&row.try_get::<String>("", "document")?).map_err(Into::into))
+    .collect()
+}
+pub async fn db_upsert_block(
+    block: &crate::types::automation_block::AutomationBlock,
+) -> Result<()> {
+    upsert_block_on(get_db_connection()?, block).await
+}
+async fn upsert_block_on<C: ConnectionTrait>(
+    db: &C,
+    block: &crate::types::automation_block::AutomationBlock,
+) -> Result<()> {
+    execute(
+        db,
+        Query::insert()
+            .into_table(AutomationBlocks::Table)
+            .columns([AutomationBlocks::Id, AutomationBlocks::Document])
+            .values_panic([
+                Expr::value(block.id.clone()),
+                Expr::value(serde_json::to_string(block)?),
+            ])
+            .on_conflict(
+                OnConflict::column(AutomationBlocks::Id)
+                    .update_column(AutomationBlocks::Document)
+                    .to_owned(),
+            )
+            .to_owned(),
+    )
+    .await?;
+    Ok(())
+}
+pub async fn db_delete_block(id: &str) -> Result<bool> {
+    delete_by_string_key(
+        get_db_connection()?,
+        AutomationBlocks::Table,
+        AutomationBlocks::Id,
+        id,
+    )
+    .await
+}
+
+/// Definition and caller revisions must survive a restart together.
+pub async fn db_save_block_change(
+    block: &crate::types::automation_block::AutomationBlock,
+    routines: &[RoutineRow],
+) -> Result<()> {
+    let txn = get_db_connection()?.begin().await?;
+    upsert_block_on(&txn, block).await?;
+    for routine in routines {
+        upsert_routine_on(&txn, routine).await?;
+    }
+    txn.commit().await?;
+    Ok(())
 }

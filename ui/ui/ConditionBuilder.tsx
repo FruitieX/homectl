@@ -1,3 +1,4 @@
+import { BlockCallEditor } from '@/ui/BlockCallEditor';
 import { JsonValueControl } from '@/ui/settings/JsonValueControl';
 import {
   FlowBlock,
@@ -59,6 +60,7 @@ const conditionKindOptions: Array<{ value: ConditionKind; label: string }> = [
   { value: 'not', label: 'Condition does not hold' },
   { value: 'comparison', label: 'Value check' },
   { value: 'group', label: 'Group check' },
+  { value: 'block', label: 'Reusable condition' },
   { value: 'literal', label: 'Always / never' },
 ];
 
@@ -71,6 +73,8 @@ const quantifierLabels: Record<string, string> = {
 
 export function defaultCondition(kind: ConditionKind): ConditionExpr {
   switch (kind) {
+    case 'block':
+      return { kind: 'block', block_id: '', inputs: {} };
     case 'literal':
       return { kind: 'literal', value: true };
     case 'comparison':
@@ -153,6 +157,8 @@ export function describeCondition(
       const { subject, field } = sourceSubject(expr.source, resolveDevice);
       return conditionWords({ subject, field }, expr.operator, expr.value);
     }
+    case 'block':
+      return `block ${expr.block_id || '?'}`;
     case 'group':
       return `group ${expr.group_id || '?'} (${quantifierLabels[expr.quantifier] ?? expr.quantifier})`;
     default:
@@ -613,6 +619,21 @@ export function ConditionEditor({
     <div className={'flow-condition space-y-3'} data-condition-path={path}>
       {!hideKind && <ConfigField label="Match">{kindSelect}</ConfigField>}
 
+      {condition.kind === 'block' && (
+        <BlockCallEditor
+          path={`${path}/block`}
+          kind="condition"
+          blockId={condition.block_id}
+          inputs={condition.inputs}
+          onChange={(block_id, inputs) =>
+            onChange({ ...condition, block_id, inputs })
+          }
+          devices={devices}
+          groups={groups}
+          scenes={scenes}
+          helpers={helpers}
+        />
+      )}
       {condition.kind === 'literal' ? (
         <ConfigField label="Result">
           <SettingsSelect

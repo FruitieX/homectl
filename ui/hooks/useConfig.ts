@@ -215,6 +215,7 @@ export interface ConfigExport {
   scenes?: Scene[];
   routines?: Routine[];
   sources?: SourceConfig[];
+  blocks?: import('@/bindings/AutomationBlock').AutomationBlock[];
   floorplan?: Record<string, unknown> | null;
   floorplans?: Record<string, unknown>[];
   device_display_overrides?: DeviceDisplayNameOverride[];
@@ -494,6 +495,12 @@ export function useGroups() {
 
 export function useScenes() {
   return useConfigApi<Scene>('scenes');
+}
+
+export function useBlocks() {
+  return useConfigApi<import('@/bindings/AutomationBlock').AutomationBlock>(
+    'blocks',
+  );
 }
 
 export function useRoutines() {

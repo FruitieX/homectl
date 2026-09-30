@@ -9,6 +9,7 @@ import {
   useGroups,
   useScenes,
   useHelpers,
+  useBlocks,
   useIntegrations,
   useRoutines,
   readApiResponse,
@@ -32,6 +33,7 @@ export default function ConfigHomePage() {
   const scenes = useScenes();
   const routines = useRoutines();
   const helpers = useHelpers();
+  const blocks = useBlocks();
   const integrations = useIntegrations();
   const { recents } = useRecents();
   const recordRecent = useRecordRecent();
@@ -70,6 +72,11 @@ export default function ConfigHomePage() {
         id: row.id,
         name: row.name,
       })),
+      ...blocks.data.map((row) => ({
+        kind: 'block',
+        id: row.id,
+        name: row.name,
+      })),
       ...helpers.data.map((row) => ({
         kind: 'helper',
         id: row.id,
@@ -87,6 +94,7 @@ export default function ConfigHomePage() {
       scenes.data,
       routines.data,
       helpers.data,
+      blocks.data,
       integrations.data,
     ],
   );
@@ -95,6 +103,7 @@ export default function ConfigHomePage() {
     '/config/devices': devices ? Object.keys(devices).length : undefined,
     '/config/scenes': scenes.loading ? undefined : scenes.data.length,
     '/config/routines': routines.loading ? undefined : routines.data.length,
+    '/config/blocks': blocks.loading ? undefined : blocks.data.length,
     '/config/helpers': helpers.loading ? undefined : helpers.data.length,
     '/config/integrations': integrations.loading
       ? undefined

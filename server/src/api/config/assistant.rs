@@ -5301,6 +5301,7 @@ mod tests {
             scenes: Vec::new(),
             routines: Vec::new(),
             scenario_suite: None,
+            blocks: Vec::new(),
             helpers: Vec::new(),
             helper_values: Vec::new(),
             sources: Vec::new(),

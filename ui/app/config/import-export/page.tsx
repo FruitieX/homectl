@@ -38,6 +38,7 @@ const destinations: Record<string, string> = {
   groups: '/config/groups',
   scenes: '/config/scenes',
   routines: '/config/routines',
+  blocks: '/config/blocks',
   helpers: '/config/helpers',
   sources: '/config/sources',
   dashboard_layouts: '/config/dashboard',

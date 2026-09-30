@@ -10,6 +10,7 @@ import type { JsonValue } from './serde_json/JsonValue';
  * Three-valued condition expression. `All`/`Any` require at least one child.
  */
 export type ConditionExpr =
+  | { kind: 'block'; block_id: string; inputs: { [key in string]: JsonValue } }
   | { kind: 'literal'; value: boolean }
   | { kind: 'all'; conditions: Array<ConditionExpr> }
   | { kind: 'any'; conditions: Array<ConditionExpr> }

@@ -12,6 +12,7 @@ import {
 } from '@/ui/primitives/dropdown-menu';
 export const RoutineAuthoringContext = createContext<{
   draftKey?: string;
+  blockId?: string;
   returnHref?: string;
 }>({});
 export const useRoutineAuthoring = () => useContext(RoutineAuthoringContext);

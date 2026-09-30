@@ -10,14 +10,15 @@ export function ReferenceField({
   value,
   children,
 }: {
-  kind: 'device' | 'group' | 'scene' | 'routine' | 'helper' | 'source';
+  kind:
+    'device' | 'group' | 'scene' | 'routine' | 'helper' | 'source' | 'block';
   value: string;
   children: ReactNode;
 }) {
   return (
     <div className="flex min-w-0 items-start gap-1">
       <div className="min-w-0 flex-1">{children}</div>
-      {value && (
+      {value && !value.startsWith('__block_input__') && (
         <Button
           asChild
           variant="ghost"
@@ -118,7 +119,11 @@ export function DeviceMultiSelect({
   return (
     <SearchableMultiPicker
       options={useDeviceOptions(devices)}
-      hrefFor={(key) => configItemHref('device', key)}
+      hrefFor={(key) =>
+        key.startsWith('__block_input__')
+          ? undefined
+          : configItemHref('device', key)
+      }
       value={value}
       onChange={onChange}
       placeholder="Add devices…"
@@ -162,7 +167,11 @@ export function GroupMultiSelect({
   return (
     <SearchableMultiPicker
       options={groupOptions(groups)}
-      hrefFor={(key) => configItemHref('group', key)}
+      hrefFor={(key) =>
+        key.startsWith('__block_input__')
+          ? undefined
+          : configItemHref('group', key)
+      }
       value={value}
       onChange={onChange}
       placeholder="Add groups…"

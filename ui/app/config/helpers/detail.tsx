@@ -9,6 +9,7 @@ import {
   useHelperDefinitions,
   useSetHelperValue,
   useRoutines,
+  useBlocks,
 } from '@/hooks/useConfig';
 import { useAppConfig } from '@/hooks/appConfig';
 import { useEntityDraft } from '@/hooks/useEntityDraft';
@@ -126,7 +127,8 @@ export default function HelperDetailPage() {
     navigate = useNavigate();
   const api = useHelpers(),
     definitions = useHelperDefinitions(),
-    routines = useRoutines();
+    routines = useRoutines(),
+    blocks = useBlocks();
   const { apiEndpoint } = useAppConfig(),
     { advanced } = useSettingsPreferences();
   const status = api.data.find((row) => row.id === id);
@@ -218,7 +220,7 @@ export default function HelperDetailPage() {
     }
   }
   const related = routines.data.filter((row) =>
-    routineReferences(row.definition_v2).helpers.has(id ?? ''),
+    routineReferences(row.definition_v2, blocks.data).helpers.has(id ?? ''),
   );
   return (
     <DetailPageShell

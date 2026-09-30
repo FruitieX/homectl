@@ -2093,9 +2093,9 @@ const server = http.createServer(async (req, res) => {
         });
       }
     }
-    if (endpoint === 'sources' && method === 'PUT') {
+    if (['sources', 'blocks'].includes(endpoint) && method === 'PUT') {
       const { expected, create_only, ...source } = await readBody(req),
-        rows = (db.config.sources ??= []),
+        rows = (db.config[endpoint] ??= []),
         index = rows.findIndex((row) => row.id === rest),
         current = rows[index];
       if (create_only && current)
@@ -2117,7 +2117,7 @@ const server = http.createServer(async (req, res) => {
       source.revision = (current?.revision ?? 0) + 1;
       if (current) rows[index] = source;
       else rows.push(source);
-      db.config.sources = rows;
+      db.config[endpoint] = rows;
       return send(res, 200, { success: true, data: source, write: writeOk });
     }
     if (endpoint === 'device-settings') {

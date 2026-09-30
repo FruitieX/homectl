@@ -26,6 +26,7 @@ export type NarrativeDevice = {
 };
 
 export type NarrativeContext = {
+  blocks?: Array<{ id: string; name: string }>;
   devices?: Record<string, NarrativeDevice | undefined> | null;
   groups?: Record<string, { name?: string } | undefined> | null;
   deviceNames?: Record<string, string | undefined> | null;
@@ -47,6 +48,7 @@ type ValueSourceLike =
   | { kind: 'computed_source'; source: string; path: string };
 
 type ConditionLike = {
+  block_id?: string;
   kind?: string;
   value?: unknown;
   conditions?: ConditionLike[];
@@ -372,6 +374,15 @@ export function describeConditionNarrative(
       return { text: expr.value === false ? 'never' : 'always' };
     case 'comparison':
       return describeComparisonNarrative(expr, context);
+    case 'block':
+      return {
+        text:
+          'check “' +
+          (context.blocks?.find((b) => b.id === expr.block_id)?.name ??
+            expr.block_id ??
+            'block') +
+          '”',
+      };
     case 'group':
       return { text: describeGroupConditionNarrative(expr, context) };
     case 'not': {

@@ -54,6 +54,7 @@ pub struct ConfigCatalog {
     sources: HashSet<SourceId>,
     group_links: Vec<(GroupId, GroupId)>,
     strict_devices: bool,
+    pub blocks: BTreeMap<String, crate::types::automation_block::AutomationBlock>,
 }
 
 impl ConfigCatalog {
@@ -141,6 +142,12 @@ impl ConfigCatalog {
                 .collect(),
             group_links,
             strict_devices: false,
+            blocks: export
+                .blocks
+                .iter()
+                .cloned()
+                .map(|block| (block.id.clone(), block))
+                .collect(),
         }
     }
 
@@ -182,6 +189,11 @@ impl ConfigCatalog {
         self
     }
 
+    pub(crate) fn with_block_sample_device(mut self, key: DeviceKey) -> Self {
+        self.devices.insert(key);
+        self
+    }
+
     pub fn with_group(mut self, group: GroupId) -> Self {
         self.groups.insert(group);
         self
@@ -195,6 +207,45 @@ impl ConfigCatalog {
     pub fn with_routine(mut self, routine: RoutineId) -> Self {
         self.routines.insert(routine);
         self
+    }
+
+    pub(crate) fn validate_block_input(
+        &self,
+        kind: &crate::types::automation_block::BlockInputKind,
+        value: &Value,
+    ) -> Result<(), String> {
+        use crate::types::automation_block::BlockInputKind;
+        super::blocks::validate_input(kind, value)?;
+        let group = |id: &str| self.groups.contains(&GroupId(id.to_string()));
+        let device = |value: &Value| {
+            serde_json::from_value::<DeviceRef>(value.clone()).is_ok_and(|DeviceRef::Id(r)| {
+                self.device_known(&DeviceKey::new(r.integration_id, r.device_id))
+            })
+        };
+        let known = match kind {
+            BlockInputKind::Group => group(value.as_str().unwrap()),
+            BlockInputKind::Scene => self
+                .scenes
+                .contains(&SceneId::from(value.as_str().unwrap().to_string())),
+            BlockInputKind::Helper => self
+                .helpers
+                .contains_key(&HelperId(value.as_str().unwrap().to_string())),
+            BlockInputKind::Device => device(value),
+            BlockInputKind::Targets => {
+                let targets: TargetSpec = serde_json::from_value(value.clone()).unwrap();
+                targets.groups.iter().all(|id| self.groups.contains(id))
+                    && targets
+                        .devices
+                        .iter()
+                        .all(|r| device(&serde_json::to_value(r).unwrap()))
+            }
+            _ => true,
+        };
+        if known {
+            Ok(())
+        } else {
+            Err("Input references an unknown entity.".into())
+        }
     }
 
     fn device_known(&self, key: &DeviceKey) -> bool {
@@ -440,7 +491,12 @@ fn compile_definition_value_for(
     value: &Value,
     catalog: &ConfigCatalog,
 ) -> Result<CompiledDefinition, RoutineValidationReport> {
-    let deserializer = value.clone().into_deserializer();
+    let expanded = super::blocks::expand_definition(value, catalog).map_err(|error| {
+        let mut report = RoutineValidationReport::default();
+        report.error(error.path, "invalid_block", error.message);
+        report
+    })?;
+    let deserializer = expanded.into_deserializer();
     let definition: RoutineDefinitionV2 = match serde_path_to_error::deserialize(deserializer) {
         Ok(definition) => definition,
         Err(error) => {
@@ -462,7 +518,10 @@ pub fn compile_definition(
     definition: &RoutineDefinitionV2,
     catalog: &ConfigCatalog,
 ) -> Result<CompiledDefinition, RoutineValidationReport> {
-    compile_definition_inner(None, definition, catalog)
+    compile_definition_value(
+        &serde_json::to_value(definition).expect("serializable definition"),
+        catalog,
+    )
 }
 
 /// Collect every device referenced by a v2 definition without resolving it
@@ -739,6 +798,11 @@ impl Compiler<'_> {
         }
 
         match condition {
+            ConditionExpr::Block { .. } => self.report.error(
+                path,
+                "unexpanded_block",
+                "Block conditions must be expanded before validation.",
+            ),
             ConditionExpr::Literal { .. } => {}
             ConditionExpr::All { conditions } | ConditionExpr::Any { conditions } => {
                 if conditions.is_empty() {
@@ -895,6 +959,11 @@ impl Compiler<'_> {
             self.register_node(action.id(), &action_path);
 
             match action {
+                NativeAction::CallBlock { .. } => self.report.error(
+                    &action_path,
+                    "unexpanded_block",
+                    "Block calls must be expanded before validation.",
+                ),
                 NativeAction::RunScript { spec, .. } => {
                     self.compile_script(spec, &format!("{action_path}/spec"))
                 }
