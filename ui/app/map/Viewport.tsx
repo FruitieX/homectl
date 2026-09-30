@@ -1,3 +1,5 @@
+import { LightQuickPopover } from '@/ui/LightQuickPopover';
+import type { LightHold } from '@/lib/lightQuickAdjust';
 import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -47,10 +49,16 @@ import { Tabs, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import { Slider } from '@/ui/primitives/slider';
 import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { GroupPanel } from '../groups/GroupPanel';
+import { useMediaQuery } from 'usehooks-ts';
 
 type FloorplanMode = 'all' | 'lights' | 'sensors';
 
 export const Viewport = ({ groupId }: { groupId?: string }) => {
+  const [quickLight, setQuickLight] = useState<{
+    key: string;
+    hold: LightHold;
+  } | null>(null);
+  const desktop = useMediaQuery('(min-width: 768px)');
   const healthQuery = useDeviceHealth();
   const healthByDevice = healthQuery.isError
     ? undefined
@@ -86,6 +94,8 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
     setOpen: setDeviceModalOpen,
     setPresentation,
   } = useDeviceModalState();
+
+  useEffect(() => setQuickLight(null), [groupId, selectedFloorplanId]);
 
   const effectiveSelectedFloorplanId =
     floorplans.find((floorplan) => floorplan.id === selectedFloorplanId)?.id ??
@@ -231,30 +241,48 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
       {tabs &&
         floorplans.length > 1 &&
         createPortal(
-          <Tabs
-            value={effectiveSelectedFloorplanId ?? ''}
-            onValueChange={(id) => {
-              clearSelection();
-              setActiveSensorKey(null);
-              setSelectedFloorplanId(id);
-              setPixiFallbackReason(null);
-            }}
-            className="min-w-0"
-          >
-            <div className="min-w-0 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <TabsList className="h-9 w-max justify-start bg-transparent p-0">
-                {floorplans.map((floorplan) => (
-                  <TabsTrigger
-                    key={floorplan.id}
-                    value={floorplan.id}
-                    className="h-8 shrink-0 px-3 text-xs"
-                  >
-                    {floorplan.name}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
-          </Tabs>,
+          !desktop ? (
+            <SettingsSelect
+              aria-label="Floorplan"
+              className="w-36 border-transparent bg-transparent shadow-none"
+              value={effectiveSelectedFloorplanId ?? ''}
+              onValueChange={(id) => {
+                clearSelection();
+                setActiveSensorKey(null);
+                setSelectedFloorplanId(id);
+                setPixiFallbackReason(null);
+              }}
+              options={floorplans.map((floorplan) => ({
+                value: floorplan.id,
+                label: floorplan.name,
+              }))}
+            />
+          ) : (
+            <Tabs
+              value={effectiveSelectedFloorplanId ?? ''}
+              onValueChange={(id) => {
+                clearSelection();
+                setActiveSensorKey(null);
+                setSelectedFloorplanId(id);
+                setPixiFallbackReason(null);
+              }}
+              className="min-w-0"
+            >
+              <div className="min-w-0 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <TabsList className="h-9 w-max justify-start bg-transparent p-0">
+                  {floorplans.map((floorplan) => (
+                    <TabsTrigger
+                      key={floorplan.id}
+                      value={floorplan.id}
+                      className="h-8 shrink-0 px-3 text-xs"
+                    >
+                      {floorplan.name}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+            </Tabs>
+          ),
           tabs,
         )}
       {toolbar &&
@@ -423,8 +451,9 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
                   </summary>
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                     Tap a device or group to open controls. Drag to pan and
-                    pinch to zoom. Long-press a device or group to start
-                    selecting several devices.
+                    pinch to zoom. Hold and release a light to select it, or
+                    drag onto its outer ring to adjust brightness. Hold a group
+                    to select its devices.
                   </p>
                 </details>
               </PopoverContent>
@@ -433,6 +462,28 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
           toolbar,
         )}
 
+      {quickLight && devicesState?.[quickLight.key] && (
+        <LightQuickPopover
+          key={
+            quickLight.hold.pointerId +
+            ':' +
+            quickLight.hold.x +
+            ':' +
+            quickLight.hold.y
+          }
+          device={devicesState[quickLight.key]!}
+          anchor={quickLight.hold}
+          hold={quickLight.hold}
+          displayNames={deviceDisplayNameMap}
+          onSelect={() => {
+            setSelecting(true);
+            toggleSelectedDevice(quickLight.key);
+            setQuickLight(null);
+          }}
+          onClose={() => setQuickLight(null)}
+          onDetails={() => openDevice([quickLight.key])}
+        />
+      )}
       <div className="relative min-h-0 min-w-0 flex-1">
         {pixiFallbackReason === null &&
         floorplanScene.width > 0 &&
@@ -446,6 +497,10 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
             onDevicePress={(key) =>
               selecting ? toggleSelectedDevice(key) : openDevice([key])
             }
+            onDeviceHold={(key, hold) => {
+              setActiveSensorKey(null);
+              setQuickLight({ key, hold });
+            }}
             onDeviceLongPress={(key) => {
               setSelecting(true);
               setActiveSensorKey(null);

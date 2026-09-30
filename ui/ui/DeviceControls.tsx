@@ -8,12 +8,12 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { createUuid } from '@/lib/uuid';
 import { sendSceneCommand } from '@/lib/deviceCommands';
-import type { DeviceColor } from '@/bindings/DeviceColor';
 import { LoaderCircle, Power, SlidersHorizontal } from 'lucide-react';
-import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
+import { LightQuickIndicator } from '@/ui/LightQuickIndicator';
 import type { Device } from '@/bindings/Device';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
-import { useSetDeviceState } from '@/hooks/useSetDeviceColor';
+import { useLiveDeviceControls } from '@/hooks/useLiveDeviceControls';
+export { useLiveDeviceControls } from '@/hooks/useLiveDeviceControls';
 import {
   useConnectionStatus,
   useScenesState,
@@ -27,36 +27,6 @@ import { Slider } from '@/ui/primitives/slider';
 import Color, { type ColorInstance } from 'color';
 
 type Color = ColorInstance;
-
-// Keep the explicit scene-autosave preference when changing live controls.
-export function useLiveDeviceControls() {
-  const setState = useSetDeviceState();
-  const scenes = useScenesState();
-  return (
-    device: Device,
-    power: boolean,
-    brightness?: number,
-    color?: DeviceColor,
-  ) => {
-    if (!('Controllable' in device.data) || isDeviceReadOnly(device))
-      return Promise.resolve(false);
-    const sceneId = device.data.Controllable.scene_id;
-    const persist = Boolean(
-      sceneId &&
-      scenes?.[sceneId]?.active_overrides.includes(getDeviceKey(device)),
-    );
-    // Omitted color/brightness preserve each device's own state and color mode.
-    return setState(
-      device,
-      persist,
-      power,
-      undefined,
-      brightness,
-      undefined,
-      color,
-    );
-  };
-}
 
 export function DeviceRow({
   device,
@@ -87,6 +57,15 @@ export function DeviceRow({
     <div
       className={`dashboard-device-row flex min-w-0 items-center gap-3 bg-card py-2 ${plain ? '' : 'rounded-lg border border-border px-3'}`}
     >
+      <LightQuickIndicator
+        device={device}
+        displayNames={displayNames}
+        onDetails={() => {
+          modal.setState([getDeviceKey(device)]);
+          modal.setPresentation(presentation);
+          modal.setOpen(true);
+        }}
+      />
       <button
         className="dashboard-device-adjust flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`Adjust ${label}`}
@@ -96,7 +75,6 @@ export function DeviceRow({
           modal.setOpen(true);
         }}
       >
-        <LiveStatePreview states={[devicePreviewState(device)]} />
         <span className="dashboard-device-label min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">{label}</span>
           <span className="block text-sm text-muted-foreground">
@@ -115,7 +93,7 @@ export function DeviceRow({
         <SlidersHorizontal className="dashboard-device-settings size-4 shrink-0 text-muted-foreground" />
       </button>
       {inlineBrightness && supportsDeviceBrightness(device) && (
-        <div className="hidden w-36 shrink-0 items-center gap-2 md:flex">
+        <div className="dashboard-device-brightness hidden w-36 shrink-0 items-center gap-2 md:flex">
           <Slider
             aria-label={`${label} brightness`}
             min={0}

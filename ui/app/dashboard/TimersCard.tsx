@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Play, Square, LoaderCircle } from 'lucide-react';
+import { Play, Square, LoaderCircle, Timer } from 'lucide-react';
 import type { UserTimerEntry } from '@/bindings/UserTimerEntry';
 import type { DashboardWidget } from '@/hooks/useDashboard';
 import { getDashboardWidgetOptionStringArray } from '@/hooks/useDashboard';
 import { useUserTimers } from '@/hooks/useUserTimers';
 import { TimerIcon } from '@/ui/TimerIcon';
 import { Button } from '@/ui/primitives/button';
-import { DashboardCard } from './WidgetChrome';
+import { DashboardCard, WidgetHeading } from './WidgetChrome';
 
 export function TimerSummary({ entry }: { entry: UserTimerEntry }) {
   const { definition: d, runtime: r } = entry;
@@ -84,14 +84,15 @@ export function TimersCard({ widget }: { widget: DashboardWidget }) {
   return (
     <DashboardCard>
       <header className="flex min-h-12 shrink-0 items-center justify-between gap-2 px-4 pt-3">
-        <h2 className="truncate text-sm font-semibold">
-          {widget.title || 'Timers'}
-        </h2>
-        <Link to="/config/timers" className="text-xs text-primary underline">
+        <WidgetHeading icon={<Timer />} label={widget.title || 'Timers'} />
+        <Link
+          to="/config/timers"
+          className="shrink-0 text-xs text-primary hover:underline"
+        >
           Manage timers
         </Link>
       </header>
-      <div className="min-h-0 flex-1 space-y-2 overflow-auto p-4 pt-2">
+      <div className="min-h-0 flex-1 divide-y divide-border/60 overflow-auto px-4 pb-3 pt-2">
         {api.isPending ? (
           <p className="text-sm" role="status">
             Loading timers…
@@ -118,7 +119,7 @@ export function TimersCard({ widget }: { widget: DashboardWidget }) {
             ) : (
               <div
                 key={entry.definition.id}
-                className="flex items-center gap-3 rounded-lg border border-border p-3"
+                className="flex items-center gap-3 py-3"
               >
                 <TimerIcon name={entry.definition.icon} />
                 <div className="min-w-0 flex-1">

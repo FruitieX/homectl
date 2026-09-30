@@ -20,7 +20,6 @@ import {
 } from '@/lib/trainSchedule';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { useWidgetResource } from '@/hooks/useWidgetResource';
-import { Button } from '@/ui/primitives/button';
 import { CardContent } from '@/ui/primitives/card';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { WidgetCard, WidgetHeading } from './WidgetChrome';
@@ -173,26 +172,26 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
           return (
             <div
               key={`${train.name}-${train.departureFormatted}-${index}`}
-              className="dashboard-train-row grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-3"
+              className="dashboard-train-row grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-2.5"
             >
+              <span className="grid min-h-9 min-w-9 max-w-16 place-items-center rounded-md bg-primary/10 px-2 text-sm font-semibold text-primary">
+                {train.name}
+              </span>
               <div className="min-w-0">
-                <div className="truncate font-semibold">{train.name}</div>
-                <div className="dashboard-train-destination truncate text-sm">
+                <div className="dashboard-train-destination truncate text-sm font-medium">
                   {train.destination || 'Destination unavailable'}
                 </div>
                 <div className="dashboard-train-extra text-xs text-muted-foreground">
-                  Departure {train.departureFormatted}
+                  {train.departureFormatted}
+                  {!train.realtime && !cancelled ? ' · Scheduled' : ''}
                 </div>
               </div>
-              <span className="dashboard-train-extra text-xs text-muted-foreground">
-                {!train.realtime && !cancelled ? 'Scheduled' : ''}
-              </span>
               <div
                 className={clsx(
-                  'dashboard-train-time min-w-16 rounded-xl px-3 py-2 text-right',
+                  'dashboard-train-time min-w-14 py-1 text-right',
                   remaining <= 5 && !cancelled
-                    ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
-                    : 'bg-muted/60',
+                    ? 'text-amber-700 dark:text-amber-300'
+                    : 'text-foreground',
                 )}
               >
                 <div className="text-lg font-semibold leading-none tabular-nums">
@@ -202,7 +201,7 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
                       ? 'Now'
                       : remaining}
                 </div>
-                <div className="dashboard-train-time-label mt-1 text-[0.65rem] font-medium uppercase tracking-wide">
+                <div className="dashboard-train-time-label mt-1 text-[0.65rem] text-muted-foreground">
                   {cancelled
                     ? 'departure cancelled'
                     : remaining === 0
@@ -220,9 +219,9 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
   return (
     <>
       <WidgetCard className="dashboard-train-card col-span-4">
-        <Button
-          variant="ghost"
-          className="group h-full w-full items-stretch rounded-[inherit] p-0 text-left hover:bg-muted/30"
+        <button
+          type="button"
+          className="group flex h-full w-full items-stretch focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring rounded-[inherit] p-0 text-left hover:bg-muted/30"
           onClick={() => setDetailsOpen(true)}
         >
           <CardContent className="flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
@@ -268,7 +267,7 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
               </div>
             ) : null}
           </CardContent>
-        </Button>
+        </button>
       </WidgetCard>
 
       <ResponsiveOverlay

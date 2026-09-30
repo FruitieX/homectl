@@ -1,3 +1,4 @@
+import type { LightHold } from '@/lib/lightQuickAdjust';
 import {
   Application,
   Container,
@@ -31,6 +32,7 @@ interface PixiFloorplanRendererProps {
   paused?: boolean;
   onDevicePress?: (deviceKey: string) => void;
   onDeviceLongPress?: (deviceKey: string) => void;
+  onDeviceHold?: (deviceKey: string, hold: LightHold) => void;
   onSensorPress?: (deviceKey: string) => void;
   onGroupPress?: (groupId: string) => void;
   onGroupLongPress?: (groupId: string) => void;
@@ -43,6 +45,7 @@ interface PixiFloorplanRendererProps {
 interface RendererHandlers {
   onDevicePress?: (deviceKey: string) => void;
   onDeviceLongPress?: (deviceKey: string) => void;
+  onDeviceHold?: (deviceKey: string, hold: LightHold) => void;
   onSensorPress?: (deviceKey: string) => void;
   onGroupPress?: (groupId: string) => void;
   onGroupLongPress?: (groupId: string) => void;
@@ -1205,6 +1208,7 @@ export function PixiFloorplanRenderer({
   paused = false,
   onDevicePress,
   onDeviceLongPress,
+  onDeviceHold,
   onSensorPress,
   onGroupPress,
   onGroupLongPress,
@@ -1228,6 +1232,7 @@ export function PixiFloorplanRenderer({
   const handlersRef = useRef<RendererHandlers>({
     onDevicePress,
     onDeviceLongPress,
+    onDeviceHold,
     onSensorPress,
     onGroupPress,
     onGroupLongPress,
@@ -1273,6 +1278,7 @@ export function PixiFloorplanRenderer({
     handlersRef.current = {
       onDevicePress,
       onDeviceLongPress,
+      onDeviceHold,
       onSensorPress,
       onGroupPress,
       onGroupLongPress,
@@ -1287,6 +1293,7 @@ export function PixiFloorplanRenderer({
     focusBounds,
     onDevicePress,
     onDeviceLongPress,
+    onDeviceHold,
     onGroupLongPress,
     onGroupPress,
     onSensorPress,
@@ -1359,6 +1366,7 @@ export function PixiFloorplanRenderer({
     };
 
     const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
       event.preventDefault();
       const point = getPointerPoint(container, event);
       pointers.set(event.pointerId, point);
@@ -1383,7 +1391,22 @@ export function PixiFloorplanRenderer({
         activeGesture.longPressTimer = setTimeout(() => {
           if (!activeGesture.moved && activeGesture.target) {
             activeGesture.longPressFired = true;
-            invokeLongPress(activeGesture.target, handlersRef.current);
+            if (
+              activeGesture.target.type === 'device' &&
+              handlersRef.current.onDeviceHold
+            ) {
+              const light = latestSceneRef.current.lights.find(
+                (light) => light.deviceKey === activeGesture.target?.key,
+              );
+              const rect = container.getBoundingClientRect();
+              const view = viewRef.current;
+              handlersRef.current.onDeviceHold(activeGesture.target.key, {
+                pointerId: event.pointerId,
+                x:
+                  rect.left + (light ? light.x * view.scale + view.x : point.x),
+                y: rect.top + (light ? light.y * view.scale + view.y : point.y),
+              });
+            } else invokeLongPress(activeGesture.target, handlersRef.current);
           }
         }, longPressDelayMs);
       }
@@ -1465,6 +1488,14 @@ export function PixiFloorplanRenderer({
         return;
       }
 
+      // A held light belongs to the radial control until release. Panning
+      // still starts normally when movement occurs before the hold threshold.
+      if (
+        activeGesture.longPressFired &&
+        activeGesture.target?.type === 'device' &&
+        handlersRef.current.onDeviceHold
+      )
+        return;
       const deltaX = point.x - activeGesture.last.x;
       const deltaY = point.y - activeGesture.last.y;
       const movedDistance = distance(activeGesture.start, point);
@@ -1501,6 +1532,7 @@ export function PixiFloorplanRenderer({
       clearActiveLongPress();
 
       if (
+        event.type !== 'pointercancel' &&
         !activeGesture.moved &&
         !activeGesture.longPressFired &&
         activeGesture.target

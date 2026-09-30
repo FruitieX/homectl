@@ -1417,3 +1417,38 @@ html[data-density='comfortable'] {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Widget bodies adapt to their own saved dimensions, including narrow desktop cards. */
+@container dashboard-widget (max-width: 28rem) {
+  .dashboard-controls-content .dashboard-device-brightness {
+    display: none;
+  }
+}
+@container dashboard-widget (max-height: 16rem) {
+  .dashboard-weather-hours {
+    display: none;
+  }
+}
+@container dashboard-widget (max-height: 10rem) {
+  .dashboard-weather-trend {
+    display: none;
+  }
+  .dashboard-sensor-temperature {
+    font-size: 1rem;
+  }
+}
+@container dashboard-widget (max-height: 5rem) {
+  .dashboard-weather-body {
+    display: none;
+  }
+}
+@container dashboard-widget (max-height: 20rem) {
+  .dashboard-clock-calendar .dashboard-agenda-row:nth-child(n + 3) {
+    display: none;
+  }
+}
+@container dashboard-widget (max-height: 15rem) {
+  .dashboard-clock-calendar .dashboard-agenda-row:nth-child(n + 2) {
+    display: none;
+  }
+}

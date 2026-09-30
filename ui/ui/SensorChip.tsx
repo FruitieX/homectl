@@ -49,7 +49,8 @@ export function SensorChip({
       </div>
       <div
         className={cn(
-          'flex items-center gap-1.5 text-sm tabular-nums',
+          'dashboard-sensor-temperature flex items-center gap-1.5 tabular-nums',
+          compact ? 'text-2xl font-semibold tracking-tight' : 'text-sm',
           temperatureStale && 'text-muted-foreground',
         )}
         aria-label={

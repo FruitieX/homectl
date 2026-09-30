@@ -1,0 +1,69 @@
+{
+ "driven": {
+  "checks": [
+   {
+    "name": "Read failure exposes device controls and retry",
+    "passed": true
+   },
+   {
+    "name": "Shared map read retries without nonexistent image requests",
+    "passed": true
+   },
+   {
+    "name": "View options use shared accessible selectors",
+    "passed": true
+   },
+   {
+    "name": "Device inspector retains related settings link",
+    "passed": true
+   },
+   {
+    "name": "Inspector fits the viewport",
+    "passed": true
+   },
+   {
+    "name": "Phone inspector height is keyboard adjustable",
+    "passed": true
+   },
+   {
+    "name": "Keyboard Escape dismisses inspector",
+    "passed": true
+   },
+   {
+    "name": "Shared close button dismisses controls",
+    "passed": true
+   },
+   {
+    "name": "Floorplan selector shares the AppBar immediately before the assistant",
+    "passed": true
+   },
+   {
+    "name": "Hold and release selects without changing state",
+    "passed": true
+   },
+   {
+    "name": "Outer ring previews brightness before release",
+    "passed": true
+   },
+   {
+    "name": "Brightness release keeps selection and color popover",
+    "passed": true
+   },
+   {
+    "name": "Quick popover stays inside phone and desktop viewport",
+    "passed": true
+   },
+   {
+    "name": "Cancelled touch closes preview without selection or command",
+    "passed": true
+   },
+   {
+    "name": "Movement before hold threshold pans without opening quick controls",
+    "passed": true
+   }
+  ],
+  "passed": true,
+  "width": 390
+ }
+}
+{"url":"http://127.0.0.1:3021/map","viewport":{"width":390,"height":844},"problems":[]}

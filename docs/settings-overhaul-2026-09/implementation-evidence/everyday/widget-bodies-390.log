@@ -1,0 +1,14 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   "Keyboard opens shared quick controls without writes",
+   "Keyboard brightness uses one acknowledged command",
+   "Escape closes quick controls and restores focus"
+  ],
+  "cards": 7,
+  "overflow": false,
+  "text": "Home\nToday\n08:59\nWed, Sep 30\n09:09\nTeam call\nOnline\n10:19\nPick up groceries\nLocal market\nNext departures\nI\nHelsinki\n09:16 AM\n4\nmin to leave\nP\nHelsinki\n09:25 AM\n13\nmin to leave\nI\nHelsinki\n09:38 AM\n26\nmin to leave\nEntryway cooldown\nOff\ndurable · rev 1\nOn\nOff\nHelper details\nElectricity\nNext 24 hours\nAverage 5.97 c/kWh\nNow\n5.42 c/kWh\n0\n2\n4\n6\n8\n10\n12:00\n18:00\nThu\n06:00\nWeather\n12 °C\n3 m/s\nUV 2\nRain Showers\n08:00 AM\n12°\n12:00 PM\n14°\n04:00 PM\n16°\n08:00 PM\n16°\n12:00 AM\n14°\n04:00 AM\n11°\nLights\nFloor lamp\nOff\nLiving room lamp\nOn · 26%\nIndoor climate\nrender_bedroom\n21.7°\nrender_living\n20.7°\nHome\nSearch\nFloorplan\nRooms\nSettings"
+ }
+}
+{"url":"http://127.0.0.1:3021/","viewport":{"width":390,"height":844},"problems":[]}

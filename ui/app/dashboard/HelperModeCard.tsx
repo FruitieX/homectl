@@ -1,3 +1,4 @@
+import { House } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { configItemHref } from '@/lib/configItemHref';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
@@ -12,11 +13,12 @@ import {
 import { useHelpers, useSetHelperValue } from '@/hooks/useConfig';
 import { useHelperStatuses, useConnectionStatus } from '@/hooks/websocket';
 import { Button } from '@/ui/primitives/button';
-import { CardContent, CardHeader, CardTitle } from '@/ui/primitives/card';
+import { CardContent } from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
-import { DashboardCard } from './WidgetChrome';
+import { DashboardCard, WidgetHeading } from './WidgetChrome';
 
 function displayValue(value: unknown) {
+  if (typeof value === 'boolean') return value ? 'On' : 'Off';
   if (typeof value === 'string') {
     return value;
   }
@@ -68,10 +70,10 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <DashboardCard className="dashboard-helper-mode-card">
-      <CardHeader className="dashboard-widget-title shrink-0">
-        <CardTitle>{widget?.title || 'Mode'}</CardTitle>
-      </CardHeader>
-      <CardContent className="dashboard-helper-mode-content flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
+      <div className="dashboard-widget-title shrink-0 px-4 pb-3 pt-4">
+        <WidgetHeading icon={<House />} label={widget?.title || 'Mode'} />
+      </div>
+      <CardContent className="dashboard-helper-mode-content flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-4 pb-4">
         {loading && !helper ? (
           <p role="status" className="text-sm text-muted-foreground">
             Loading helper…
@@ -107,13 +109,19 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
               )}
             </div>
             {helper.kind.kind === 'enum' ? (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1 rounded-lg bg-muted/65 p-1">
                 {helperOptions(helper).map((option) => (
                   <Button
                     key={option}
                     type="button"
                     size="sm"
-                    variant={helper.value === option ? 'default' : 'outline'}
+                    className={
+                      helper.value === option
+                        ? 'flex-1 bg-background shadow-sm'
+                        : 'flex-1'
+                    }
+                    aria-pressed={helper.value === option}
+                    variant="ghost"
                     disabled={setValue.isPending || !connected}
                     onClick={() => apply(option)}
                   >
@@ -123,11 +131,17 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
               </div>
             ) : null}
             {helper.kind.kind === 'boolean' ? (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1 rounded-lg bg-muted/65 p-1">
                 <Button
                   type="button"
                   size="sm"
-                  variant={helper.value === true ? 'default' : 'outline'}
+                  className={
+                    helper.value === true
+                      ? 'flex-1 bg-background shadow-sm'
+                      : 'flex-1'
+                  }
+                  aria-pressed={helper.value === true}
+                  variant="ghost"
                   disabled={setValue.isPending || !connected}
                   onClick={() => apply(true)}
                 >
@@ -136,7 +150,13 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
                 <Button
                   type="button"
                   size="sm"
-                  variant={helper.value === false ? 'default' : 'outline'}
+                  className={
+                    helper.value === false
+                      ? 'flex-1 bg-background shadow-sm'
+                      : 'flex-1'
+                  }
+                  aria-pressed={helper.value === false}
+                  variant="ghost"
                   disabled={setValue.isPending || !connected}
                   onClick={() => apply(false)}
                 >

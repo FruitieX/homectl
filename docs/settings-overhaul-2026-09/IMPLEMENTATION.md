@@ -718,3 +718,44 @@ regression pass; four SQLite/PostgreSQL calibration and group-link migration
 checks pass. Synthetic image bytes test retention, not image rendering. No
 household configuration was changed. Already-lost calibration values cannot be
 reconstructed by this migration.
+
+### Widget bodies and light quick controls — 2026-09-30
+
+The widget bodies now follow the Compact study more closely: clock/date with a
+short divided agenda, route badges and compact departure rows, shared headings
+for controls/helpers/timers, segmented helper choices, divided device/timer rows,
+larger climate readings, a leading current electricity price, and an hourly
+weather strip plus temperature trend. Agenda details use divided rows as well.
+The larger existing chart/detail views remain available from widget surfaces.
+Weather forecasts default on for new widgets; explicit saved false stays false.
+An unclassified sensor is no longer assumed to be outdoors: weather overrides
+use an explicit sensor or the outdoor sensor group, otherwise forecast data.
+
+The mobile floorplan selector is back in the single AppBar row immediately
+before the assistant. Desktop keeps tabs. The same light quick popover is used
+by map holds and device-row indicators (rooms, controls widgets and fallbacks):
+
+- Hold 500 ms: show the enlarged brightness ring and quick controls.
+- Release without dragging: select/deselect the map light, close the quick
+  popover and return to the existing selection controls. Row indicators have
+  no selection mode and keep their quick controls open.
+- Drag at least 42 px from the marker center: adjust clockwise brightness on
+  the outer ring, with endpoint protection at twelve o'clock. Release sends one
+  acknowledged command; the popover remains open for white presets/hue.
+- Movement before the hold threshold pans normally. Cancellation or a second
+  pointer cancels the pending adjustment. Ordinary map taps keep their controls.
+- Buttons, a keyboard-operable brightness slider, Escape/focus return and an
+  All light controls action make the gesture optional. Read-only/disabled and
+  disconnected devices cannot be changed; the existing scene-override policy
+  and command acknowledgements are retained.
+
+Native browser evidence at 390/1440 px checks selection, no early commands,
+brightness release, cancellation on touch, popover bounds and panning. Seven
+populated widgets are captured at both widths, with keyboard open/brightness/
+Escape checks. Synthetic weather/departure/calendar data is supplied only by
+the isolated review driver. Type checking, lint, production build and 251 UI
+tests pass; existing backup-effect lint and chunk-size build warnings remain.
+See `ui/dev/light-gesture-review.mjs`, `widget-bodies-review.mjs`, and the
+comparison gallery's widget-bodies section. Physical touchscreen testing is
+still a useful final user check; the gesture evidence uses Chromium native
+input dispatch rather than physical hardware.

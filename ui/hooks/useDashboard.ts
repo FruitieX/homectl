@@ -213,7 +213,7 @@ export const widgetRegistry: Record<
       sensorPath: '/api/influxdb/temp-sensors',
       forecastHours: 48,
       forecastDays: 5,
-      showWidgetForecast: false,
+      showWidgetForecast: true,
       refreshSeconds: 60,
     },
   },

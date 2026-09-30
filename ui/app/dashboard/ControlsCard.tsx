@@ -1,3 +1,4 @@
+import { SlidersHorizontal } from 'lucide-react';
 import { useMemo } from 'react';
 import {
   type DashboardWidget,
@@ -7,8 +8,8 @@ import {
 import { useDevicesState, useGroupsState } from '@/hooks/websocket';
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { DeviceRow } from '@/ui/DeviceControls';
-import { CardContent, CardHeader, CardTitle } from '@/ui/primitives/card';
-import { DashboardCard } from './WidgetChrome';
+import { CardContent } from '@/ui/primitives/card';
+import { DashboardCard, WidgetHeading } from './WidgetChrome';
 import { WidgetRecovery } from './WidgetRecovery';
 import { Link } from 'react-router-dom';
 import { configItemHref } from '@/lib/configItemHref';
@@ -38,10 +39,13 @@ export const ControlsCard = ({ widget }: { widget?: DashboardWidget }) => {
         : Object.keys(state ?? {});
   return (
     <DashboardCard>
-      <CardHeader className="dashboard-controls-title shrink-0">
-        <CardTitle>{widget?.title || 'Controls'}</CardTitle>
-      </CardHeader>
-      <CardContent className="dashboard-controls-content min-h-0 flex-1 space-y-2 overflow-auto">
+      <div className="dashboard-controls-title shrink-0 px-4 pb-2 pt-4">
+        <WidgetHeading
+          icon={<SlidersHorizontal />}
+          label={widget?.title || 'Controls'}
+        />
+      </div>
+      <CardContent className="dashboard-controls-content min-h-0 flex-1 divide-y divide-border/60 overflow-auto px-4 pb-3">
         {!state || !groups ? (
           <p role="status" className="text-sm text-muted-foreground">
             Loading controls…
@@ -78,7 +82,12 @@ export const ControlsCard = ({ widget }: { widget?: DashboardWidget }) => {
               );
             return 'Controllable' in device.data ? (
               <div key={key} className="dashboard-controls-row min-w-0">
-                <DeviceRow device={device} displayNames={names} />
+                <DeviceRow
+                  device={device}
+                  displayNames={names}
+                  plain
+                  inlineBrightness
+                />
               </div>
             ) : null;
           })

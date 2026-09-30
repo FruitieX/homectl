@@ -18,12 +18,12 @@ The widget bodies and their detail views now take priority over further generic
 verification. Existing widget creation/options coverage is not visual acceptance
 of the widgets themselves.
 
-- [ ] Overhaul the actual dashboard widgets using approved Compact mockups;
+- [x] Overhaul the actual dashboard widgets using approved Compact mockups;
       review their content hierarchy, useful density, controls and detail views
       at realistic small/large widget sizes and phone/desktop layouts.
-- [ ] Return the mobile floorplan selector to the AppBar, immediately left of
+- [x] Return the mobile floorplan selector to the AppBar, immediately left of
       the assistant button, without consuming an extra row.
-- [ ] Explore a shared quick-adjust popover for light indicators, with long
+- [x] Explore a shared quick-adjust popover for light indicators, with long
       press on touch screens and an accessible button/keyboard alternative.
       Keep short taps and map pan/zoom reliable; use acknowledged existing
       commands and consistent brightness/color previews across entry points.
@@ -1013,3 +1013,19 @@ Long-press refinement: keep hold-and-release as selection. While held, show a
 larger outer brightness ring and the quick-controls popover. Dragging onto the
 ring adjusts brightness and releases one acknowledged command; leave the popover
 open for color. Movement before the hold threshold remains ordinary map panning.
+
+### Current-priority delivery — 2026-09-30
+
+Actual clock/agenda, departure, weather, price, control, helper, timer and climate
+widget bodies now have the compact hierarchy and consistent control treatment.
+Updated desktop/phone captures sit beside the approved widget study in the
+comparison gallery. Mobile floorplan selection occupies the existing AppBar row.
+Shared light quick controls preserve hold/release selection, add the larger
+brightness ring and keep color controls open after brightness release. Simple
+selection closes the quick popover in favor of the existing selection controls.
+See IMPLEMENTATION.md for interaction semantics and evidence.
+
+The broad historical MQTT transport/discovery, runtime activity-suppression and
+final cross-family accessibility reconciliation gates remain distinct from
+this delivered widget/gesture checkpoint; they are not marked complete by these
+screenshots or browser command fixtures.

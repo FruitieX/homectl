@@ -13,8 +13,7 @@ import {
 } from '@/hooks/useDashboard';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
-import { Button } from '@/ui/primitives/button';
-import { Card, CardContent } from '@/ui/primitives/card';
+import { CardContent } from '@/ui/primitives/card';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { WidgetCard, WidgetHeading } from './WidgetChrome';
@@ -170,33 +169,6 @@ const formatEventTimeDisplay = (event: CalendarEvent) => {
   return `${formatTime(event.start)} - ${formatTime(event.end)}`;
 };
 
-const getNextEvent = (events: CalendarEvent[], now: Date) => {
-  return events.find((event) => {
-    const eventStart = new Date(event.start);
-    return eventStart > now;
-  });
-};
-
-const getCurrentEvent = (events: CalendarEvent[], now: Date) => {
-  return events
-    .filter((event) => !event.isAllDay)
-    .find((event) => {
-      const eventStart = new Date(event.start);
-      const eventEnd = new Date(event.end);
-      return eventStart <= now && eventEnd > now;
-    });
-};
-
-const getCurrentAllDayEvent = (events: CalendarEvent[], now: Date) => {
-  return events
-    .filter((event) => event.isAllDay)
-    .find((event) => {
-      const eventStart = new Date(event.start);
-      const eventEnd = new Date(event.end);
-      return eventStart <= now && eventEnd > now;
-    });
-};
-
 const getEventStatus = (
   event: CalendarEvent,
   now: Date,
@@ -279,7 +251,7 @@ function LiveClockDisplay({
         {formatClockValue(time, showSeconds)}
       </span>
       {showDate ? (
-        <span className="dashboard-clock-date mt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="dashboard-clock-date mt-2 text-xs font-medium text-muted-foreground">
           {time.toLocaleDateString(undefined, {
             weekday: 'short',
             month: 'short',
@@ -304,37 +276,41 @@ function CalendarSummary({
 }) {
   if (!showCalendar || error || !calendar) return null;
 
-  const events = calendar.events;
-  const currentEvent = getCurrentEvent(events, now);
-  const currentAllDayEvent = getCurrentAllDayEvent(events, now);
-  const nextEvent = getNextEvent(events, now);
-
-  if (events.length === 0) return null;
-
-  const displayEvent = currentEvent || nextEvent || currentAllDayEvent;
-  if (!displayEvent) return null;
-
+  const events = calendar.events
+    .filter((event) => new Date(event.end) > now)
+    .slice(0, 3);
   return (
-    <div className="dashboard-clock-calendar mt-4 w-full border-t border-border/50 pt-3 text-center">
-      <div className="mb-1 flex items-center justify-center gap-1">
-        <Calendar className="size-3" />
-        {currentEvent && <Badge>Now</Badge>}
-        {!currentEvent && nextEvent && (
-          <Badge variant="secondary">Upcoming</Badge>
-        )}
-        {!currentEvent && !nextEvent && currentAllDayEvent && (
-          <Badge>All day</Badge>
-        )}
-      </div>
-      <div className="max-w-full truncate text-sm font-medium">
-        {displayEvent.summary}
-      </div>
-      <div className="flex min-w-0 items-center justify-center gap-1 text-xs text-muted-foreground">
-        <Clock className="size-3 shrink-0" />
-        <div className="max-w-full truncate">
-          {formatEventTimeDisplay(displayEvent)}
-        </div>
-      </div>
+    <div className="dashboard-clock-calendar mt-3 w-full divide-y divide-border/60 border-t border-border/60 text-left">
+      {events.length ? (
+        events.map((event) => (
+          <div
+            key={event.id}
+            className="dashboard-agenda-row grid grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-3 py-2.5"
+          >
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {event.isAllDay
+                ? 'All day'
+                : new Date(event.start) <= now
+                  ? 'Now'
+                  : formatTime(event.start)}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-medium">
+                {event.summary}
+              </span>
+              {event.location && (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {event.location}
+                </span>
+              )}
+            </span>
+          </div>
+        ))
+      ) : (
+        <p className="py-3 text-sm text-muted-foreground">
+          No more events today
+        </p>
+      )}
     </div>
   );
 }
@@ -346,38 +322,35 @@ function CalendarEventCard({ view }: { view: CalendarEventView }) {
   const isUpcomingEvent = status === 'upcoming';
 
   return (
-    <Card
+    <article
       className={clsx(
-        'content-visibility-card',
-        isCurrentEvent && 'ring-2 ring-primary',
+        'content-visibility-card flex items-start gap-4 border-b border-border/60 py-4',
         isPastEvent && 'opacity-60',
       )}
     >
-      <CardContent className="flex items-start gap-3 p-4">
-        <div className="shrink-0">
-          {isCurrentEvent && <Badge>Now</Badge>}
-          {isUpcomingEvent && <Badge variant="secondary">Upcoming</Badge>}
-          {isPastEvent && <Badge variant="outline">Past</Badge>}
+      <div className="shrink-0">
+        {isCurrentEvent && <Badge>Now</Badge>}
+        {isUpcomingEvent && <Badge variant="secondary">Upcoming</Badge>}
+        {isPastEvent && <Badge variant="outline">Past</Badge>}
+      </div>
+      <div className="flex-1">
+        <h3 className="mb-1 text-sm font-semibold">{event.summary}</h3>
+        <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+          <Clock className="size-4" />
+          <span>{timeDisplay}</span>
         </div>
-        <div className="flex-1">
-          <h3 className="mb-1 text-lg font-semibold">{event.summary}</h3>
-          <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
-            <Clock className="size-4" />
-            <span>{timeDisplay}</span>
+        {event.location && (
+          <div className="mb-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+            <MapPin className="size-4" /> {event.location}
           </div>
-          {event.location && (
-            <div className="mb-2 flex items-center gap-1.5 text-sm text-muted-foreground">
-              <MapPin className="size-4" /> {event.location}
-            </div>
-          )}
-          {event.description && (
-            <div className="mt-2 text-sm text-muted-foreground">
-              {event.description}
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+        )}
+        {event.description && (
+          <div className="mt-2 text-sm text-muted-foreground">
+            {event.description}
+          </div>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -462,9 +435,9 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
   return (
     <>
       <WidgetCard className="dashboard-clock-card col-span-2">
-        <Button
-          variant="ghost"
-          className="group h-full w-full items-stretch rounded-[inherit] p-0 text-left hover:bg-muted/30"
+        <button
+          type="button"
+          className="group flex h-full w-full items-stretch focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring rounded-[inherit] p-0 text-left hover:bg-muted/30"
           onClick={toggleDetailsModal}
         >
           <CardContent className="flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
@@ -478,21 +451,31 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
               }
               detail
             />
-            <div className="dashboard-clock-content flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden py-[var(--widget-inner-y,1rem)]">
-              <LiveClockDisplay
-                time={liveClockTime}
-                showSeconds={showSeconds}
-                showDate={showDate}
-              />
+            <div className="dashboard-clock-content flex min-h-0 flex-1 flex-col overflow-hidden pt-[var(--widget-inner-y,1rem)]">
+              <div className="dashboard-clock-hero flex flex-wrap items-end gap-x-4 gap-y-1">
+                <LiveClockDisplay
+                  time={liveClockTime}
+                  showSeconds={showSeconds}
+                  showDate={showDate}
+                />
+              </div>
               <CalendarSummary
                 showCalendar={showCalendar}
                 error={error}
                 calendar={calendar}
                 now={calendarNow}
               />
+              {showCalendar && error && (
+                <p
+                  role="status"
+                  className="mt-3 whitespace-normal text-xs text-muted-foreground"
+                >
+                  Calendar unavailable. Open details to check the source.
+                </p>
+              )}
             </div>
           </CardContent>
-        </Button>
+        </button>
       </WidgetCard>
       <ResponsiveOverlay
         open={detailsModalOpen}

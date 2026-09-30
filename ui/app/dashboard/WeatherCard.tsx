@@ -1,3 +1,4 @@
+import { Sparkline } from '@/ui/charts/Sparkline';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useInterval, useTimeout, useToggle } from 'usehooks-ts';
 import clsx from 'clsx';
@@ -16,7 +17,6 @@ import {
 import { getUvIndexColor } from '@/lib/uvIndex';
 import { WeatherChart } from '@/ui/charts/WeatherChart';
 import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
-import { Button } from '@/ui/primitives/button';
 import { CardContent } from '@/ui/primitives/card';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Tabs, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
@@ -347,13 +347,11 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   const tempSensors = useTempSensorsQuery(sensorPath);
   const { catalog } = useSensorCatalog();
-  const indoorIds = new Set(
-    catalog?.groups.find((group) => group.id === 'indoor')?.sensorIds ?? [],
-  );
+  // Only an explicit choice or the outdoor group identifies an outdoor sensor.
+  // An unclassified sensor may be indoors; otherwise use the forecast value.
   const outdoorSensorId =
     configuredOutdoorSensorId ||
-    catalog?.sensors.find((sensor) => !indoorIds.has(sensor.id))?.id ||
-    tempSensors.find((row) => !indoorIds.has(row.device_id))?.device_id ||
+    catalog?.groups.find((group) => group.id === 'outdoor')?.sensorIds[0] ||
     '';
   const latestFrontyardTemp = latestTemperature(
     tempSensors,
@@ -370,7 +368,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
   const showWidgetForecast = getDashboardWidgetOptionBoolean(
     widget,
     'showWidgetForecast',
-    false,
+    true,
   );
 
   useTimeout(
@@ -408,9 +406,9 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
   return (
     <>
       <WidgetCard className="dashboard-weather-card col-span-1">
-        <Button
-          variant="ghost"
-          className="group h-full w-full items-stretch rounded-[inherit] p-0 text-left hover:bg-muted/30"
+        <button
+          type="button"
+          className="group flex h-full w-full items-stretch focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring rounded-[inherit] p-0 text-left hover:bg-muted/30"
           onClick={toggleDetailsModal}
         >
           <CardContent className="flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
@@ -426,34 +424,87 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
               }
               detail
             />
-            <div
-              className={clsx(
-                'dashboard-weather-content min-h-0 flex-1 items-center justify-center gap-2 overflow-hidden py-[var(--widget-inner-y,0.75rem)]',
-                showWidgetForecast
-                  ? 'dashboard-weather-layout grid grid-cols-1'
-                  : 'flex flex-col',
-              )}
-            >
-              <div className="dashboard-weather-current min-w-0">
-                <div className="dashboard-weather-current-card">
-                  <span className="dashboard-weather-current-label">Now</span>
-                  {renderWeatherDetail(
-                    currentAndFutureSeries[0],
-                    true,
-                    currentTemperature,
-                  )}
-                </div>
+            <div className="dashboard-weather-body flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-3">
+              <div
+                className={clsx(
+                  'dashboard-weather-current flex items-center justify-between gap-3',
+                  !showWidgetForecast && 'flex-1',
+                )}
+              >
+                {renderWeatherDetail(currentSeries, false, currentTemperature)}
+                {currentSeries && (
+                  <span className="min-w-0 text-right text-xs capitalize text-muted-foreground">
+                    {(
+                      currentSeries.data.next_1_hours?.summary?.symbol_code ??
+                      currentSeries.data.next_6_hours?.summary?.symbol_code ??
+                      ''
+                    )
+                      .replace(/_(day|night|polartwilight)$/, '')
+                      .replaceAll('_', ' ')
+                      .replace(
+                        /(light|heavy|partly|fair|clear|sky|cloudy|rain|snow|sleet|showers|and|thunder)/g,
+                        '$1 ',
+                      )
+                      .trim()}
+                  </span>
+                )}
               </div>
-              {showWidgetForecast && dailyData.length > 0 && (
-                <div className="dashboard-weather-forecast grid grid-cols-1 gap-1.5">
-                  {dailyData.slice(0, 3).map((day) => (
-                    <DailyForecastCard
-                      key={day.date.toISOString()}
-                      day={day}
-                      compact
+              {showWidgetForecast && hourlyData.length > 1 && (
+                <>
+                  <div className="dashboard-weather-hours grid grid-cols-6 gap-1 border-t border-border/60 pt-2">
+                    {hourlyData
+                      .filter(
+                        (_, i) =>
+                          i % Math.max(1, Math.floor(hourlyData.length / 6)) ===
+                          0,
+                      )
+                      .slice(0, 6)
+                      .map((series) => (
+                        <div
+                          key={String(series.time)}
+                          className="grid justify-items-center gap-1 text-xs tabular-nums"
+                        >
+                          <span className="text-muted-foreground">
+                            {parseTime(series.time).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                          <img
+                            src={
+                              '/weathericons/' +
+                              (series.data.next_1_hours?.summary?.symbol_code ||
+                                series.data.next_6_hours?.summary
+                                  ?.symbol_code ||
+                                'clearsky_day') +
+                              '.svg'
+                            }
+                            className="size-7"
+                            alt=""
+                          />
+                          <span>
+                            {Math.round(
+                              series.data.instant.details.air_temperature,
+                            )}
+                            °
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                  <div
+                    className="dashboard-weather-trend relative min-h-0 flex-1"
+                    aria-label="Forecast temperature trend"
+                  >
+                    <Sparkline
+                      className="absolute inset-0 h-full w-full text-primary/75"
+                      minSpan={3}
+                      points={hourlyData.map((series) => ({
+                        time: parseTime(series.time),
+                        value: series.data.instant.details.air_temperature,
+                      }))}
                     />
-                  ))}
-                </div>
+                  </div>
+                </>
               )}
             </div>
             {weatherQuery.isError && (
@@ -479,7 +530,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
                 </p>
               )}
           </CardContent>
-        </Button>
+        </button>
       </WidgetCard>
       <ResponsiveOverlay
         open={detailsModalOpen}

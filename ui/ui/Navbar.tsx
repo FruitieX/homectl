@@ -20,8 +20,6 @@ export const Navbar = () => {
   const isRoomMap =
     isRoom && new URLSearchParams(location.search).get('view') === 'floorplan';
 
-  const isMap = pathname === '/map' || isRoomMap;
-
   let title = 'homectl';
   // Named at sm and up; a phone shows one location signal at a time.
   let sectionSuffix: string | null = null;
@@ -93,9 +91,7 @@ export const Navbar = () => {
   }
 
   return (
-    <header
-      className={`relative z-20 flex shrink-0 items-center gap-1 border-b border-border/40 bg-background px-3 pt-[env(safe-area-inset-top)] sm:px-5 lg:px-8 ${isMap ? 'min-h-16 flex-wrap md:h-16 md:flex-nowrap' : 'h-16'}`}
-    >
+    <header className="relative z-20 flex h-16 shrink-0 items-center gap-1 border-b border-border/40 bg-background px-3 pt-[env(safe-area-inset-top)] sm:px-5 lg:px-8">
       <div className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-1">
         {isRoom ? (
           <nav
@@ -119,12 +115,14 @@ export const Navbar = () => {
                 </span>
                 <Link
                   to={`/groups/${encodeURIComponent(groupMatch!.params.id!)}`}
-                  className="hover:text-foreground"
+                  className="min-w-0 truncate hover:text-foreground"
                 >
                   Room controls
                 </Link>
-                <span aria-hidden="true">/</span>
-                <span>Floorplan</span>
+                <span aria-hidden="true" className="hidden sm:inline">
+                  /
+                </span>
+                <span className="hidden sm:inline">Floorplan</span>
               </>
             )}
           </nav>
@@ -142,7 +140,7 @@ export const Navbar = () => {
       {(pathname === '/map' || isRoomMap) && (
         <div
           id="floorplan-tabs"
-          className="order-last flex w-full min-w-0 items-center gap-1 pb-1 empty:hidden md:order-none md:w-auto md:max-w-[40%] md:pb-0"
+          className="flex min-w-0 max-w-[40%] items-center gap-1 empty:hidden"
         />
       )}
       <AssistantButton

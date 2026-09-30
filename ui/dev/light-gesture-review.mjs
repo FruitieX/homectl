@@ -233,6 +233,113 @@ export default async function (cdp, { width, url }) {
         `(()=>{const selector=document.querySelector('[aria-label="Floorplan"]'), assistant=document.querySelector('[aria-label="Ask AI"]'), a=selector.getBoundingClientRect(), b=assistant.getBoundingClientRect();return Math.abs(a.top-b.top)<=6 && a.right<=b.left+1 && selector.closest('header').getBoundingClientRect().height<=65 && document.documentElement.scrollWidth<=innerWidth+1;})()`,
       );
     await shot('map');
+    const commands = async () =>
+      (
+        await (
+          await fetch('http://127.0.0.1:3021/api/__fixture/live-controls')
+        ).json()
+      ).commands;
+    const before = (await commands()).length;
+    const locate = () =>
+      evaluate(
+        `(()=>{const r=document.querySelector('canvas').getBoundingClientRect();const s=.86*Math.min(r.width/640,r.height/384);return {x:r.left+(r.width-640*s)/2+112*s,y:r.top+(r.height-384*s)/2+112*s}})()`,
+      );
+    let point = await locate();
+    const pointer = async (type, p = point) =>
+      width < 768
+        ? cdp.send('Input.dispatchTouchEvent', {
+            type: {
+              down: 'touchStart',
+              move: 'touchMove',
+              up: 'touchEnd',
+              cancel: 'touchCancel',
+            }[type],
+            touchPoints:
+              type === 'up' || type === 'cancel' ? [] : [{ ...p, id: 1 }],
+          })
+        : cdp.send('Input.dispatchMouseEvent', {
+            type: {
+              down: 'mousePressed',
+              move: 'mouseMoved',
+              up: 'mouseReleased',
+            }[type],
+            ...p,
+            button: 'left',
+            buttons: type === 'up' ? 0 : 1,
+            clickCount: 1,
+          });
+    const popover = `document.querySelector('[aria-label="Living room lamp quick controls"]')`;
+    await pointer('down');
+    await new Promise((r) => setTimeout(r, 650));
+    await until(`!!${popover}`, 'Long hold opens quick controls');
+    await shot('hold');
+    if ((await commands()).length !== before)
+      throw Error('Holding must not issue commands');
+    await pointer('up');
+    await pause();
+    await check(
+      'Hold and release selects without changing state',
+      `document.body.innerText.includes('1 selected') && !${popover}`,
+    );
+    point = await locate();
+    await pointer('down');
+    await new Promise((r) => setTimeout(r, 650));
+    await until(`!!${popover}`, 'Second hold reopens quick controls');
+    await pointer('move', { x: point.x + 58, y: point.y });
+    await pause();
+    await check(
+      'Outer ring previews brightness before release',
+      `${popover}.innerText.includes('25%')`,
+    );
+    if ((await commands()).length !== before)
+      throw Error('Drag preview must not issue commands');
+    await pointer('up', { x: point.x + 58, y: point.y });
+    await new Promise((r) => setTimeout(r, 300));
+    const sent = await commands();
+    if (
+      sent.length !== before + 1 ||
+      sent.at(-1).DeviceCommand?.brightness !== 0.25
+    )
+      throw Error(
+        'Expected one quarter-brightness command: ' +
+          JSON.stringify(sent.at(-1)),
+      );
+    await check(
+      'Brightness release keeps selection and color popover',
+      `document.body.innerText.includes('1 selected') && !!${popover} && !!document.querySelector('[aria-label="Living room lamp hue"]')`,
+    );
+    await check(
+      'Quick popover stays inside phone and desktop viewport',
+      `(()=>{const r=${popover}.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight+1;})()`,
+    );
+    await shot('quick');
+    await click(
+      `document.querySelector('[aria-label="Close quick controls"]')`,
+    );
+    if (width < 768) {
+      point = await locate();
+      await pointer('down');
+      await new Promise((r) => setTimeout(r, 650));
+      await until(`!!${popover}`, 'Cancellation hold opens');
+      await pointer('move', { x: point.x, y: point.y + 58 });
+      await pointer('cancel');
+      await pause();
+      await check(
+        'Cancelled touch closes preview without selection or command',
+        `!${popover} && document.body.innerText.includes('1 selected')`,
+      );
+      if ((await commands()).length !== before + 1)
+        throw Error('Cancelled gesture sent command');
+    }
+    await pointer('down');
+    await pointer('move', { x: point.x + 35, y: point.y + 10 });
+    await new Promise((r) => setTimeout(r, 650));
+    await check(
+      'Movement before hold threshold pans without opening quick controls',
+      `!${popover}`,
+    );
+    await pointer('up', { x: point.x + 35, y: point.y + 10 });
+
     return { checks, passed: checks.every((c) => c.passed), width };
   } finally {
     await fetch(`${base}/${id}`, { method: 'DELETE' });

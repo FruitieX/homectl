@@ -1,0 +1,14 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   "Keyboard opens shared quick controls without writes",
+   "Keyboard brightness uses one acknowledged command",
+   "Escape closes quick controls and restores focus"
+  ],
+  "cards": 7,
+  "overflow": false,
+  "text": "Search\nHome\nFloorplan\nRooms\nSettings\nHome\nToday\n09:00\nWed, Sep 30\n09:10\nTeam call\nOnline\n10:20\nPick up groceries\nLocal market\nNext departures\nI\nHelsinki\n09:17 AM\n4\nmin to leave\nP\nHelsinki\n09:26 AM\n13\nmin to leave\nI\nHelsinki\n09:39 AM\n26\nmin to leave\nEntryway cooldown\nOff\ndurable · rev 1\nOn\nOff\nHelper details\nElectricity\nNext 24 hours\nAverage 5.97 c/kWh\nNow\n4.37 c/kWh\n0\n2\n4\n6\n8\n10\n09:00\n12:00\n15:00\n18:00\n21:00\nThu\n03:00\n06:00\nWeather\n12 °C\n3 m/s\nUV 2\nRain Showers\n09:00 AM\n12°\n01:00 PM\n14°\n05:00 PM\n16°\n09:00 PM\n16°\n01:00 AM\n14°\n05:00 AM\n11°\nLights\nFloor lamp\nOff\n100%\nLiving room lamp\nOn · 27%\n27%\nIndoor climate\nrender_bedroom\n21.7°\n44%\nrender_living\n20.7°\n43%"
+ }
+}
+{"url":"http://127.0.0.1:3021/","viewport":{"width":1440,"height":1000},"problems":[]}

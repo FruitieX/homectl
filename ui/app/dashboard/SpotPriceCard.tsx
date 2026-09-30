@@ -113,8 +113,8 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
                 compactValue={stats ? formatPrice(stats.current?.value) : null}
                 detail
               />
-              <div className="dashboard-spot-summary mt-3 flex items-end justify-between gap-4 px-1 pb-1">
-                <div className="dashboard-spot-secondary">
+              <div className="dashboard-spot-summary mt-3 flex flex-row-reverse items-end justify-between gap-4 pb-1">
+                <div className="dashboard-spot-secondary text-right">
                   <div className="text-xs text-muted-foreground">
                     Next 24 hours
                   </div>
@@ -124,7 +124,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
                     </div>
                   ) : null}
                 </div>
-                <div className="text-right">
+                <div>
                   <div className="text-xs font-medium text-muted-foreground">
                     Now
                   </div>

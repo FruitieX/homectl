@@ -421,3 +421,20 @@ conversion remains in the routine editor. No JSX native select elements remain
 in the UI source. This closes the identified selector/obsolete-editor inventory;
 restore/restart, MQTT transport, activity-runtime and broader accessibility/final
 reconciliation remain open.
+
+### Restore and current widget/map priorities — 2026-09-30
+
+The reviewed backup lifecycle now passes through real server restarts, including
+secret retention, stale review rejection and empty replacement. Calibration
+brightness persistence and empty-database authority are fixed, with passing
+SQLite/PostgreSQL migration checks. See IMPLEMENTATION.md.
+
+The actual widget bodies now have refreshed Compact desktop/phone captures and
+keyboard quick-control evidence. Native map holds preserve release-to-select,
+while ring drags preview brightness and send one acknowledged command on release.
+Phone cancellation, pan threshold, popover bounds and the single-row AppBar
+selector are covered. Shared row indicators offer the same controls with
+keyboard focus return. Existing command failure/read-only protections are reused.
+This closes the current widget-body/mobile-selector/quick-control requirements;
+physical touch hardware and the previously listed transport/runtime/final
+cross-family reconciliation gates are not claimed by this fixture evidence.
