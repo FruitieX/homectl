@@ -758,7 +758,7 @@ function drawLightMarker(
         -Math.PI / 2,
         -Math.PI / 2 + brightness * Math.PI * 2,
       )
-      .stroke({ color: tint, width: 2.5, cap: 'round' });
+      .stroke({ color: tint, width: 2.5, cap: 'butt' });
 
   if (selected) {
     graphics

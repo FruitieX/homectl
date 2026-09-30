@@ -484,7 +484,7 @@ export function FloorplanEditorCanvas({
         );
         ctx.strokeStyle =
           preview.power && !preview.disabled ? '#52806a' : '#94a39a';
-        ctx.lineCap = 'round';
+        ctx.lineCap = 'butt';
         ctx.stroke();
         ctx.beginPath();
         ctx.arc(0, 0, Math.max(4, r - 4), 0, Math.PI * 2);

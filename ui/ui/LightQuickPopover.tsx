@@ -27,10 +27,12 @@ import { getColor } from '@/lib/colors';
 import { Button } from './primitives/button';
 
 const SURFACE_SIZE = 268;
-const COLOR_SIZE = 192;
+const COLOR_SIZE = 208;
 const COLOR_CENTER = COLOR_SIZE / 2 - 4;
 const COLOR_MIN_RADIUS = 42;
 const COLOR_MAX_RADIUS = COLOR_CENTER - 8;
+const BRIGHTNESS_WIDTH = 24;
+const BRIGHTNESS_RADIUS = 119;
 /** One radial surface for map and row indicators, with coalesced live updates. */
 export function LightQuickPopover({
   device,
@@ -101,6 +103,18 @@ export function LightQuickPopover({
     selectedColor && 'ct' in selectedColor ? selectedColor.ct : 4000;
   const level = draft?.brightness ?? Math.round((state?.brightness ?? 1) * 100);
   const power = draft?.power ?? state?.power ?? false;
+  const powerFill = color.desaturate(0.45);
+  const powerPress = useRef<{
+    timer?: ReturnType<typeof setTimeout>;
+    x: number;
+    y: number;
+    suppressClick: boolean;
+  }>({ x: 0, y: 0, suppressClick: false });
+  const clearPowerHold = () => {
+    clearTimeout(powerPress.current.timer);
+    powerPress.current.timer = undefined;
+  };
+  useEffect(() => () => clearTimeout(powerPress.current.timer), []);
   const cx = Math.max(140, Math.min(innerWidth - 140, anchor.x));
   const cy = Math.min(innerHeight - 146, Math.max(228, anchor.y));
   const label = getDeviceDisplayLabel(device, displayNames);
@@ -231,7 +245,11 @@ export function LightQuickPopover({
           ((e.clientY - bounds.top - bounds.height / 2) * SURFACE_SIZE) /
           bounds.height,
         r = Math.hypot(dx, dy);
-      if (region === 'brightness' && r < 108) return;
+      if (
+        region === 'brightness' &&
+        r < BRIGHTNESS_RADIUS - BRIGHTNESS_WIDTH / 2
+      )
+        return;
       e.preventDefault();
       if (region === 'brightness') {
         if (!latest.current.dimmable) return;
@@ -251,6 +269,9 @@ export function LightQuickPopover({
           },
         };
       } else {
+        const capabilities = latest.current.caps;
+        if (!(capabilities?.hs || capabilities?.xy || capabilities?.rgb))
+          return;
         value = {
           color: {
             h: ringBrightness(dx, dy) * 3.6,
@@ -301,7 +322,9 @@ export function LightQuickPopover({
   useEffect(() => () => dragCleanup.current?.(), []);
   useEffect(() => {
     if (!hold) return;
-    const cleanup = start(hold.pointerId, 'brightness');
+    // The opening pointer stays a color gesture even outside the hue disk.
+    // Brightness always needs a fresh pointerdown on its own ring.
+    const cleanup = start(hold.pointerId, 'color');
     return cleanup;
   }, [hold]);
   if (!state) return null;
@@ -423,26 +446,26 @@ export function LightQuickPopover({
           <circle
             cx="134"
             cy="134"
-            r="119"
+            r={BRIGHTNESS_RADIUS}
             fill="none"
             stroke="currentColor"
             strokeOpacity=".12"
-            strokeWidth="14"
+            strokeWidth={BRIGHTNESS_WIDTH}
           />
           {dimmable && (
             <circle
               cx="134"
               cy="134"
-              r="119"
+              r={BRIGHTNESS_RADIUS}
               fill="none"
               stroke="currentColor"
               data-brightness-arc
               style={{ color: color.hex() }}
-              strokeWidth="14"
+              strokeWidth={BRIGHTNESS_WIDTH}
               pathLength="100"
               strokeDasharray={`${level} 100`}
               transform="rotate(-90 134 134)"
-              strokeLinecap={level ? 'round' : 'butt'}
+              strokeLinecap="butt"
             />
           )}
         </svg>
@@ -455,7 +478,7 @@ export function LightQuickPopover({
             aria-valuenow={level}
             aria-disabled={!enabled}
             tabIndex={enabled ? 0 : -1}
-            className="absolute inset-[8px] rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="absolute inset-[2px] rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onPointerDown={(e) => {
               if (!enabled) return;
               e.preventDefault();
@@ -497,8 +520,10 @@ export function LightQuickPopover({
           }
           aria-disabled={!enabled}
           tabIndex={enabled && (colored || caps?.ct) ? 0 : -1}
-          className="absolute left-1/2 top-1/2 size-[192px] -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-card outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-card outline-none focus-visible:ring-2 focus-visible:ring-ring"
           style={{
+            width: COLOR_SIZE,
+            height: COLOR_SIZE,
             background: colored || caps?.ct ? disk : 'var(--color-muted)',
           }}
           onPointerDown={(e) => {
@@ -567,12 +592,50 @@ export function LightQuickPopover({
           aria-label={`Turn ${label} ${power ? 'off' : 'on'}`}
           aria-pressed={power}
           disabled={!enabled}
-          className="absolute left-1/2 top-1/2 grid size-[68px] -translate-x-1/2 -translate-y-1/2 place-content-center rounded-full border-4 border-card shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          className="absolute left-1/2 top-1/2 grid size-[68px] -translate-x-1/2 -translate-y-1/2 place-content-center rounded-full border-2 shadow-lg ring-4 ring-card outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
           style={{
-            background: power ? color.hex() : '#434e5a',
-            color: power && color.isLight() ? '#17251e' : '#fff',
+            background: power ? powerFill.hex() : '#434e5a',
+            borderColor: power ? color.hex() : '#94a3b8',
+            color: power && powerFill.isLight() ? '#17251e' : '#fff',
           }}
-          onClick={() => adjust({ power: !power }, true)}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            e.currentTarget.setPointerCapture(e.pointerId);
+            clearPowerHold();
+            powerPress.current = {
+              x: e.clientX,
+              y: e.clientY,
+              suppressClick: false,
+              timer: setTimeout(() => {
+                powerPress.current.suppressClick = true;
+                latest.current.onClose();
+              }, 500),
+            };
+          }}
+          onPointerMove={(e) => {
+            if (
+              powerPress.current.timer &&
+              Math.hypot(
+                e.clientX - powerPress.current.x,
+                e.clientY - powerPress.current.y,
+              ) > 8
+            ) {
+              clearPowerHold();
+              powerPress.current.suppressClick = true;
+            }
+          }}
+          onPointerUp={clearPowerHold}
+          onPointerCancel={() => {
+            clearPowerHold();
+            powerPress.current.suppressClick = true;
+          }}
+          onLostPointerCapture={clearPowerHold}
+          onContextMenu={(e) => e.preventDefault()}
+          onClick={(e) => {
+            if (!powerPress.current.suppressClick || e.detail === 0)
+              adjust({ power: !power }, true);
+          }}
         >
           <Power className={`mx-auto size-5 ${power ? '' : 'opacity-50'}`} />
           {pending && (

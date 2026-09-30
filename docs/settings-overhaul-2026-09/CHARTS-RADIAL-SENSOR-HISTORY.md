@@ -165,7 +165,8 @@ light. Do not silently discard the sheet's existing target.
       hue/saturation area, and outermost brightness ring.
 - [x] Hue runs around the circle; saturation increases with distance away from
       the central power button. Make each interaction region distinguishable.
-- [x] Preserve direct hold-and-drag brightness adjustment on the outer ring.
+- [x] Opening hold-and-drag now adjusts color; brightness requires a fresh
+  touch on its outer ring (updated by the gesture refinement below).
 - [x] Add small floating mode buttons above the circle for at least hue/saturation
       and color temperature.
 - [x] Default to the device's current color mode; offer only supported controls
@@ -397,3 +398,49 @@ No live household configuration or devices were changed.
 [Phone temperature](implementation-evidence/radial-live/phone-temperature.png) ·
 [Desktop checks](implementation-evidence/radial-live/desktop-checks.json) ·
 [Phone checks](implementation-evidence/radial-live/phone-checks.json).
+
+## Follow-up: radial gesture and appearance refinement
+
+Requested and delivered 2026-09-30. This supersedes the opening gesture and
+center-preview styling in the earlier iterations.
+
+- [x] After a held press opens the popover, movement adjusts hue/saturation,
+  or color temperature when that is the device's active mode. That gesture
+  remains a color gesture even if the finger crosses the brightness ring.
+  Opening and releasing without movement sends no command. Lights without
+  color controls do not receive unsupported color commands.
+- [x] Brightness requires releasing the opening press and starting a new
+  touch on the brightness ring. Live updates retain their 120 ms debounce,
+  request coalescing and stable indicators through delayed acknowledgements.
+- [x] Holding the center power button for 500 ms dismisses the popover without
+  toggling power. A short tap still toggles power. Movement, cancellation and
+  releasing the press cancel its dismissal timer.
+- [x] Widen the brightness arc from 14 to 24 px and its touch region; use flat
+  ends at both ends of the arc. Enlarge the color wheel from 192 to 208 px,
+  reducing the gap between the wheel and the brightness ring while retaining
+  correctly centered pointer coordinates at either UI density.
+- [x] Desaturate the center power preview by 45%, with an outline in the actual
+  selected light color and a separating neutral ring. This only affects its
+  appearance; commands, color indicators and brightness arcs retain the actual
+  selected color. The powered-off center stays dark with a muted outline.
+- [x] Use flat brightness arc ends on both live floorplan light indicators and
+  floorplan-editor indicators. Static SVG floorplan previews already use flat
+  ends.
+
+Verification: UI type check, unit tests and production build passed. Lint has
+only the existing import/export cleanup warning. Native desktop mouse and phone
+touch batches pass, covering opening color drags, fresh brightness drags,
+hold-to-dismiss without power commands, short power taps, flat/wider arcs,
+four-quadrant geometry at both densities, delayed acknowledgements and existing
+selection/sensor/history workflows. Both batches report no browser errors.
+All writes were to isolated fixtures; no live household configuration or devices
+were changed.
+
+[Desktop hue](implementation-evidence/radial-gesture-refinement/desktop-hue.png) ·
+[Phone hue](implementation-evidence/radial-gesture-refinement/phone-hue.png) ·
+[Desktop temperature](implementation-evidence/radial-gesture-refinement/desktop-temperature.png) ·
+[Phone temperature](implementation-evidence/radial-gesture-refinement/phone-temperature.png) ·
+[Desktop off](implementation-evidence/radial-gesture-refinement/desktop-off.png) ·
+[Phone off](implementation-evidence/radial-gesture-refinement/phone-off.png) ·
+[Desktop checks](implementation-evidence/radial-gesture-refinement/desktop-checks.json) ·
+[Phone checks](implementation-evidence/radial-gesture-refinement/phone-checks.json).

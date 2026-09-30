@@ -266,12 +266,12 @@ export default async function (cdp, { width, url }) {
 
     if (
       !(await evaluate(
-        `(()=>{const title=${pop}.querySelector('p'),arc=${pop}.querySelector('[data-brightness-arc]'),power=${pop}.querySelector('button[aria-label^="Turn "]');return getComputedStyle(title).backgroundColor!=='rgba(0, 0, 0, 0)'&&!${pop}.textContent.includes('Inner circle:')&&getComputedStyle(arc).color===getComputedStyle(power).backgroundColor})()`,
+        `(()=>{const title=${pop}.querySelector('p'),arc=${pop}.querySelector('[data-brightness-arc]'),power=${pop}.querySelector('button[aria-label^="Turn "]');return getComputedStyle(title).backgroundColor!=='rgba(0, 0, 0, 0)'&&!${pop}.textContent.includes('Inner circle:')&&getComputedStyle(arc).color===getComputedStyle(power).borderTopColor&&getComputedStyle(power).backgroundColor!==getComputedStyle(power).borderTopColor})()`,
       ))
     )
       throw Error('Radial title or shared light color');
     checks.push(
-      'Title has a background; brightness ring and power button use the light color',
+      'Title has a background; the center has a muted fill and an outline matching the light color',
     );
 
     await request('/api/__fixture/live-controls', { delay: 400 });
@@ -340,9 +340,9 @@ export default async function (cdp, { width, url }) {
           `(()=>{const wheel=${pop}.querySelector('[aria-label="Living room lamp hue and saturation"]').getBoundingClientRect(),dot=${pop}.querySelector('[data-color-indicator]').getBoundingClientRect();return {diameter:wheel.width,center:Math.hypot(wheel.x+wheel.width/2-${center.x},wheel.y+wheel.height/2-${center.y}),extent:Math.hypot(dot.x+dot.width/2-wheel.x-wheel.width/2,dot.y+dot.height/2-wheel.y-wheel.height/2)+dot.width/2}})()`,
         );
         if (
-          Math.abs(geometry.diameter - 192) > 0.5 ||
+          Math.abs(geometry.diameter - 208) > 0.5 ||
           geometry.center > 0.5 ||
-          geometry.extent > 92.5
+          geometry.extent > 100.5
         )
           throw Error(
             'Hue geometry ' + density + ': ' + JSON.stringify(geometry),
@@ -350,7 +350,7 @@ export default async function (cdp, { width, url }) {
       }
       checks.push(
         density +
-          ' density: centered 192 px hue wheel and indicator within its color surface in all four quadrants',
+          ' density: centered 208 px hue wheel and indicator within its color surface in all four quadrants',
       );
     }
     await evaluate(`document.documentElement.dataset.density='compact'`);
@@ -380,7 +380,7 @@ export default async function (cdp, { width, url }) {
       throw Error('Color jumped after acknowledgement');
     if (
       !(await evaluate(
-        `(()=>{const dot=${pop}.querySelector('[data-color-indicator]'),arc=${pop}.querySelector('[data-brightness-arc]'),power=${pop}.querySelector('button[aria-label^="Turn "]');return getComputedStyle(dot).backgroundColor===getComputedStyle(arc).color&&getComputedStyle(arc).color===getComputedStyle(power).backgroundColor})()`,
+        `(()=>{const dot=${pop}.querySelector('[data-color-indicator]'),arc=${pop}.querySelector('[data-brightness-arc]'),power=${pop}.querySelector('button[aria-label^="Turn "]');return getComputedStyle(dot).backgroundColor===getComputedStyle(arc).color&&getComputedStyle(arc).color===getComputedStyle(power).borderTopColor&&getComputedStyle(power).backgroundColor!==getComputedStyle(power).borderTopColor})()`,
       ))
     )
       throw Error('Selected color is not shared');
@@ -388,7 +388,7 @@ export default async function (cdp, { width, url }) {
       'Hue applies while held and stays steady across release and acknowledgement',
     );
     checks.push(
-      'Selected hue immediately colors the indicator, brightness arc and power button',
+      'Selected hue immediately colors the indicator, brightness arc and outlined, muted power button',
     );
     await shot('live-color');
     await request('/api/__fixture/live-controls', { delay: 0 });
@@ -429,16 +429,63 @@ export default async function (cdp, { width, url }) {
     await pointer('down', { x: width - 5, y: 100 });
     await pointer('up', { x: width - 5, y: 100 });
     await until(`!${pop}`, 'Outside tap dismisses radial');
+    updatedDevice.data.Controllable.state.color = { h: 240, s: 0.5 };
+    await request('/api/v1/devices/living_room_lamp', updatedDevice, 'PUT');
+    await pause();
     p = await point();
     await pointer('down', p);
     await pause(850);
     await until(`!!${pop}`, 'Direct hold drag reopens radial');
+    const heldBefore = (await commands()).length;
+    await pointer('move', { x: center.x + 70, y: center.y });
+    await pause(180);
+    const heldColor = (await commands()).at(-1)?.DeviceCommand;
+    if (
+      (await commands()).length <= heldBefore ||
+      !heldColor?.color ||
+      !('h' in heldColor.color) ||
+      heldColor.color.h !== 90 ||
+      heldColor.brightness != null
+    )
+      throw Error(
+        'Opening hold must apply color before release, without changing brightness',
+      );
     await pointer('move', { x: center.x + 119, y: center.y });
     await pointer('up', { x: center.x + 119, y: center.y });
     await pause(300);
-    if ((await commands()).at(-1)?.DeviceCommand?.brightness !== 0.25)
-      throw Error('Direct hold drag brightness');
-    checks.push('Hold and drag commits brightness and stays open');
+    const heldFinal = (await commands()).at(-1)?.DeviceCommand;
+    if (heldFinal?.color?.s !== 1 || heldFinal.brightness != null)
+      throw Error('Opening hold became brightness on entering its ring');
+    checks.push(
+      'Opening hold pans hue/saturation live, even on the outer ring, and stays open after release',
+    );
+    const dismissBefore = (await commands()).length;
+    await pointer('down', center);
+    await pause(620);
+    await until('!' + pop, 'Holding the power button dismisses the popover');
+    await pointer('up', center);
+    await pause();
+    if ((await commands()).length !== dismissBefore)
+      throw Error('Power hold toggled the light');
+    checks.push(
+      'Power-button hold dismisses without a power command or selection',
+    );
+    p = await point();
+    await pointer('down', p);
+    await pause(620);
+    await until('!!' + pop, 'Reopen after power hold');
+    await pointer('up', p);
+    await pause();
+    const ringStyle = await evaluate(
+      '(()=>{const arc=' +
+        pop +
+        '.querySelector("[data-brightness-arc]");return{cap:getComputedStyle(arc).strokeLinecap,width:Number(arc.getAttribute("stroke-width"))}})()',
+    );
+    if (ringStyle.cap !== 'butt' || ringStyle.width < 24)
+      throw Error(
+        'Brightness ring must have flat ends and a wider touch target',
+      );
+    checks.push('Brightness arc has flat ends and a wider 24 px band');
     if (width < 768) {
       const count = (await commands()).length;
       await pointer('down', { x: center.x + 119, y: center.y });
