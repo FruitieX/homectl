@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Floorplan editor · design review</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: #f4f6f4;
+        color: #2a3d32;
+        font-size: 14px;
+      }
+      main {
+        max-width: 1540px;
+        margin: auto;
+        padding: 40px 36px 70px;
+      }
+      header {
+        max-width: 780px;
+        margin-bottom: 33px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        color: #859888;
+        letter-spacing: 1.7px;
+      }
+      h1 {
+        font-size: 32px;
+        font-weight: 650;
+        letter-spacing: -1px;
+        margin: 9px 0 13px;
+      }
+      p {
+        color: #74877a;
+        line-height: 1.7;
+      }
+      a {
+        color: #286954;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .links {
+        display: flex;
+        gap: 9px;
+        flex-wrap: wrap;
+      }
+      .links a {
+        padding: 9px 14px;
+        border: 1px solid #d8e2da;
+        border-radius: 8px;
+        background: white;
+        font-size: 12px;
+      }
+      .links a:first-child {
+        background: #286954;
+        color: white;
+        border-color: #286954;
+      }
+      h2 {
+        font-size: 23px;
+        font-weight: 600;
+        margin: 38px 0 8px;
+        letter-spacing: -0.4px;
+      }
+      h3 {
+        font-size: 16px;
+        margin: 0 0 7px;
+        font-weight: 600;
+      }
+      .comparison {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+      }
+      .card {
+        border: 1px solid #dce4dc;
+        border-radius: 12px;
+        background: white;
+        overflow: hidden;
+      }
+      .card > div {
+        padding: 18px 20px;
+      }
+      .card p {
+        font-size: 12px;
+        margin: 0;
+      }
+      .card img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-top: 1px solid #e3e9e3;
+      }
+      .wide {
+        margin-top: 20px;
+      }
+      .phone-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 18px;
+      }
+      .phone-grid .card > div {
+        padding: 15px;
+      }
+      .phone-grid h3 {
+        font-size: 14px;
+      }
+      .phone-grid .card p {
+        min-height: 48px;
+      }
+      .note {
+        background: #e9f1eb;
+        border-radius: 10px;
+        padding: 15px 18px;
+        color: #6d8273;
+        font-size: 12px;
+        line-height: 1.7;
+        margin-top: 24px;
+      }
+      footer {
+        margin-top: 30px;
+        font-size: 12px;
+        color: #8b9c8d;
+      }
+      @media (max-width: 800px) {
+        main {
+          padding: 25px 16px 40px;
+        }
+        .comparison {
+          grid-template-columns: 1fr;
+        }
+        .phone-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        h1 {
+          font-size: 27px;
+        }
+        .phone-grid .card > div {
+          padding: 12px;
+        }
+        .phone-grid .card p {
+          min-height: 0;
+          font-size: 11px;
+        }
+      }
+      @media (max-width: 440px) {
+        .phone-grid {
+          gap: 9px;
+        }
+        .phone-grid h3 {
+          font-size: 12px;
+        }
+        .phone-grid .card > div {
+          padding: 10px;
+        }
+        .phone-grid .card p {
+          font-size: 10px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="eyebrow">HOMECTL · STUDY 06</span>
+        <h1>A workspace for floorplan editing</h1>
+        <p>
+          The canvas stays put. Separate Devices, Room areas and Walls modes
+          bring their own library, tools and properties. Only panels scroll; the
+          wheel zooms, and middle-drag or Space + drag pans.
+        </p>
+        <div class="links">
+          <a href="floorplan-editor.html?layout=docked&tool=devices"
+            >Try docked editor ↗</a
+          ><a href="floorplan-editor.html?layout=focus&tool=devices"
+            >Try canvas first ↗</a
+          ><a href="FLOORPLAN-EDITOR-PLAN.md">Read the plan</a>
+        </div>
+      </header>
+      <h2>Desktop · two panel arrangements</h2>
+      <p>
+        Same editing model, different use of the canvas. Docked is the proposed
+        default; both allow hiding panels.
+      </p>
+      <div class="comparison">
+        <article class="card">
+          <div>
+            <h3>A · Docked panels</h3>
+            <p>
+              The catalog and inspector have dedicated space. Easy to scan, with
+              no tools covering the drawing.
+            </p>
+          </div>
+          <a href="floorplan-editor.html?layout=docked&tool=devices"
+            ><img
+              src="previews/floorplan-editor/docked-devices.png"
+              alt="Desktop docked editor with device catalog, fixed canvas, placement inspector and an unsaved change"
+          /></a>
+        </article>
+        <article class="card">
+          <div>
+            <h3>B · Canvas first</h3>
+            <p>
+              Floating panels over a larger canvas. Fit respects visible panels;
+              close them when you need the whole workspace.
+            </p>
+          </div>
+          <a href="floorplan-editor.html?layout=focus&tool=devices"
+            ><img
+              src="previews/floorplan-editor/focus-devices.png"
+              alt="Desktop editor with floating device catalog and property panels"
+          /></a>
+        </article>
+      </div>
+      <article class="card wide">
+        <div>
+          <h3>Canvas first · panels hidden</h3>
+          <p>
+            Use the Hand tool for navigation. Library and properties buttons
+            reopen the panels; Fit uses the space available.
+          </p>
+        </div>
+        <a href="previews/floorplan-editor/focus-canvas.png"
+          ><img
+            src="previews/floorplan-editor/focus-canvas.png"
+            alt="Full width floorplan with panels hidden, Hand tool and zoom controls"
+        /></a>
+      </article>
+      <h2>Separate modes, relevant controls</h2>
+      <p>
+        Room masks are independent of room membership. Walls use existing tile
+        materials and drawing shapes.
+      </p>
+      <div class="comparison">
+        <article class="card">
+          <div>
+            <h3>Room areas</h3>
+            <p>
+              Choose a room, paint or erase its mask. The inspector shows
+              placement coverage and links to room settings.
+            </p>
+          </div>
+          <a href="floorplan-editor.html?layout=docked&tool=rooms"
+            ><img
+              src="previews/floorplan-editor/docked-rooms.png"
+              alt="Room area editing with room catalog, highlighted Kitchen mask, brush controls and room inspector"
+              loading="lazy"
+          /></a>
+        </article>
+        <article class="card">
+          <div>
+            <h3>Walls & tiles</h3>
+            <p>
+              Floor, Wall, Door, Window and Empty, with Brush, Line and
+              Rectangle. Each completed stroke is one undo step.
+            </p>
+          </div>
+          <a href="floorplan-editor.html?layout=docked&tool=walls"
+            ><img
+              src="previews/floorplan-editor/docked-walls.png"
+              alt="Wall drawing mode with tile materials, brush and shape controls"
+              loading="lazy"
+          /></a>
+        </article>
+      </div>
+      <article class="card wide">
+        <div>
+          <h3>Layout & background</h3>
+          <p>
+            Background replacement, grid dimensions and global marker appearance
+            have a dedicated mode. Import/export and document actions live in
+            the document menu.
+          </p>
+        </div>
+        <a href="floorplan-editor.html?layout=docked&tool=layout"
+          ><img
+            src="previews/floorplan-editor/docked-layout.png"
+            alt="Layout mode showing background image, grid settings and marker settings around fixed canvas"
+            loading="lazy"
+        /></a>
+      </article>
+      <h2>Phone · a fixed canvas with contextual trays</h2>
+      <p>
+        Tools stay at the bottom. One tray opens at a time; the view keeps the
+        selected marker or room above the inspector.
+      </p>
+      <div class="phone-grid">
+        <article class="card">
+          <div>
+            <h3>Canvas</h3>
+            <p>
+              Room labels and color/brightness previews, without a scrolling
+              page.
+            </p>
+          </div>
+          <a href="floorplan-editor.html?tool=devices"
+            ><img
+              src="previews/floorplan-editor/phone-canvas.png"
+              alt="Phone fixed floorplan canvas and bottom tools"
+              loading="lazy"
+          /></a>
+        </article>
+        <article class="card">
+          <div>
+            <h3>Device library</h3>
+            <p>Search and choose a device, then place it on the canvas.</p>
+          </div>
+          <a href="floorplan-editor.html?tool=devices&tray=library"
+            ><img
+              src="previews/floorplan-editor/phone-library.png"
+              alt="Phone device catalog tray with to-place and placed lists"
+              loading="lazy"
+          /></a>
+        </article>
+        <article class="card">
+          <div>
+            <h3>Placement</h3>
+            <p>
+              Selected light stays visible. Enter coordinates or drag its
+              marker.
+            </p>
+          </div>
+          <a href="floorplan-editor.html?tool=devices&tray=inspector"
+            ><img
+              src="previews/floorplan-editor/phone-inspector.png"
+              alt="Phone selected marker and placement property tray"
+              loading="lazy"
+          /></a>
+        </article>
+        <article class="card">
+          <div>
+            <h3>Room area</h3>
+            <p>
+              The same paint tools and related room link, in a compact tray.
+            </p>
+          </div>
+          <a href="floorplan-editor.html?tool=rooms&tray=inspector"
+            ><img
+              src="previews/floorplan-editor/phone-rooms.png"
+              alt="Phone Kitchen room mask editing and property tray"
+              loading="lazy"
+          /></a>
+        </article>
+      </div>
+      <div class="note">
+        <strong>Interactive study, synthetic data.</strong> Try device
+        placement/dragging, room and tile strokes, wheel zoom, Hand or
+        middle-drag pan, Undo/Redo, layers and local Save/Discard. No server or
+        devices are contacted. File operations and recovery are location
+        examples; the architectural illustration and painted samples are not a
+        production geometry engine. Save lasts only for the current tab.
+      </div>
+      <footer>
+        Design review only · 2026-09-30 · <a href="README.md">All UI studies</a>
+      </footer>
+    </main>
+  </body>
+</html>

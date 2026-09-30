@@ -4,6 +4,16 @@ Start with [the visual gallery](review.html), then [the interactive studies](ind
 
 **The HTML studies are design prototypes.** Their entities, reports, logs and catalog entries are synthetic. They make no API calls; saves affect the current tab and reload discards them. Production implementation is now active: see [IMPLEMENTATION.md](IMPLEMENTATION.md) for progress, verification and outstanding acceptance, and `implementation-evidence/` for screenshots of the implemented UI against isolated fixtures.
 
+## Floorplan editor · Study 06 (new design review)
+
+[Floorplan editor screenshot gallery](floorplan-editor-review.html) ·
+[Interactive editor](floorplan-editor.html) ·
+[Plan and confirmed interactions](FLOORPLAN-EDITOR-PLAN.md).
+
+Compares docked versus floating panels around a fixed canvas, with separate
+Devices, Room areas and Walls modes and responsive phone trays. This study is
+planning only; the production floorplan settings route is not changed.
+
 ## Current review
 
 The Compact baseline is approved. Study 04 responds to the preference for the earlier routine canvas and desktop scene table. The complex controls are retained within those layouts:

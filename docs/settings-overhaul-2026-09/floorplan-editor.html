@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Floorplan editor · homectl study</title>
+    <link rel="stylesheet" href="floorplan-editor.css" />
+    <script src="floorplan-editor.js" defer></script>
+  </head>
+  <body>
+    <div class="study">
+      <span
+        >EDITOR STUDY <span class="desktop-only">· synthetic home</span></span
+      >
+      <div>
+        <a data-direction="docked" href="?layout=docked&tool=devices">Docked</a
+        ><a data-direction="focus" href="?layout=focus&tool=devices"
+          >Canvas first</a
+        ><a href="floorplan-editor-review.html" title="Screenshot gallery"
+          >Gallery ↗</a
+        >
+      </div>
+    </div>
+    <div class="app">
+      <nav class="app-rail" aria-label="Application">
+        <a href="everyday.html#dashboard" data-icon="home" title="Dashboard"></a
+        ><a href="everyday.html#map" data-icon="map" title="Map"></a
+        ><a
+          class="active"
+          href="index.html#settings"
+          data-icon="settings"
+          title="Settings"
+        ></a
+        ><span class="rail-bottom">h.</span>
+      </nav>
+      <main>
+        <header class="appbar">
+          <a href="index.html#settings">Settings</a><span class="crumb">/</span
+          ><strong>Floorplan editor</strong>
+          <div class="appbar-end">
+            <span class="desktop-only">Configuration</span
+            ><button
+              data-icon="sparkles"
+              data-action="assistant"
+              title="Assistant"
+              aria-label="Assistant"
+            ></button>
+          </div>
+        </header>
+        <div class="document-bar">
+          <div class="documents" role="tablist" aria-label="Floorplans">
+            <button
+              class="document active"
+              role="tab"
+              aria-selected="true"
+              data-doc="Ground floor"
+            >
+              <span data-icon="layers"></span><span>Ground floor</span></button
+            ><button
+              class="document"
+              role="tab"
+              aria-selected="false"
+              data-doc="Upstairs"
+            >
+              <span>Upstairs</span></button
+            ><button
+              class="icon-button add-document"
+              data-action="add-document"
+              data-icon="plus"
+              aria-label="Add floorplan"
+              title="Add floorplan"
+            ></button>
+          </div>
+          <button
+            class="icon-button"
+            data-action="document-menu"
+            data-icon="more"
+            aria-label="Document menu"
+            title="Document menu"
+          ></button>
+          <div class="save-actions">
+            <span id="dirty" class="dirty">Saved</span
+            ><button id="discard" data-action="discard" class="quiet">
+              Discard</button
+            ><button id="save" data-action="save" class="primary">Save</button>
+          </div>
+        </div>
+        <div class="tool-options">
+          <div class="history-buttons">
+            <button
+              data-action="undo"
+              data-icon="undo"
+              aria-label="Undo"
+              title="Undo · Ctrl Z"
+            ></button
+            ><button
+              data-action="redo"
+              data-icon="redo"
+              aria-label="Redo"
+              title="Redo · Ctrl Shift Z"
+            ></button>
+          </div>
+          <div id="context-options"></div>
+          <div class="panel-buttons">
+            <button
+              data-action="library"
+              data-icon="list"
+              title="Toggle library"
+              aria-label="Toggle library"
+            ></button
+            ><button
+              data-action="inspector"
+              data-icon="sliders"
+              title="Toggle properties"
+              aria-label="Toggle properties"
+            ></button>
+          </div>
+        </div>
+        <div class="workspace">
+          <nav class="tools" aria-label="Editor tools">
+            <button data-tool="select" data-icon="cursor" title="Select · V">
+              <span>Select</span></button
+            ><button data-tool="devices" data-icon="bulb" title="Devices · D">
+              <span>Devices</span></button
+            ><button data-tool="rooms" data-icon="room" title="Room areas · R">
+              <span>Rooms</span></button
+            ><button
+              data-tool="walls"
+              data-icon="wall"
+              title="Walls & tiles · B"
+            >
+              <span>Walls</span></button
+            ><button data-tool="erase" data-icon="erase" title="Erase · E">
+              <span>Erase</span></button
+            ><button data-tool="hand" data-icon="hand" title="Hand · H">
+              <span>Pan</span>
+            </button>
+            <div class="tool-spacer"></div>
+            <button
+              data-tool="layout"
+              data-icon="image"
+              title="Layout & background"
+            >
+              <span>Layout</span>
+            </button>
+          </nav>
+          <aside class="library panel" aria-label="Editor library">
+            <div class="panel-heading">
+              <div>
+                <span class="eyebrow" id="library-eyebrow"
+                  >PLACE & ORGANIZE</span
+                >
+                <h1 id="library-title">Devices</h1>
+              </div>
+              <button
+                class="mobile-only"
+                data-action="close-tray"
+                data-icon="close"
+                aria-label="Close tray"
+              ></button>
+            </div>
+            <div id="library-content" class="panel-content"></div>
+          </aside>
+          <section class="stage" aria-label="Floorplan canvas">
+            <div class="canvas-title">
+              <span data-icon="map"></span
+              ><span id="canvas-document">Ground floor</span
+              ><span class="canvas-subtitle">32 × 20 tiles</span>
+            </div>
+            <div id="pending" class="pending" hidden></div>
+            <svg
+              id="canvas"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-label="Synthetic floorplan; select and place devices"
+              role="img"
+            >
+              <defs>
+                <pattern
+                  id="tile-grid"
+                  width="30"
+                  height="30"
+                  patternUnits="userSpaceOnUse"
+                >
+                  <path
+                    d="M 30 0 L 0 0 0 30"
+                    fill="none"
+                    stroke="#548274"
+                    stroke-opacity=".2"
+                    stroke-width="1"
+                  />
+                </pattern>
+                <filter id="marker-shadow">
+                  <feDropShadow
+                    dx="0"
+                    dy="2"
+                    stdDeviation="3"
+                    flood-opacity=".12"
+                  />
+                </filter>
+              </defs>
+              <g id="world">
+                <g id="architecture"></g>
+                <g id="room-masks"></g>
+                <g id="paint"></g>
+                <rect
+                  id="grid-layer"
+                  x="120"
+                  y="105"
+                  width="720"
+                  height="420"
+                  fill="url(#tile-grid)"
+                  style="display: none"
+                  pointer-events="none"
+                />
+                <g id="markers"></g>
+                <g id="ghost"></g>
+              </g>
+            </svg>
+            <div class="canvas-controls">
+              <div class="zoom">
+                <button
+                  data-action="zoom-out"
+                  data-icon="minus"
+                  aria-label="Zoom out"
+                ></button
+                ><button
+                  id="zoom-label"
+                  data-action="fit"
+                  title="Fit entire floorplan"
+                >
+                  Fit</button
+                ><button
+                  data-action="zoom-in"
+                  data-icon="plus"
+                  aria-label="Zoom in"
+                ></button
+                ><span></span
+                ><button
+                  data-action="fit"
+                  data-icon="fit"
+                  aria-label="Fit entire floorplan"
+                  title="Fit entire floorplan"
+                ></button>
+              </div>
+              <button
+                class="layer-trigger"
+                data-action="layers"
+                data-icon="layers"
+                title="View layers"
+                aria-label="View layers"
+              ></button>
+            </div>
+            <div class="canvas-tip" id="canvas-tip">
+              Choose a device, then click to place it
+            </div>
+          </section>
+          <aside class="inspector panel" aria-label="Selection properties">
+            <div class="panel-heading">
+              <div>
+                <span class="eyebrow">PROPERTIES</span>
+                <h2 id="inspector-title">Placement</h2>
+              </div>
+              <button
+                data-action="close-inspector"
+                data-icon="close"
+                title="Close properties"
+                aria-label="Close properties"
+              ></button>
+            </div>
+            <div id="inspector-content" class="panel-content"></div>
+          </aside>
+        </div>
+        <footer class="status">
+          <span
+            ><i class="status-dot"></i
+            ><span id="status-tool">Devices</span></span
+          ><span class="status-hint">Wheel to zoom · Space + drag to pan</span
+          ><span id="coordinates">32 × 20 tiles · 30 px / tile</span>
+        </footer>
+      </main>
+    </div>
+    <div id="popover" class="popover" hidden></div>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <dialog id="dialog">
+      <div id="dialog-content"></div>
+      <button data-action="close-dialog" class="primary">Done</button>
+    </dialog>
+  </body>
+</html>
