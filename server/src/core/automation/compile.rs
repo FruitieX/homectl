@@ -2290,6 +2290,50 @@ mod tests {
         assert_eq!(compiled.dependencies.len(), 1);
     }
 
+    #[test]
+    fn script_editor_defaults_versions_and_declaration_limit_match_the_compiler() {
+        let definition = json!({
+            "triggers": [{"kind":"manual", "id":"start"}],
+            "program": {"kind":"native", "steps":[{
+                "id":"script", "action":"run_script", "spec":{
+                    "api_version":1, "source_body":"return {actions:[]};"
+                }
+            }]}
+        });
+        // Absent declarations and limits use server defaults without requiring
+        // the editor to materialize fields in the stored JSON.
+        assert!(compile_definition_value(&definition, &catalog()).is_ok());
+        for (field, value, code) in [
+            ("api_version", json!(99), "unsupported_script_api_version"),
+            (
+                "limits_profile",
+                json!("future"),
+                "unsupported_limits_profile",
+            ),
+        ] {
+            let mut changed = definition.clone();
+            changed["program"]["steps"][0]["spec"][field] = value;
+            assert_eq!(
+                error_codes(&compile_definition_value(&changed, &catalog()).unwrap_err()),
+                vec![code]
+            );
+        }
+        for count in [MAX_SCRIPT_DECLARATIONS, MAX_SCRIPT_DECLARATIONS + 1] {
+            let mut changed = definition.clone();
+            changed["program"]["steps"][0]["spec"]["declarations"] =
+                json!(vec![json!({"kind":"all_state"}); count]);
+            let result = compile_definition_value(&changed, &catalog());
+            if count == MAX_SCRIPT_DECLARATIONS {
+                assert!(result.is_ok());
+            } else {
+                assert_eq!(
+                    error_codes(&result.unwrap_err()),
+                    vec!["too_many_declarations"]
+                );
+            }
+        }
+    }
+
     // S13: script declarations may reference entities that are not discovered
     // yet. The declaration is tracked as a dependency instead of rejecting the
     // routine, so later discovery can wake the script.

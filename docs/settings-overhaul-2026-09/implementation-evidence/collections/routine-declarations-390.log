@@ -1,0 +1,88 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Malformed future declaration remains visible for explicit removal",
+    "passed": true
+   },
+   {
+    "name": "Unsupported script API is preserved without editable body",
+    "passed": true
+   },
+   {
+    "name": "Viewing unsupported content writes nothing",
+    "passed": true
+   },
+   {
+    "name": "Omitted declaration and limits defaults render as an editable script",
+    "passed": true
+   },
+   {
+    "name": "Changing declaration type restores the selected device",
+    "passed": true
+   },
+   {
+    "name": "Returning to group restores its independent choice",
+    "passed": true
+   },
+   {
+    "name": "Edited device declaration retains row and reference extensions",
+    "passed": true
+   },
+   {
+    "name": "Group, timer, all-state and script extensions survive Save",
+    "passed": true
+   },
+   {
+    "name": "Omitted defaults remain omitted when another block is edited",
+    "passed": true
+   },
+   {
+    "name": "Forward device and group declarations save exact IDs",
+    "passed": true
+   },
+   {
+    "name": "Forward IDs remain visible after navigation",
+    "passed": true
+   },
+   {
+    "name": "Discard restores declared timer",
+    "passed": true
+   },
+   {
+    "name": "Type drafts follow a declaration after removing an earlier row",
+    "passed": true
+   },
+   {
+    "name": "Removal preserves order and restored reference",
+    "passed": true
+   },
+   {
+    "name": "Explicit empty declarations save as an empty list",
+    "passed": true
+   },
+   {
+    "name": "All four declaration kinds can be recreated and saved",
+    "passed": true
+   },
+   {
+    "name": "Script body edits retain declarations and metadata",
+    "passed": true
+   },
+   {
+    "name": "Separate script blocks keep independent declarations",
+    "passed": true
+   },
+   {
+    "name": "Script declarations survive reload",
+    "passed": true
+   },
+   {
+    "name": "Declaration controls fit the viewport",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/routines","viewport":{"width":390,"height":844},"problems":[]}

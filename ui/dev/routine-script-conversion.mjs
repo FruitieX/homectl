@@ -26,7 +26,11 @@ export default async function (cdp, { url }) {
     ],
     limits_profile: 'default',
   };
-  row.definition_v2.program = { kind: 'script', spec };
+  row.definition_v2.program = {
+    kind: 'script',
+    spec,
+    future: { preserve: true },
+  };
   const created = await fetch(base, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -87,6 +91,7 @@ export default async function (cdp, { url }) {
     if (
       program.kind !== 'native' ||
       program.steps.length !== 1 ||
+      program.future?.preserve !== true ||
       program.steps[0].action !== 'run_script' ||
       !program.steps[0].id ||
       JSON.stringify(program.steps[0].spec) !== JSON.stringify(spec)
@@ -100,6 +105,7 @@ export default async function (cdp, { url }) {
         'No write before Save',
         'Discard restores whole-program script',
         'Save preserves complete script and declarations',
+        'Conversion preserves program extension fields',
       ],
       firstDraftId: id,
     };

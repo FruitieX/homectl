@@ -110,3 +110,14 @@ Block-width-based random-color layout fixes the clipped desktop transition field
 found during screenshot review. All 234 UI tests, three targeted Rust compiler
 tests and type/lint/build pass. Script declarations and the broader reference,
 persistence, recovery and accessibility gates remain open; see FIELD-COVERAGE.md.
+
+## Script declaration follow-up
+
+Twenty declaration editing checks and six whole-program conversion checks pass
+per 1440/390 px viewport. Script declarations now use shared selectors, compact
+rows and direct future device/group IDs. Unknown formats remain visible for
+explicit removal; default limits and absent declaration lists are not needlessly
+written into stored definitions. Conversion preserves extension fields. Three
+targeted compiler tests, all 234 UI tests and type/lint/build pass. Current gaps
+are the cross-family reference/recovery and persistence contracts, remaining
+named accessibility cases and final ledger cleanup, not the declaration UI.

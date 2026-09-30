@@ -58,7 +58,7 @@ schema; server compiler/resolver behavior remains authoritative.
 | `ConditionExpr`, `ValueSource`, comparison operators, group quantifiers | `ConditionBuilder`: literal, All/Any/Not, comparison, group; device/helper/source values | The condition journey saves all 11 comparison operators and all four group quantifiers, edits device/helper/computed-source choices, optional scene removal and false/zero/structured values. Value-free operators omit their operand. Source paths and type drafts restore; malformed/future sources remain visible for explicit removal. The compiler rejects top-level null operands, now explained in the JSON dialog; nested nulls persist. Remaining unavailable-reference recovery is part of the final cross-family gate. |
 | `NativeAction` | `ProgramBuilder`: script, activate/cycle, power, dim, random color, choose, schedule/replace/cancel timer, helper write, routine invocation | The action journey edits and reloads singular SetPower device/power, multi-device/group dim and random-color targets, timer names/delays, all four helper value types and both invocation modes/references. Other scene/choose/script journeys are recorded separately. Remaining declaration/reference cases stay open. |
 | Scene selection, cycle entry, rollout | `ProgramBuilder` scene/target/transition/selection/rollout controls | Direct/helper/group modes, independent fallbacks, stale-key removal and cycle scope/order are edited in the routine selection journey. The timing journey edits rollout source, off/on restoration, omitted/zero/bounded spread, explicit transition precedence and cycle-specific values. **Open:** unavailable references and runtime spatial behavior reconciliation. |
-| `ProgramBody`, `ScriptSpec` declarations | `ProgramBuilder`, `RoutineScriptEditor`: native/mixed scripts; explicit whole-script conversion; declaration rows | Mixed script and whole-program conversion journeys already pass. Still name each declaration collection and persistence/limits default fixture. |
+| `ProgramBody`, `ScriptSpec` declarations | `ProgramBuilder`, `RoutineScriptEditor`: native/mixed scripts; explicit whole-script conversion; declaration rows | The declaration journey edits device/group/timer/all-state references, future IDs, empty/multiple lists, type restoration, row removal and independent script blocks. Omitted server defaults, unsupported data review and conversion extensions are covered. Compiler tests verify defaults, supported API/profile and the 32-declaration limit. Database persistence reconciliation remains open. |
 | Scene explicit/device-link/scene-link state | `app/config/scenes/target-row.tsx`, shared color controls | Scene collection journey edits explicit/device-link/scene-link modes, source and multiplier, default power, zero brightness/fade, full stored scopes, missing-target replacement, and retained inactive variants. Nullable transition and unknown siblings survive. Color variants/capture and creation-return still need ledger reconciliation. |
 | Helper boolean/enum/number/string and initial value | Helper definition fields plus separate current-value control | All four types and initial values now have edited save/reload evidence, including false/zero/empty text/optional bounds. Separate command tests cover rejection, pending state, acknowledgement and retained configuration drafts. Visibility and full dependency-link reconciliation remain open. |
 | `SourceCompute`: circadian compatibility, script preset, custom script | Source detail, day/night color controls, params JSON, script editor, draft preview | Edited pinned/custom/built-in computations, exact forked and edited bodies, unknown-pin conversion, null/list/object params, extra-field preservation, switches/Discard/reload and preview recovery now have native browser evidence. Timing-input/error-focus is covered by the source timing checkpoint; complete visibility/reference reconciliation remains open. |
@@ -386,3 +386,28 @@ synthetic, and Save/reload evidence proves fixture serialization, not database
 restart durability. All 234 UI tests, three targeted Rust compiler tests and
 type/lint/build pass. Remaining: script declarations, unavailable-reference
 recovery and the cross-family persistence/accessibility acceptance gates.
+
+### Script declarations and optional metadata
+
+`dev/routine-declarations-review.mjs` passes 20 native browser checks at
+1440/390 px. Every declaration kind has edited Save/reload evidence. Device and
+group pickers keep related links and offer direct IDs for entities not discovered
+yet, matching the compiler's standing-reference contract. Type switches restore
+previous values; removing an earlier row remaps those caches. Row, nested device
+reference and script extensions survive. Empty lists and multiple independent
+script blocks remain distinct. Incompatible declaration shapes and future script
+API/profile versions are shown without coercion, then explicitly removed before
+Save; the browser fixture does not prove server acceptance of unknown formats.
+
+Omitted declarations and limits use the server defaults for rendering but remain
+omitted in the saved JSON when untouched. Three targeted compiler tests verify
+forward-reference tracking, all-state scope, omitted defaults, unsupported API and
+limits profiles, and the 32-declaration boundary. Six conversion checks per
+viewport verify no early writes, Discard, stable action identity, complete script
+preservation and program extension fields. Conversion also remaps declaration
+cache paths into the new action. All 234 UI tests and type/lint/build pass.
+
+Evidence is under `implementation-evidence/collections/routine-declarations-*`.
+The captures are scrolled to the declarations being reviewed; runtime badges are
+synthetic. These checks cover authoring and fixture serialization; database
+restart/export reconciliation and broader reference/recovery acceptance stay open.

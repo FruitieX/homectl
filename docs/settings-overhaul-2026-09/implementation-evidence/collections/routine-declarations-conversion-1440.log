@@ -1,0 +1,15 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   "Whole-program script converts into a native action",
+   "Conversion creates a stable action ID",
+   "No write before Save",
+   "Discard restores whole-program script",
+   "Save preserves complete script and declarations",
+   "Conversion preserves program extension fields"
+  ],
+  "firstDraftId": "2178acd0-e3e4-4907-b79e-c6636f81bbd4"
+ }
+}
+{"url":"http://127.0.0.1:3021/config/routines","viewport":{"width":1440,"height":1080},"problems":[]}

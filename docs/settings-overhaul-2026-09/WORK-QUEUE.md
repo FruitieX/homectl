@@ -322,6 +322,16 @@ All 234 UI tests, three targeted Rust compiler tests and type/lint/build pass.
 Remaining: script declarations, unavailable references and broader persistence,
 recovery/accessibility/final acceptance. The full goal remains active.
 
+Script declaration checkpoint, 2026-09-30: 20 native editing checks pass at
+1440/390 px, with six whole-program conversion checks per size. Shared selectors
+and compact rows replace the remaining native declaration controls. Device,
+room/group, timer and all-state references preserve extensions and per-type drafts;
+future device/group IDs can be entered directly. Omitted limits/declarations stay
+omitted unless edited. Unsupported data remains visible for explicit removal.
+Conversion preserves program extensions and remaps declaration draft paths.
+All 234 UI tests, three compiler tests and type/lint/build pass. Remaining:
+reference/recovery, persistence, named accessibility cases and final gate cleanup.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

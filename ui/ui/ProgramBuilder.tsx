@@ -30,12 +30,11 @@ import type { InvokeMode } from '@/bindings/InvokeMode';
 import type { NativeAction } from '@/bindings/NativeAction';
 import type { Program } from '@/bindings/Program';
 import type { RolloutSpec } from '@/bindings/RolloutSpec';
-import type { ScriptDeclaration } from '@/bindings/ScriptDeclaration';
 import type { ScriptSpec } from '@/bindings/ScriptSpec';
 import type { SceneSelection } from '@/bindings/SceneSelection';
 import type { TargetSpec } from '@/bindings/TargetSpec';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
-import { DurationInput, selectClassName } from '@/ui/builder-fields';
+import { DurationInput } from '@/ui/builder-fields';
 import { ConditionEditor } from '@/ui/ConditionBuilder';
 import {
   DeviceMultiSelect,
@@ -52,7 +51,7 @@ import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { SearchablePicker } from '@/ui/SearchablePicker';
 import RoutineScriptEditor from '@/ui/RoutineScriptEditor';
-import { useState } from 'react';
+import { RoutineScriptDeclarations } from '@/ui/RoutineScriptDeclarations';
 
 type StepKind = NativeAction['action'];
 
@@ -895,6 +894,7 @@ function StepFields({
           </p>
           <ScriptProgramEditor
             spec={step.spec}
+            path={actionPath + '/spec'}
             onChange={(spec) => onChange({ ...step, spec })}
             devices={devices}
             groups={groups}
@@ -1790,63 +1790,33 @@ function StepEditor({
   );
 }
 
-function defaultDeclaration(
-  kind: ScriptDeclaration['kind'],
-): ScriptDeclaration {
-  switch (kind) {
-    case 'device':
-      return {
-        kind: 'device',
-        device: { integration_id: '', device_id: '' },
-      };
-    case 'group':
-      return { kind: 'group', group_id: '' };
-    case 'timer':
-      return { kind: 'timer', timer: '' };
-    case 'all_state':
-      return { kind: 'all_state' };
-  }
-}
-
 function ScriptProgramEditor({
   spec,
   onChange,
   devices,
   groups,
+  path,
 }: {
   spec: ScriptSpec;
   onChange: (spec: ScriptSpec) => void;
   devices: DevicesState;
   groups: FlattenedGroupsConfig;
+  path: string;
 }) {
-  const [newDeclarationKind, setNewDeclarationKind] =
-    useState<ScriptDeclaration['kind']>('device');
-
-  const updateDeclaration = (index: number, declaration: ScriptDeclaration) => {
-    onChange({
-      ...spec,
-      declarations: spec.declarations.map((candidate, candidateIndex) =>
-        candidateIndex === index ? declaration : candidate,
-      ),
-    });
-  };
-
-  const addDeclaration = () => {
-    onChange({
-      ...spec,
-      declarations: [
-        ...spec.declarations,
-        defaultDeclaration(newDeclarationKind),
-      ],
-    });
-  };
-
+  if (
+    !spec ||
+    typeof spec.source_body !== 'string' ||
+    (spec.declarations !== undefined && !Array.isArray(spec.declarations)) ||
+    spec.api_version !== 1 ||
+    (spec.limits_profile !== undefined && spec.limits_profile !== 'default')
+  )
+    return <UnknownFlowValue value={spec} />;
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        JavaScript · API {spec.api_version} · {spec.limits_profile} limits
+        JavaScript · API {spec.api_version} · {spec.limits_profile ?? 'default'}{' '}
+        limits
       </p>
-
       <ConfigField
         label="Function body"
         description="Runs in the sandboxed worker after a trigger fires and the condition holds. ctx and api are typed and autocompleted; return { actions, next_state? }."
@@ -1857,152 +1827,13 @@ function ScriptProgramEditor({
         />
       </ConfigField>
 
-      <div className="space-y-3">
-        <div>
-          <h5 className="text-sm font-medium">Declarations</h5>
-          <p className="text-sm text-muted-foreground">
-            Declarations choose additional state the script may read. Triggers
-            and conditions decide when it runs. Undeclared reads are absent;
-            devices and groups may be declared before they are discovered.
-          </p>
-        </div>
-
-        {spec.declarations.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-3 text-center text-sm text-muted-foreground">
-            No declarations. The script only sees the triggering frame and its
-            own memory.
-          </div>
-        ) : null}
-
-        {spec.declarations.map((declaration, index) => (
-          <div
-            key={`${declaration.kind}:${index}`}
-            className="flex flex-wrap items-end gap-2 rounded-xl border border-border/60 bg-muted/20 p-3"
-          >
-            <ConfigField label="Kind" className="min-w-44">
-              <select
-                className={selectClassName}
-                value={declaration.kind}
-                onChange={(event) =>
-                  updateDeclaration(
-                    index,
-                    defaultDeclaration(
-                      event.target.value as ScriptDeclaration['kind'],
-                    ),
-                  )
-                }
-              >
-                <option value="device">Device</option>
-                <option value="group">Group</option>
-                <option value="timer">Timer</option>
-                <option value="all_state">All state (broad)</option>
-              </select>
-            </ConfigField>
-
-            {declaration.kind === 'device' ? (
-              <ConfigField label="Device" className="min-w-64">
-                <DeviceSelect
-                  devices={devices}
-                  value={
-                    declaration.device.integration_id &&
-                    declaration.device.device_id
-                      ? `${declaration.device.integration_id}/${declaration.device.device_id}`
-                      : ''
-                  }
-                  onChange={(key) =>
-                    updateDeclaration(index, {
-                      kind: 'device',
-                      device: splitDeviceKey(key) ?? {
-                        integration_id: '',
-                        device_id: '',
-                      },
-                    })
-                  }
-                />
-              </ConfigField>
-            ) : null}
-
-            {declaration.kind === 'group' ? (
-              <ConfigField label="Group" className="min-w-64">
-                <GroupSelect
-                  groups={groups}
-                  value={declaration.group_id}
-                  onChange={(group_id) =>
-                    updateDeclaration(index, { kind: 'group', group_id })
-                  }
-                />
-              </ConfigField>
-            ) : null}
-
-            {declaration.kind === 'timer' ? (
-              <ConfigField label="Timer name" className="min-w-64">
-                <Input
-                  className="font-mono"
-                  value={declaration.timer}
-                  placeholder="off"
-                  onChange={(event) =>
-                    updateDeclaration(index, {
-                      kind: 'timer',
-                      timer: event.target.value,
-                    })
-                  }
-                />
-              </ConfigField>
-            ) : null}
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={() =>
-                onChange({
-                  ...spec,
-                  declarations: spec.declarations.filter(
-                    (_, candidateIndex) => candidateIndex !== index,
-                  ),
-                })
-              }
-            >
-              Remove
-            </Button>
-          </div>
-        ))}
-
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            className={selectClassName}
-            value={newDeclarationKind}
-            onChange={(event) =>
-              setNewDeclarationKind(
-                event.target.value as ScriptDeclaration['kind'],
-              )
-            }
-          >
-            <option value="device">Device</option>
-            <option value="group">Group</option>
-            <option value="timer">Timer</option>
-            <option value="all_state">All state (broad)</option>
-          </select>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={addDeclaration}
-          >
-            Add declaration
-          </Button>
-        </div>
-
-        {spec.declarations.some(
-          (declaration) => declaration.kind === 'all_state',
-        ) ? (
-          <p className="text-xs text-amber-600 dark:text-amber-400">
-            All state is a broad compatibility declaration: the script may read
-            any device in the triggering frame. Prefer exact declarations.
-          </p>
-        ) : null}
-      </div>
+      <RoutineScriptDeclarations
+        declarations={spec.declarations ?? []}
+        onChange={(declarations) => onChange({ ...spec, declarations })}
+        devices={devices}
+        groups={groups}
+        path={path + '/declarations'}
+      />
     </div>
   );
 }
@@ -2024,6 +1855,7 @@ export function ProgramBuilder({
   routines: Array<{ id: string; name: string }>;
   helpers: HelperRuntimeStatus[];
 }) {
+  const { draftKey } = useRoutineAuthoring();
   const steps =
     program?.kind === 'native' && Array.isArray(program.steps)
       ? program.steps
@@ -2036,7 +1868,8 @@ export function ProgramBuilder({
       (program.kind === 'script' &&
         (!program.spec ||
           typeof program.spec.source_body !== 'string' ||
-          !Array.isArray(program.spec.declarations))))
+          (program.spec.declarations !== undefined &&
+            !Array.isArray(program.spec.declarations)))))
   )
     return <UnknownFlowValue value={program} />;
   const update = (steps: NativeAction[]) =>
@@ -2047,24 +1880,35 @@ export function ProgramBuilder({
         <FlowBlock title="Sandboxed script">
           <ScriptProgramEditor
             spec={program.spec}
+            path="program/spec"
             onChange={(spec) => onChange({ ...program, spec })}
             devices={devices}
             groups={groups}
           />
           <Button
             variant="outline"
-            onClick={() =>
+            onClick={() => {
+              const id = createUuid();
+              const { spec, ...metadata } = program;
+              if (draftKey)
+                entityDraftStore.remapEditorPaths(draftKey, (path) =>
+                  path.startsWith('program/spec/')
+                    ? `step/${id}/run_script/spec/` +
+                      path.slice('program/spec/'.length)
+                    : path,
+                );
               onChange({
+                ...metadata,
                 kind: 'native',
                 steps: [
                   {
                     action: 'run_script',
-                    id: createUuid(),
-                    spec: program.spec,
+                    id,
+                    spec,
                   },
                 ],
-              })
-            }
+              });
+            }}
           >
             Use as an action in the flow
           </Button>
