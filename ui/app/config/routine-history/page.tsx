@@ -12,17 +12,25 @@ import type { RuleRuntimeStatus } from '@/bindings/RuleRuntimeStatus';
 import type { TruthValue } from '@/bindings/TruthValue';
 import {
   describeUnknownReason,
-  countEntryErrors,
   explainEntry,
   outcome,
   summary,
+  recordedRun,
 } from '@/lib/routineActivity';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { configItemHref } from '@/lib/configItemHref';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
+import { SettingsSelect } from '@/ui/settings/SettingsSelect';
+import { SearchablePicker } from '@/ui/SearchablePicker';
 import { ConfigPageHeader } from '../page-header';
+import {
+  ActivityReferenceProvider,
+  ActivityReferenceStatus,
+  ActivityEntityName,
+  ActivityDefinitionNotice,
+} from './references';
 
 const triggerLabels: Record<RoutineHistoryTriggerKind, string> = {
   rule_match: 'Legacy rule match',
@@ -222,7 +230,11 @@ function PlannedStepList({
                   key={`${reference.entity}/${reference.entity_id}`}
                   to={configItemHref(reference.entity, reference.entity_id)}
                 >
-                  {reference.entity}: {reference.entity_id}
+                  {reference.entity}:{' '}
+                  <ActivityEntityName
+                    entity={reference.entity}
+                    id={reference.entity_id}
+                  />
                 </Link>
               ))}
             </div>
@@ -244,6 +256,7 @@ function PlannedStepList({
 function EntryEvidence({ entry }: { entry: RoutineHistoryEntry }) {
   const { advanced } = useSettingsPreferences();
   const v2 = entry.v2;
+  const run = recordedRun(entry);
   return (
     <div className="space-y-4 border-t border-border bg-muted/20 p-3 text-sm">
       <p>{explainEntry(entry)}</p>
@@ -260,7 +273,11 @@ function EntryEvidence({ entry }: { entry: RoutineHistoryEntry }) {
               className="settings-link break-all"
               to={configItemHref('device', entry.event_source_device_key)}
             >
-              Source device: {entry.event_source_device_key}
+              Source device:{' '}
+              <ActivityEntityName
+                entity="device"
+                id={entry.event_source_device_key}
+              />
             </Link>
             <Link
               className="settings-link"
@@ -277,15 +294,19 @@ function EntryEvidence({ entry }: { entry: RoutineHistoryEntry }) {
           {v2
             ? ` · Definition revision ${v2.definition_revision}`
             : ' · Legacy routine'}
-          {v2?.last_run ? ` · Run ${v2.last_run.run_id}` : ''}
+          {run ? ` · Run ${run.run_id}` : ''}
         </p>
       )}
       {v2 ? (
         <>
+          <ActivityDefinitionNotice
+            id={entry.routine_id}
+            recordedRevision={v2.definition_revision}
+          />
           <section className="space-y-2" aria-label="Recorded steps">
             <h3 className="font-medium">Steps</h3>
-            {v2.last_run ? (
-              <PlannedStepList run={v2.last_run} routineId={entry.routine_id} />
+            {run ? (
+              <PlannedStepList run={run} routineId={entry.routine_id} />
             ) : (
               <p className="text-muted-foreground">
                 No run outcome was recorded for this attempt.
@@ -330,8 +351,8 @@ function EntryEvidence({ entry }: { entry: RoutineHistoryEntry }) {
             )}
           </section>
           <p className="text-xs text-muted-foreground">
-            This is recorded evidence. The current routine may have changed
-            since this attempt.
+            This is recorded evidence. Reference names use current settings; the
+            recorded IDs and outcomes stay unchanged.
           </p>
         </>
       ) : (
@@ -395,193 +416,206 @@ export default function RoutineHistoryPage() {
   if (routine && !routines.has(routine)) routines.set(routine, routine);
   const filtersActive = Boolean(search || routine || kind || result);
   return (
-    <div className="mx-auto max-w-[1600px] space-y-4">
-      <ConfigPageHeader
-        title="Routine activity"
-        description="Recorded attempts and dispatched actions. A device report confirms what physically happened."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (!paused) setFrozen(data);
-                setPaused(!paused);
-              }}
-            >
-              {paused ? (
-                <Play className="size-4" />
-              ) : (
-                <Pause className="size-4" />
-              )}
-              {paused ? 'Resume' : 'Pause'}
+    <ActivityReferenceProvider>
+      <div className="mx-auto max-w-[1600px] space-y-4">
+        <ConfigPageHeader
+          title="Routine activity"
+          description="Recorded attempts and dispatched actions. A device report confirms what physically happened."
+          actions={
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (!paused) setFrozen(data);
+                  setPaused(!paused);
+                }}
+              >
+                {paused ? (
+                  <Play className="size-4" />
+                ) : (
+                  <Pause className="size-4" />
+                )}
+                {paused ? 'Resume' : 'Pause'}
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Refresh activity"
+                disabled={paused || loading}
+                onClick={() => void refetch()}
+              >
+                <RefreshCw
+                  className={`size-4 ${loading ? 'animate-spin' : ''}`}
+                />
+              </Button>
+            </div>
+          }
+        />
+        <div className="flex flex-wrap gap-2">
+          <Input
+            type="search"
+            aria-label="Search activity"
+            placeholder="Search routines, devices or reasons"
+            className="min-w-0 flex-1 sm:min-w-48"
+            value={search}
+            onChange={(e) => patch('q', e.target.value)}
+          />
+          <div className="w-full sm:w-64">
+            <SearchablePicker
+              clearable={false}
+              ariaLabel="Routine filter"
+              value={routine ? 'routine:' + routine : 'all'}
+              onChange={(value) =>
+                patch('routine', value === 'all' ? '' : value.slice(8))
+              }
+              options={[
+                { value: 'all', label: 'All routines' },
+                ...[...routines]
+                  .sort((a, b) => a[1].localeCompare(b[1]))
+                  .map(([id, name]) => ({
+                    value: 'routine:' + id,
+                    label: name,
+                    detail: id,
+                  })),
+              ]}
+            />
+          </div>
+          <SettingsSelect
+            className="w-full sm:w-auto sm:min-w-40"
+            aria-label="Activity outcome"
+            value={result || 'all'}
+            onValueChange={(value) =>
+              patch('outcome', value === 'all' ? '' : value)
+            }
+            options={[
+              { value: 'all', label: 'All outcomes' },
+              { value: 'attention', label: 'Needs explanation' },
+              ...[
+                'Dispatched',
+                'Blocked',
+                'Rejected',
+                'Error',
+                'Unknown',
+                'Some steps skipped',
+                'All steps skipped',
+                'No actions',
+                'No run recorded',
+              ].map((value) => ({ value, label: value })),
+            ]}
+          />
+          {advanced && (
+            <SettingsSelect
+              className="w-full sm:w-auto sm:min-w-40"
+              aria-label="Activity kind"
+              value={kind || 'all'}
+              onValueChange={(value) =>
+                patch('kind', value === 'all' ? '' : value)
+              }
+              options={[
+                { value: 'all', label: 'All event types' },
+                ...Object.entries(triggerLabels).map(([value, label]) => ({
+                  value,
+                  label,
+                })),
+              ]}
+            />
+          )}
+          {filtersActive && (
+            <Button variant="ghost" onClick={clear}>
+              Clear filters
             </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Refresh activity"
-              disabled={paused || loading}
-              onClick={() => void refetch()}
-            >
-              <RefreshCw
-                className={`size-4 ${loading ? 'animate-spin' : ''}`}
-              />
+          )}
+        </div>
+        <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
+          <span>
+            {filtered.length} of {rows.length} retained entries ·{' '}
+            {paused ? 'Updates paused' : 'Newest first'}
+          </span>
+          <span>
+            {lastUpdated
+              ? `Updated ${formatShortTime(lastUpdated)}`
+              : 'Waiting for activity'}
+          </span>
+        </div>
+        <ActivityReferenceStatus />
+        {error && (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center gap-2 text-sm text-destructive"
+          >
+            {error}
+            {rows.length > 0 && ' · Showing the last successful result.'}
+            <Button variant="outline" onClick={() => void refetch()}>
+              Retry
             </Button>
           </div>
-        }
-      />
-      <div className="flex flex-wrap gap-2">
-        <Input
-          type="search"
-          aria-label="Search activity"
-          placeholder="Search routines, devices or reasons"
-          className="min-w-48 flex-1"
-          value={search}
-          onChange={(e) => patch('q', e.target.value)}
-        />
-        <select
-          className="settings-select max-w-full sm:max-w-64"
-          aria-label="Routine filter"
-          value={routine}
-          onChange={(e) => patch('routine', e.target.value)}
-        >
-          <option value="">All routines</option>
-          {[...routines]
-            .sort((a, b) => a[1].localeCompare(b[1]))
-            .map(([id, name]) => (
-              <option key={id} value={id}>
-                {name}
-              </option>
-            ))}
-        </select>
-        <select
-          className="settings-select"
-          aria-label="Activity outcome"
-          value={result}
-          onChange={(e) => patch('outcome', e.target.value)}
-        >
-          <option value="">All outcomes</option>
-          <option value="attention">Needs explanation</option>
-          {[
-            'Dispatched',
-            'Blocked',
-            'Rejected',
-            'Error',
-            'Unknown',
-            'Some steps skipped',
-            'No run recorded',
-          ].map((value) => (
-            <option key={value}>{value}</option>
-          ))}
-        </select>
-        {advanced && (
-          <select
-            className="settings-select"
-            aria-label="Activity kind"
-            value={kind}
-            onChange={(e) => patch('kind', e.target.value)}
+        )}
+        {loading && !rows.length ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            Loading activity…
+          </p>
+        ) : !filtered.length ? (
+          <p className="rounded-md border border-dashed border-border p-5 text-sm text-muted-foreground">
+            {error
+              ? 'Activity is unavailable until the request succeeds.'
+              : filtersActive
+                ? 'No recorded attempts match these filters.'
+                : 'No retained activity yet. This does not prove that a device event was received or that no routine was evaluated.'}
+          </p>
+        ) : (
+          <div
+            className="settings-activity-list divide-y divide-border overflow-hidden rounded-lg border border-border"
+            aria-label="Routine activity entries"
           >
-            <option value="">All event types</option>
-            {Object.entries(triggerLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
+            {filtered.slice(0, limit).map((entry) => (
+              <details
+                key={entry.id}
+                className="group"
+                data-activity-id={entry.id}
+              >
+                <summary className="settings-activity-summary grid cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 px-3 py-2.5 text-sm hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring">
+                  <time
+                    dateTime={entry.timestamp}
+                    title={formatTimestamp(entry.timestamp)}
+                    className="flex items-center gap-1 text-xs tabular-nums text-muted-foreground"
+                  >
+                    <ChevronRight
+                      aria-hidden
+                      className="size-3 shrink-0 transition-transform group-open:rotate-90"
+                    />
+                    {formatTimestamp(entry.timestamp)}
+                  </time>
+                  <span className="min-w-0 truncate font-medium">
+                    {entry.routine_name || entry.routine_id}
+                  </span>
+                  <span
+                    className={`text-xs font-medium ${['Dispatched', 'No actions'].includes(outcome(entry)) ? 'text-muted-foreground' : 'text-amber-700 dark:text-amber-400'}`}
+                  >
+                    {outcome(entry)}
+                  </span>
+                  <span
+                    className="min-w-0 truncate text-xs text-muted-foreground"
+                    title={summary(entry)}
+                  >
+                    {summary(entry)}
+                  </span>
+                </summary>
+                <EntryEvidence entry={entry} />
+              </details>
             ))}
-          </select>
+          </div>
         )}
-        {filtersActive && (
-          <Button variant="ghost" onClick={clear}>
-            Clear filters
+        {filtered.length > limit && (
+          <Button variant="outline" onClick={() => setLimit((n) => n + 100)}>
+            Show more ({filtered.length - limit} remaining)
           </Button>
         )}
-      </div>
-      <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
-        <span>
-          {filtered.length} of {rows.length} retained entries ·{' '}
-          {paused ? 'Updates paused' : 'Newest first'}
-        </span>
-        <span>
-          {lastUpdated
-            ? `Updated ${formatShortTime(lastUpdated)}`
-            : 'Waiting for activity'}
-        </span>
-      </div>
-      {error && (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center gap-2 text-sm text-destructive"
-        >
-          {error}
-          {rows.length > 0 && ' · Showing the last successful result.'}
-          <Button variant="outline" onClick={() => void refetch()}>
-            Retry
-          </Button>
-        </div>
-      )}
-      {loading && !rows.length ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          Loading activity…
+        <p className="text-xs text-muted-foreground">
+          The newest 500 entries are retained across restarts when database
+          persistence is available. Identical blocked attempts may share one
+          entry. Legacy routines record runs only.
         </p>
-      ) : !filtered.length ? (
-        <p className="rounded-md border border-dashed border-border p-5 text-sm text-muted-foreground">
-          {error
-            ? 'Activity is unavailable until the request succeeds.'
-            : filtersActive
-              ? 'No recorded attempts match these filters.'
-              : 'No retained activity yet. This does not prove that a device event was received or that no routine was evaluated.'}
-        </p>
-      ) : (
-        <div
-          className="settings-activity-list divide-y divide-border overflow-hidden rounded-lg border border-border"
-          aria-label="Routine activity entries"
-        >
-          {filtered.slice(0, limit).map((entry) => (
-            <details
-              key={entry.id}
-              className="group"
-              data-activity-id={entry.id}
-            >
-              <summary className="settings-activity-summary grid cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 px-3 py-2.5 text-sm hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring">
-                <time
-                  dateTime={entry.timestamp}
-                  title={formatTimestamp(entry.timestamp)}
-                  className="flex items-center gap-1 text-xs tabular-nums text-muted-foreground"
-                >
-                  <ChevronRight
-                    aria-hidden
-                    className="size-3 shrink-0 transition-transform group-open:rotate-90"
-                  />
-                  {formatTimestamp(entry.timestamp)}
-                </time>
-                <span className="min-w-0 truncate font-medium">
-                  {entry.routine_name || entry.routine_id}
-                </span>
-                <span
-                  className={`text-xs font-medium ${outcome(entry) === 'Dispatched' ? 'text-muted-foreground' : 'text-amber-700 dark:text-amber-400'}`}
-                >
-                  {outcome(entry)}
-                </span>
-                <span
-                  className="min-w-0 truncate text-xs text-muted-foreground"
-                  title={summary(entry)}
-                >
-                  {summary(entry)}
-                </span>
-              </summary>
-              <EntryEvidence entry={entry} />
-            </details>
-          ))}
-        </div>
-      )}
-      {filtered.length > limit && (
-        <Button variant="outline" onClick={() => setLimit((n) => n + 100)}>
-          Show more ({filtered.length - limit} remaining)
-        </Button>
-      )}
-      <p className="text-xs text-muted-foreground">
-        The newest 500 entries are retained across restarts when database
-        persistence is available. Identical blocked attempts may share one
-        entry. Legacy routines record runs only.
-      </p>
-    </div>
+      </div>
+    </ActivityReferenceProvider>
   );
 }

@@ -1,0 +1,21 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.25s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/homectl_server-deb79e13f06b027d)
+
+running 11 tests
+test core::routine_history::tests::hydrate_into_restores_order_and_continues_the_id_counter ... ok
+test core::routine_history::tests::a_blocked_entry_never_carries_a_previous_run ... ok
+test core::routine_history::tests::a_changed_reason_or_window_starts_a_new_entry ... ok
+test core::routine_history::tests::records_force_trigger_without_event_source ... ok
+test core::routine_history::tests::recent_routine_history_drops_oldest_entries_when_buffer_is_full ... ok
+test core::routine_history::tests::records_v2_run_with_evaluation_snapshot_and_dispatched_step_count ... ok
+test core::routine_history::tests::repeated_blocked_attempts_coalesce_inside_the_window ... ok
+test core::routine_history::tests::hydrate_into_keeps_only_the_ring_bound ... ok
+test types::routine_history::export_bindings_routinehistorytriggerkind ... ok
+test db::config_queries::consistency_tests::routine_history_round_trips_and_prunes_to_newest_entries ... ok
+test types::routine_history::export_bindings_routinehistoryentry ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 807 filtered out; finished in 0.11s

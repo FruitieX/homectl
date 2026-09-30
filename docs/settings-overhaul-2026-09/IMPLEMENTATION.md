@@ -637,3 +637,12 @@ Widget links cover every layout and both option representations, with independen
 Retry and retained drafts. Type/lint/build pass. See the
 [work queue checkpoint](WORK-QUEUE.md#helper-visibility-and-widget-consumers--2026-09-30)
 for evidence and scope; broader recovery/accessibility remains open.
+
+### Activity evidence checkpoint — 2026-09-30
+
+Shared filters, current reference labels with recorded identities, revision-change
+notices and distinct empty/suppressed outcomes are verified. Twenty browser checks
+and the existing 17-check journey pass at each 390/1440 px; 251 UI tests and
+11 Rust history tests pass. See [the work queue](WORK-QUEUE.md#routine-activity-references-and-outcomes--2026-09-30)
+for evidence and limits. Runtime suppression end-to-end and broader accessibility
+acceptance remain open.

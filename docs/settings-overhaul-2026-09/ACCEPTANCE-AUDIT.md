@@ -381,3 +381,12 @@ source plus a scene referencing its unavailable output contributes only one
 canonical source key to attention. Diagnostics retain both explanations and
 return the source entity ID and device-key log reference. This closes the
 previous API deduplication gap; it does not claim a live MQTT session.
+
+### Activity evidence checkpoint — 2026-09-30
+
+Shared filters, current reference labels with recorded identities, revision-change
+notices and distinct empty/suppressed outcomes are verified. Twenty browser checks
+and the existing 17-check journey pass at each 390/1440 px; 251 UI tests and
+11 Rust history tests pass. See [the work queue](WORK-QUEUE.md#routine-activity-references-and-outcomes--2026-09-30)
+for evidence and limits. Runtime suppression end-to-end and broader accessibility
+acceptance remain open.

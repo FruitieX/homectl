@@ -55,6 +55,11 @@ export function countEntryErrors(entry: RoutineHistoryEntry) {
   return entry.v2 ? countV2Errors(entry) : countRuleErrors(entry);
 }
 
+/** Blocked history must never present a previous run as this attempt's work. */
+export function recordedRun(entry: RoutineHistoryEntry) {
+  return entry.trigger_kind === 'v2_blocked' ? undefined : entry.v2?.last_run;
+}
+
 /**
  * Plain-language "why it ran or did not run" summary for one history entry,
  * built from the recorded trigger, condition, and plan outcome.
@@ -119,6 +124,8 @@ export function explainEntry(entry: RoutineHistoryEntry): string {
   if (dispatched > 0) {
     summary += ` ${dispatched} step${dispatched === 1 ? '' : 's'} dispatched; the device's own report confirms delivery, dispatch alone does not.`;
   }
+  if (!steps.length && Number(v2.last_run.dropped) === 0)
+    summary += ' No actions were planned.';
   if (suppressed.length > 0) {
     summary += ` ${suppressed.length} step${suppressed.length === 1 ? '' : 's'} suppressed (${suppressed[0].reason ?? 'no reason recorded'}).`;
   }
@@ -141,7 +148,12 @@ export function outcome(entry: RoutineHistoryEntry) {
     ) ||
     Number(entry.v2?.last_run?.dropped ?? 0) > 0
   )
-    return 'Some steps skipped';
+    return entry.v2?.last_run?.steps.some(
+      (step) => step.disposition === 'dispatched',
+    )
+      ? 'Some steps skipped'
+      : 'All steps skipped';
+  if (entry.v2?.last_run?.steps.length === 0) return 'No actions';
   return 'Dispatched';
 }
 
@@ -152,6 +164,12 @@ export function summary(entry: RoutineHistoryEntry) {
   if (entry.v2?.condition.unknown_reason)
     return describeUnknownReason(entry.v2.condition.unknown_reason);
   if (entry.v2 && !entry.v2.last_run) return 'No run outcome was recorded';
+  if (
+    entry.v2?.last_run?.accepted &&
+    entry.v2.last_run.steps.length === 0 &&
+    Number(entry.v2.last_run.dropped) === 0
+  )
+    return 'No actions were planned';
   const reason = entry.v2?.last_run?.steps.find((step) => step.reason)?.reason;
   return (
     reason ??

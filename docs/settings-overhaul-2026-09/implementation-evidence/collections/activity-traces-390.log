@@ -1,0 +1,89 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Name read failures keep all recorded entries",
+    "passed": true
+   },
+   {
+    "name": "Failed name lookup falls back to the recorded entity ID",
+    "passed": true
+   },
+   {
+    "name": "Current names accompany exact recorded destinations",
+    "passed": true
+   },
+   {
+    "name": "Historical revision change is explained before navigation",
+    "passed": true
+   },
+   {
+    "name": "A removed historical node opens the current routine with an explanation",
+    "passed": true
+   },
+   {
+    "name": "Accepted empty plan has its own filter and outcome",
+    "passed": true
+   },
+   {
+    "name": "Empty plans make no dispatch claim",
+    "passed": true
+   },
+   {
+    "name": "Fully suppressed plan is distinct from partial dispatch",
+    "passed": true
+   },
+   {
+    "name": "Execution-policy rejection stays distinct",
+    "passed": true
+   },
+   {
+    "name": "Condition errors stay distinct",
+    "passed": true
+   },
+   {
+    "name": "Blocked attempt never exposes a previous run as current evidence",
+    "passed": true
+   },
+   {
+    "name": "Keyboard opens the complete unknown trace",
+    "passed": true
+   },
+   {
+    "name": "Typed unknown reasons link to their canonical settings",
+    "passed": true
+   },
+   {
+    "name": "Event-kind filter retains its exact URL value",
+    "passed": true
+   },
+   {
+    "name": "A routine named all cannot collide with All routines",
+    "passed": true
+   },
+   {
+    "name": "Routine picker restores focus",
+    "passed": true
+   },
+   {
+    "name": "Native Enter opens and closes evidence",
+    "passed": true
+   },
+   {
+    "name": "Related links follow the summary in keyboard order",
+    "passed": true
+   },
+   {
+    "name": "Activity remains usable at 200% CSS zoom without horizontal page overflow",
+    "passed": true
+   },
+   {
+    "name": "History inspection and navigation never write configuration or raise page exceptions",
+    "passed": true
+   }
+  ],
+  "scope": "Synthetic retained entries, local catalogs and injected name-read failure; runtime execution requires separate server evidence"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)"]}

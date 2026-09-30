@@ -36,6 +36,28 @@
       }),
     );
   };
+  const choose = async (label, value) => {
+    const trigger = document.querySelector('[aria-label="' + label + '"]');
+    if (label === 'Routine filter') trigger.click();
+    else
+      trigger.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+      );
+    await until(
+      () => document.querySelector('[role=option],[cmdk-item]'),
+      'Filter options',
+    );
+    const item = [
+      ...document.querySelectorAll('[role=option],[cmdk-item]'),
+    ].find((item) =>
+      label === 'Routine filter'
+        ? item.textContent.includes(value)
+        : item.textContent.trim() === value,
+    );
+    if (!item) throw Error('Missing filter choice ' + value);
+    item.click();
+    await pause();
+  };
   const configure = (body) =>
     fetch('/api/__fixture/activity', {
       method: 'POST',
@@ -52,7 +74,7 @@
     rows().every((el) => !el.open && el.getBoundingClientRect().height < 95),
     'Outcomes are glanceable in compact closed rows',
   );
-  input(document.querySelector('[aria-label="Activity outcome"]'), 'Blocked');
+  await choose('Activity outcome', 'Blocked');
   await pause();
   assert(
     rows().length === 1 && rows()[0].textContent.includes('7 attempts'),
@@ -117,8 +139,7 @@
     'Return to activity',
   );
   assert(
-    document.querySelector('[aria-label="Routine filter"]').value ===
-      'motion_on',
+    new URLSearchParams(location.search).get('routine') === 'motion_on',
     'Routine detail links filter activity by exact routine ID',
   );
   const retained = document.querySelector(
@@ -177,7 +198,7 @@
     rows()[0].dataset.activityId === 'new-record',
     'Resuming shows fresh records',
   );
-  input(document.querySelector('[aria-label="Routine filter"]'), 'motion_on');
+  await choose('Routine filter', 'motion_on');
   await pause();
   assert(
     rows().length === 2 &&

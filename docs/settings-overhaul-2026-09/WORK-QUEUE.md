@@ -865,6 +865,33 @@ controls. Resolve these in the shared-control/cleanup pass, distinguishing them
 from unreferenced legacy editors. Activity trace, restore/restart, MQTT transport,
 broader recovery/accessibility and final reconciliation remain open.
 
+### Routine activity references and outcomes — 2026-09-30
+
+Activity uses the shared selectors and a searchable routine filter, including
+literal routine IDs named `all`. Accepted empty plans, fully suppressed plans,
+partial dispatch, rejection, errors and unknown conditions remain distinct.
+Blocked attempts never expose a previous run as their own evidence.
+
+Recorded entity links show current friendly names, preserve exact destinations
+and fall back to recorded IDs when a catalog fails or an entity was removed.
+Name lookup failures have Retry and never hide recorded activity. A changed
+definition revision is explained before navigation; removed historical nodes
+open the current editor with its existing missing-node explanation.
+
+Twenty native browser checks pass at each 390/1440 px, including all seven
+unknown-condition reasons, URL filters, picker focus, related-link keyboard
+order and 200% CSS zoom. The existing 17-check activity journey also passes at
+both sizes. All 251 UI tests, type/lint/build and 11 server history tests pass;
+the existing backup-effect, bundle-size and Rust future-compatibility warnings
+remain. Expected 503s are injected name-catalog failures. No page exceptions,
+configuration writes or household commands occurred. Screenshots were inspected.
+
+Evidence: `ui/dev/activity-traces-review.mjs`,
+`implementation-evidence/collections/activity-*` and the
+[comparison gallery](implementation-evidence/comparison/index.html#activity-traces).
+Browser traces are synthetic retained records; real runtime suppression coverage
+and broader accessibility remain separate open acceptance items.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { explainEntry, outcome, summary } from './routineActivity.ts';
+import {
+  explainEntry,
+  outcome,
+  summary,
+  recordedRun,
+} from './routineActivity.ts';
 import type { RoutineHistoryEntry } from '../hooks/useConfig';
 
 const base = (): RoutineHistoryEntry => ({
@@ -46,6 +51,7 @@ test('blocked coalesced attempts remain separate from old run evidence', () => {
   assert.equal(outcome(entry), 'Blocked');
   assert.match(summary(entry), /outside the schedule · 7 attempts/);
   assert.match(explainEntry(entry), /did not run/);
+  assert.equal(recordedRun(entry), undefined);
 });
 
 test('policy rejection, suppression and unknown conditions keep their recorded meaning', () => {
@@ -69,11 +75,35 @@ test('policy rejection, suppression and unknown conditions keep their recorded m
   assert.equal(summary(entry), 'queue full');
   assert.match(explainEntry(entry), /rejected/);
   entry.v2!.last_run.accepted = true;
+  assert.equal(outcome(entry), 'All steps skipped');
+  entry.v2!.last_run.steps.push({
+    action_id: 'sent',
+    kind: 'set_power',
+    targets: [],
+    disposition: 'dispatched',
+  });
   assert.equal(outcome(entry), 'Some steps skipped');
   entry.v2!.condition.truth = 'unknown';
   entry.v2!.condition.unknown_reason = { kind: 'stale', device: 'mqtt/window' };
   assert.equal(outcome(entry), 'Unknown');
   assert.match(summary(entry), /Stale observation: mqtt\/window/);
+});
+
+test('accepted empty plans do not claim to have dispatched actions', () => {
+  const entry = base();
+  entry.v2!.last_run = {
+    run_id: 4n,
+    definition_revision: 1n,
+    accepted: true,
+    steps: [],
+    dropped: 0n,
+  };
+  assert.equal(outcome(entry), 'No actions');
+  assert.equal(summary(entry), 'No actions were planned');
+  assert.match(explainEntry(entry), /No actions were planned/);
+  assert.equal(recordedRun(entry), entry.v2!.last_run);
+  entry.v2!.last_run.dropped = 2n;
+  assert.equal(outcome(entry), 'All steps skipped');
 });
 
 test('legacy history without a condition trace still records a run, not a failed evaluation', () => {
