@@ -1,4 +1,5 @@
 /** Native browser acceptance against the isolated development fixture only. */
+import { writeFile } from 'node:fs/promises';
 export default async function (cdp, { width, url }) {
   if (!url.startsWith('http://127.0.0.1:3021/config/floorplan'))
     throw Error('Use the isolated fixture UI on :3021.');
@@ -61,7 +62,11 @@ export default async function (cdp, { width, url }) {
     evaluate(
       `(()=>{const el=document.querySelector('canvas'),r=el.getBoundingClientRect(),d=el.dataset;return{x:r.x+Number(d.viewX)+(${x}+.5)*Number(d.tileWidth)*Number(d.zoom),y:r.y+Number(d.viewY)+(${y}+.5)*Number(d.tileHeight)*Number(d.zoom)}})()`,
     );
-  const drag = async (start, end, { button = 'left', cancel = false } = {}) => {
+  const drag = async (
+    start,
+    end,
+    { button = 'left', cancel = false, modifiers = 0 } = {},
+  ) => {
     if (width < 900 && button === 'left') {
       await cdp.send('Input.dispatchTouchEvent', {
         type: 'touchStart',
@@ -84,6 +89,7 @@ export default async function (cdp, { width, url }) {
         button,
         buttons: button === 'middle' ? 4 : 1,
         clickCount: 1,
+        modifiers,
       });
       await pause();
       await cdp.send('Input.dispatchMouseEvent', {
@@ -91,6 +97,7 @@ export default async function (cdp, { width, url }) {
         ...end,
         button,
         buttons: button === 'middle' ? 4 : 1,
+        modifiers,
       });
       await pause();
       await cdp.send('Input.dispatchMouseEvent', {
@@ -99,6 +106,7 @@ export default async function (cdp, { width, url }) {
         button,
         buttons: 0,
         clickCount: 1,
+        modifiers,
       });
     }
     await pause();
@@ -108,6 +116,41 @@ export default async function (cdp, { width, url }) {
     'document.body.scrollHeight===innerHeight&&document.body.scrollWidth===innerWidth&&document.querySelector("canvas").width===Math.round(document.querySelector("canvas").getBoundingClientRect().width*devicePixelRatio)',
   );
   await click('Walls tool');
+  if (width < 900) await click('Close library');
+  const shortcut = async (key) => {
+    await evaluate('document.querySelector("canvas").focus()');
+    await cdp.send('Input.dispatchKeyEvent', {
+      type: 'keyDown',
+      key,
+      code: 'Key' + key.toUpperCase(),
+    });
+    await cdp.send('Input.dispatchKeyEvent', {
+      type: 'keyUp',
+      key,
+      code: 'Key' + key.toUpperCase(),
+    });
+    await pause();
+  };
+  await shortcut('f');
+  await check(
+    'F switches brush to rectangle without editing the document',
+    `document.querySelector('[aria-label="Rectangle"]').getAttribute('aria-pressed')==='true'&&!(${dirty})`,
+  );
+  await shortcut('f');
+  await check(
+    'F switches rectangle back to brush',
+    `document.querySelector('[aria-label="Brush"]').getAttribute('aria-pressed')==='true'`,
+  );
+  await shortcut('e');
+  await check(
+    'E enables tile erasing with a distinct eraser cursor',
+    `document.querySelector('.fp-stage').dataset.tool==='erase'&&getComputedStyle(document.querySelector('canvas')).cursor.startsWith('url(')`,
+  );
+  await shortcut('e');
+  await check(
+    'E restores Walls painting and its normal cursor',
+    `document.querySelector('.fp-stage').dataset.tool==='walls'&&getComputedStyle(document.querySelector('canvas')).cursor==='crosshair'`,
+  );
   if (width < 900) await click('Close library');
   const rect = await world(5, 4);
   const scale = await evaluate(
@@ -175,12 +218,82 @@ export default async function (cdp, { width, url }) {
     'Unplaced catalog entry arms canvas placement',
     '!!document.querySelector(".fp-pending")',
   );
-  const place = await world(7, 5);
+  const place = await world(7.38, 5.12);
   await drag(place, place);
   await check(
     'Canvas placement opens the position inspector',
     `!!document.querySelector('[aria-label="Placement X"]')`,
   );
+  await check(
+    'New device placement defaults to quarter-grid snapping',
+    `document.querySelector('[aria-label="Placement X"]').value==='7.5'&&document.querySelector('[aria-label="Placement Y"]').value==='5'`,
+  );
+  const setSnap = async (label) => {
+    await click('Device snapping');
+    await evaluate(
+      `[...document.querySelectorAll('[role="option"]')].find(el=>el.textContent.trim()===${JSON.stringify(label)}).click()`,
+    );
+    await pause();
+  };
+  await setSnap('Grid');
+  await button('Snap to grid');
+  await check(
+    'Inspector snaps an existing placement to the selected whole grid',
+    `document.querySelector('[aria-label="Placement X"]').value==='8'&&document.querySelector('[aria-label="Placement Y"]').value==='5'`,
+  );
+  await click('Undo');
+  await setSnap('¼ grid');
+  await input('Placement X', 7.38);
+  await input('Placement Y', 5.12);
+  await button('Snap to ¼ grid');
+  await check(
+    'Quarter-grid control snaps exact typed coordinates',
+    `document.querySelector('[aria-label="Placement X"]').value==='7.5'&&document.querySelector('[aria-label="Placement Y"]').value==='5'`,
+  );
+  await click('Undo');
+  const snapShot = await cdp.send('Page.captureScreenshot', { format: 'png' });
+  await writeFile(
+    `/tmp/homectl-floorplan-snap-${width}.png`,
+    Buffer.from(snapShot.data, 'base64'),
+  );
+  await setSnap('Grid');
+  const expectPosition = async (x, y, message) =>
+    check(
+      message,
+      `Math.abs(Number(document.querySelector('[aria-label="Placement X"]').value)-${x})<.002&&Math.abs(Number(document.querySelector('[aria-label="Placement Y"]').value)-${y})<.002`,
+    );
+  const movePlacement = async (modifiers = 0) => {
+    if (width < 900) await click('Close properties');
+    await click('Fit entire floorplan');
+    await drag(await world(7.38, 5.12), await world(9.38, 6.12), { modifiers });
+  };
+  await movePlacement();
+  await expectPosition(9, 6, 'Dragging respects whole-grid snapping');
+  await click('Undo');
+  if (width >= 900) {
+    await movePlacement(1);
+    await expectPosition(
+      9.38,
+      6.12,
+      'Alt bypasses snapping during a device drag',
+    );
+    await click('Undo');
+    await movePlacement(8);
+    await expectPosition(
+      9.5,
+      6,
+      'Shift uses quarter-grid precision while whole-grid mode stays selected',
+    );
+    await click('Undo');
+  }
+  await setSnap('Free');
+  await movePlacement();
+  await expectPosition(
+    9.38,
+    6.12,
+    'Free mode supports precise placement on desktop and touch',
+  );
+  await click('Undo');
   await input('Placement X', 7.3);
   await check('Fractional coordinate editing stays unsaved', dirty);
   await button('Save');
@@ -199,6 +312,16 @@ export default async function (cdp, { width, url }) {
   if (width < 900) await click('Close properties');
   await click('Rooms tool');
   if (width < 900) await click('Close library');
+  await shortcut('e');
+  await check(
+    'E erases room areas without switching into tile erasing',
+    `document.querySelector('.fp-stage').dataset.tool==='rooms'&&document.querySelector('.fp-stage').dataset.erasing==='true'&&getComputedStyle(document.querySelector('canvas')).cursor.startsWith('url(')`,
+  );
+  await shortcut('e');
+  await check(
+    'E restores room painting without changing mode',
+    `document.querySelector('.fp-stage').dataset.tool==='rooms'&&document.querySelector('.fp-stage').dataset.erasing==='false'`,
+  );
   await click('Brush');
   const roomStart = await world(4, 5);
   await drag(roomStart, { x: roomStart.x + 15, y: roomStart.y + 10 });

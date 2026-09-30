@@ -13,9 +13,8 @@ import type { LightHold } from '@/lib/lightQuickAdjust';
 import type { Device } from '@/bindings/Device';
 import { useAppConfig } from '@/hooks/appConfig';
 import { useConnectionStatus } from '@/hooks/websocket';
+import { useSensorInteraction } from '@/hooks/useSensorInteraction';
 import {
-  getSensorDetails,
-  resolveSensorInteraction,
   getSensorButtonValue,
   type DeviceSensorConfig,
 } from '@/lib/sensorInteraction';
@@ -40,10 +39,13 @@ export function SensorQuickPopover({
 }) {
   const { apiEndpoint } = useAppConfig();
   const connected = useConnectionStatus() === 'connected';
-  const sensor = getSensorDetails(device),
-    interaction = resolveSensorInteraction(device, sensorConfig);
+  const { sensor, interaction, eventButtons } = useSensorInteraction(
+    device,
+    sensorConfig,
+  );
   const [pending, setPending] = useState(false),
     [error, setError] = useState(''),
+    [text, setText] = useState(sensor.kind === 'text' ? sensor.value : ''),
     [number, setNumber] = useState(
       sensor.kind === 'number' ? String(sensor.value) : '0',
     );
@@ -82,6 +84,7 @@ export function SensorQuickPopover({
       <PopoverContent
         collisionPadding={12}
         aria-label={`${device.name} sensor quick controls`}
+        aria-busy={pending}
         className="w-52 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto rounded-none border-0 bg-transparent p-0 shadow-none"
         onOpenAutoFocus={(e) => {
           if (hold) e.preventDefault();
@@ -99,10 +102,43 @@ export function SensorQuickPopover({
             <X />
           </Button>
         </div>
-        <p className="mb-3 rounded-full bg-card/95 py-1 text-center text-[11px] text-muted-foreground">
-          {pending ? 'Sending event…' : 'Simulate an event for routines'}
-        </p>
-        {buttons.length > 0 ? (
+        {eventButtons.length > 0 || interaction.kind === 'text' ? (
+          <div className="space-y-2 rounded-2xl border border-border bg-card/95 p-2 shadow-lg">
+            {eventButtons.map((event) => (
+              <Button
+                key={event.value}
+                variant="ghost"
+                className="h-auto min-h-10 w-full justify-between gap-2 whitespace-normal text-left"
+                disabled={pending || !connected}
+                aria-label={`Send ${event.label} sensor event`}
+                onClick={() => void send({ value: event.value })}
+              >
+                <span>{event.label}</span>
+                <span className="min-w-0 break-all font-mono text-[10px] text-muted-foreground">
+                  {event.value}
+                </span>
+              </Button>
+            ))}
+            {interaction.kind === 'text' && (
+              <form
+                className="flex gap-1"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void send({ value: text });
+                }}
+              >
+                <Input
+                  aria-label="Sensor text value"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                />
+                <Button type="submit" disabled={pending || !connected}>
+                  Send
+                </Button>
+              </form>
+            )}
+          </div>
+        ) : buttons.length > 0 ? (
           <div className="mx-auto flex w-16 flex-col gap-1 rounded-full border border-border bg-card/95 p-1 shadow-lg">
             {buttons.map((name) => (
               <Button
@@ -206,9 +242,14 @@ export function SensorQuickPopover({
             </div>
           </form>
         ) : (
-          <p className="text-xs text-muted-foreground">
+          <p className="rounded-2xl bg-card/95 p-3 text-xs text-muted-foreground shadow-md">
             Open details for this sensor's full controls.
           </p>
+        )}
+        {pending && (
+          <span role="status" className="sr-only">
+            Sending event…
+          </span>
         )}
         {!connected && (
           <p role="status" className="mt-2 text-xs text-muted-foreground">

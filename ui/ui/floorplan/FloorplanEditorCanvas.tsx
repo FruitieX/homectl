@@ -23,6 +23,11 @@ import {
 } from '@/lib/floorplan-editor';
 import { getFloorplanRenderMetrics } from '@/lib/floorplan-metrics';
 import {
+  effectiveDeviceSnap,
+  snapDevicePoint,
+  type DeviceSnap,
+} from '@/lib/floorplan-snapping';
+import {
   getFloorplanGroupFill,
   getFloorplanGroupStroke,
 } from '@/lib/floorplanGroupColor';
@@ -82,6 +87,7 @@ export function FloorplanEditorCanvas({
   disabled,
   keyboardCell,
   onKeyboardCell,
+  snap,
 }: {
   grid: FloorplanGrid;
   onChange: (next: FloorplanGrid) => void;
@@ -105,6 +111,7 @@ export function FloorplanEditorCanvas({
   disabled: boolean;
   keyboardCell: GridPoint;
   onKeyboardCell: (p: GridPoint) => void;
+  snap: DeviceSnap;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null),
     stage = useRef<HTMLDivElement>(null),
@@ -522,7 +529,7 @@ export function FloorplanEditorCanvas({
       for (const d of grid.devices) marker(d.x, d.y, d.deviceKey);
     if (pending && hover) {
       ctx.globalAlpha = 0.55;
-      marker(hover.x, hover.y, pending);
+      marker(hover.x - 0.5, hover.y - 0.5, pending);
       ctx.globalAlpha = 1;
     }
     const cell = hover ?? keyboardCell;
@@ -566,16 +573,16 @@ export function FloorplanEditorCanvas({
   };
   const inBounds = (p: GridPoint) =>
     p.x >= 0 && p.y >= 0 && p.x < grid.width && p.y < grid.height;
-  const placement = (p: GridPoint) => ({
-    x: Math.max(
-      0,
-      Math.min(grid.width - 0.001, Math.round((p.x - 0.5) * 10) / 10),
-    ),
-    y: Math.max(
-      0,
-      Math.min(grid.height - 0.001, Math.round((p.y - 0.5) * 10) / 10),
-    ),
-  });
+  const placement = (
+    p: GridPoint,
+    modifiers: { altKey?: boolean; shiftKey?: boolean },
+  ) =>
+    snapDevicePoint(
+      p,
+      grid.width,
+      grid.height,
+      effectiveDeviceSnap(snap, modifiers),
+    );
   const applyPaint = (g: Extract<Gesture, { kind: 'paint' }>, p: GridPoint) => {
     const cell = {
       x: Math.max(0, Math.min(grid.width - 1, Math.floor(p.x))),
@@ -612,6 +619,7 @@ export function FloorplanEditorCanvas({
       className="fp-stage"
       data-tool={tool}
       data-panning={isPanning}
+      data-erasing={tool === 'erase' || (tool === 'rooms' && roomErase)}
     >
       <div className="fp-canvas-title">
         {name || 'New floorplan'}{' '}
@@ -661,13 +669,14 @@ export function FloorplanEditorCanvas({
             return;
           }
           if (pending && inBounds(p)) {
+            const position = placement({ x: p.x - 0.5, y: p.y - 0.5 }, e);
             emit(
               placeSelectedDeviceOnGrid(
                 before,
                 pending,
                 devices,
-                placement(p).x,
-                placement(p).y,
+                position.x,
+                position.y,
               ),
             );
             onCommit(before);
@@ -720,7 +729,16 @@ export function FloorplanEditorCanvas({
         }}
         onPointerMove={(e) => {
           const p = point(e);
-          setHover(inBounds(p) ? p : null);
+          const preview = pending
+            ? placement({ x: p.x - 0.5, y: p.y - 0.5 }, e)
+            : null;
+          setHover(
+            inBounds(p)
+              ? preview
+                ? { x: preview.x + 0.5, y: preview.y + 0.5 }
+                : p
+              : null,
+          );
           if (touches.current.has(e.pointerId))
             touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
           const g = gesture.current;
@@ -748,25 +766,12 @@ export function FloorplanEditorCanvas({
             g.x = e.clientX;
             g.y = e.clientY;
           } else if (g.kind === 'move') {
+            const position = placement(
+              { x: p.x + g.offset.x, y: p.y + g.offset.y },
+              e,
+            );
             emit(
-              moveDeviceOnGrid(
-                gridRef.current,
-                g.key,
-                Math.max(
-                  0,
-                  Math.min(
-                    grid.width - 0.001,
-                    Math.round((p.x + g.offset.x) * 10) / 10,
-                  ),
-                ),
-                Math.max(
-                  0,
-                  Math.min(
-                    grid.height - 0.001,
-                    Math.round((p.y + g.offset.y) * 10) / 10,
-                  ),
-                ),
-              ),
+              moveDeviceOnGrid(gridRef.current, g.key, position.x, position.y),
             );
           } else applyPaint(g, p);
         }}

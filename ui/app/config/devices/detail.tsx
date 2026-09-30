@@ -131,12 +131,19 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
           ['down_value', 'Dimmer'],
           ['off_value', 'Off'],
         ]
-      : kind === 'on_off_buttons'
+      : kind === 'button_events'
         ? [
-            ['on_value', 'On'],
+            ['single_value', 'Press'],
+            ['double_value', 'Double press'],
+            ['hold_value', 'Hold'],
             ['off_value', 'Off'],
           ]
-        : [];
+        : kind === 'on_off_buttons'
+          ? [
+              ['on_value', 'On'],
+              ['off_value', 'Off'],
+            ]
+          : [];
   async function remove(replace: boolean) {
     if (
       !(await confirmDialog({
@@ -275,7 +282,7 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
                   </label>
                   <p className="text-xs text-muted-foreground">
                     Changes the controls used to simulate sensor input. Auto
-                    follows the reported value type.
+                    follows the reported value type and observed button events.
                   </p>
                   {!knownSensor ? (
                     <p className="text-xs text-amber-700">
@@ -295,7 +302,9 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
                               value={
                                 typeof sensor?.config[field] === 'string'
                                   ? (sensor.config[field] as string)
-                                  : ''
+                                  : (getDefaultSensorInteractionConfig(
+                                      kind as SensorInteractionKind,
+                                    )[field] ?? '')
                               }
                               placeholder={
                                 getDefaultSensorInteractionConfig(
@@ -318,6 +327,11 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
                         ))}
                       </div>
                     )
+                  )}
+                  {kind === 'button_events' && (
+                    <p className="text-xs text-muted-foreground">
+                      Leave a value empty to hide that button.
+                    </p>
                   )}
                 </>
               )}

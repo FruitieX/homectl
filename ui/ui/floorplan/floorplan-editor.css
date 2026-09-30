@@ -584,6 +584,12 @@
 .fp-stage[data-tool='devices'] canvas {
   cursor: default;
 }
+.fp-stage[data-erasing='true'] canvas {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='m5 19 13-13 9 9-13 13H5l-4-4Zm7-7 9 9M14 28h15' fill='white' stroke='white' stroke-width='5' stroke-linejoin='round'/%3E%3Cpath d='m5 19 13-13 9 9-13 13H5l-4-4Zm7-7 9 9M14 28h15' fill='none' stroke='%23364941' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E")
+      3 24,
+    crosshair;
+}
 .fp-stage[data-tool='hand'] canvas,
 .fp-stage[data-panning='true'] canvas {
   cursor: grab;
@@ -797,6 +803,11 @@
   .fp-editor[data-tool='walls'] .fp-tool-title,
   .fp-editor[data-tool='rooms'] .fp-tool-title,
   .fp-editor[data-tool='erase'] .fp-tool-title {
+    display: none;
+  }
+  .fp-editor[data-tool='select'] .fp-tool-title,
+  .fp-editor[data-tool='devices'] .fp-tool-title,
+  .fp-editor[data-tool='hand'] .fp-tool-title {
     display: none;
   }
   .fp-context .fp-segmented span,

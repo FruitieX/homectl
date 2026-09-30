@@ -10,6 +10,14 @@ export default async function (cdp, { width, url }) {
     throw Error('Isolated fixture required');
   const id = 'radial_review_' + Date.now();
   const checks = [];
+  const sensorWrites = [];
+  cdp.on('Network.requestWillBeSent', ({ request }) => {
+    if (
+      request.method === 'PUT' &&
+      request.url.endsWith('/api/v1/devices/review_button')
+    )
+      sensorWrites.push(JSON.parse(request.postData));
+  });
   const evaluate = async (expression) => {
     const r = await cdp.send('Runtime.evaluate', {
       expression,
@@ -130,6 +138,12 @@ export default async function (cdp, { width, url }) {
   };
   grid.devices.push(
     {
+      deviceKey: 'dummy/review_button',
+      deviceName: 'Office button',
+      x: 3,
+      y: 8,
+    },
+    {
       deviceKey: 'dummy/review_number',
       deviceName: 'Review number',
       x: 12,
@@ -159,6 +173,13 @@ export default async function (cdp, { width, url }) {
   ).devices.find((d) => d.id === 'living_room_motion');
   await request('/api/__fixture/sensor-history', {
     devices: [
+      {
+        id: 'review_button',
+        name: 'Office button',
+        integration_id: 'dummy',
+        data: { Sensor: { value: 'off' } },
+        raw: { action: 'off' },
+      },
       { ...motion, data: { Sensor: { value: false } } },
       {
         id: 'review_number',
@@ -182,15 +203,24 @@ export default async function (cdp, { width, url }) {
         config: { up_value: 'raise', down_value: 'lower' },
       },
     ],
-    entries: Array.from({ length: 12 }, (_, i) => ({
-      id: i + 1,
-      source_key: i % 2 ? 'zigbee2mqtt/living_room_motion' : 'fixture/climate',
-      changed_at_ms: now - (12 - i) * 60000,
-      value:
-        i % 2
-          ? Boolean(i % 4 === 1)
-          : { temperature: 20 + i / 4, humidity: 40 + i },
-    })),
+    entries: [
+      ...['off', 'hold', 'single', 'double'].map((value, i) => ({
+        id: 20 + i,
+        source_key: 'dummy/review_button',
+        changed_at_ms: now - (4 - i) * 60000,
+        value,
+      })),
+      ...Array.from({ length: 12 }, (_, i) => ({
+        id: i + 1,
+        source_key:
+          i % 2 ? 'zigbee2mqtt/living_room_motion' : 'fixture/climate',
+        changed_at_ms: now - (12 - i) * 60000,
+        value:
+          i % 2
+            ? Boolean(i % 4 === 1)
+            : { temperature: 20 + i / 4, humidity: 40 + i },
+      })),
+    ],
   });
   try {
     await cdp.send('Page.navigate', { url: base + '/map' });
@@ -362,6 +392,17 @@ export default async function (cdp, { width, url }) {
     );
     await shot('live-color');
     await request('/api/__fixture/live-controls', { delay: 0 });
+    await click(`${pop}.querySelector('button[aria-label^="Turn "]')`);
+    await until(
+      `${pop}.querySelector('button[aria-label^="Turn "]').getAttribute('aria-pressed')==='false'&&getComputedStyle(${pop}.querySelector('button[aria-label^="Turn "]')).backgroundColor==='rgb(67, 78, 90)'`,
+      'Power-off centre matches the darkened floorplan marker',
+    );
+    await shot('power-off');
+    await click(`${pop}.querySelector('button[aria-label^="Turn "]')`);
+    await until(
+      `${pop}.querySelector('button[aria-label^="Turn "]').getAttribute('aria-pressed')==='true'`,
+      'Power-on restores the selected light color',
+    );
     await pointer('down', { x: center.x, y: center.y + 84 });
     await pause(220);
     await pointer('up', { x: center.x, y: center.y + 84 });
@@ -451,6 +492,30 @@ export default async function (cdp, { width, url }) {
       await pointer('up', await point(), 2);
       await pause();
     }
+    p = await point();
+    await pointer('down', p);
+    await pause(620);
+    await pointer('up', p);
+    await until(
+      `!!document.querySelector('[aria-label="Select Living room lamp"]')`,
+      'Radial offers a selection icon',
+    );
+    const beforeSelection = (await commands()).length;
+    await click(
+      `document.querySelector('[aria-label="Select Living room lamp"]')`,
+    );
+    await until(
+      `document.body.innerText.includes('1 selected')&&!${pop}`,
+      'Selection icon enters multi-light selection and closes radial',
+    );
+    if ((await commands()).length !== beforeSelection)
+      throw Error('Selection must not change a device');
+    await pointer('down', await point());
+    await pointer('up', await point());
+    await until(
+      `!document.body.innerText.includes('1 selected')`,
+      'Radial selection retains last-deselect exit behavior',
+    );
     p = await point(12, 3);
     await pointer('down', p);
     await pause(620);
@@ -494,6 +559,49 @@ export default async function (cdp, { width, url }) {
       throw Error('Configured dimmer event');
     checks.push('Dimmer uses configured event values');
     await shot('sensor-dimmer');
+    await click(
+      `document.querySelector('[aria-label="Close sensor quick controls"]')`,
+    );
+    p = await point(3, 8);
+    await pointer('down', p);
+    await pause(620);
+    await pointer('up', p);
+    await until(
+      `!!document.querySelector('[aria-label="Send Double press sensor event"]')`,
+      'Office button discovers action controls even while current state is off',
+    );
+    if (
+      await evaluate(
+        `document.body.innerText.includes('Simulate an event for routines')`,
+      )
+    )
+      throw Error('Removed quick-control instruction still present');
+    await shot('office-button');
+    for (const [label, value] of [
+      ['Press', 'single'],
+      ['Press', 'single'],
+      ['Double press', 'double'],
+      ['Hold', 'hold'],
+      ['Off', 'off'],
+    ]) {
+      await click(
+        `document.querySelector('[aria-label="Send ${label} sensor event"]')`,
+      );
+      await until(
+        `document.querySelector('[aria-label="Office button sensor quick controls"]').getAttribute('aria-busy')==='false'`,
+        `${label} event accepted`,
+      );
+      if (
+        sensorWrites.at(-1)?.data?.Sensor?.value !== value ||
+        sensorWrites.at(-1)?.raw !== null
+      )
+        throw Error('Incorrect normalized action payload: ' + value);
+    }
+    if (sensorWrites.length !== 5)
+      throw Error('Repeated press must issue another sensor event');
+    checks.push(
+      'All four MQTT action values simulate through normalized sensor input; repeated Press sends a second event',
+    );
     await click(
       `document.querySelector('[aria-label="Close sensor quick controls"]')`,
     );
@@ -541,6 +649,69 @@ export default async function (cdp, { width, url }) {
     );
     await pause();
     await shot('settings-lists');
+    await cdp.send('Page.navigate', {
+      url: base + '/config/devices/detail/dummy%2Freview_button',
+    });
+    await until(
+      `!!document.querySelector('[aria-label="Sensor controls"]')`,
+      'Button device settings exposes control mappings',
+    );
+    await click(`document.querySelector('[aria-label="Sensor controls"]')`);
+    await click(
+      `[...document.querySelectorAll('[role="option"]')].find(el=>el.textContent.trim()==='Button events')`,
+    );
+    await until(
+      `[...document.querySelectorAll('label')].some(el=>el.textContent.includes('Double press value'))`,
+      'Button event mapping fields are directly editable',
+    );
+    await evaluate(
+      `(()=>{const label=[...document.querySelectorAll('label')].find(el=>el.textContent.trim().startsWith('Press value')),input=label.querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'press_custom');input.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+    );
+    await pause();
+    await click(button('Save changes'));
+    await until(
+      `document.querySelector('.settings-savebar')?.dataset.dirty!=='true'`,
+      'Custom button event mapping saved',
+    );
+    const mapping = (
+      await (
+        await fetch(
+          base +
+            '/api/v1/config/device-settings?device_key=dummy%2Freview_button',
+        )
+      ).json()
+    ).data.sensor;
+    if (
+      mapping.interaction_kind !== 'button_events' ||
+      mapping.config.single_value !== 'press_custom'
+    )
+      throw Error('Button mapping did not persist');
+    await shot('button-mappings');
+    await cdp.send('Page.navigate', { url: base + '/map' });
+    await until(
+      `!!${button('Radial review')}`,
+      'Map returns after editing sensor settings',
+    );
+    await click(button('Radial review'));
+    await pause(300);
+    p = await point(3, 8);
+    await pointer('down', p);
+    await pause(620);
+    await pointer('up', p);
+    await until(
+      `!!document.querySelector('[aria-label="Send Press sensor event"]')`,
+      'Saved mapping supplies button quick controls',
+    );
+    await click(
+      `document.querySelector('[aria-label="Send Press sensor event"]')`,
+    );
+    await until(
+      `document.querySelector('[aria-label="Office button sensor quick controls"]').getAttribute('aria-busy')==='false'`,
+      'Custom Press event accepted',
+    );
+    if (sensorWrites.at(-1)?.data?.Sensor?.value !== 'press_custom')
+      throw Error('Saved button mapping not used by quick controls');
+    checks.push('Saved mapping is used by the shared quick-control path');
     return { passed: true, width, checks };
   } catch (e) {
     await shot('failure');

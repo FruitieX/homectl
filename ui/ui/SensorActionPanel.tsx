@@ -1,11 +1,10 @@
 import { Device } from '@/bindings/Device';
 import { useAppConfig } from '@/hooks/appConfig';
+import { useSensorInteraction } from '@/hooks/useSensorInteraction';
 import {
   type DeviceSensorConfig,
   getSensorButtonValue,
-  getSensorDetails,
   getSensorInteractionLabel,
-  resolveSensorInteraction,
   stringifySensorPayload,
 } from '@/lib/sensorInteraction';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
@@ -66,8 +65,11 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const sensor = getSensorDetails(device);
-  const resolvedInteraction = resolveSensorInteraction(device, sensorConfig);
+  const {
+    sensor,
+    interaction: resolvedInteraction,
+    eventButtons,
+  } = useSensorInteraction(device, sensorConfig);
   const sensorPayloadJson = stringifySensorPayload(sensor.payload);
   const initialNumberValue =
     sensor.kind === 'number'
@@ -200,6 +202,25 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
               Off
             </Button>
           </div>
+        </div>
+      )}
+
+      {eventButtons.length > 0 && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {eventButtons.map((event) => (
+            <Button
+              key={event.value}
+              variant="outline"
+              className="h-auto min-h-11 justify-between gap-2 whitespace-normal text-left"
+              disabled={submitting}
+              onClick={() => void runAction({ value: event.value })}
+            >
+              <span>{event.label}</span>
+              <span className="min-w-0 break-all font-mono text-xs text-muted-foreground">
+                {event.value}
+              </span>
+            </Button>
+          ))}
         </div>
       )}
 

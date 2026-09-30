@@ -494,6 +494,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
           displayNames={deviceDisplayNameMap}
           onClose={() => setQuickLight(null)}
           onDetails={() => openDevice([quickLight.key])}
+          onSelect={() => selectLight(quickLight.key)}
         />
       )}
       {quickSensor && devicesState?.[quickSensor.key] && (

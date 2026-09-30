@@ -7,6 +7,7 @@ import {
   Thermometer,
   X,
   LoaderCircle,
+  MousePointer2,
 } from 'lucide-react';
 import type { Device } from '@/bindings/Device';
 import { useConnectionStatus } from '@/hooks/websocket';
@@ -37,6 +38,7 @@ export function LightQuickPopover({
   hold,
   onClose,
   onDetails,
+  onSelect,
   displayNames = {},
 }: {
   device: Device;
@@ -44,6 +46,7 @@ export function LightQuickPopover({
   hold?: LightHold;
   onClose: () => void;
   onDetails: () => void;
+  onSelect?: () => void;
   displayNames?: Record<string, string>;
 }) {
   const helpId = useId();
@@ -371,6 +374,20 @@ export function LightQuickPopover({
               <Thermometer />
             </Button>
           )}
+          {onSelect && (
+            <Button
+              size="icon"
+              className="size-9 rounded-full bg-card shadow-md"
+              variant="ghost"
+              aria-label={`Select ${label}`}
+              onClick={() => {
+                onClose();
+                onSelect();
+              }}
+            >
+              <MousePointer2 />
+            </Button>
+          )}
           <Button
             size="icon"
             className="size-9 rounded-full bg-card shadow-md"
@@ -552,8 +569,8 @@ export function LightQuickPopover({
           disabled={!enabled}
           className="absolute left-1/2 top-1/2 grid size-[68px] -translate-x-1/2 -translate-y-1/2 place-content-center rounded-full border-4 border-card shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
           style={{
-            background: color.hex(),
-            color: color.isLight() ? '#17251e' : '#fff',
+            background: power ? color.hex() : '#434e5a',
+            color: power && color.isLight() ? '#17251e' : '#fff',
           }}
           onClick={() => adjust({ power: !power }, true)}
         >

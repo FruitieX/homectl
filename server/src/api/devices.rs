@@ -3,6 +3,7 @@ use std::convert::Infallible;
 use percent_encoding::percent_decode_str;
 
 use crate::types::{
+    automation_event::EventOrigin,
     color::ColorMode,
     device::{Device, DeviceId},
 };
@@ -89,7 +90,16 @@ async fn put_device_impl(
     let response = handle
         .mutate(move |state| {
             Box::pin(async move {
-                state.devices.set_state(&device, false, false);
+                // Sensor simulation is an input report, including repeated
+                // button presses. V2 report triggers exclude derived writes.
+                let origin = if device.is_sensor() {
+                    EventOrigin::Report
+                } else {
+                    EventOrigin::Derived
+                };
+                state
+                    .devices
+                    .set_state_with_origin(&device, false, false, origin);
                 let devices = state.devices.get_state();
                 DevicesResponse {
                     devices: devices.0.values().cloned().collect(),
@@ -100,4 +110,101 @@ async fn put_device_impl(
         .unwrap_or(DevicesResponse { devices: vec![] });
 
     Ok(warp::reply::json(&response))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::state::actor::spawn_state_actor;
+    use crate::db::config_queries::RoutineRow;
+    use crate::types::device::{DeviceData, SensorDevice};
+    use crate::types::integration::IntegrationId;
+    use crate::types::rule::RoutineId;
+
+    #[tokio::test]
+    async fn simulated_button_reports_trigger_v2_routines_on_repeated_presses() {
+        let (mut state, _events) = crate::core::event::tests::test_state();
+        let device = Device::new(
+            IntegrationId::from("dummy".to_string()),
+            DeviceId::new("office_button"),
+            "Office button".into(),
+            DeviceData::Sensor(SensorDevice::Text {
+                value: "single".into(),
+            }),
+            None,
+        );
+        state
+            .devices
+            .set_state_with_origin(&device, true, true, EventOrigin::Startup);
+        state.flush_pending_frames().await;
+        state.runtime_config.routines.push(RoutineRow {
+            id: "api_button_report".into(), name: "Button report".into(),
+            enabled: true, semantics_version: 2, revision: 1,
+            definition_v2: Some(serde_json::json!({
+                "triggers": [{ "kind": "report", "id": "press", "device": { "integration_id": "dummy", "device_id": "office_button" } }],
+                "condition": { "kind": "literal", "value": true },
+                "program": { "kind": "native", "steps": [{ "action": "cancel_timer", "id": "cancel", "timer": "unused" }] }
+            })),
+            ..Default::default()
+        });
+        state.apply_runtime_routines();
+        let snapshot = state.snapshot.clone();
+        let (work_tx, mut work_rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = spawn_state_actor(state, snapshot.clone(), work_tx);
+        let route = devices(&snapshot, &handle);
+        let mut last_run_id = None;
+        for value in ["single", "single", "double", "hold", "off"] {
+            let mut report = device.clone();
+            report.data = DeviceData::Sensor(SensorDevice::Text {
+                value: value.into(),
+            });
+            let response = warp::test::request()
+                .method("PUT")
+                .path("/devices/office_button")
+                .json(&report)
+                .reply(&route)
+                .await;
+            assert_eq!(response.status(), 200);
+            // Barrier behind the API mutation, including its frame evaluation.
+            let status = handle
+                .mutate(|state| {
+                    Box::pin(async move {
+                        state
+                            .rules
+                            .get_runtime_statuses()
+                            .0
+                            .get(&RoutineId("api_button_report".into()))
+                            .cloned()
+                            .unwrap()
+                    })
+                })
+                .await
+                .unwrap();
+            let v2 = status.v2.expect("v2 routine status");
+            let run = v2
+                .last_run
+                .expect("the simulated report must run the routine");
+            assert!(run.accepted);
+            assert_ne!(
+                last_run_id,
+                Some(run.run_id),
+                "each press is a separate invocation even when its value repeats"
+            );
+            last_run_id = Some(run.run_id);
+            assert_eq!(
+                snapshot
+                    .load()
+                    .devices
+                    .0
+                    .get(&device.get_device_key())
+                    .unwrap()
+                    .data,
+                report.data
+            );
+        }
+        assert!(
+            work_rx.try_recv().is_err(),
+            "simulating sensor events must not send physical-device work"
+        );
+    }
 }

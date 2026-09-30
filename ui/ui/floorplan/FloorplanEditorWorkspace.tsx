@@ -61,6 +61,7 @@ import {
 } from './FloorplanEditorCanvas';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { deepEqual } from '@/lib/configSection';
+import { snapDevicePoint, type DeviceSnap } from '@/lib/floorplan-snapping';
 import './floorplan-editor.css';
 const tools = [
   { id: 'select', name: 'Select', icon: MousePointer2, key: 'V' },
@@ -136,6 +137,7 @@ export function FloorplanEditorWorkspace({
     [shape, setShape] = useState<DrawShape>('freehand'),
     [room, setRoom] = useState(groups[0]?.id ?? ''),
     [roomErase, setRoomErase] = useState(false),
+    [snap, setSnap] = useState<DeviceSnap>(0.25),
     [selected, setSelected] = useState<string | null>(null),
     [centerTarget, setCenterTarget] = useState<{
       key: string;
@@ -210,6 +212,11 @@ export function FloorplanEditorWorkspace({
     }
   }, [revealLayout]);
   const chooseTool = (value: EditorTool) => {
+    if (value === 'erase' && tool === 'rooms') {
+      setRoomErase((v) => !v);
+      return;
+    }
+    if (value === 'erase' && tool === 'erase') value = 'walls';
     setTool(value);
     setSearch('');
     setPending(null);
@@ -225,7 +232,7 @@ export function FloorplanEditorWorkspace({
       if (
         disabled ||
         (e.target as HTMLElement).closest(
-          'input,textarea,[role="dialog"],[role="combobox"],[role="menu"]',
+          'input,textarea,[contenteditable="true"],[role="dialog"],[role="combobox"],[role="listbox"],[role="menu"]',
         )
       )
         return;
@@ -241,6 +248,15 @@ export function FloorplanEditorWorkspace({
         return;
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.repeat) return;
+      if (
+        e.key.toLowerCase() === 'f' &&
+        ['rooms', 'walls', 'erase'].includes(tool)
+      ) {
+        e.preventDefault();
+        setShape((s) => (s === 'freehand' ? 'rectangle' : 'freehand'));
+        return;
+      }
       const next = tools.find(
         (t) => t.key && t.key.toLowerCase() === e.key.toLowerCase(),
       );
@@ -271,7 +287,7 @@ export function FloorplanEditorWorkspace({
           <Button
             key={s.id}
             variant="ghost"
-            title={s.name}
+            title={`${s.name}${s.id !== 'line' ? ' · F toggles brush / rectangle' : ''}`}
             aria-label={s.name}
             aria-pressed={shape === s.id}
             onClick={() => setShape(s.id)}
@@ -411,6 +427,7 @@ export function FloorplanEditorWorkspace({
                   variant="ghost"
                   className={roomErase ? 'active' : ''}
                   aria-pressed={roomErase}
+                  title="Toggle erase · E"
                   onClick={() => setRoomErase((v) => !v)}
                 >
                   <Eraser />
@@ -422,6 +439,22 @@ export function FloorplanEditorWorkspace({
                 </span>
               )}
             </>
+          )}
+          {['select', 'devices', 'hand'].includes(tool) && (
+            <label className="flex min-w-0 items-center gap-2 text-xs">
+              <span>Snap</span>
+              <SettingsSelect
+                aria-label="Device snapping"
+                className="h-8 w-28"
+                value={String(snap)}
+                onValueChange={(v) => setSnap(Number(v) as DeviceSnap)}
+                options={[
+                  { value: '0', label: 'Free' },
+                  { value: '1', label: 'Grid' },
+                  { value: '0.25', label: '¼ grid' },
+                ]}
+              />
+            </label>
           )}
         </div>
         <div className="fp-panel-buttons">
@@ -459,8 +492,16 @@ export function FloorplanEditorWorkspace({
               variant="ghost"
               title={`${t.name}${t.key ? ' · ' + t.key : ''}`}
               aria-label={`${t.name} tool`}
-              aria-pressed={tool === t.id}
-              className={tool === t.id ? 'active' : ''}
+              aria-pressed={
+                tool === t.id ||
+                (t.id === 'erase' && tool === 'rooms' && roomErase)
+              }
+              className={
+                tool === t.id ||
+                (t.id === 'erase' && tool === 'rooms' && roomErase)
+                  ? 'active'
+                  : ''
+              }
               disabled={disabled}
               onClick={() => chooseTool(t.id)}
             >
@@ -840,6 +881,7 @@ export function FloorplanEditorWorkspace({
             disabled={disabled}
             keyboardCell={keyboardCell}
             onKeyboardCell={setKeyboardCell}
+            snap={snap}
           />
         ) : (
           <div className="fp-stage fp-unavailable" role="alert">
@@ -1022,7 +1064,7 @@ export function FloorplanEditorWorkspace({
                         key={`${axis}/${placement[axis]}`}
                         aria-label={`Placement ${axis.toUpperCase()}`}
                         type="number"
-                        step=".1"
+                        step={snap || 0.1}
                         min="0"
                         max={
                           (axis === 'x' ? grid!.width : grid!.height) - 0.001
@@ -1047,9 +1089,27 @@ export function FloorplanEditorWorkspace({
                   ))}
                 </div>
                 <p className="fp-explanation">
-                  Drag the marker or enter its position. Fractional tile
-                  positions are supported.
+                  Alt: free placement · Shift: ¼ grid. Typed coordinates stay
+                  exact.
                 </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!snap || disabled}
+                  onClick={() => {
+                    const p = snapDevicePoint(
+                      placement,
+                      grid!.width,
+                      grid!.height,
+                      snap,
+                    );
+                    discrete(
+                      moveDeviceOnGrid(grid!, placement.deviceKey, p.x, p.y),
+                    );
+                  }}
+                >
+                  Snap to {snap === 1 ? 'grid' : '¼ grid'}
+                </Button>
                 {info?.preview && (
                   <>
                     <div className="fp-section-heading">
@@ -1102,7 +1162,12 @@ export function FloorplanEditorWorkspace({
       </div>
       <footer className="fp-status">
         <span>{tools.find((t) => t.id === tool)?.name}</span>
-        <span>Wheel to zoom · Space + drag to pan</span>
+        <span>
+          {['rooms', 'walls', 'erase'].includes(tool)
+            ? 'F: brush / rectangle · E: erase · '
+            : 'Alt: free · Shift: ¼ grid · '}
+          Wheel to zoom · Space + drag to pan
+        </span>
         <span>
           {grid ? `${grid.width} × ${grid.height} tiles` : 'Layout retained'}
         </span>

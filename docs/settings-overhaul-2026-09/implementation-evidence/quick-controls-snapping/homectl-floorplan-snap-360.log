@@ -1,0 +1,7 @@
+{
+ "evaluated": {
+  "horizontalOverflow": false,
+  "snap": true
+ }
+}
+{"url":"http://127.0.0.1:3021/config/floorplan","viewport":{"width":360,"height":800},"problems":[]}

@@ -2,6 +2,56 @@
 
 Updated: 2026-09-30.
 
+## Follow-up: selection, off appearance and action buttons
+
+The latest quick-control requirements are implemented:
+
+- [x] Add a **Select** icon above the floorplan light's radial surface. It closes
+      the radial control and enters the existing multi-light selection mode;
+      selection sends no device command. Deselecting the last light still exits.
+- [x] Darken the radial power centre when the light is off, matching the map
+      marker's slate fill. Restore the selected color when powered on. Preserve
+      the selected hue on the brightness ring and the existing live-update queue.
+- [x] Remove the idle “Simulate an event for routines” instruction from sensor
+      quick controls. Pending/error states remain accessible.
+- [x] Support Office button's MQTT actions: **Press → single**, **Double press →
+      double**, **Hold → hold**, **Off → off**. Auto controls use the current value
+      plus retained `/value` history, so an `off` or `on` report does not hide
+      previously observed press actions. Actual payload spelling is preserved;
+      auto controls offer observed values rather than guessing device capabilities.
+- [x] Add **Button events** to device sensor settings, with editable mappings for
+      those four actions. Empty mappings hide unused buttons. These use the
+      existing database-backed sensor configuration, with no schema migration
+      or live household configuration change. Saved mappings override inference.
+- [x] Use the same observed/mapped actions in quick controls and full sensor
+      controls. Generic text sensors also get a directly editable value and Send
+      control rather than only a link to their details.
+
+Simulation sends homectl's normalized `Sensor: { value: "single" }` input through
+the existing device API; it does not publish a physical MQTT command. The server
+evaluates repeated identical sensor reports as events. This batch also fixes the
+API input's origin: sensor simulation is now a report, rather than a derived
+write which v2 report triggers intentionally ignore. Repeated Press therefore
+works with pulse/event routines even though history only retains value changes.
+Office button's configuration and retained events were inspected read-only;
+acceptance writes target only the isolated development fixture.
+
+Verification for this combined follow-up batch:
+
+- **268 UI unit tests pass**, including observed/saved event mappings and snap
+  precision/bounds/modifiers. UI type check and production build pass; lint has
+  only its existing import/export ref-cleanup warning.
+- **174 desktop/phone browser checks pass**: 53 quick-control/history/mapping
+  checks and 34 editor checks at each size. An additional 360 px capture confirms
+  the snap control fits without horizontal document overflow.
+- A real Rust HTTP/actor regression test passes for `single`, repeated `single`,
+  `double`, `hold` and `off`: each produces a separate accepted v2 report-triggered
+  run, updates the value and sends no physical-device work. Run with
+  `nix develop -c cargo test -p homectl-server --lib api::devices::tests`.
+- [Screenshots and acceptance logs](implementation-evidence/quick-controls-snapping/)
+  preserve the final batch. Editor logs include the expected HTTP 409 from
+  deliberate conflict testing. Quick-control runs have no browser errors.
+
 Source: the user request beginning “the weather forecast widget table/charts tabs
 are a bit buggy, the selected…”, plus the subsequent answers and correction.
 This is the current implementation checklist for that entire request.

@@ -39,6 +39,38 @@ for phones. [Design plan](FLOORPLAN-EDITOR-PLAN.md).
   extensions survive edits; unsupported layouts remain downloadable and intact
   during name/image saves. Read endpoints refresh when the editor remounts.
 
+## Follow-up: device snapping and painting shortcuts
+
+Requirements from the subsequent editor feedback are implemented:
+
+- [x] A visible **Snap** control in the editor toolbar offers **Free**, **Grid**
+      and **¼ grid**. New placement and marker dragging default to quarter-grid
+      precision. The choice is local editor tool state, like the active brush;
+      changing it does not edit the saved floorplan.
+- [x] **Alt** temporarily bypasses snapping. **Shift** temporarily uses quarter
+      cells; Alt wins when both are held. These apply while placing/dragging.
+- [x] The placement inspector's **Snap to grid / ¼ grid** action aligns an
+      existing device without requiring a drag. Typed coordinates remain exact.
+      Snapping is an ordinary draft edit with Undo and explicit Save.
+- [x] **F** toggles Brush/Rectangle in Rooms, Walls and Erase modes. **E** toggles
+      erase: room areas in Rooms mode, tiles in Walls/Erase mode. Text fields,
+      menus, pickers and dialogs keep their normal keyboard behavior.
+- [x] Erasing uses a distinct outlined eraser cursor, including room-area erase.
+      Pan gestures retain their hand cursor. Sidebar erase reflects room erase
+      and does not unexpectedly switch from rooms to destructive tile editing.
+- [x] Pending-device previews show the actual snapped placement position.
+
+The desktop/phone native interaction batches cover placement, dragging, exact
+coordinates, snap actions, Undo, keyboard mode toggles and erase cursors. Desktop
+also covers Alt and Shift while dragging. Existing pan/zoom, painting, persistence
+and conflict checks remain in the combined batch. The deliberate conflict case
+produces an expected HTTP 409; it does not produce an uncaught UI exception.
+
+The updated editor batch passes **34 checks at each size**, including the phone
+pinch/cancel checks and desktop modifier checks. See the
+[combined follow-up evidence](implementation-evidence/quick-controls-snapping/)
+for captures and logs; a 360 px viewport also fits the snapping toolbar.
+
 ## Main files
 
 | Area | Source |
