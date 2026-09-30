@@ -27,12 +27,14 @@ function OperationRow({
   operation,
   accepted,
   disabled,
+  applied,
   result,
   onToggle,
 }: {
   operation: AssistantOperation;
   accepted: boolean;
   disabled: boolean;
+  applied: boolean;
   result?: AssistantOperationResult;
   onToggle: (opId: string) => void;
 }) {
@@ -84,6 +86,11 @@ function OperationRow({
           <span>{result.ok ? 'Applied' : (result.error ?? 'Failed')}</span>
         </div>
       ) : null}
+      {applied && !result && (
+        <p className="pl-7 text-xs text-muted-foreground">
+          Not included in the last application
+        </p>
+      )}
     </div>
   );
 }
@@ -125,6 +132,8 @@ export function PlanCard({
     initialResults,
   );
   const applied = results !== null;
+  const busy = applyPlan.isPending || discardPlan.isPending;
+  const failedCount = results?.filter((result) => !result.ok).length ?? 0;
   const counts = useMemo(() => planOperationCounts(plan), [plan]);
   const resultsByOp = useMemo(
     () => new Map((results ?? []).map((result) => [result.opId, result])),
@@ -133,6 +142,7 @@ export function PlanCard({
   const showPreview = useMemo(() => planTouchesFloorplanEntities(plan), [plan]);
 
   const toggle = (opId: string) => {
+    if (readOnly || busy) return;
     setAccepted((current) => {
       const next = new Set(current);
       if (next.has(opId)) {
@@ -145,7 +155,7 @@ export function PlanCard({
   };
 
   const apply = () => {
-    if (accepted.size === 0 || applyPlan.isPending) {
+    if (accepted.size === 0 || busy || readOnly) {
       return;
     }
     applyPlan.mutate(
@@ -178,6 +188,7 @@ export function PlanCard({
   };
 
   const discard = () => {
+    if (readOnly || busy) return;
     if (applied) {
       onDiscard();
       return;
@@ -212,7 +223,15 @@ export function PlanCard({
                   {counts.delete} delete
                 </Badge>
               ) : null}
-              {applied ? <span>Plan applied</span> : null}
+              {applied ? (
+                <span>
+                  {(results?.length ?? 0) - failedCount} applied
+                  {failedCount ? ` · ${failedCount} failed` : ''}
+                  {plan.operations.length > (results?.length ?? 0)
+                    ? ` · ${plan.operations.length - (results?.length ?? 0)} not included`
+                    : ''}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
@@ -231,6 +250,7 @@ export function PlanCard({
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-xs"
+              disabled={readOnly || busy}
               onClick={() =>
                 setAccepted(
                   new Set(plan.operations.map((operation) => operation.opId)),
@@ -244,6 +264,7 @@ export function PlanCard({
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-xs"
+              disabled={readOnly || busy}
               onClick={() => setAccepted(new Set())}
             >
               Clear
@@ -258,7 +279,8 @@ export function PlanCard({
             key={operation.opId}
             operation={operation}
             accepted={accepted.has(operation.opId)}
-            disabled={readOnly}
+            disabled={readOnly || busy}
+            applied={applied}
             result={resultsByOp.get(operation.opId)}
             onToggle={toggle}
           />
@@ -269,7 +291,7 @@ export function PlanCard({
         <Button
           type="button"
           variant="ghost"
-          disabled={readOnly || discardPlan.isPending}
+          disabled={readOnly || busy}
           onClick={discard}
           className="sm:mr-auto"
         >
@@ -278,7 +300,7 @@ export function PlanCard({
         </Button>
         <Button
           type="button"
-          disabled={accepted.size === 0 || applyPlan.isPending}
+          disabled={accepted.size === 0 || busy || readOnly}
           onClick={apply}
         >
           {applyPlan.isPending ? <Loader2 className="animate-spin" /> : null}
@@ -287,6 +309,14 @@ export function PlanCard({
             : `Apply${applied ? ' again' : ''} ${accepted.size} change${accepted.size === 1 ? '' : 's'}`}
         </Button>
       </div>
+
+      {applyPlan.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          {applyPlan.error instanceof Error
+            ? applyPlan.error.message
+            : 'Failed to apply plan. Try again.'}
+        </p>
+      )}
 
       {!applied ? (
         <p className="text-[0.7rem] text-muted-foreground">

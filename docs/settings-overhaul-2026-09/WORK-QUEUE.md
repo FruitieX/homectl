@@ -358,6 +358,27 @@ desktop/phone size, including inline repair guidance, focused Save validation
 without writing and Discard. All 237 UI tests, the server cycle-validation test
 and type/lint/build pass. Screenshots are in the comparison gallery.
 
+
+### Assistant review recovery — 2026-09-30
+
+`ui/dev/assistant-review-recovery.mjs` passes 17 native checks at 1440/390 px.
+The plan's map renderer now stays inside its preview container; it previously
+covered controls because its positioned ancestor was missing. Historical cards
+marked read-only cannot apply or change selection. Pending Apply/Discard locks
+review controls, and failed requests remain visible inside the card. Partial
+plan results distinguish applied, failed and excluded operations. Destructive
+operations remain unselected by default; request payloads contain only reviewed
+IDs. Related-page navigation closes the panel and retains results. Failed remote
+discard still removes the local proposal.
+
+The driver intercepts assistant responses on the marked local fixture, including
+503 and 404 failures; those exact browser resource errors are expected in the
+logs. This proves UI behavior, not provider/server execution. The screenshots
+are scrolled to the reviewed controls; phone toasts temporarily cover the header.
+All 237 UI tests and type/lint/build pass. Evidence: `everyday/assistant-review-*`.
+Conversation/search read failures, streaming cancellation and broader navigation/
+accessibility still need reconciliation; the whole assistant gate remains open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

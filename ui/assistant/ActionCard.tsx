@@ -59,6 +59,7 @@ export function ActionCard({
   const closePanel = useSetAtom(closeAssistantPanelAtom);
 
   const applied = results !== null;
+  const busy = applyAction.isPending || discardAction.isPending;
   const resultsByDevice = useMemo(
     () => new Map((results ?? []).map((result) => [result.deviceKey, result])),
     [results],
@@ -81,7 +82,7 @@ export function ActionCard({
   );
 
   const apply = () => {
-    if (selected.size === 0 || applyAction.isPending || readOnly) {
+    if (selected.size === 0 || busy || readOnly) {
       return;
     }
     applyAction.mutate(
@@ -112,6 +113,7 @@ export function ActionCard({
   };
 
   const discard = () => {
+    if (readOnly || busy) return;
     if (applied) {
       onDiscard();
       return;
@@ -216,7 +218,7 @@ export function ActionCard({
                     <Checkbox
                       aria-label={`Apply change to ${displayNameByKey.get(change.deviceKey) || change.name || change.deviceKey}`}
                       checked={selected.has(change.deviceKey)}
-                      disabled={readOnly || applyAction.isPending}
+                      disabled={readOnly || busy}
                       onCheckedChange={(checked) =>
                         setSelected((previous) => {
                           const next = new Set(previous);
@@ -281,7 +283,7 @@ export function ActionCard({
         <Button
           type="button"
           variant="ghost"
-          disabled={readOnly || discardAction.isPending}
+          disabled={readOnly || busy}
           onClick={discard}
           className="sm:mr-auto"
         >
@@ -290,7 +292,7 @@ export function ActionCard({
         </Button>
         <Button
           type="button"
-          disabled={selected.size === 0 || applyAction.isPending || readOnly}
+          disabled={selected.size === 0 || busy || readOnly}
           onClick={apply}
         >
           {applyAction.isPending ? <Loader2 className="animate-spin" /> : null}
@@ -301,6 +303,14 @@ export function ActionCard({
               : `Apply ${selected.size} change${selected.size === 1 ? '' : 's'}`}
         </Button>
       </div>
+
+      {applyAction.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          {applyAction.error instanceof Error
+            ? applyAction.error.message
+            : 'Failed to apply assistant action. Try again.'}
+        </p>
+      )}
 
       {!applied ? (
         <p className="text-[0.7rem] text-muted-foreground">

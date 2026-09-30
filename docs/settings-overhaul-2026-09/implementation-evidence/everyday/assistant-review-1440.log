@@ -1,0 +1,76 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Plan preview stays inside its reserved container",
+    "passed": true
+   },
+   {
+    "name": "Read-only historical proposal disables Apply and selection controls",
+    "passed": true
+   },
+   {
+    "name": "Proposal and history review write nothing",
+    "passed": true
+   },
+   {
+    "name": "Destructive operation is unselected by default",
+    "passed": true
+   },
+   {
+    "name": "Expanded update shows before and after values",
+    "passed": true
+   },
+   {
+    "name": "Pending plan locks operation selection, bulk selection and discard",
+    "passed": true
+   },
+   {
+    "name": "Only reviewed operations are submitted",
+    "passed": true
+   },
+   {
+    "name": "Failed plan request stays visible inside the card",
+    "passed": true
+   },
+   {
+    "name": "Partial result distinguishes applied, failed and excluded operations",
+    "passed": true
+   },
+   {
+    "name": "Successful response clears the request error",
+    "passed": true
+   },
+   {
+    "name": "Related-page navigation closes the panel and preserves results",
+    "passed": true
+   },
+   {
+    "name": "Pending light action locks selection and discard",
+    "passed": true
+   },
+   {
+    "name": "Light action request failure remains visible in the card",
+    "passed": true
+   },
+   {
+    "name": "Pending discard prevents applying the light action",
+    "passed": true
+   },
+   {
+    "name": "Failed remote discard still removes the local proposal",
+    "passed": true
+   },
+   {
+    "name": "Assistant fits the viewport",
+    "passed": true
+   },
+   {
+    "name": "Interception completed without errors",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":1440,"height":1080},"problems":["log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 404 (Not Found)"]}

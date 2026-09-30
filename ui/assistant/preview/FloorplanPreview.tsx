@@ -148,7 +148,7 @@ export function FloorplanPreview({ plan }: { plan: AssistantPlan }) {
         </span>
       </div>
       {canRender && selectedFloorplan ? (
-        <div className="h-56 overflow-hidden rounded-2xl border border-border bg-muted/20">
+        <div className="relative h-56 overflow-hidden rounded-2xl border border-border bg-muted/20">
           <PixiFloorplanRenderer
             key={selectedFloorplan.id}
             scene={scene}
