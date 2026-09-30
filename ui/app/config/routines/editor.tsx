@@ -16,6 +16,8 @@ import {
   useRoutines,
   useScenes,
   useHelpers,
+  useGroups,
+  useSources,
   useRoutineHistory,
   type Routine,
   type RoutineDefinitionV2Body,
@@ -70,7 +72,10 @@ function newRoutine(): Routine {
 export function RoutineEditor({ id }: { id?: string }) {
   const api = useRoutines(),
     scenes = useScenes(),
-    helpers = useHelpers();
+    helpers = useHelpers(),
+    groupCatalog = useGroups(),
+    sources = useSources();
+  const [retryingCatalogs, setRetryingCatalogs] = useState(false);
   const { apiEndpoint } = useAppConfig();
   const catalog = useDevicesApi(),
     liveDevices = useDevicesState(),
@@ -79,6 +84,13 @@ export function RoutineEditor({ id }: { id?: string }) {
     statuses = useRoutineStatuses(),
     timers = useTimers();
   const history = useRoutineHistory();
+  const failedCatalogs = [
+    { name: 'devices', ...catalog },
+    { name: 'rooms and groups', ...groupCatalog },
+    { name: 'scenes', ...scenes },
+    { name: 'helpers', ...helpers },
+    { name: 'computed sources', ...sources },
+  ].filter((entry) => entry.error);
   const { advanced } = useSettingsPreferences();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -353,6 +365,36 @@ export function RoutineEditor({ id }: { id?: string }) {
           The referenced step or trigger is no longer present in this
           definition. Recorded activity remains available in the activity page.
         </p>
+      )}
+      {routine && failedCatalogs.length > 0 && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm"
+        >
+          <div className="min-w-0 flex-1">
+            <p>
+              Could not refresh reference lists:{' '}
+              {failedCatalogs.map((entry) => entry.name).join(', ')}.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Saved references and your draft are kept. Some choices may be
+              unavailable until the lists recover.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={retryingCatalogs}
+            onClick={() => {
+              setRetryingCatalogs(true);
+              void Promise.allSettled(
+                failedCatalogs.map((entry) => entry.refetch()),
+              ).finally(() => setRetryingCatalogs(false));
+            }}
+          >
+            {retryingCatalogs ? 'Retrying…' : 'Retry reference lists'}
+          </Button>
+        </div>
       )}
       {routine && (
         <RoutineAuthoringContext.Provider

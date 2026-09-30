@@ -658,6 +658,31 @@ open.
 
 Passing browser runs: 390 px: 16 checks; 1440 px: 16 checks.
 
+### Routine reference recovery — 2026-09-30
+
+The routine editor reports failed device/group/scene/helper/source catalog reads
+with an explicit Retry, retaining the draft and saved references. Shared searchable
+pickers reset their query on opening; phone selection and Escape return focus to
+the trigger. Required condition sources no longer offer a Clear action that could
+not change their value.
+
+Twenty checks pass at each 1440/390 px viewport. The journey retries a failed scene
+catalog while retaining an edited name, saves/reloads an unchanged unavailable
+definition, discards repairs, then repairs helper/scene/fallback/device/group/routine
+references and saves/reloads the exact result. It preserves mapping extensions,
+target extensions, false values and structured values belonging to missing helpers.
+No repair is written before Save. Phone routine selection also passes its existing
+19 checks after the shared picker changes.
+
+Evidence: [reference recovery captures](implementation-evidence/comparison/index.html#routine-reference)
+and logs under `implementation-evidence/collections/routine-reference-*`;
+repeatable driver: `ui/dev/routine-reference-review.mjs`. Expected intercepted
+503 responses appear in the logs; no page exceptions occur. These checks use
+and remove temporary isolated fixture records, with no household edits or routine
+execution. Type checking, lint and production build pass; existing backup-effect
+lint and large-chunk build warnings remain. The broader schema, persistence,
+recovery and accessibility gates remain open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

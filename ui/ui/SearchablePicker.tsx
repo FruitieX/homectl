@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Check, ChevronsUpDown, X } from 'lucide-react';
 import { useMediaQuery } from 'usehooks-ts';
 import { Button } from '@/ui/primitives/button';
@@ -38,9 +38,22 @@ export function SearchablePicker({
   clearable?: boolean;
 }) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listId = useId();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [limit, setLimit] = useState(50);
+  const changeOpen = (next: boolean) => {
+    if (next) {
+      setQuery('');
+      setLimit(50);
+    }
+    setOpen(next);
+  };
+  const closeSelection = () => {
+    setOpen(false);
+    if (!isDesktop) requestAnimationFrame(() => triggerRef.current?.focus());
+  };
   const matching = options.filter((option) =>
     `${option.label} ${option.value} ${option.detail ?? ''}`
       .toLowerCase()
@@ -55,6 +68,13 @@ export function SearchablePicker({
       // Inline phone results may sit inside a field label. Selecting a div-based
       // result must not activate the label's trigger and reopen the picker.
       onClick={(event) => event.preventDefault()}
+      onKeyDown={(event) => {
+        if (!isDesktop && event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          closeSelection();
+        }
+      }}
     >
       <CommandInput
         autoFocus
@@ -65,14 +85,14 @@ export function SearchablePicker({
           setLimit(50);
         }}
       />
-      <CommandList className="max-h-[min(45dvh,20rem)]">
+      <CommandList id={listId} className="max-h-[min(45dvh,20rem)]">
         <CommandEmpty>No matches. Check the name or ID.</CommandEmpty>
         {value && clearable && (
           <CommandItem
             value="clear selection"
             onSelect={() => {
               onChange('');
-              setOpen(false);
+              closeSelection();
             }}
           >
             Clear selection
@@ -84,7 +104,7 @@ export function SearchablePicker({
             value={`${option.label} ${option.value} ${option.detail ?? ''}`}
             onSelect={() => {
               onChange(option.value);
-              setOpen(false);
+              closeSelection();
             }}
           >
             <Check
@@ -123,10 +143,12 @@ export function SearchablePicker({
           type="button"
           variant="outline"
           role="combobox"
+          ref={triggerRef}
           aria-expanded={open}
+          aria-controls={open ? listId : undefined}
           aria-label={ariaLabel ?? placeholder}
           disabled={disabled}
-          onClick={() => setOpen((current) => !current)}
+          onClick={() => changeOpen(!open)}
           className="h-auto min-h-11 w-full justify-between gap-2 text-left font-normal"
         >
           <span className="min-w-0 truncate">{triggerLabel}</span>
@@ -148,13 +170,15 @@ export function SearchablePicker({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={changeOpen}>
       <PopoverTrigger asChild>
         <Button
           type="button"
           variant="outline"
           role="combobox"
+          ref={triggerRef}
           aria-expanded={open}
+          aria-controls={open ? listId : undefined}
           aria-label={ariaLabel ?? placeholder}
           disabled={disabled}
           className="h-auto min-h-11 w-full justify-between gap-2 text-left font-normal"

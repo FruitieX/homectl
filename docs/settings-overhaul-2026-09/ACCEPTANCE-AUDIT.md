@@ -348,3 +348,11 @@ unsupported definitions. Other cross-family recovery/accessibility gates remain
 open.
 
 Passing browser runs: 390 px: 16 checks; 1440 px: 16 checks.
+
+### Routine reference recovery — 2026-09-30
+
+Twenty checks at each 1440/390 px cover failed catalog Retry, retained drafts,
+unavailable reference repair, exact Save/reload, Discard and picker focus. The
+phone selection regression also passes 19 checks. See the
+[work queue checkpoint](WORK-QUEUE.md#routine-reference-recovery--2026-09-30)
+for evidence and limitations; broader cross-family gates remain open.

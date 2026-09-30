@@ -336,6 +336,7 @@ function ValueSourceEditor({
           <SearchablePicker
             options={sourceOptions}
             value={source.kind + ':' + selectedId}
+            clearable={false}
             placeholder="Choose a device, helper or source…"
             onChange={(selected) => {
               const split = selected.indexOf(':');

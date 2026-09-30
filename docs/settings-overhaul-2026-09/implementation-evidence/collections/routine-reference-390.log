@@ -1,0 +1,89 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Read failure keeps the saved definition",
+    "passed": true
+   },
+   {
+    "name": "Catalog retry retains edited name",
+    "passed": true
+   },
+   {
+    "name": "Missing helper, scene and fallback stay identifiable",
+    "passed": true
+   },
+   {
+    "name": "Missing helper keeps its structured value visible",
+    "passed": true
+   },
+   {
+    "name": "Escape closes picker and restores trigger",
+    "passed": true
+   },
+   {
+    "name": "Reopening clears the previous search",
+    "passed": true
+   },
+   {
+    "name": "Selecting Reference modes restores picker focus",
+    "passed": true
+   },
+   {
+    "name": "Choosing a helper retains obsolete mappings for repair",
+    "passed": true
+   },
+   {
+    "name": "Discard restores missing references and structured helper values",
+    "passed": true
+   },
+   {
+    "name": "Name-only Save/reload preserves exact unavailable definition",
+    "passed": true
+   },
+   {
+    "name": "Selecting Reference modes restores picker focus",
+    "passed": true
+   },
+   {
+    "name": "Selecting Normal restores picker focus",
+    "passed": true
+   },
+   {
+    "name": "Unavailable scope members remain removable",
+    "passed": true
+   },
+   {
+    "name": "Selecting Entryway cooldown restores picker focus",
+    "passed": true
+   },
+   {
+    "name": "Required value source does not offer a no-op Clear selection",
+    "passed": true
+   },
+   {
+    "name": "Selecting Entryway cooldown restores picker focus",
+    "passed": true
+   },
+   {
+    "name": "Selecting Kitchen daytime restores picker focus",
+    "passed": true
+   },
+   {
+    "name": "Repair edits are staged before Save",
+    "passed": true
+   },
+   {
+    "name": "Save/reload persists every repaired reference and preserved extension",
+    "passed": true
+   },
+   {
+    "name": "No page exceptions",
+    "passed": true
+   }
+  ],
+  "scope": "Temporary local routine, intercepted scene-catalog failure; no routine execution"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)"]}
