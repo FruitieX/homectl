@@ -16,9 +16,9 @@ export function SettingsDraftGuard() {
   }, [dirty]);
   return null;
 }
-export function RetainedDrafts({ activeKey }: { activeKey?: string } = {}) {
+export function useRetainedDrafts(activeKey?: string) {
   const { pathname, search } = useLocation();
-  const drafts = useEntityDrafts().filter(
+  return useEntityDrafts().filter(
     (draft) =>
       (draft.dirty || draft.saving) &&
       draft.key !== activeKey &&
@@ -27,6 +27,10 @@ export function RetainedDrafts({ activeKey }: { activeKey?: string } = {}) {
           ([key, value]) => new URLSearchParams(search).get(key) !== value,
         )),
   );
+}
+
+export function RetainedDrafts({ activeKey }: { activeKey?: string } = {}) {
+  const drafts = useRetainedDrafts(activeKey);
   if (!drafts.length) return null;
   return (
     <div

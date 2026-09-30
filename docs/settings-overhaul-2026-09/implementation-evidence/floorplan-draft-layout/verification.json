@@ -1,0 +1,99 @@
+{
+  "checks": 30,
+  "results": [
+    {
+      "width": 1440,
+      "checks": [
+        "Implicit first floorplan loads",
+        "First paint marks the document dirty",
+        "First paint keeps canvas bounds, pan and zoom unchanged",
+        "Continuing stroke keeps the canvas fixed",
+        "No retained-draft banner is inserted above the editor",
+        "Active implicit floorplan is excluded from other drafts",
+        "Undo clears the dirty status without moving the canvas",
+        "Redo restores the draft without moving the canvas",
+        "New document opens",
+        "Other floorplan draft is available in the document menu",
+        "Reopening the retained floorplan restores its edits",
+        "New document draft is available without adding a banner",
+        "New document draft is retained and its canvas size is stable",
+        "Other settings pages retain the existing draft banner",
+        "Browser checks made no configuration writes"
+      ],
+      "canvasBefore": {
+        "x": 532,
+        "y": 158,
+        "width": 657,
+        "height": 815,
+        "zoom": "1.26875",
+        "viewX": "24",
+        "viewY": "179.125"
+      },
+      "canvasAfterStroke": {
+        "x": 532,
+        "y": 158,
+        "width": 657,
+        "height": 815,
+        "zoom": "1.26875",
+        "viewX": "24",
+        "viewY": "179.125"
+      },
+      "newDocumentCanvas": {
+        "x": 532,
+        "y": 158,
+        "width": 657,
+        "height": 815,
+        "zoom": "0.47578125",
+        "viewX": "24",
+        "viewY": "103"
+      }
+    },
+    {
+      "width": 430,
+      "checks": [
+        "Implicit first floorplan loads",
+        "First paint marks the document dirty",
+        "First paint keeps canvas bounds, pan and zoom unchanged",
+        "Continuing stroke keeps the canvas fixed",
+        "No retained-draft banner is inserted above the editor",
+        "Active implicit floorplan is excluded from other drafts",
+        "Undo clears the dirty status without moving the canvas",
+        "Redo restores the draft without moving the canvas",
+        "New document opens",
+        "Other floorplan draft is available in the document menu",
+        "Reopening the retained floorplan restores its edits",
+        "New document draft is available without adding a banner",
+        "New document draft is retained and its canvas size is stable",
+        "Other settings pages retain the existing draft banner",
+        "Browser checks made no configuration writes"
+      ],
+      "canvasBefore": {
+        "x": 0,
+        "y": 152,
+        "width": 430,
+        "height": 633.453125,
+        "zoom": "0.7958333333333333",
+        "viewX": "24",
+        "viewY": "173.4765625"
+      },
+      "canvasAfterStroke": {
+        "x": 0,
+        "y": 152,
+        "width": 430,
+        "height": 633.453125,
+        "zoom": "0.7958333333333333",
+        "viewX": "24",
+        "viewY": "173.4765625"
+      },
+      "newDocumentCanvas": {
+        "x": 0,
+        "y": 152,
+        "width": 430,
+        "height": 633.453125,
+        "zoom": "0.0742919921875",
+        "viewX": "167.453125",
+        "viewY": "40"
+      }
+    }
+  ]
+}

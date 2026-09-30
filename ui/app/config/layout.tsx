@@ -60,7 +60,8 @@ export default function ConfigLayout({
             </AlertDescription>
           </Alert>
         )}
-      <RetainedDrafts />
+      {/* The fixed editor shows retained drafts in its document menu. */}
+      {!editorWorkspace && <RetainedDrafts />}
       {/* Content area */}
       <motion.div
         ref={contentRef}

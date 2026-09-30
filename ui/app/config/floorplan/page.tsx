@@ -40,6 +40,7 @@ import { readFloorplanDraft } from '@/lib/floorplanDraft';
 import { entityDraftStore } from '@/lib/entityDraft';
 import { deepEqual } from '@/lib/configSection';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
+import { useRetainedDrafts } from '@/ui/settings/SettingsDrafts';
 import {
   createEmptyGrid,
   serializeGrid,
@@ -53,6 +54,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/ui/primitives/dropdown-menu';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
@@ -221,6 +223,7 @@ function FloorplanEditor({
       return saved;
     },
   });
+  const retainedDrafts = useRetainedDrafts(draft.key);
   const value = draft.value;
   const gridData = value?.grid_data;
   const parsed = useMemo(
@@ -496,17 +499,41 @@ function FloorplanEditor({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
-              className="fp-doc-menu"
+              className="fp-doc-menu relative"
               variant="ghost"
               size="icon"
               aria-label="Document menu"
-              title="Document menu"
+              title={
+                retainedDrafts.length
+                  ? 'Document menu · Other unsaved drafts'
+                  : 'Document menu'
+              }
               disabled={busy || draft.saving}
             >
               <MoreHorizontal />
+              {retainedDrafts.length > 0 && (
+                <span
+                  aria-hidden="true"
+                  className="absolute right-1 top-1 size-1.5 rounded-full bg-amber-500"
+                />
+              )}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
+          <DropdownMenuContent className="max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto">
+            {retainedDrafts.length > 0 && (
+              <>
+                <DropdownMenuLabel>Unsaved drafts</DropdownMenuLabel>
+                {retainedDrafts.map((retained) => (
+                  <DropdownMenuItem key={retained.key} asChild>
+                    <Link to={retained.href}>
+                      <Pencil />
+                      {retained.label}
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+              </>
+            )}
             <DropdownMenuItem asChild>
               <Link to="/config/floorplan?new=1">
                 <Plus />

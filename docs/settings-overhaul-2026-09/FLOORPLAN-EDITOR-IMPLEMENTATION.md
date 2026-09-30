@@ -9,8 +9,9 @@ for phones. [Design plan](FLOORPLAN-EDITOR-PLAN.md).
   no scrollbars; libraries and inspectors scroll internally.
 - Floorplan tabs, New/document actions, unsaved status and Save/Discard are in
   the document bar. On phones, New and Discard are also in the document menu.
-- Compact application rail on desktop; existing Settings navigation/assistant
-  in the AppBar. Editor tools replace ordinary bottom navigation on this route.
+- Shared application sidebar on desktop and navigation menu in the phone
+  AppBar, consistent with other views. Editor tools sit above the common bottom
+  navigation. See [unified navigation](UNIFIED-NAVIGATION.md).
 - Separate Devices, Room areas and Walls modes, plus safe Select, Erase, Hand
   and Layout tools. Each mode exposes its relevant catalog and properties.
 - Search/type/room filtering, unplaced/placed entries, retained unavailable
@@ -71,6 +72,28 @@ pinch/cancel checks and desktop modifier checks. See the
 [combined follow-up evidence](implementation-evidence/quick-controls-snapping/)
 for captures and logs; a 360 px viewport also fits the snapping toolbar.
 
+## Follow-up: stable canvas while editing
+
+- [x] The **Unsaved drafts** banner no longer enters the editor's layout.
+      Current changes stay visible in the permanent Save/Discard row.
+- [x] Other retained drafts are linked from the existing **Document menu**
+      (ellipsis), with a small amber dot when drafts are available. The current
+      document is excluded by draft key, including when the first floorplan
+      opens at `/config/floorplan` without an explicit `?id=`.
+- [x] Draft retention and the browser's unsaved-change protection remain in
+      place. Other settings pages keep their existing retained-draft banner.
+
+The targeted [browser batch](../../ui/dev/floorplan-draft-layout-review.mjs)
+checks mouse painting on desktop and touch painting on a phone. It measures
+canvas bounds, pan and zoom before the first edit, while drawing, and through
+Undo/Redo. It also verifies reopening two retained drafts and access from other
+settings pages, without writing server configuration.
+
+Both sizes pass **15 checks each**, with identical canvas bounds and transforms
+before and after drawing. Type checking, lint and the production build pass
+(existing lint/chunk warnings only). See
+[verification and captures](implementation-evidence/floorplan-draft-layout/).
+
 ## Main files
 
 | Area | Source |
@@ -81,7 +104,7 @@ for captures and logs; a 360 px viewport also fits the snapping toolbar.
 | Existing grid operations extracted for reuse | `ui/lib/floorplan-editor.ts` |
 | Theme-aware editor styling | `ui/ui/floorplan/floorplan-editor.css` |
 | Fixed config content and compact save controls | `ui/app/config/layout.tsx`, `ui/ui/settings/EntitySaveBar.tsx` |
-| Navigation adaptation | `ui/ui/BottomNavigation.tsx`, `ui/ui/settings/SettingsNavigation.tsx` |
+| Shared application navigation | `ui/ui/AppNavigation.tsx`, `ui/ui/BottomNavigation.tsx` |
 
 `ui/ui/FloorplanGridEditor.tsx` retains compatibility exports for map/preview
 readers. The old scrolling editor component is removed. No new package,
