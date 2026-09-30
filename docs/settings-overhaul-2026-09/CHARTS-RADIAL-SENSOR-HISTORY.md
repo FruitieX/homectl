@@ -54,6 +54,29 @@ Verification for this combined follow-up batch:
 
 ## Follow-up: open group controls in the floorplan
 
+### Follow-up: quiet room areas
+
+- [x] Replace saturated group rectangles with very faint, desaturated fills
+      and dashed outer boundaries. Light gradients remain the main color cue.
+- [x] Outline the actual painted mask, including concave areas, holes and
+      disconnected islands. Merge adjacent cell edges so no internal grid is drawn.
+- [x] Add small, muted room names inside the area. Prefer upper interior rows
+      with enough space and avoid device markers. Long names truncate on narrow
+      areas; omit the label when there is insufficient space to place it clearly.
+- [x] Keep dash spacing, outline width and label size stable during zoom.
+      Selected groups emphasize the boundary without a strong color wash.
+- [x] Preserve the full group hit area: tapping opens its panel and long press
+      selects its devices. The label visibility setting still hides room names.
+
+Verification: **272 UI tests pass**, including rectangular/concave masks, holes,
+disconnected cells and label spans. The desktop/phone group-control batch passes
+**40 browser checks** with no browser errors; type check, lint and production
+build pass with their existing warnings. Visual captures use the rich synthetic
+floorplan with five rooms and live light gradients. No live home state changed.
+[Captures and logs](implementation-evidence/muted-room-areas/).
+
+### Group interactions
+
 - [x] Clicking/tapping a group area opens its controls in the floorplan inspector,
       keeping the current map route, floorplan and view filter. Desktop uses the
       side panel; phones use the same resizable bottom panel as device controls.

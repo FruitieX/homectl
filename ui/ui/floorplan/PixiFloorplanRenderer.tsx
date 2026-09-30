@@ -10,6 +10,7 @@ import {
 import { useEffect, useRef } from 'react';
 
 import { cn } from '@/lib/cn';
+import { getGroupOutline } from '@/lib/floorplan-group-outline';
 import {
   type FloorplanScene,
   type FloorplanScenePoint,
@@ -108,12 +109,15 @@ interface SensorLabelRenderEntry {
 interface GroupRenderEntry {
   drawKey: string;
   graphics: Graphics;
+  outline: Graphics;
+  label: Text;
 }
 
 interface SceneRenderState {
   hoveredKey?: string;
   backgroundLayer: Container;
   groupLayer: Container;
+  groupOutlineLayer: Container;
   tileLayer: Container;
   lightLayer: Container;
   markerLayer: Container;
@@ -266,7 +270,7 @@ function getGroupColor(groupId: string) {
   for (let index = 0; index < groupId.length; index += 1) {
     hash = (hash * 31 + groupId.charCodeAt(index)) % 360;
   }
-  return hslToHex(hash, 0.72, 0.55);
+  return hslToHex(hash, 0.12, 0.42);
 }
 
 function getTileColor(tile: FloorplanSceneTile) {
@@ -365,6 +369,7 @@ function createSceneRenderState(world: Container): SceneRenderState {
   const groupLayer = new Container();
   const tileLayer = new Container();
   const lightLayer = new Container();
+  const groupOutlineLayer = new Container();
   const markerLayer = new Container();
   const labelLayer = new Container();
   const tileGraphics = new Graphics();
@@ -375,6 +380,7 @@ function createSceneRenderState(world: Container): SceneRenderState {
     groupLayer,
     tileLayer,
     lightLayer,
+    groupOutlineLayer,
     markerLayer,
     labelLayer,
   );
@@ -382,6 +388,7 @@ function createSceneRenderState(world: Container): SceneRenderState {
   return {
     backgroundLayer,
     groupLayer,
+    groupOutlineLayer,
     tileLayer,
     lightLayer,
     markerLayer,
@@ -450,13 +457,15 @@ function syncTiles(renderState: SceneRenderState, scene: FloorplanScene) {
 }
 
 function drawGroupMask(
-  graphics: Graphics,
+  entry: GroupRenderEntry,
   group: FloorplanScene['groups'][number],
   scene: FloorplanScene,
   selected: boolean,
+  viewScale: number,
 ) {
   const color = getGroupColor(group.groupId);
-  const alpha = selected ? 0.34 : 0.16;
+  const alpha = selected ? 0.05 : 0.025;
+  const graphics = entry.graphics;
 
   graphics.clear();
   for (const cell of group.cells) {
@@ -469,23 +478,101 @@ function drawGroupMask(
       )
       .fill({ color, alpha });
   }
+  // Outlines sit above light gradients, but below the device markers.
+  const scale = Math.max(viewScale, 0.0001);
+  entry.outline.clear();
+  for (const edge of getGroupOutline(group.cells).edges) {
+    const ax = edge.a.x * scene.tileWidth,
+      ay = edge.a.y * scene.tileHeight;
+    const bx = edge.b.x * scene.tileWidth,
+      by = edge.b.y * scene.tileHeight;
+    const length = Math.hypot(bx - ax, by - ay);
+    for (let d = 0; d < length; d += 9 / scale) {
+      const end = Math.min(length, d + 5 / scale);
+      entry.outline
+        .moveTo(ax + ((bx - ax) * d) / length, ay + ((by - ay) * d) / length)
+        .lineTo(
+          ax + ((bx - ax) * end) / length,
+          ay + ((by - ay) * end) / length,
+        );
+    }
+  }
+  entry.outline.stroke({
+    color,
+    alpha: selected ? 0.85 : 0.5,
+    width: (selected ? 1.4 : 1) / scale,
+  });
 }
 
 function getGroupDrawKey(
   group: FloorplanScene['groups'][number],
   scene: FloorplanScene,
   selectedSet: ReadonlySet<string>,
+  viewScale: number,
 ) {
   const selected = group.deviceKeys.some((deviceKey) =>
     selectedSet.has(deviceKey),
   );
-  return `${scene.layoutKey}:${getObjectIdentity(group.cells)}:${scene.tileWidth}:${scene.tileHeight}:${selected}`;
+  return `${scene.layoutKey}:${getObjectIdentity(group.cells)}:${scene.tileWidth}:${scene.tileHeight}:${selected}:${viewScale}`;
+}
+
+function syncGroupLabel(
+  entry: GroupRenderEntry,
+  group: FloorplanScene['groups'][number],
+  scene: FloorplanScene,
+  viewScale: number,
+  visible: boolean,
+) {
+  const scale = Math.max(viewScale, 0.0001),
+    textureScale = getLabelTextureScale(scale);
+  const label = entry.label;
+  label.text = group.name;
+  label.style.fontSize = 10 * textureScale;
+  label.style.stroke = {
+    color: 0xffffff,
+    alpha: 0.75,
+    width: 2 * textureScale,
+  };
+  label.scale.set(1 / (textureScale * scale));
+  label.visible = false;
+  if (!visible) return;
+  const rows = getGroupOutline(group.cells).labelRows;
+  const maxWidth = rows.reduce(
+    (max, row) => Math.max(max, row.width * scene.tileWidth - 12 / scale),
+    0,
+  );
+  if (maxWidth < 20 / scale) return;
+  const characters = Array.from(group.name);
+  while (label.width > maxWidth && characters.length > 3) {
+    characters.pop();
+    label.text = characters.join('') + '…';
+  }
+  const markers = [...scene.lights, ...scene.sensors];
+  for (const row of rows) {
+    const available = row.width * scene.tileWidth - 12 / scale;
+    if (available < label.width) continue;
+    const x = (row.x + row.width / 2) * scene.tileWidth,
+      y = row.y * scene.tileHeight;
+    if (
+      markers.some(
+        (p) =>
+          Math.abs(p.x - x) < label.width / 2 + 24 / scale &&
+          Math.abs(p.y - y) < 28 / scale,
+      )
+    )
+      continue;
+    label.position.set(x, y);
+    label.visible = true;
+    break;
+  }
 }
 
 function syncGroups(
   renderState: SceneRenderState,
   scene: FloorplanScene,
   selectedSet: ReadonlySet<string>,
+  viewScale: number,
+  renderLabels: boolean,
 ) {
   const seenGroupIds = new Set<string>();
 
@@ -493,21 +580,46 @@ function syncGroups(
     seenGroupIds.add(group.groupId);
     let entry = renderState.groupEntries.get(group.groupId);
     if (!entry) {
-      entry = { drawKey: '', graphics: new Graphics() };
+      const label = new Text({
+        text: group.name,
+        style: {
+          fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+          fontSize: 10,
+          fontWeight: '400',
+          fill: 0x64746c,
+        },
+      });
+      label.anchor.set(0.5);
+      label.alpha = 0.85;
+      entry = {
+        drawKey: '',
+        graphics: new Graphics(),
+        outline: new Graphics(),
+        label,
+      };
       renderState.groupEntries.set(group.groupId, entry);
       renderState.groupLayer.addChild(entry.graphics);
+      renderState.groupOutlineLayer.addChild(entry.outline, entry.label);
     }
 
-    const drawKey = getGroupDrawKey(group, scene, selectedSet);
+    const drawKey = getGroupDrawKey(group, scene, selectedSet, viewScale);
     if (entry.drawKey !== drawKey) {
       entry.drawKey = drawKey;
       drawGroupMask(
-        entry.graphics,
+        entry,
         group,
         scene,
         group.deviceKeys.some((deviceKey) => selectedSet.has(deviceKey)),
+        viewScale,
       );
     }
+    syncGroupLabel(
+      entry,
+      group,
+      scene,
+      viewScale,
+      renderLabels && scene.labelMode !== 'none',
+    );
   }
 
   for (const [groupId, entry] of renderState.groupEntries) {
@@ -517,6 +629,9 @@ function syncGroups(
 
     renderState.groupLayer.removeChild(entry.graphics);
     destroyDisplayObject(entry.graphics);
+    renderState.groupOutlineLayer.removeChild(entry.outline, entry.label);
+    destroyDisplayObject(entry.outline);
+    destroyDisplayObject(entry.label);
     renderState.groupEntries.delete(groupId);
   }
 }
@@ -941,7 +1056,7 @@ function syncScene(
 ) {
   const selectedSet = new Set(selectedDeviceKeys);
   syncBackground(renderState, scene);
-  syncGroups(renderState, scene, selectedSet);
+  syncGroups(renderState, scene, selectedSet, viewScale, renderLabels);
   syncTiles(renderState, scene);
   syncLights(renderState, scene, quality);
   syncMarkers(renderState, scene, selectedSet);
@@ -1261,8 +1376,17 @@ export function PixiFloorplanRenderer({
   }
 
   function setView(nextView: ViewTransform) {
+    const scaleChanged = nextView.scale !== viewRef.current.scale;
     viewRef.current = nextView;
     applyView(worldRef.current, nextView);
+    if (renderStateRef.current && scaleChanged)
+      syncGroups(
+        renderStateRef.current,
+        latestSceneRef.current,
+        new Set(latestSelectedKeysRef.current),
+        nextView.scale,
+        renderLabelsRef.current,
+      );
     syncLabelTextureScale(
       renderStateRef.current,
       latestSceneRef.current,
