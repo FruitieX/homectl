@@ -165,7 +165,7 @@ export default async function (cdp, { width, url }) {
     );
     await check(
       'Related room controls and settings links preserve group identity',
-      `[...document.querySelectorAll('#floorplan-inspector a')].some(a=>a.textContent==='Room controls'&&a.pathname==='/groups/${id}') && [...document.querySelectorAll('#floorplan-inspector a')].some(a=>a.textContent==='Room settings'&&a.href.includes('${id}'))`,
+      `[...document.querySelectorAll('#floorplan-inspector a')].some(a=>a.textContent==='Room details'&&a.pathname==='/groups/${id}') && [...document.querySelectorAll('#floorplan-inspector a')].some(a=>a.textContent==='Room settings'&&a.href.includes('${id}'))`,
     );
     await check(
       'Group inspector has no unrelated kitchen controls',
@@ -204,6 +204,124 @@ export default async function (cdp, { width, url }) {
       `!document.querySelector('[aria-label="Floorplan inspector"]') && location.pathname==='/groups/${id}'`,
     );
     await shot('markers');
+    await cdp.send('Page.navigate', { url: origin + '/map' });
+    await until(
+      `!!${button('Map group review')}`,
+      'Main floorplan tabs loaded',
+    );
+    await click(button('Map group review'));
+    await until(`!!${canvas}`, 'Main floorplan canvas loaded');
+    await pause();
+    const groupPoint = async () =>
+      evaluate(
+        `(()=>{const r=${canvas}.getBoundingClientRect(),s=.86*Math.min(r.width/640,r.height/384);return{x:r.left+(r.width-640*s)/2+48*s,y:r.top+(r.height-384*s)/2+48*s}})()`,
+      );
+    const groupGesture = async (hold = false) => {
+      const p = await groupPoint();
+      if (width < 768) {
+        await cdp.send('Input.dispatchTouchEvent', {
+          type: 'touchStart',
+          touchPoints: [{ ...p, id: 1 }],
+        });
+        if (hold) await new Promise((r) => setTimeout(r, 650));
+        await cdp.send('Input.dispatchTouchEvent', {
+          type: 'touchEnd',
+          touchPoints: [],
+        });
+      } else {
+        await cdp.send('Input.dispatchMouseEvent', {
+          type: 'mousePressed',
+          ...p,
+          button: 'left',
+          buttons: 1,
+          clickCount: 1,
+        });
+        if (hold) await new Promise((r) => setTimeout(r, 650));
+        await cdp.send('Input.dispatchMouseEvent', {
+          type: 'mouseReleased',
+          ...p,
+          button: 'left',
+          buttons: 0,
+          clickCount: 1,
+        });
+      }
+      await pause();
+    };
+    const commandsBeforeGroupTap = (await commands()).length;
+    await groupGesture();
+    await until(
+      `!!document.querySelector('[aria-label="Floorplan inspector"]')`,
+      'Group tap opens controls',
+    );
+    await check(
+      'Group tap keeps the main map route and opens room controls',
+      `location.pathname==='/map'&&document.querySelector('#floorplan-inspector').textContent.includes('Map review room')`,
+    );
+    await check(
+      'Group tap exposes nested members and a direct Room details link',
+      `document.querySelector('#floorplan-inspector').textContent.includes('missing_review')&&[...document.querySelectorAll('#floorplan-inspector a')].some(a=>a.textContent==='Room details'&&a.pathname==='/groups/${id}')`,
+    );
+    if ((await commands()).length !== commandsBeforeGroupTap)
+      throw Error('Opening group must not command devices');
+    checks.push({
+      name: 'Opening group controls sends no device commands',
+      passed: true,
+    });
+    await shot('tap-group');
+    await groupGesture(true);
+    await until(
+      `document.body.innerText.includes('4 selected')`,
+      'Group hold selects nested members',
+    );
+    await check(
+      'Long press selects group devices without navigating or leaving the group panel open',
+      `location.pathname==='/map'&&![...document.querySelectorAll('#floorplan-inspector a')].some(a=>a.textContent==='Room details')`,
+    );
+    await shot('group-selection');
+    await click(button('Done'));
+    await until(
+      `!document.body.innerText.includes('4 selected')`,
+      'Group selection finished',
+    );
+    await groupGesture();
+    await until(
+      `document.querySelector('#floorplan-inspector').textContent.includes('Map review room')`,
+      'Group panel reopens after selection',
+    );
+    await check(
+      'Ending selection restores ordinary tap-to-open behavior',
+      `location.pathname==='/map'`,
+    );
+    await click(`document.querySelector('[aria-label="Close controls"]')`);
+    await check(
+      'Group controls close while retaining the main floorplan',
+      `location.pathname==='/map'&&!document.querySelector('[aria-label="Floorplan inspector"]')`,
+    );
+    await groupGesture();
+    await until(
+      `!!document.querySelector('#floorplan-inspector a[href="/groups/${id}"]')`,
+      'Room details link available',
+    );
+    await click(
+      `document.querySelector('#floorplan-inspector a[href="/groups/${id}"]')`,
+    );
+    await until(
+      `location.pathname==='/groups/${id}'&&!location.search.includes('floorplan')`,
+      'Room details navigation',
+    );
+    await check(
+      'Room details navigation requires the explicit panel link',
+      `location.pathname==='/groups/${id}'`,
+    );
+    // Restore the room-specific route for the existing fallback scope checks.
+    await cdp.send('Page.navigate', {
+      url: origin + `/groups/${id}?view=floorplan`,
+    });
+    await until(
+      `!!${canvas}&&!!document.querySelector('[aria-label="Floorplan inspector"]')`,
+      'Room floorplan reopened',
+    );
+    await click(`document.querySelector('[aria-label="Close controls"]')`);
     // Exercise the actual browser event handler used after a GPU reset.
     await evaluate(
       `${canvas}.dispatchEvent(new Event('webglcontextlost',{cancelable:true}))`,

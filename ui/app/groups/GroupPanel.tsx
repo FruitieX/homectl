@@ -46,6 +46,22 @@ export function GroupPanel({
               : ''}
           </span>
         </div>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <Link
+            className="text-primary underline"
+            to={`/groups/${encodeURIComponent(groupId)}`}
+            onClick={onClose}
+          >
+            Room details
+          </Link>
+          <Link
+            className="text-primary underline"
+            to={configItemHref('group', groupId)}
+            onClick={onClose}
+          >
+            Room settings
+          </Link>
+        </div>
         <LiveAttention deviceKeys={keys} />
         <DeviceQuickControls key={groupId} devices={controls} />
         <section className="space-y-2 border-t border-border pt-3">
@@ -83,22 +99,6 @@ export function GroupPanel({
             </p>
           )}
         </section>
-        <div className="flex flex-wrap gap-4 text-sm">
-          <Link
-            className="text-primary underline"
-            to={`/groups/${encodeURIComponent(groupId)}`}
-            onClick={onClose}
-          >
-            Room controls
-          </Link>
-          <Link
-            className="text-primary underline"
-            to={configItemHref('group', groupId)}
-            onClick={onClose}
-          >
-            Room settings
-          </Link>
-        </div>
       </div>
     </FloorplanInspector>
   );

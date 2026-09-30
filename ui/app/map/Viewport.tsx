@@ -5,7 +5,7 @@ import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SlidersHorizontal } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   useDevicesByKeysState,
   useDevicesState,
@@ -66,7 +66,6 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
   const healthByDevice = healthQuery.isError
     ? undefined
     : healthQuery.data?.devices;
-  const navigate = useNavigate();
   const devicesState = useDevicesState();
   const liveGroups = useGroupsState();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
@@ -124,8 +123,12 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
     groupId ?? null,
   );
   const [groupPanelOpen, setGroupPanelOpen] = useState(true);
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(
+    groupId ?? null,
+  );
   useEffect(() => {
     setGroupFilterId(groupId ?? null);
+    setActiveGroupId(groupId ?? null);
     setGroupPanelOpen(true);
     setSelectedFloorplanId(null);
     setActiveSensorKey(null);
@@ -190,7 +193,11 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
   const inspectorOpen =
     (deviceOpen && presentation === 'floorplan') || activeSensor !== null;
   const groupPanelVisible = Boolean(
-    groupId && groupPanelOpen && !inspectorOpen,
+    activeGroupId &&
+    groups[activeGroupId] &&
+    groupPanelOpen &&
+    !inspectorOpen &&
+    !selecting,
   );
 
   useEffect(() => {
@@ -218,8 +225,14 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
 
   const openGroup = (groupId: string) => {
     if (!groupId) return;
-    // Groups open the same room view as the rooms list does.
-    navigate(`/groups/${encodeURIComponent(groupId)}`);
+    setQuickLight(null);
+    setQuickSensor(null);
+    setActiveSensorKey(null);
+    setSelecting(false);
+    setSelectedDevices([]);
+    setDeviceModalOpen(false);
+    setActiveGroupId(groupId);
+    setGroupPanelOpen(true);
   };
   const openDevice = (keys: string[]) => {
     if (keys.length === 0) return;
@@ -259,7 +272,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
     setDeviceModalOpen(false);
   };
   const toggleGroup = (groupId: string) => {
-    const keys = groups[groupId]?.device_keys ?? [];
+    const keys = resolveGroupDeviceKeys(groupId, liveGroups ?? {});
     const remove = keys.some((key) => selectedDevices.includes(key));
     setSelectedDevices(
       remove
@@ -278,6 +291,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
             onValueChange={(id) => {
               clearSelection();
               setActiveSensorKey(null);
+              setGroupPanelOpen(false);
               setSelectedFloorplanId(id);
               setPixiFallbackReason(null);
             }}
@@ -447,12 +461,12 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
                 >
                   {selecting ? 'Finish selecting' : 'Select devices'}
                 </Button>
-                {groupId && !groupPanelOpen ? (
+                {activeGroupId && groups[activeGroupId] && !groupPanelOpen ? (
                   <Button
                     variant="outline"
                     className="w-full"
                     onClick={() => {
-                      setGroupPanelOpen(true);
+                      openGroup(activeGroupId);
                       setViewOpen(false);
                     }}
                   >
@@ -550,6 +564,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
             }}
             onGroupPress={(id) => (selecting ? toggleGroup(id) : openGroup(id))}
             onGroupLongPress={(id) => {
+              setGroupPanelOpen(false);
               setSelecting(true);
               setActiveSensorKey(null);
               toggleGroup(id);
@@ -675,10 +690,10 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
           }
         />
       </div>
-      {groupPanelVisible && groupId ? (
+      {groupPanelVisible && activeGroupId ? (
         <GroupPanel
-          key={groupId}
-          groupId={groupId}
+          key={activeGroupId}
+          groupId={activeGroupId}
           onClose={() => setGroupPanelOpen(false)}
         />
       ) : null}

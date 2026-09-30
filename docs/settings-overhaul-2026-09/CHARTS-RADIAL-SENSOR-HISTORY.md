@@ -52,6 +52,30 @@ Verification for this combined follow-up batch:
   preserve the final batch. Editor logs include the expected HTTP 409 from
   deliberate conflict testing. Quick-control runs have no browser errors.
 
+## Follow-up: open group controls in the floorplan
+
+- [x] Clicking/tapping a group area opens its controls in the floorplan inspector,
+      keeping the current map route, floorplan and view filter. Desktop uses the
+      side panel; phones use the same resizable bottom panel as device controls.
+- [x] Show group summary, attention, shared power/brightness/color controls,
+      scenes and member devices using the existing room panel. Opening a group
+      clears an active device/sensor/quick-control overlay, so panels do not stack.
+- [x] Put **Room details** and **Room settings** links near the top of the panel.
+      Navigation to the full room page happens through the explicit link.
+- [x] Preserve group long press for device selection, including deduplicated
+      nested members. While selecting, a group tap still toggles its members.
+      Finishing selection restores normal tap-to-open behavior.
+- [x] Keep close/reopen controls and room-specific floorplan entry points working.
+      Changing floorplans closes the previous group's panel.
+
+Verification: **39 browser checks pass** (19 desktop, 20 phone) against the
+isolated fixture. They cover tap/hold, route retention, panel close/reopen,
+nested/disabled/read-only/unavailable members, command scope and map recovery;
+the phone batch also follows the Room details link. Both runs have no browser
+errors. UI type check, lint and production build pass, with the existing lint
+and build warnings. No live household configuration or devices were changed.
+[Captures and logs](implementation-evidence/group-tap/).
+
 Source: the user request beginning “the weather forecast widget table/charts tabs
 are a bit buggy, the selected…”, plus the subsequent answers and correction.
 This is the current implementation checklist for that entire request.

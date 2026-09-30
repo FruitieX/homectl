@@ -1,0 +1,85 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Nested group inspector shows scope and unavailable member",
+    "passed": true
+   },
+   {
+    "name": "Related room controls and settings links preserve group identity",
+    "passed": true
+   },
+   {
+    "name": "Group inspector has no unrelated kitchen controls",
+    "passed": true
+   },
+   {
+    "name": "Floorplan tabs do not overlap the room breadcrumb",
+    "passed": true
+   },
+   {
+    "name": "Group command remains pending until acknowledged",
+    "passed": true
+   },
+   {
+    "name": "Group commands deduplicate nested members and exclude unavailable, disabled and read-only devices",
+    "passed": true
+   },
+   {
+    "name": "Room inspector closes without leaving map",
+    "passed": true
+   },
+   {
+    "name": "Group tap keeps the main map route and opens room controls",
+    "passed": true
+   },
+   {
+    "name": "Group tap exposes nested members and a direct Room details link",
+    "passed": true
+   },
+   {
+    "name": "Opening group controls sends no device commands",
+    "passed": true
+   },
+   {
+    "name": "Long press selects group devices without navigating or leaving the group panel open",
+    "passed": true
+   },
+   {
+    "name": "Ending selection restores ordinary tap-to-open behavior",
+    "passed": true
+   },
+   {
+    "name": "Group controls close while retaining the main floorplan",
+    "passed": true
+   },
+   {
+    "name": "Fallback preserves room scope and disabled controls",
+    "passed": true
+   },
+   {
+    "name": "Rejected fallback command retains reported state",
+    "passed": true
+   },
+   {
+    "name": "Fallback command targets only the selected device",
+    "passed": true
+   },
+   {
+    "name": "Fallback command visibly waits for acknowledgment",
+    "passed": true
+   },
+   {
+    "name": "Retry restores the map without navigating away",
+    "passed": true
+   },
+   {
+    "name": "No horizontal overflow",
+    "passed": true
+   }
+  ],
+  "width": 1440
+ }
+}
+{"url":"http://127.0.0.1:3021/map","viewport":{"width":1440,"height":1000},"problems":[]}
