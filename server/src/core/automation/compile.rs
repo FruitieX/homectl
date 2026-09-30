@@ -2066,6 +2066,16 @@ mod tests {
         });
         assert!(compile_definition_value(&valid, &catalog()).is_ok());
 
+        // Stored bounds are preserved; normalization belongs to execution.
+        for (lower, upper) in [(json!(0), Value::Null), (json!(1.2), json!(-0.2))] {
+            let mut definition = valid.clone();
+            let action = &mut definition["program"]["steps"][0];
+            action["min_saturation"] = lower;
+            action["max_saturation"] = upper;
+            action.as_object_mut().unwrap().remove("transition_ms");
+            assert!(compile_definition_value(&definition, &catalog()).is_ok());
+        }
+
         let no_targets = json!({
             "triggers": [{ "kind": "manual", "id": "trig" }],
             "program": { "kind": "native", "steps": [{
@@ -2091,6 +2101,45 @@ mod tests {
             error_codes(&compile_definition_value(&zero_transition, &catalog()).unwrap_err()),
             vec!["invalid_duration"]
         );
+    }
+
+    #[test]
+    fn helper_action_values_keep_types_and_respect_bounds() {
+        use crate::types::automation_value::HelperKind;
+        for (kind, accepted, rejected) in [
+            (HelperKind::Boolean, json!(false), json!("false")),
+            (HelperKind::String, json!(""), Value::Null),
+            (
+                HelperKind::Enum {
+                    options: vec!["on".into(), "off".into()],
+                },
+                json!("off"),
+                json!("missing"),
+            ),
+            (
+                HelperKind::Number {
+                    min: Some(2.0),
+                    max: Some(8.0),
+                },
+                json!(4.5),
+                json!(9),
+            ),
+        ] {
+            let catalog =
+                catalog().with_helper_definition(HelperDefinition::new("setting", "Setting", kind));
+            let mut definition = json!({
+                "triggers": [{ "kind": "manual", "id": "trig" }],
+                "program": { "kind": "native", "steps": [{
+                    "action": "set_helper", "id": "step", "helper": "setting", "value": accepted
+                }] }
+            });
+            assert!(compile_definition_value(&definition, &catalog).is_ok());
+            definition["program"]["steps"][0]["value"] = rejected;
+            assert_eq!(
+                error_codes(&compile_definition_value(&definition, &catalog).unwrap_err()),
+                vec!["invalid_helper_value"]
+            );
+        }
     }
 
     fn valid_definition() -> Value {

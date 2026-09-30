@@ -99,3 +99,14 @@ Two targeted server compiler tests and all 234 UI tests pass; type/lint/build
 also pass. FIELD-COVERAGE.md records the exact scope and remaining action/script,
 reference and persistence contracts. This closes those edited-field cases only;
 all broader final acceptance gates above remain open.
+
+## Native action field follow-up
+
+The action journey passes 38 checks at each 1440/390 px for power, dim, random
+color, start/replace/cancel timer, four helper value types and routine invocation.
+It includes numeric draft recovery, invalid-input focus, explicit Save/reload,
+optional/false/zero/empty values, device/group targets and related helper links.
+Block-width-based random-color layout fixes the clipped desktop transition field
+found during screenshot review. All 234 UI tests, three targeted Rust compiler
+tests and type/lint/build pass. Script declarations and the broader reference,
+persistence, recovery and accessibility gates remain open; see FIELD-COVERAGE.md.

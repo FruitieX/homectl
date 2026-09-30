@@ -7,6 +7,7 @@ import {
   Play,
   Code2,
 } from 'lucide-react';
+import { DraftNumberInput } from '@/ui/settings/DraftNumberInput';
 import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import {
   FlowBlock,
@@ -213,56 +214,97 @@ function HelperValueEditor({
   helper,
   value,
   onChange,
+  path,
 }: {
   helper: HelperRuntimeStatus | undefined;
   value: JsonValue;
   onChange: (value: JsonValue) => void;
+  path: string;
 }) {
-  if (!helper) {
+  const { draftKey } = useRoutineAuthoring();
+  if (!helper)
     return (
-      <Input
-        className="font-mono"
-        value={
-          typeof value === 'string' ? value : JSON.stringify(value ?? null)
-        }
-        placeholder='true, 42, "text"'
-        onChange={(event) => onChange(parseJsonish(event.target.value))}
-      />
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Select an available helper to edit this value.
+        </p>
+        <pre className="whitespace-pre-wrap break-all text-xs">
+          {JSON.stringify(value)}
+        </pre>
+      </div>
     );
-  }
-
-  switch (helper.kind.kind) {
+  const kind = helper.kind;
+  const compatible =
+    kind.kind === 'enum'
+      ? typeof value === 'string'
+      : typeof value === kind.kind;
+  if (!compatible)
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-destructive">
+          The stored value does not match this helper's type.
+        </p>
+        <pre className="whitespace-pre-wrap break-all text-xs">
+          {JSON.stringify(value)}
+        </pre>
+        <Button
+          variant="outline"
+          onClick={() => onChange(helperDefaultValue(helper))}
+        >
+          Use a {kind.kind} value
+        </Button>
+      </div>
+    );
+  switch (kind.kind) {
     case 'boolean':
       return (
-        <select
-          className={selectClassName}
+        <SettingsSelect
+          aria-label="Helper value"
           value={value === true ? 'true' : 'false'}
-          onChange={(event) => onChange(event.target.value === 'true')}
-        >
-          <option value="true">True</option>
-          <option value="false">False</option>
-        </select>
+          onValueChange={(next) => onChange(next === 'true')}
+          options={[
+            { value: 'true', label: 'On / true' },
+            { value: 'false', label: 'Off / false' },
+          ]}
+        />
       );
     case 'number':
-      return (
+      return draftKey ? (
+        <DraftNumberInput
+          aria-label="Helper value"
+          draftKey={draftKey}
+          path={path}
+          value={value as number}
+          validate={(number) =>
+            (kind.min !== undefined && number < kind.min) ||
+            (kind.max !== undefined && number > kind.max)
+              ? 'Enter a number within the configured bounds.'
+              : undefined
+          }
+          onValueChange={(number) => onChange(number!)}
+        />
+      ) : (
         <Input
+          aria-label="Helper value"
           type="number"
           step="any"
-          value={typeof value === 'number' ? value : ''}
+          value={value as number}
           onChange={(event) => {
-            const parsed = event.target.valueAsNumber;
-            onChange(Number.isNaN(parsed) ? 0 : parsed);
+            if (Number.isFinite(event.target.valueAsNumber))
+              onChange(event.target.valueAsNumber);
           }}
         />
       );
     case 'enum':
       return (
         <SearchablePicker
-          options={helper.kind.options.map((option) => ({
+          ariaLabel="Helper value"
+          clearable={false}
+          options={kind.options.map((option) => ({
             value: option,
             label: option,
           }))}
-          value={typeof value === 'string' ? value : ''}
+          value={value as string}
           onChange={onChange}
           placeholder="Select value…"
         />
@@ -270,18 +312,11 @@ function HelperValueEditor({
     case 'string':
       return (
         <Input
-          value={typeof value === 'string' ? value : ''}
+          aria-label="Helper value"
+          value={value as string}
           onChange={(event) => onChange(event.target.value)}
         />
       );
-  }
-}
-
-function parseJsonish(text: string): JsonValue {
-  try {
-    return JSON.parse(text) as JsonValue;
-  } catch {
-    return text;
   }
 }
 
@@ -295,7 +330,10 @@ function helperDefaultValue(
     case 'boolean':
       return false;
     case 'number':
-      return 0;
+      return Math.min(
+        helper.kind.max ?? Infinity,
+        Math.max(helper.kind.min ?? -Infinity, 0),
+      );
     case 'enum':
       return helper.kind.options[0] ?? '';
     case 'string':
@@ -1230,16 +1268,17 @@ function StepFields({
             />
           </ConfigField>
           <ConfigField label="Power">
-            <select
-              className={selectClassName}
+            <SettingsSelect
+              aria-label="Power"
               value={step.power ? 'true' : 'false'}
-              onChange={(event) =>
-                onChange({ ...step, power: event.target.value === 'true' })
+              onValueChange={(next) =>
+                onChange({ ...step, power: next === 'true' })
               }
-            >
-              <option value="true">Turn on</option>
-              <option value="false">Turn off</option>
-            </select>
+              options={[
+                { value: 'true', label: 'Turn on' },
+                { value: 'false', label: 'Turn off' },
+              ]}
+            />
           </ConfigField>
           {!step.device.integration_id ? (
             <p className="text-xs text-destructive sm:col-span-2">
@@ -1257,19 +1296,17 @@ function StepFields({
               label="Dim step"
               description="Relative change in the -1.0 to 1.0 range."
             >
-              <Input
-                type="number"
-                step="0.05"
-                min={-1}
-                max={1}
+              <DraftNumberInput
+                aria-label="Dim step"
+                draftKey={draftKey!}
+                path={actionPath + '/amount'}
                 value={step.step}
-                onChange={(event) => {
-                  const parsed = event.target.valueAsNumber;
-                  onChange({
-                    ...step,
-                    step: Number.isNaN(parsed) ? 0 : parsed,
-                  });
-                }}
+                validate={(value) =>
+                  value === 0 || Math.abs(value) > 1
+                    ? 'Enter a non-zero change from -1 to 1.'
+                    : undefined
+                }
+                onValueChange={(value) => onChange({ ...step, step: value! })}
               />
             </ConfigField>
             <ConfigField
@@ -1277,6 +1314,14 @@ function StepFields({
               description="Optional fade duration."
             >
               <DurationInput
+                label="Transition"
+                draftKey={draftKey}
+                path={actionPath + '/transition'}
+                validate={(ms) =>
+                  ms === 0
+                    ? 'Enter a positive duration, or leave empty for the default.'
+                    : undefined
+                }
                 valueMs={
                   step.transition_ms === undefined
                     ? undefined
@@ -1303,45 +1348,37 @@ function StepFields({
     case 'randomize_color':
       return (
         <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="flow-color-fields grid gap-3">
             <ConfigField
               label="Min saturation"
-              description="Inclusive lower bound. Defaults to 0.2."
+              description="Defaults to 0.2. Clamped to 0–1 when run; reversed bounds are swapped."
             >
-              <Input
-                type="number"
-                step="0.05"
-                min={0}
-                max={1}
+              <DraftNumberInput
+                aria-label="Min saturation"
+                draftKey={draftKey!}
+                path={actionPath + '/min_saturation'}
+                optional
                 placeholder="0.2"
-                value={step.min_saturation ?? ''}
-                onChange={(event) => {
-                  const parsed = event.target.valueAsNumber;
-                  onChange({
-                    ...step,
-                    min_saturation: Number.isNaN(parsed) ? undefined : parsed,
-                  } as unknown as NativeAction);
-                }}
+                value={step.min_saturation}
+                onValueChange={(value) =>
+                  onChange({ ...step, min_saturation: value })
+                }
               />
             </ConfigField>
             <ConfigField
               label="Max saturation"
-              description="Inclusive upper bound. Defaults to 1.0."
+              description="Defaults to 1.0. Stored values are kept as entered."
             >
-              <Input
-                type="number"
-                step="0.05"
-                min={0}
-                max={1}
+              <DraftNumberInput
+                aria-label="Max saturation"
+                draftKey={draftKey!}
+                path={actionPath + '/max_saturation'}
+                optional
                 placeholder="1.0"
-                value={step.max_saturation ?? ''}
-                onChange={(event) => {
-                  const parsed = event.target.valueAsNumber;
-                  onChange({
-                    ...step,
-                    max_saturation: Number.isNaN(parsed) ? undefined : parsed,
-                  } as unknown as NativeAction);
-                }}
+                value={step.max_saturation}
+                onValueChange={(value) =>
+                  onChange({ ...step, max_saturation: value })
+                }
               />
             </ConfigField>
             <ConfigField
@@ -1349,6 +1386,14 @@ function StepFields({
               description="Optional fade duration."
             >
               <DurationInput
+                label="Transition"
+                draftKey={draftKey}
+                path={actionPath + '/transition'}
+                validate={(ms) =>
+                  ms === 0
+                    ? 'Enter a positive duration, or leave empty for the default.'
+                    : undefined
+                }
                 valueMs={
                   step.transition_ms === undefined
                     ? undefined
@@ -1386,6 +1431,7 @@ function StepFields({
               }
             >
               <Input
+                aria-label="Timer name"
                 className="font-mono"
                 value={step.timer}
                 placeholder="off"
@@ -1396,6 +1442,15 @@ function StepFields({
             </ConfigField>
             <ConfigField label="Delay">
               <DurationInput
+                label="Delay"
+                draftKey={draftKey}
+                path={actionPath + '/delay'}
+                required
+                validate={(ms) =>
+                  ms > 604800000
+                    ? 'Timer delay cannot exceed seven days.'
+                    : undefined
+                }
                 valueMs={Number(step.delay_ms)}
                 onChange={(delay_ms) =>
                   onChange({ ...step, delay_ms } as unknown as NativeAction)
@@ -1465,6 +1520,7 @@ function StepFields({
           description="Cancelling a timer that is not running succeeds."
         >
           <Input
+            aria-label="Timer name"
             className="font-mono"
             value={step.timer}
             placeholder="off"
@@ -1480,27 +1536,56 @@ function StepFields({
       return (
         <div className="grid gap-3 sm:grid-cols-2">
           <ConfigField label="Helper">
-            <SearchablePicker
-              options={helpers.map((candidate) => ({
-                value: candidate.id,
-                label: candidate.name,
-                detail: candidate.id,
-              }))}
-              value={step.helper}
-              onChange={(selected) =>
-                onChange({
-                  ...step,
-                  helper: selected,
-                  value: helperDefaultValue(
-                    helpers.find((candidate) => candidate.id === selected),
-                  ),
-                })
-              }
-              placeholder="Select helper…"
-            />
+            <ReferenceField kind="helper" value={step.helper}>
+              <SearchablePicker
+                ariaLabel="Helper"
+                options={helpers.map((candidate) => ({
+                  value: candidate.id,
+                  label: candidate.name,
+                  detail: candidate.id,
+                }))}
+                value={step.helper}
+                onChange={(selected) =>
+                  onChange({
+                    ...step,
+                    helper: selected,
+                    value: draftKey
+                      ? entityDraftStore.switchVariant(
+                          draftKey,
+                          actionPath + '/helper',
+                          step.helper,
+                          step.value,
+                          selected,
+                          helperDefaultValue(
+                            helpers.find(
+                              (candidate) => candidate.id === selected,
+                            ),
+                          ),
+                        )
+                      : helperDefaultValue(
+                          helpers.find(
+                            (candidate) => candidate.id === selected,
+                          ),
+                        ),
+                  })
+                }
+                placeholder="Select helper…"
+              />
+            </ReferenceField>
           </ConfigField>
-          <ConfigField label="Value">
+          <ConfigField
+            label="Value"
+            description={
+              helper?.kind.kind === 'number'
+                ? 'Range: ' +
+                  (helper.kind.min ?? 'no minimum') +
+                  ' to ' +
+                  (helper.kind.max ?? 'no maximum')
+                : undefined
+            }
+          >
             <HelperValueEditor
+              path={actionPath + '/helper/value'}
               helper={helper}
               value={step.value}
               onChange={(value) => onChange({ ...step, value })}
@@ -1529,16 +1614,25 @@ function StepFields({
             label="Mode"
             description="Await completion keeps later steps waiting for the invoked routine."
           >
-            <select
-              className={selectClassName}
+            <SettingsSelect
+              aria-label="Invocation mode"
               value={step.mode}
-              onChange={(event) =>
-                onChange({ ...step, mode: event.target.value as InvokeMode })
+              onValueChange={(mode) =>
+                onChange({ ...step, mode: mode as InvokeMode })
               }
-            >
-              <option value="fire_and_forget">Fire and forget</option>
-              <option value="await_completion">Await completion</option>
-            </select>
+              options={[
+                { value: 'fire_and_forget', label: 'Fire and forget' },
+                { value: 'await_completion', label: 'Await completion' },
+                ...(!['fire_and_forget', 'await_completion'].includes(step.mode)
+                  ? [
+                      {
+                        value: step.mode,
+                        label: 'Unsupported mode: ' + step.mode,
+                      },
+                    ]
+                  : []),
+              ]}
+            />
           </ConfigField>
           {!step.routine_id ? (
             <p className="text-xs text-destructive sm:col-span-2">

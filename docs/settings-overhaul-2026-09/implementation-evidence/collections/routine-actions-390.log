@@ -1,0 +1,160 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Incomplete dim change stays editable and receives focus",
+    "passed": true
+   },
+   {
+    "name": "Invalid dim change sends no writes",
+    "passed": true
+   },
+   {
+    "name": "Dim raw draft survives navigation",
+    "passed": true
+   },
+   {
+    "name": "Discard restores saved dim amount",
+    "passed": true
+   },
+   {
+    "name": "Dim rejects 0",
+    "passed": true
+   },
+   {
+    "name": "Dim rejects 1.1",
+    "passed": true
+   },
+   {
+    "name": "Zero dim transition is explained",
+    "passed": true
+   },
+   {
+    "name": "Negative dim change, optional fade and extensions save",
+    "passed": true
+   },
+   {
+    "name": "Positive dim change and millisecond fade save",
+    "passed": true
+   },
+   {
+    "name": "Power writes a false boolean to a single device",
+    "passed": true
+   },
+   {
+    "name": "Power device selection saves",
+    "passed": true
+   },
+   {
+    "name": "dim saves multiple devices and a room target",
+    "passed": true
+   },
+   {
+    "name": "random saves multiple devices and a room target",
+    "passed": true
+   },
+   {
+    "name": "Saturation retains incomplete raw text",
+    "passed": true
+   },
+   {
+    "name": "Zero saturation and omitted upper bound/fade remain distinct",
+    "passed": true
+   },
+   {
+    "name": "Runtime-normalized saturation bounds remain as authored",
+    "passed": true
+   },
+   {
+    "name": "Required schedule delay retains empty draft",
+    "passed": true
+   },
+   {
+    "name": "schedule delay enforces seven-day bound",
+    "passed": true
+   },
+   {
+    "name": "schedule accepts zero as queued execution",
+    "passed": true
+   },
+   {
+    "name": "Required replace delay retains empty draft",
+    "passed": true
+   },
+   {
+    "name": "replace delay enforces seven-day bound",
+    "passed": true
+   },
+   {
+    "name": "replace accepts zero as queued execution",
+    "passed": true
+   },
+   {
+    "name": "Replace and cancel timer fields persist",
+    "passed": true
+   },
+   {
+    "name": "Helper number stays empty instead of becoming zero",
+    "passed": true
+   },
+   {
+    "name": "Helper numeric bounds are enforced",
+    "passed": true
+   },
+   {
+    "name": "Changing helpers restores the authored numeric value",
+    "passed": true
+   },
+   {
+    "name": "Typed numeric helper write saves",
+    "passed": true
+   },
+   {
+    "name": "False helper value saves",
+    "passed": true
+   },
+   {
+    "name": "Enum helper choice saves",
+    "passed": true
+   },
+   {
+    "name": "Text helper value saves",
+    "passed": true
+   },
+   {
+    "name": "Empty text helper value remains an empty string",
+    "passed": true
+   },
+   {
+    "name": "Helper reference opens its details page",
+    "passed": true
+   },
+   {
+    "name": "Fresh bounded helper default respects its minimum",
+    "passed": true
+   },
+   {
+    "name": "Changing helper clears discarded numeric error",
+    "passed": true
+   },
+   {
+    "name": "Invocation mode saves: await_completion",
+    "passed": true
+   },
+   {
+    "name": "Invocation mode saves: fire_and_forget",
+    "passed": true
+   },
+   {
+    "name": "Saved action fields survive reload",
+    "passed": true
+   },
+   {
+    "name": "Phone and desktop action controls stay within page width",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config/routines","viewport":{"width":390,"height":844},"problems":[]}

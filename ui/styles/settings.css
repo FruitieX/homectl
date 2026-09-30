@@ -317,6 +317,24 @@
   -webkit-line-clamp: unset;
   text-align: left;
 }
+/* A duration needs space for both its value and unit, including inside a
+   desktop routine column. Arrange by block width rather than viewport width. */
+@container (min-width: 400px) {
+  .flow-color-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .flow-color-fields > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+@container (min-width: 660px) {
+  .flow-color-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .flow-color-fields > :last-child {
+    grid-column: auto;
+  }
+}
 @container (min-width: 290px) {
   .condition-comparison {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

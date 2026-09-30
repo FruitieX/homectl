@@ -56,7 +56,7 @@ schema; server compiler/resolver behavior remains authoritative.
 | --- | --- | --- |
 | `TriggerSpec`, `StateChangeMode`, `ScheduleSpec` | `TriggerBuilder`: report, state change, predicate transition/held, schedule, timer fired, startup, manual; schedule/timezone/backlog controls | Each trigger edited; report field omitted/present; change modes; cron/interval; explicit Helsinki timezone; catch-up lateness required only for catch-up. |
 | `ConditionExpr`, `ValueSource`, comparison operators, group quantifiers | `ConditionBuilder`: literal, All/Any/Not, comparison, group; device/helper/source values | The condition journey saves all 11 comparison operators and all four group quantifiers, edits device/helper/computed-source choices, optional scene removal and false/zero/structured values. Value-free operators omit their operand. Source paths and type drafts restore; malformed/future sources remain visible for explicit removal. The compiler rejects top-level null operands, now explained in the JSON dialog; nested nulls persist. Remaining unavailable-reference recovery is part of the final cross-family gate. |
-| `NativeAction` | `ProgramBuilder`: script, activate/cycle, power, dim, random color, choose, schedule/replace/cancel timer, helper write, routine invocation | Each variant edited through Save/reload, including singular SetPower device; no false multi-target claim. |
+| `NativeAction` | `ProgramBuilder`: script, activate/cycle, power, dim, random color, choose, schedule/replace/cancel timer, helper write, routine invocation | The action journey edits and reloads singular SetPower device/power, multi-device/group dim and random-color targets, timer names/delays, all four helper value types and both invocation modes/references. Other scene/choose/script journeys are recorded separately. Remaining declaration/reference cases stay open. |
 | Scene selection, cycle entry, rollout | `ProgramBuilder` scene/target/transition/selection/rollout controls | Direct/helper/group modes, independent fallbacks, stale-key removal and cycle scope/order are edited in the routine selection journey. The timing journey edits rollout source, off/on restoration, omitted/zero/bounded spread, explicit transition precedence and cycle-specific values. **Open:** unavailable references and runtime spatial behavior reconciliation. |
 | `ProgramBody`, `ScriptSpec` declarations | `ProgramBuilder`, `RoutineScriptEditor`: native/mixed scripts; explicit whole-script conversion; declaration rows | Mixed script and whole-program conversion journeys already pass. Still name each declaration collection and persistence/limits default fixture. |
 | Scene explicit/device-link/scene-link state | `app/config/scenes/target-row.tsx`, shared color controls | Scene collection journey edits explicit/device-link/scene-link modes, source and multiplier, default power, zero brightness/fade, full stored scopes, missing-target replacement, and retained inactive variants. Nullable transition and unknown siblings survive. Color variants/capture and creation-return still need ledger reconciliation. |
@@ -355,3 +355,34 @@ Remaining routine fields include dim/random-color/helper/invocation actions,
 script declarations, unavailable-reference recovery and final persistence
 reconciliation. Unknown execution modes are visibly retained, but that behavior
 does not close the full malformed-definition acceptance gate.
+
+### Remaining native routine action fields
+
+`dev/routine-actions-review.mjs` passes 38 checks at each 1440/390 px.
+Power remains a single-device action. Dim and random-color actions save multiple
+devices plus a group, without changing the other action's scope. Negative and
+positive dim amounts, exact 1.001-second fades and omitted transitions persist.
+Incomplete numbers remain editable and focus on Save; zero and out-of-range dim
+amounts are rejected without silently changing the draft. Random-color bounds
+preserve zero, omission and reversed/out-of-range finite values, matching the
+server's execution-time clamp/swap contract. A compiler regression covers those
+accepted representations rather than claiming a fixture executes random colors.
+
+Start/replace timers require a complete delay, allow zero for queued execution,
+reject values beyond seven days and preserve exact milliseconds. Cancel timer
+names are edited independently. All four helper write types save/reload, including
+false and empty text. Bounded helper numbers retain unfinished text and validate
+their range; helper selection restores the last valid value before Save and clears
+discarded numeric errors. Fresh numeric defaults respect the declared bounds.
+Helper references link to their details. Both invocation modes save with an edited
+routine reference. Incompatible/missing helper values are displayed without
+coercion; full malformed-reference recovery remains a separate gate.
+
+Desktop screenshot review found the three-column random-color fields clipping a
+transition value. The form now uses the action block's width to arrange fields;
+phone controls remain stacked. Screenshots and logs are in
+`implementation-evidence/collections/routine-actions-*`. Runtime badges are
+synthetic, and Save/reload evidence proves fixture serialization, not database
+restart durability. All 234 UI tests, three targeted Rust compiler tests and
+type/lint/build pass. Remaining: script declarations, unavailable-reference
+recovery and the cross-family persistence/accessibility acceptance gates.

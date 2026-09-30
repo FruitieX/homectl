@@ -312,6 +312,16 @@ targeted Rust compiler tests and type/lint/build pass. Screenshots are recorded.
 Remaining: other action variants, script declarations and the broader reference,
 persistence, recovery and final acceptance gates. The goal remains active.
 
+Routine action checkpoint, 2026-09-30: 38 checks pass at each 1440/390 px.
+Power, dimming, random colors, timer start/replace/cancel, typed helper writes and
+routine invocation now have edited Save/reload evidence. Numeric action drafts
+retain unfinished text, timer limits match the compiler, and helper switching
+restores authored values. Helper details are linked. Screenshot review caught
+and fixed a cramped desktop transition field using block-width-based layout.
+All 234 UI tests, three targeted Rust compiler tests and type/lint/build pass.
+Remaining: script declarations, unavailable references and broader persistence,
+recovery/accessibility/final acceptance. The full goal remains active.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before
