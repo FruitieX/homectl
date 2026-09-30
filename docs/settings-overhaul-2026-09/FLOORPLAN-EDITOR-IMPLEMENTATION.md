@@ -96,8 +96,10 @@ before and after drawing. Type checking, lint and the production build pass
 
 ## Follow-up: readable group labels and canvas selection
 
-- [x] Map and editor group labels use consistent 11 px medium-weight text with
-      stronger contrast and a thin 0.6 px white halo instead of the thick outline.
+- [x] Map and editor group labels use consistent 13 px semibold text on a nearly
+      opaque neutral background, with no text outline. Captions remain readable
+      over photos, light gradients and the optional editor tile grid. See the
+      [readability and scene-restore follow-up](CHARTS-RADIAL-SENSOR-HISTORY.md).
 - [x] Labels choose a fixed rectangle and top anchor in floorplan coordinates.
       Zoom changes wrapping/truncation within that rectangle, without relocating
       labels to another part of the room. Marker avoidance also stays independent

@@ -1,0 +1,23 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+   Compiling homectl-server v0.9.5 (/home/rasse/homectl/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 15s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/homectl_server-deb79e13f06b027d)
+
+running 1 test
+
+thread 'core::scene_commands::tests::restore_scene_resumes_only_selected_devices_and_follows_later_updates' (2810407) panicked at server/src/core/scene_commands.rs:244:9:
+explicit scene commands must resume the scene
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test core::scene_commands::tests::restore_scene_resumes_only_selected_devices_and_follows_later_updates ... FAILED
+
+failures:
+
+failures:
+    core::scene_commands::tests::restore_scene_resumes_only_selected_devices_and_follows_later_updates
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 827 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`

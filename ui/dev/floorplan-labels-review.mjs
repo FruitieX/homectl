@@ -1,5 +1,6 @@
 /** Labels, saved defaults and settings navigation against loopback fixtures. */
 import { writeFile } from 'node:fs/promises';
+import { configSections } from '../app/config/sections.ts';
 export default async function (cdp, { width, url }) {
   const base = 'http://127.0.0.1:3021';
   if (
@@ -125,7 +126,7 @@ export default async function (cdp, { width, url }) {
       'Settings categories loaded',
     );
     await until(
-      `(()=>{const links=[...document.querySelectorAll('.settings-section-list a[href^="/config/"]')].filter(a=>a.querySelector('.text-sm.font-medium'));return links.length===18&&links.every(a=>a.querySelector('svg[aria-hidden]'))})()`,
+      `(()=>{const links=[...document.querySelectorAll('.settings-section-list a[href^="/config/"]')].filter(a=>a.querySelector('.text-sm.font-medium'));return links.length===${configSections.length}&&links.every(a=>a.querySelector('svg[aria-hidden]'))})()`,
       'Every settings landing category has an icon',
     );
     if (width < 1024) {
@@ -134,7 +135,7 @@ export default async function (cdp, { width, url }) {
       );
     }
     await until(
-      `(()=>{const nav=[...document.querySelectorAll('nav[aria-label="Settings categories"]')].find(n=>n.getBoundingClientRect().width>0);return nav&&nav.querySelectorAll('a').length===19&&[...nav.querySelectorAll('a')].every(a=>a.querySelector('svg[aria-hidden]'))})()`,
+      `(()=>{const nav=[...document.querySelectorAll('nav[aria-label="Settings categories"]')].find(n=>n.getBoundingClientRect().width>0);return nav&&nav.querySelectorAll('a').length===${configSections.length + 1}&&[...nav.querySelectorAll('a')].every(a=>a.querySelector('svg[aria-hidden]'))})()`,
       'Every settings sidebar/mobile menu item has an icon',
     );
     if (width < 1024)

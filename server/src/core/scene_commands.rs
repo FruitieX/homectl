@@ -89,6 +89,9 @@ fn prepare(state: &AppState, command: &SceneCommand) -> Result<Vec<Device>, Stri
         let mut device = device.clone();
         if let DeviceData::Controllable(data) = &mut device.data {
             data.scene_id = Some(command.scene_id.clone());
+            // Explicit UI activation/restoration resumes even the same scene.
+            // Keeping the pause here applies once but suppresses future updates.
+            data.scene_paused = false;
             data.state_source = Some(source);
             data.state = desired;
         }
@@ -227,6 +230,83 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn restore_scene_resumes_only_selected_devices_and_follows_later_updates() {
+        let (mut state, _rx, mut command) = fixture();
+        for id in ["a", "b"] {
+            let mut device = state.devices.get_device(&key(id)).unwrap().clone();
+            if let DeviceData::Controllable(data) = &mut device.data {
+                data.scene_id = Some(command.scene_id.clone());
+                data.scene_paused = true;
+            }
+            state.devices.set_state(&device, true, true);
+        }
+        command.device_keys = Some(vec![key("a")]);
+        command.transition = Some(0.4);
+        assert_eq!(
+            apply_scene_command(&mut state, &command).unwrap(),
+            vec![key("a")]
+        );
+        let restored = state.devices.get_device(&key("a")).unwrap();
+        assert!(
+            !restored.is_scene_paused(),
+            "explicit scene commands must resume the scene"
+        );
+        assert_eq!(restored.get_scene_id(), Some(command.scene_id.clone()));
+        assert_eq!(
+            restored.get_controllable_state().unwrap().brightness,
+            Some(OrderedFloat(0.6))
+        );
+        assert_eq!(
+            restored.get_controllable_state().unwrap().transition,
+            Some(OrderedFloat(0.4))
+        );
+        assert!(state
+            .devices
+            .get_device(&key("b"))
+            .unwrap()
+            .is_scene_paused());
+
+        state.runtime_config.scenes[0]
+            .device_states
+            .insert("dummy/a".into(), json!({"power": true, "brightness": 0.9}));
+        state.apply_runtime_scenes();
+        state.devices.invalidate(
+            &key("a"),
+            &[command.scene_id.clone()].into_iter().collect(),
+            &state.scenes,
+            &[],
+            &[],
+        );
+        assert_eq!(
+            state
+                .devices
+                .get_device(&key("a"))
+                .unwrap()
+                .get_controllable_state()
+                .unwrap()
+                .brightness,
+            Some(OrderedFloat(0.9)),
+            "restored devices must follow subsequent scene changes",
+        );
+        assert!(state
+            .devices
+            .get_device(&key("b"))
+            .unwrap()
+            .is_scene_paused());
+        assert_eq!(
+            state
+                .devices
+                .get_device(&key("b"))
+                .unwrap()
+                .get_controllable_state()
+                .unwrap()
+                .brightness,
+            Some(OrderedFloat(0.2)),
+            "other paused devices must remain untouched",
+        );
+    }
+
+    #[tokio::test]
     async fn invalid_explicit_selection_rejects_before_any_state_changes() {
         let (mut state, _rx, mut command) = fixture();
         let before = state.devices.get_state().clone();
@@ -288,7 +368,18 @@ mod tests {
 
     #[tokio::test]
     async fn actor_confirms_after_publishing_all_affected_devices() {
-        let (state, _rx, command) = fixture();
+        let (mut state, _rx, command) = fixture();
+        for id in ["a", "b"] {
+            let mut device = state.devices.get_device(&key(id)).unwrap().clone();
+            if let DeviceData::Controllable(data) = &mut device.data {
+                data.scene_id = Some(command.scene_id.clone());
+                data.scene_paused = true;
+                // A restore must publish the pause change even if values match.
+                data.state.power = true;
+                data.state.brightness = Some(OrderedFloat(0.6));
+            }
+            state.devices.set_state(&device, true, true);
+        }
         let snapshot = state.snapshot.clone();
         let (work_tx, _work_rx) = tokio::sync::mpsc::unbounded_channel();
         let handle = spawn_state_actor(state, snapshot.clone(), work_tx);
@@ -296,6 +387,13 @@ mod tests {
         assert!(result.applied, "{:?}", result.error);
         assert_eq!(result.affected_devices, vec![key("a"), key("b")]);
         for key in &result.affected_devices {
+            assert!(!snapshot
+                .load()
+                .devices
+                .0
+                .get(key)
+                .unwrap()
+                .is_scene_paused());
             assert_eq!(
                 snapshot.load().devices.0.get(key).unwrap().is_powered_on(),
                 Some(true)

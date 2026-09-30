@@ -5,23 +5,14 @@ import {
 } from '@/lib/deviceCapabilities';
 import { useEffect, useRef, useState } from 'react';
 
-import { toast } from 'sonner';
-import { createUuid } from '@/lib/uuid';
-import {
-  MANUAL_TRANSITION_SECONDS,
-  sendSceneCommand,
-} from '@/lib/deviceCommands';
+import { useSceneRestore } from '@/hooks/useSceneRestore';
 import { LoaderCircle, Power, SlidersHorizontal } from 'lucide-react';
 import { LightQuickIndicator } from '@/ui/LightQuickIndicator';
 import type { Device } from '@/bindings/Device';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { useLiveDeviceControls } from '@/hooks/useLiveDeviceControls';
 export { useLiveDeviceControls } from '@/hooks/useLiveDeviceControls';
-import {
-  useConnectionStatus,
-  useScenesState,
-  useWebsocket,
-} from '@/hooks/websocket';
+import { useConnectionStatus } from '@/hooks/websocket';
 import { getColor, getPower } from '@/lib/colors';
 import { getDeviceKey } from '@/lib/device';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
@@ -204,8 +195,8 @@ export function DeviceQuickControls({
   const [pendingBrightness, setPendingBrightness] = useState<number | null>(
     null,
   );
-  const scenes = useScenesState();
-  const ws = useWebsocket();
+  const { canRestore, restoreLabel, restoring, restore } =
+    useSceneRestore(devices);
   const allControllable = devices.filter(
     (device) => 'Controllable' in device.data,
   );
@@ -214,46 +205,10 @@ export function DeviceQuickControls({
   );
   const readonlyCount = allControllable.length - controllable.length;
   const dimmable = controllable.filter(supportsDeviceBrightness);
-  const restorable = controllable.filter((device) => {
-    if (!('Controllable' in device.data)) return false;
-    const { scene_id, scene_paused } = device.data.Controllable;
-    return Boolean(
-      scene_paused &&
-      scene_id &&
-      scenes?.[scene_id]?.devices[getDeviceKey(device)],
-    );
-  });
   const restoreScenes = async () => {
-    if (!ws) return;
-    const targets = new Map<string, string[]>();
-    for (const device of restorable) {
-      const key = getDeviceKey(device);
-      const id =
-        'Controllable' in device.data
-          ? device.data.Controllable.scene_id
-          : null;
-      if (!id) continue;
-      targets.set(id, [...(targets.get(id) ?? []), key]);
-    }
-    try {
-      await Promise.all(
-        [...targets].map(([scene_id, device_keys]) =>
-          sendSceneCommand(ws, {
-            request_id: createUuid(),
-            scene_id,
-            device_keys,
-            group_keys: null,
-            use_scene_transition: false,
-            transition: MANUAL_TRANSITION_SECONDS,
-          }),
-        ),
-      );
+    if (await restore()) {
       setDraft(null);
       setPendingBrightness(null);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : 'Could not restore scenes.',
-      );
     }
   };
   const brightnessUnset = dimmable.every(
@@ -434,22 +389,20 @@ export function DeviceQuickControls({
           onNativeChange={setState}
         />
       )}
-      {restorable.length > 0 && (
+      {canRestore && (
         <Button
           variant="outline"
-          disabled={!connected}
+          disabled={
+            !connected ||
+            restoring ||
+            powerPending ||
+            pendingBrightness !== null
+          }
+          aria-busy={restoring}
           onClick={() => void restoreScenes()}
         >
-          Restore{' '}
-          {new Set(
-            restorable.map((device) =>
-              'Controllable' in device.data
-                ? device.data.Controllable.scene_id
-                : null,
-            ),
-          ).size > 1
-            ? 'scenes'
-            : 'scene'}
+          {restoring && <LoaderCircle className="animate-spin" />}
+          {restoreLabel}
         </Button>
       )}
     </div>

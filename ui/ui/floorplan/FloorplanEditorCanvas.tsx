@@ -22,7 +22,11 @@ import {
   placeSelectedDeviceOnGrid,
 } from '@/lib/floorplan-editor';
 import { floorplanLabels } from '@/lib/floorplan-labels';
-import { getGroupLabelLayout } from '@/lib/floorplan-group-label';
+import {
+  getGroupLabelLayout,
+  GROUP_LABEL_FONT_SIZE,
+  GROUP_LABEL_LINE_HEIGHT,
+} from '@/lib/floorplan-group-label';
 import { getFloorplanRenderMetrics } from '@/lib/floorplan-metrics';
 import {
   effectiveDeviceSnap,
@@ -406,6 +410,8 @@ export function FloorplanEditorCanvas({
         }
       ctx.globalAlpha = 1;
     }
+    const groupLabels: NonNullable<ReturnType<typeof getGroupLabelLayout>>[] =
+      [];
     if (layers.rooms)
       for (const [id, points] of Object.entries(grid.groups)) {
         ctx.fillStyle = getFloorplanGroupFill(
@@ -420,8 +426,8 @@ export function FloorplanEditorCanvas({
         }
         if (floorplanLabels(grid).groups && points.length) {
           ctx.save();
-          const fontSize = 11;
-          ctx.font = '500 ' + fontSize + 'px system-ui';
+          const fontSize = GROUP_LABEL_FONT_SIZE;
+          ctx.font = '600 ' + fontSize + 'px system-ui';
           const label = getGroupLabelLayout({
             cells: points,
             text: groups.find((g) => g.id === id)?.name ?? id,
@@ -430,20 +436,12 @@ export function FloorplanEditorCanvas({
             scale: view.scale,
             fontSize,
             measure: (text) => ctx.measureText(text).width,
+            avoid: grid.devices.map((device) => ({
+              x: (device.x + 0.5) * tw,
+              y: (device.y + 0.5) * th,
+            })),
           });
-          if (label) {
-            ctx.translate(label.x, label.y);
-            ctx.scale(1 / view.scale, 1 / view.scale);
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 0.6;
-            ctx.fillStyle = '#47584e';
-            label.lines.forEach((line, i) => {
-              ctx.strokeText(line, 0, i * (fontSize + 3));
-              ctx.fillText(line, 0, i * (fontSize + 3));
-            });
-          }
+          if (label) groupLabels.push(label);
           ctx.restore();
         }
       }
@@ -464,6 +462,36 @@ export function FloorplanEditorCanvas({
     ctx.strokeStyle = '#8da19550';
     ctx.lineWidth = 1 / view.scale;
     ctx.strokeRect(0, 0, metrics.width, metrics.height);
+    // Captions sit above the optional tile grid, with a readable neutral backing.
+    for (const label of groupLabels) {
+      ctx.save();
+      ctx.translate(label.x, label.y);
+      ctx.scale(1 / view.scale, 1 / view.scale);
+      ctx.font = `600 ${GROUP_LABEL_FONT_SIZE}px system-ui`;
+      const width = Math.max(
+        ...label.lines.map((line) => ctx.measureText(line).width),
+      );
+      ctx.beginPath();
+      ctx.roundRect(
+        -width / 2 - 4,
+        -3,
+        width + 8,
+        label.lines.length * GROUP_LABEL_LINE_HEIGHT + 6,
+        4,
+      );
+      ctx.fillStyle = 'rgba(255,255,255,.95)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(130,145,135,.3)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = '#20342b';
+      label.lines.forEach((line, i) =>
+        ctx.fillText(line, 0, i * GROUP_LABEL_LINE_HEIGHT),
+      );
+      ctx.restore();
+    }
     const marker = (x: number, y: number, key: string) => {
       const info = devices.find((d) => d.key === key),
         preview = info?.preview;

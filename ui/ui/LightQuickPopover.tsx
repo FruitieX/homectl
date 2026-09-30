@@ -8,10 +8,12 @@ import {
   X,
   LoaderCircle,
   MousePointer2,
+  RotateCcw,
 } from 'lucide-react';
 import type { Device } from '@/bindings/Device';
 import { useConnectionStatus } from '@/hooks/websocket';
 import { useLiveDeviceControls } from '@/hooks/useLiveDeviceControls';
+import { useSceneRestore } from '@/hooks/useSceneRestore';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import {
   createLightAdjustmentQueue,
@@ -31,6 +33,8 @@ const COLOR_MIN_RADIUS = 42;
 const COLOR_MAX_RADIUS = COLOR_CENTER - 8;
 const BRIGHTNESS_WIDTH = 24;
 const BRIGHTNESS_RADIUS = 119;
+// Fit six 44 px touch targets plus gaps, without moving when Restore disappears.
+const POPOVER_EDGE_PADDING = 154;
 /** One radial surface for map and row indicators, with coalesced live updates. */
 export function LightQuickPopover({
   device: anchorDevice,
@@ -55,6 +59,8 @@ export function LightQuickPopover({
   const setState = useLiveDeviceControls();
   const connected = useConnectionStatus() === 'connected';
   const targets = devices ?? [anchorDevice];
+  const { canRestore, restoreLabel, restoring, restore } =
+    useSceneRestore(targets);
   const selection = quickLightSelection(targets);
   const device =
     selection.writable.find(
@@ -81,7 +87,7 @@ export function LightQuickPopover({
   const [draft, setDraft] = useState<LightAdjustment | null>(null),
     [pending, setPending] = useState(false),
     [dragging, setDragging] = useState(false);
-  const enabled = connected && selection.writable.length > 0;
+  const enabled = connected && selection.writable.length > 0 && !restoring;
   const root = useRef<HTMLDivElement>(null),
     returnFocus = useRef(document.activeElement);
   const surface = useRef<HTMLDivElement>(null);
@@ -122,7 +128,10 @@ export function LightQuickPopover({
     powerPress.current.timer = undefined;
   };
   useEffect(() => () => clearTimeout(powerPress.current.timer), []);
-  const cx = Math.max(140, Math.min(innerWidth - 140, anchor.x));
+  const cx = Math.max(
+    POPOVER_EDGE_PADDING,
+    Math.min(innerWidth - POPOVER_EDGE_PADDING, anchor.x),
+  );
   const cy = Math.min(innerHeight - 146, Math.max(228, anchor.y));
   const label = devices
     ? `${selection.writable.length} selected ${selection.writable.length === 1 ? 'light' : 'lights'}`
@@ -413,7 +422,7 @@ export function LightQuickPopover({
       role="dialog"
       aria-label={`${label} quick controls`}
       aria-describedby={status ? helpId : undefined}
-      aria-busy={pending}
+      aria-busy={pending || restoring}
       className="radial-light-control fixed z-[60] w-[268px] touch-none text-center text-foreground"
       style={{ left: cx - 134, top: cy - 134 }}
     >
@@ -469,6 +478,29 @@ export function LightQuickPopover({
               }}
             >
               <MousePointer2 />
+            </Button>
+          )}
+          {canRestore && (
+            <Button
+              size="icon"
+              className="size-9 rounded-full bg-card shadow-md"
+              variant="ghost"
+              aria-label={restoreLabel}
+              title={restoreLabel}
+              disabled={!enabled || pending || dragging}
+              aria-busy={restoring}
+              onClick={async () => {
+                // A delayed manual drag must not re-pause the scene after restore.
+                queue.current?.cancel();
+                if (!queue.current?.idle) return;
+                if (await restore()) resetDraft();
+              }}
+            >
+              {restoring ? (
+                <LoaderCircle className="animate-spin" />
+              ) : (
+                <RotateCcw />
+              )}
             </Button>
           )}
           <Button
@@ -705,13 +737,11 @@ export function LightQuickPopover({
             {dimmable ? `${level}%` : power ? 'On' : 'Off'}
           </span>
         </button>
-        <span className="pointer-events-none absolute bottom-8 left-0 w-full text-[10px] text-foreground/80">
-          {mode === 'ct' && caps?.ct
-            ? `${temperature} K`
-            : colored
-              ? `${Math.round(saturation * 100)}% saturation`
-              : ''}
-        </span>
+        {mode === 'ct' && caps?.ct && (
+          <span className="pointer-events-none absolute bottom-8 left-0 w-full text-[10px] text-foreground/80">
+            {temperature} K
+          </span>
+        )}
       </div>
       {status && (
         <p

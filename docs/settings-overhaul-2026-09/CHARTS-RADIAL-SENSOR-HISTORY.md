@@ -2,6 +2,55 @@
 
 Updated: 2026-09-30.
 
+## Follow-up: readable labels and quick Restore scene
+
+Requested 2026-09-30:
+
+- [x] Replace outlined group captions with larger 13 px semibold text on a
+  nearly opaque light backing. Contrast now survives colored light gradients,
+  photographs and the editor tile grid. Both renderers keep the fixed zoom
+  anchor and mask-aware wrapping; backgrounds hide along with their labels.
+- [x] The radial light controls offer a **Restore scene** icon only when at
+  least one writable selected device has a paused, assigned, resolvable scene.
+  Single-device and selection popovers share the sidebar's restore hook.
+  Each eligible device restores its own scene; other selected devices are kept
+  out of those commands. A selection with several scenes uses **Restore scenes**.
+- [x] Use the same scoped, acknowledged SceneCommand and 0.4-second interactive
+  transition as the sidebar, overriding a scene's stored transition. The popover
+  stays open, clears its optimistic preview and hides Restore once resumed.
+  It waits for in-flight manual writes and cancels unsent drag values so they
+  cannot re-pause the light after restoration. Restore failures use the existing
+  toast path and retain the ability to retry.
+- [x] Remove the **X% saturation** caption; color-temperature mode keeps Kelvin.
+  Reserve horizontal space for the complete icon row at phone touch-target
+  sizes, so Restore does not clip neighboring icons or shift the circle on exit.
+- [x] Fix the server's explicit scene-command path to clear `scene_paused`.
+  This path previously applied values while preserving the flag. The separate
+  automation scene-activation path already resumed devices. Both now resume
+  explicit scene activation, including reactivating the same scene.
+
+The server regression failed before the fix at the pause assertion. It now
+checks resuming only selected targets and following subsequent scene
+invalidation, while other paused devices remain untouched. The actor test also
+verifies an unpaused snapshot before the command acknowledgement when light
+values already match the scene. The cleared flag uses normal device persistence.
+Acknowledgement confirms runtime application, not physical delivery or database
+flush; device writes are coalesced on a 100 ms interval. An abrupt deployment can
+still interrupt that interval or integration work. The past incident cannot be
+attributed to a restart from the code audit alone; the confirmed pause bug is
+fixed independently.
+
+The fixture device-command handler now mirrors the server's pause rules so a
+manual adjustment after restoration offers Restore again. Real server tests
+cover the flag semantics; fixture browser checks cover controls and command
+scope. No live household configuration or devices were changed.
+
+Verification: UI typecheck, lint, production build and 287 unit tests pass;
+all five server scene-command tests pass. Desktop and phone fixture reviews
+pass 231 browser checks with no reported browser errors. Screenshots, the
+before-fix regression failure and the final results are stored in
+[labels-scene-restore evidence](implementation-evidence/labels-scene-restore/verification.json).
+
 ## Follow-up: selection header, layer switches, wrapped labels and settings icons
 
 Requested 2026-09-30 and implemented as one batch with the held-touch and

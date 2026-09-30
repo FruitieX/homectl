@@ -11,7 +11,11 @@ import { useEffect, useRef } from 'react';
 
 import { cn } from '@/lib/cn';
 import { floorplanLabels } from '@/lib/floorplan-labels';
-import { getGroupLabelLayout } from '@/lib/floorplan-group-label';
+import {
+  getGroupLabelLayout,
+  GROUP_LABEL_FONT_SIZE,
+  GROUP_LABEL_LINE_HEIGHT,
+} from '@/lib/floorplan-group-label';
 import { getGroupOutline } from '@/lib/floorplan-group-outline';
 import {
   type FloorplanScene,
@@ -112,6 +116,7 @@ interface GroupRenderEntry {
   drawKey: string;
   graphics: Graphics;
   outline: Graphics;
+  labelBackground: Graphics;
   label: Text;
 }
 
@@ -529,17 +534,14 @@ function syncGroupLabel(
     textureScale = getLabelTextureScale(scale);
   const label = entry.label;
   label.text = group.name;
-  label.style.fontSize = 11 * textureScale;
-  label.style.stroke = {
-    color: 0xffffff,
-    alpha: 0.9,
-    width: 0.6 * textureScale,
-  };
+  label.style.fontSize = GROUP_LABEL_FONT_SIZE * textureScale;
+  label.style.stroke = { width: 0, alpha: 0 };
   label.scale.set(1 / (textureScale * scale));
   label.visible = false;
+  entry.labelBackground.visible = false;
   if (!visible) return;
   label.style.align = 'center';
-  label.style.lineHeight = 14 * textureScale;
+  label.style.lineHeight = GROUP_LABEL_LINE_HEIGHT * textureScale;
   const layout = getGroupLabelLayout({
     cells: group.cells,
     text: group.name,
@@ -555,6 +557,20 @@ function syncGroupLabel(
   if (!layout) return;
   label.text = layout.lines.join('\n');
   label.position.set(layout.x, layout.y);
+  entry.labelBackground
+    .clear()
+    .roundRect(
+      (-label.width * scale) / 2 - 4,
+      -3,
+      label.width * scale + 8,
+      label.height * scale + 6,
+      4,
+    )
+    .fill({ color: 0xffffff, alpha: 0.95 })
+    .stroke({ color: 0x829187, alpha: 0.3, width: 1 });
+  entry.labelBackground.position.set(layout.x, layout.y);
+  entry.labelBackground.scale.set(1 / scale);
+  entry.labelBackground.visible = true;
   label.visible = true;
 }
 
@@ -575,9 +591,9 @@ function syncGroups(
         text: group.name,
         style: {
           fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-          fontSize: 11,
-          fontWeight: '500',
-          fill: 0x47584e,
+          fontSize: GROUP_LABEL_FONT_SIZE,
+          fontWeight: '600',
+          fill: 0x20342b,
         },
       });
       label.anchor.set(0.5, 0);
@@ -586,11 +602,16 @@ function syncGroups(
         drawKey: '',
         graphics: new Graphics(),
         outline: new Graphics(),
+        labelBackground: new Graphics(),
         label,
       };
       renderState.groupEntries.set(group.groupId, entry);
       renderState.groupLayer.addChild(entry.graphics);
-      renderState.groupOutlineLayer.addChild(entry.outline, entry.label);
+      renderState.groupOutlineLayer.addChild(
+        entry.outline,
+        entry.labelBackground,
+        entry.label,
+      );
     }
 
     const drawKey = getGroupDrawKey(group, scene, selectedSet, viewScale);
@@ -620,8 +641,13 @@ function syncGroups(
 
     renderState.groupLayer.removeChild(entry.graphics);
     destroyDisplayObject(entry.graphics);
-    renderState.groupOutlineLayer.removeChild(entry.outline, entry.label);
+    renderState.groupOutlineLayer.removeChild(
+      entry.outline,
+      entry.labelBackground,
+      entry.label,
+    );
     destroyDisplayObject(entry.outline);
+    destroyDisplayObject(entry.labelBackground);
     destroyDisplayObject(entry.label);
     renderState.groupEntries.delete(groupId);
   }

@@ -1,0 +1,149 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+   Compiling homectl-server v0.9.5 (/home/rasse/homectl/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 54.79s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/homectl_server-deb79e13f06b027d)
+
+running 5 tests
+test core::scene_commands::tests::transition_and_scene_validation_preserve_runtime ... ok
+test core::scene_commands::tests::restore_scene_resumes_only_selected_devices_and_follows_later_updates ... ok
+test core::scene_commands::tests::group_scope_excludes_readonly_and_outside_devices ... ok
+test core::scene_commands::tests::invalid_explicit_selection_rejects_before_any_state_changes ... ok
+test core::scene_commands::tests::actor_confirms_after_publishing_all_affected_devices ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 823 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/homectl_server-baae39f8e037ef7a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/script-worker.rs (target/debug/deps/script_worker-727ced089917cddc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/assistant_api.rs (target/debug/deps/assistant_api-84bf5e8989cd448d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 39 filtered out; finished in 0.00s
+
+     Running tests/automation_baseline.rs (target/debug/deps/automation_baseline-00e19741d7f7c6db)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/automation_blocks.rs (target/debug/deps/automation_blocks-a594b410054fbfa1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/calibration_brightness_migration.rs (target/debug/deps/calibration_brightness_migration-00f7010862235742)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/config_api.rs (target/debug/deps/config_api-88b16727676cc197)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.00s
+
+     Running tests/config_api_integration.rs (target/debug/deps/config_api_integration-b0af4d87f6ffddde)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 51 filtered out; finished in 0.00s
+
+     Running tests/convert.rs (target/debug/deps/convert-36913d6be3b19c20)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/device_persistence.rs (target/debug/deps/device_persistence-264736ed08293c6e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/export_bindings.rs (target/debug/deps/export_bindings-5e8a76f21f88fcfc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/group_link_migration.rs (target/debug/deps/group_link_migration-28050fffac1d029f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/integration.rs (target/debug/deps/integration-9e387237bd884481)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/postgres_runtime.rs (target/debug/deps/postgres_runtime-c6c8d92cdd4b46cd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/prod_config.rs (target/debug/deps/prod_config-61f653b138c04276)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/routine_rules.rs (target/debug/deps/routine_rules-8a214774261e0c28)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+
+     Running tests/scenario_runner.rs (target/debug/deps/scenario_runner-f8a15d8465bc8735)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/scene_cycling.rs (target/debug/deps/scene_cycling-6402d9598103ac95)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/script_abi.rs (target/debug/deps/script_abi-206244b968bb013a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/script_worker.rs (target/debug/deps/script_worker-49888691c4b3786b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.00s
+
+     Running tests/scripting.rs (target/debug/deps/scripting-6468df38ec24b567)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/source_presets.rs (target/debug/deps/source_presets-e310ad7c077d58de)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+

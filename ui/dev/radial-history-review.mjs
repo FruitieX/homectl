@@ -34,7 +34,7 @@ export default async function (cdp, { width, url }) {
   const pause = (ms) => new Promise((r) => setTimeout(r, ms ?? 180));
   const until = async (expression, message) => {
     for (let i = 0; i < 60; i++) {
-      if (await evaluate(expression)) {
+      if (await evaluate(`Boolean(${expression})`)) {
         checks.push(message);
         return;
       }
@@ -364,7 +364,9 @@ export default async function (cdp, { width, url }) {
       (await commands()).at(-1)?.DeviceCommand?.brightness !== 0.75 ||
       (await commands()).length !== liveBefore + 2
     )
-      throw Error('Live brightness coalescing or stale acknowledgement jump');
+      throw Error(
+        `Live brightness coalescing or stale acknowledgement jump: ${JSON.stringify({ liveBrightness, liveBefore, commands: await commands(), levels: await evaluate('window.__radialLevels'), center })}`,
+      );
     checks.push(
       'Held brightness applies immediately and coalesces a slow acknowledgement into the latest value',
     );
@@ -587,6 +589,57 @@ export default async function (cdp, { width, url }) {
         throw Error('Cancelled gesture sent command');
       checks.push('Cancelled touch discards brightness draft');
     }
+    const quickRestore = `${pop}.querySelector('[aria-label="Restore scene"]')`;
+    await until(
+      `!!${quickRestore}&&!${quickRestore}.disabled`,
+      'Paused light exposes an enabled Restore scene icon in the radial controls',
+    );
+    await until(
+      `[...${pop}.querySelectorAll('button')].every(button=>{const r=button.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth})&&!${pop}.textContent.includes('% saturation')`,
+      'Quick-control toolbar fits the viewport with Restore and no saturation caption',
+    );
+    await shot('quick-restore');
+    const quickRestoreBefore = (await commands()).length;
+    await click(quickRestore);
+    await until(
+      `!!${pop}&&!${quickRestore}&&${pop}.getAttribute('aria-busy')==='false'`,
+      'Quick restore keeps the radial open and hides its icon after resuming',
+    );
+    const quickRestoreCommands = (await commands()).slice(quickRestoreBefore);
+    if (
+      quickRestoreCommands.length !== 1 ||
+      quickRestoreCommands[0].SceneCommand?.scene_id !== restoreSceneId ||
+      quickRestoreCommands[0].SceneCommand?.transition !== 0.4 ||
+      quickRestoreCommands[0].SceneCommand?.use_scene_transition !== false ||
+      JSON.stringify(quickRestoreCommands[0].SceneCommand?.device_keys) !==
+        JSON.stringify(['zigbee2mqtt/living_room_lamp'])
+    )
+      throw Error(
+        'Quick restore must match the sidebar scene command and scope',
+      );
+    await pause(350);
+    if ((await commands()).length !== quickRestoreBefore + 1)
+      throw Error('Queued manual adjustments were sent after Restore scene');
+    const quickRestored = (
+      await (await fetch(base + '/api/v1/devices')).json()
+    ).devices.find((d) => d.id === 'living_room_lamp');
+    if (
+      quickRestored.data.Controllable.scene_paused ||
+      quickRestored.data.Controllable.state.brightness !== 0.8
+    )
+      throw Error(
+        'Quick restore failed to resume and apply the assigned scene',
+      );
+    checks.push(
+      'Quick restore uses the manual transition, clears pause and leaves no delayed manual writes',
+    );
+    // A later manual adjustment should pause it again and offer restoration.
+    await pointer('down', { x: center.x + 119, y: center.y });
+    await pointer('up', { x: center.x + 119, y: center.y });
+    await until(
+      `!!${quickRestore}&&!${quickRestore}.disabled`,
+      'Manual adjustment offers quick restore again',
+    );
     await key('Escape', 27);
     await until(`!${pop}`, 'Escape dismisses radial');
     p = await point();

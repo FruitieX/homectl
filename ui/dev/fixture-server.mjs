@@ -2659,6 +2659,11 @@ server.on('upgrade', (req, socket) => {
               ])
                 if (command[field] != null)
                   device.data.Controllable.state[field] = command[field];
+              const data = device.data.Controllable;
+              const preserveScene =
+                command.preserve_scene && !data.scene_paused;
+              data.scene_paused = Boolean(data.scene_id) && !preserveScene;
+              if (!preserveScene) data.state_source = null;
               affected = 1;
             }
           } else if (!error) {

@@ -1,5 +1,8 @@
 import { getGroupOutline } from './floorplan-group-outline.ts';
 
+export const GROUP_LABEL_FONT_SIZE = 13;
+export const GROUP_LABEL_LINE_HEIGHT = GROUP_LABEL_FONT_SIZE + 3;
+
 type Point = { x: number; y: number };
 type Label = {
   lines: string[];
@@ -44,7 +47,7 @@ export function getGroupLabelLayout({
   tileHeight,
   scale,
   measure,
-  fontSize = 11,
+  fontSize = GROUP_LABEL_FONT_SIZE,
   avoid = [],
 }: {
   cells: readonly Point[];
