@@ -16,6 +16,7 @@ export type PlotSeries = {
   points: PlotPoint[];
   className?: string;
   bars?: boolean;
+  step?: boolean;
   gapMs?: number;
 };
 export type PlotLegendItem = {
@@ -50,6 +51,7 @@ export function TimeSeriesPlot({
   showLegend = true,
   showUnit = true,
   legendItems = [],
+  valueLabels,
 }: {
   series: PlotSeries[];
   width: number;
@@ -61,6 +63,7 @@ export function TimeSeriesPlot({
   showLegend?: boolean;
   showUnit?: boolean;
   legendItems?: PlotLegendItem[];
+  valueLabels?: Record<number, string>;
 }) {
   const id = useId();
   const [keyboardInspect, setKeyboardInspect] = useState(false);
@@ -106,7 +109,15 @@ export function TimeSeriesPlot({
   const visible = clean.filter((s) => !hidden.includes(s.name));
   const points = visible.flatMap((s) => s.points);
   const times = [...new Set(points.map((p) => p.time))].sort((a, b) => a - b);
-  const left = 44,
+  const left = valueLabels
+      ? Math.min(
+          112,
+          Math.max(
+            44,
+            ...Object.values(valueLabels).map((label) => label.length * 6 + 10),
+          ),
+        )
+      : 44,
     right = 12,
     top = 16,
     bottom = 30;
@@ -195,6 +206,7 @@ export function TimeSeriesPlot({
               p.end > selectedTime),
         );
   const format = (value: number) =>
+    valueLabels?.[value] ??
     value.toLocaleString(undefined, { maximumFractionDigits: 2 });
   const inspect = (event: React.PointerEvent<SVGSVGElement>) => {
     if (times.length === 0) return;
@@ -337,26 +349,28 @@ export function TimeSeriesPlot({
             <rect x={left} y={top} width={plotWidth} height={plotHeight} />
           </clipPath>
         </defs>
-        {y.ticks(4).map((tick) => (
-          <g key={tick}>
-            <line
-              x1={left}
-              x2={width - right}
-              y1={y(tick)}
-              y2={y(tick)}
-              className="stroke-border"
-              strokeOpacity={0.65}
-            />
-            <text
-              x={left - 7}
-              y={y(tick) + 4}
-              textAnchor="end"
-              className="fill-muted-foreground text-[11px]"
-            >
-              {format(tick)}
-            </text>
-          </g>
-        ))}
+        {(valueLabels ? Object.keys(valueLabels).map(Number) : y.ticks(4)).map(
+          (tick) => (
+            <g key={tick}>
+              <line
+                x1={left}
+                x2={width - right}
+                y1={y(tick)}
+                y2={y(tick)}
+                className="stroke-border"
+                strokeOpacity={0.65}
+              />
+              <text
+                x={left - 7}
+                y={y(tick) + 4}
+                textAnchor="end"
+                className="fill-muted-foreground text-[11px]"
+              >
+                {format(tick)}
+              </text>
+            </g>
+          ),
+        )}
         {xTicks.map((tick) => (
           <text
             key={tick.getTime()}
@@ -468,7 +482,14 @@ export function TimeSeriesPlot({
                       />
                     )}
                     <path
-                      d={`M${segment.map((p) => `${x(p.time)},${y(p.value)}`).join(' L')}`}
+                      d={
+                        s.step
+                          ? `M${x(segment[0].time)},${y(segment[0].value)}${segment
+                              .slice(1)
+                              .map((p) => ` H${x(p.time)} V${y(p.value)}`)
+                              .join('')}`
+                          : `M${segment.map((p) => `${x(p.time)},${y(p.value)}`).join(' L')}`
+                      }
                       fill="none"
                       stroke="currentColor"
                       strokeWidth={2}
@@ -503,17 +524,12 @@ export function TimeSeriesPlot({
               const pad = 3;
               const barLeft = x(selectedBar.time) + 1;
               const barRight = x(selectedBar.end ?? selectedBar.time + 3600000);
-              const high = selectedBar.high ?? selectedBar.value;
-              const boxTop =
-                Math.min(y(selectedBar.value), y(high), y(0)) - pad;
-              const boxBottom =
-                Math.max(y(selectedBar.value), y(high), y(0)) + pad;
               return (
                 <rect
                   x={barLeft - pad}
-                  y={boxTop}
+                  y={top}
                   width={Math.max(1, barRight - barLeft) + pad * 2}
-                  height={Math.max(1, boxBottom - boxTop)}
+                  height={plotHeight}
                   rx={3}
                   className="fill-background stroke-foreground"
                   fillOpacity={0.45}

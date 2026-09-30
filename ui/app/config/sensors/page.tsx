@@ -118,6 +118,11 @@ export default function SensorCatalogPage() {
     <div className="settings-page">
       <ConfigPageHeader
         title="Sensor catalog"
+        actions={
+          <Button variant="outline" asChild>
+            <Link to="/config/sensor-history">Sensor activity</Link>
+          </Button>
+        }
         description="Names and groups for dashboard temperature and humidity readings. Choose which sensors a widget displays in that widget's settings."
       />
       {query.isError && (

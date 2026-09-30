@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react';
 export function SettingsSection({
   id,
+  variant = 'card',
   title,
   description,
   actions,
   children,
 }: {
   id?: string;
+  variant?: 'card' | 'list';
   title: string;
   description?: ReactNode;
   actions?: ReactNode;
@@ -15,7 +17,11 @@ export function SettingsSection({
   return (
     <section
       id={id}
-      className="settings-section"
+      className={
+        variant === 'list'
+          ? 'settings-section settings-section-list'
+          : 'settings-section'
+      }
       aria-labelledby={id ? `${id}-title` : undefined}
     >
       <div className="settings-section-heading">

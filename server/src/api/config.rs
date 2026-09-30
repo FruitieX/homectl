@@ -1657,6 +1657,7 @@ pub fn config(
                 .or(logs_routes())
                 .or(routine_history_routes())
                 .or(value_history_routes())
+                .or(sensor_history_routes())
                 .or(value_fields_routes(handle))
                 .or(routine_preview_routes(handle))
                 .or(device_display_name_routes(snapshot, handle))
@@ -1909,6 +1910,34 @@ async fn list_value_history(query: ValueHistoryQuery) -> Result<impl Reply, warp
             warp::reject::reject()
         })?;
     Ok(ApiResponse::success(entries))
+}
+
+#[derive(Deserialize)]
+struct SensorHistoryQuery {
+    sensor: Option<String>,
+    before: Option<i64>,
+}
+
+fn sensor_history_routes(
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path("sensor-history")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(warp::query::<SensorHistoryQuery>())
+        .and_then(|query: SensorHistoryQuery| async move {
+            if query.sensor.as_ref().is_some_and(|key| key.len() > 256)
+                || query.before.is_some_and(|id| id <= 0)
+            {
+                return Err(warp::reject::reject());
+            }
+            let entries = config_queries::db_sensor_history(query.sensor.as_deref(), query.before)
+                .await
+                .map_err(|error| {
+                    log::warn!("Could not read sensor history: {error}");
+                    warp::reject::reject()
+                })?;
+            Ok(ApiResponse::success(entries))
+        })
 }
 
 #[derive(Deserialize)]

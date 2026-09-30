@@ -30,10 +30,11 @@ interface PixiFloorplanRendererProps {
   renderLabels?: boolean;
   /** Stop the render ticker while the renderer is offscreen. */
   paused?: boolean;
-  onDevicePress?: (deviceKey: string) => void;
+  onDevicePress?: (deviceKey: string, modifiers?: { ctrlKey: boolean }) => void;
   onDeviceLongPress?: (deviceKey: string) => void;
   onDeviceHold?: (deviceKey: string, hold: LightHold) => void;
   onSensorPress?: (deviceKey: string) => void;
+  onSensorHold?: (deviceKey: string, hold: LightHold) => void;
   onGroupPress?: (groupId: string) => void;
   onGroupLongPress?: (groupId: string) => void;
   onUnavailable?: () => void;
@@ -43,10 +44,11 @@ interface PixiFloorplanRendererProps {
 }
 
 interface RendererHandlers {
-  onDevicePress?: (deviceKey: string) => void;
+  onDevicePress?: (deviceKey: string, modifiers?: { ctrlKey: boolean }) => void;
   onDeviceLongPress?: (deviceKey: string) => void;
   onDeviceHold?: (deviceKey: string, hold: LightHold) => void;
   onSensorPress?: (deviceKey: string) => void;
+  onSensorHold?: (deviceKey: string, hold: LightHold) => void;
   onGroupPress?: (groupId: string) => void;
   onGroupLongPress?: (groupId: string) => void;
   onUnavailable?: () => void;
@@ -1106,9 +1108,13 @@ function findHitTarget(
   return groupTarget;
 }
 
-function invokePress(target: HitTarget, handlers: RendererHandlers) {
+function invokePress(
+  target: HitTarget,
+  handlers: RendererHandlers,
+  ctrlKey = false,
+) {
   if (target.type === 'device') {
-    handlers.onDevicePress?.(target.key);
+    handlers.onDevicePress?.(target.key, { ctrlKey });
     return;
   }
 
@@ -1210,6 +1216,7 @@ export function PixiFloorplanRenderer({
   onDeviceLongPress,
   onDeviceHold,
   onSensorPress,
+  onSensorHold,
   onGroupPress,
   onGroupLongPress,
   onUnavailable,
@@ -1234,6 +1241,7 @@ export function PixiFloorplanRenderer({
     onDeviceLongPress,
     onDeviceHold,
     onSensorPress,
+    onSensorHold,
     onGroupPress,
     onGroupLongPress,
     onUnavailable,
@@ -1280,6 +1288,7 @@ export function PixiFloorplanRenderer({
       onDeviceLongPress,
       onDeviceHold,
       onSensorPress,
+      onSensorHold,
       onGroupPress,
       onGroupLongPress,
       onUnavailable,
@@ -1297,6 +1306,7 @@ export function PixiFloorplanRenderer({
     onGroupLongPress,
     onGroupPress,
     onSensorPress,
+    onSensorHold,
     onUnavailable,
     onContextLost,
     renderLabels,
@@ -1392,20 +1402,32 @@ export function PixiFloorplanRenderer({
           if (!activeGesture.moved && activeGesture.target) {
             activeGesture.longPressFired = true;
             if (
-              activeGesture.target.type === 'device' &&
-              handlersRef.current.onDeviceHold
+              (activeGesture.target.type === 'device' &&
+                handlersRef.current.onDeviceHold) ||
+              (activeGesture.target.type === 'sensor' &&
+                handlersRef.current.onSensorHold)
             ) {
-              const light = latestSceneRef.current.lights.find(
-                (light) => light.deviceKey === activeGesture.target?.key,
-              );
+              const light = (
+                activeGesture.target.type === 'device'
+                  ? latestSceneRef.current.lights
+                  : latestSceneRef.current.sensors
+              ).find((light) => light.deviceKey === activeGesture.target?.key);
               const rect = container.getBoundingClientRect();
               const view = viewRef.current;
-              handlersRef.current.onDeviceHold(activeGesture.target.key, {
-                pointerId: event.pointerId,
-                x:
-                  rect.left + (light ? light.x * view.scale + view.x : point.x),
-                y: rect.top + (light ? light.y * view.scale + view.y : point.y),
-              });
+              (activeGesture.target.type === 'device'
+                ? handlersRef.current.onDeviceHold
+                : handlersRef.current.onSensorHold)?.(
+                activeGesture.target.key,
+                {
+                  pointerId: event.pointerId,
+                  x:
+                    rect.left +
+                    (light ? light.x * view.scale + view.x : point.x),
+                  y:
+                    rect.top +
+                    (light ? light.y * view.scale + view.y : point.y),
+                },
+              );
             } else invokeLongPress(activeGesture.target, handlersRef.current);
           }
         }, longPressDelayMs);
@@ -1492,8 +1514,10 @@ export function PixiFloorplanRenderer({
       // still starts normally when movement occurs before the hold threshold.
       if (
         activeGesture.longPressFired &&
-        activeGesture.target?.type === 'device' &&
-        handlersRef.current.onDeviceHold
+        ((activeGesture.target?.type === 'device' &&
+          handlersRef.current.onDeviceHold) ||
+          (activeGesture.target?.type === 'sensor' &&
+            handlersRef.current.onSensorHold))
       )
         return;
       const deltaX = point.x - activeGesture.last.x;
@@ -1537,7 +1561,7 @@ export function PixiFloorplanRenderer({
         !activeGesture.longPressFired &&
         activeGesture.target
       ) {
-        invokePress(activeGesture.target, handlersRef.current);
+        invokePress(activeGesture.target, handlersRef.current, event.ctrlKey);
       }
 
       activeGestureRef.current = null;
@@ -1634,7 +1658,7 @@ export function PixiFloorplanRenderer({
             width === lastContainerSize.width &&
             Math.abs(height - lastContainerSize.height) <= 120;
           lastContainerSize = { width, height };
-          if ((fitOnResize || !hasInteractedRef.current) && !toolbarResize) {
+          if (fitOnResize || (!hasInteractedRef.current && !toolbarResize)) {
             fitSceneRef.current();
           }
         });

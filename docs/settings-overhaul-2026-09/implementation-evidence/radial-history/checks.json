@@ -1,0 +1,117 @@
+{
+  "date": "2026-09-30",
+  "environment": "Isolated local fixture; household devices and configuration untouched",
+  "runs": [
+    {
+      "name": "radial-phone",
+      "passed": true,
+      "width": 390,
+      "checks": [
+        "Scrolling floorplan tabs available",
+        "Map renders",
+        "Tabs share AppBar before assistant without overflow",
+        "Hold opens radial control",
+        "Release keeps radial open without selection",
+        "Outer ring commits brightness once after release",
+        "Inner circle controls hue and saturation",
+        "Color temperature mode and keyboard adjustment",
+        "Outside tap dismisses radial",
+        "Direct hold drag reopens radial",
+        "Hold and drag commits brightness and stays open",
+        "Cancelled touch discards brightness draft",
+        "Escape dismisses radial",
+        "Tap opens full device sheet",
+        "Hold with sheet enters selection and preserves first light",
+        "Tap deselects in selection mode",
+        "Last deselection exits mode",
+        "Numeric sensor quick control opens",
+        "Numeric stepper sends an unrestricted numeric event",
+        "Dimmer vertical quick controls open",
+        "Dimmer uses configured event values",
+        "Sensor hold opens quick controls",
+        "Sensor simulated event accepted",
+        "Sensor sheet shows persisted boolean step history",
+        "Filtered history shows multiple sensor values",
+        "Settings landing uses flat navigation lists"
+      ]
+    },
+    {
+      "name": "radial-desktop",
+      "passed": true,
+      "width": 1440,
+      "checks": [
+        "Scrolling floorplan tabs available",
+        "Map renders",
+        "Tabs share AppBar before assistant without overflow",
+        "Hold opens radial control",
+        "Release keeps radial open without selection",
+        "Outer ring commits brightness once after release",
+        "Inner circle controls hue and saturation",
+        "Color temperature mode and keyboard adjustment",
+        "Outside tap dismisses radial",
+        "Direct hold drag reopens radial",
+        "Hold and drag commits brightness and stays open",
+        "Escape dismisses radial",
+        "Tap opens full device sheet",
+        "Hold with sheet enters selection and preserves first light",
+        "Tap deselects in selection mode",
+        "Last deselection exits mode",
+        "Ctrl click immediately selects",
+        "Numeric sensor quick control opens",
+        "Numeric stepper sends an unrestricted numeric event",
+        "Dimmer vertical quick controls open",
+        "Dimmer uses configured event values",
+        "Sensor hold opens quick controls",
+        "Sensor simulated event accepted",
+        "Sensor sheet shows persisted boolean step history",
+        "Filtered history shows multiple sensor values",
+        "Settings landing uses flat navigation lists"
+      ]
+    },
+    {
+      "name": "charts-phone",
+      "passed": true,
+      "checks": [
+        "Keyboard opens shared quick controls without writes",
+        "Keyboard brightness uses one acknowledged command",
+        "Escape closes quick controls and restores focus",
+        "170px price card has readable chart and unclipped axis",
+        "Bar inspection highlights the full plot height",
+        "Weather forecast shows low/high temperatures and times",
+        "Inline forecast keyboard inspection does not open details",
+        "Native hover inspects inline forecast",
+        "Native touch drag keeps weather reading without opening details",
+        "Weather tabs fit their track"
+      ],
+      "priceGeometry": {
+        "cardHeight": 170,
+        "chartHeight": 127.5,
+        "axisInside": true
+      },
+      "cards": 7,
+      "overflow": false
+    },
+    {
+      "name": "charts-desktop",
+      "passed": true,
+      "checks": [
+        "Keyboard opens shared quick controls without writes",
+        "Keyboard brightness uses one acknowledged command",
+        "Escape closes quick controls and restores focus",
+        "170px price card has readable chart and unclipped axis",
+        "Bar inspection highlights the full plot height",
+        "Weather forecast shows low/high temperatures and times",
+        "Inline forecast keyboard inspection does not open details",
+        "Native hover inspects inline forecast",
+        "Weather tabs fit their track"
+      ],
+      "priceGeometry": {
+        "cardHeight": 170,
+        "chartHeight": 127.5,
+        "axisInside": true
+      },
+      "cards": 7,
+      "overflow": false
+    }
+  ]
+}

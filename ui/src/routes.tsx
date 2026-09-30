@@ -61,6 +61,9 @@ const ConfigWidgetSourcesPage = lazy(
 const ConfigWidgetSourceDetailPage = lazy(
   () => import('../app/config/widget-sources/detail'),
 );
+const ConfigSensorHistoryPage = lazy(
+  () => import('../app/config/sensor-history/page'),
+);
 const ConfigSensorCatalogPage = lazy(
   () => import('../app/config/sensors/page'),
 );
@@ -151,6 +154,10 @@ export const router = createBrowserRouter([
           {
             path: 'devices',
             element: withSuspense(<ConfigDevicesPage />),
+          },
+          {
+            path: 'sensor-history',
+            element: withSuspense(<ConfigSensorHistoryPage />),
           },
           {
             path: 'sensors',

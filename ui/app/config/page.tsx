@@ -228,13 +228,13 @@ export default function ConfigHomePage() {
           );
           if (!sections.length) return null;
           return (
-            <SettingsSection key={group} title={group}>
-              <div className="divide-y divide-border">
+            <SettingsSection key={group} title={group} variant="list">
+              <div className="overflow-hidden rounded-lg border border-border bg-card divide-y divide-border">
                 {sections.map((section) => (
                   <Link
                     key={section.href}
                     to={section.href}
-                    className="flex items-center gap-4 rounded-sm py-3 first:pt-0 last:pb-0 hover:text-primary"
+                    className="flex min-h-16 items-center gap-4 px-4 py-3 hover:bg-accent/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   >
                     <span className="min-w-0 flex-1">
                       <span className="text-sm font-medium">

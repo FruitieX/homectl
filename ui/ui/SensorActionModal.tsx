@@ -1,3 +1,4 @@
+import { SensorHistoryPanel } from '@/ui/SensorHistoryPanel';
 import { Device } from '@/bindings/Device';
 import { Link } from 'react-router-dom';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
@@ -86,6 +87,7 @@ export const SensorActionModal = ({
           </div>
         </div>
         <HealthEvidence deviceKey={deviceKey} />
+        <SensorHistoryPanel deviceKey={deviceKey} />
         <Link
           className="inline-block text-sm text-primary underline"
           to={configItemHref('device', deviceKey)}

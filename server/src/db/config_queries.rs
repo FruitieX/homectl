@@ -20,7 +20,7 @@ use crate::types::assistant::{AssistantHistoryMessage, AssistantThread, Assistan
 use crate::types::automation_definition::HelperId;
 use crate::types::automation_source::{SourceCompute, SourceDefinition};
 use crate::types::automation_value::{HelperDefinition, HelperKind, HelperPersistence};
-use crate::types::config_authoring::ValueHistoryEntry;
+use crate::types::config_authoring::{SensorHistoryEntry, ValueHistoryEntry};
 use crate::types::routine_history::RoutineHistoryEntry;
 use color_eyre::Result;
 use sea_orm::sea_query::{Expr, OnConflict, Order, Query};
@@ -3925,6 +3925,57 @@ async fn value_history_on<C: ConnectionTrait>(
         .collect())
 }
 
+/// Root sensor values only: exclude helper values and duplicate leaf aliases.
+pub async fn db_sensor_history(
+    source: Option<&str>,
+    before: Option<i64>,
+) -> Result<Vec<SensorHistoryEntry>> {
+    sensor_history_on(get_db_connection()?, source, before).await
+}
+
+async fn sensor_history_on<C: ConnectionTrait>(
+    db: &C,
+    source: Option<&str>,
+    before: Option<i64>,
+) -> Result<Vec<SensorHistoryEntry>> {
+    let mut query = Query::select();
+    query
+        .columns([
+            ValueHistory::Id,
+            ValueHistory::SourceKey,
+            ValueHistory::ChangedAtMs,
+            ValueHistory::Value,
+        ])
+        .from(ValueHistory::Table)
+        .and_where(Expr::col(ValueHistory::Path).eq("/value"))
+        .and_where(Expr::col(ValueHistory::SourceKey).not_like("helper/%"));
+    if let Some(source) = source {
+        query.and_where(Expr::col(ValueHistory::SourceKey).eq(source));
+    }
+    if let Some(before) = before {
+        query.and_where(Expr::col(ValueHistory::Id).lt(before));
+    }
+    let rows = all(
+        db,
+        query
+            .order_by(ValueHistory::Id, Order::Desc)
+            .limit(100)
+            .to_owned(),
+    )
+    .await?;
+    rows.into_iter()
+        .map(|row| {
+            let text: String = row.try_get("", "value")?;
+            Ok(SensorHistoryEntry {
+                id: row.try_get("", "id")?,
+                source_key: row.try_get("", "source_key")?,
+                changed_at_ms: row.try_get("", "changed_at_ms")?,
+                value: serde_json::from_str(&text)?,
+            })
+        })
+        .collect()
+}
+
 pub async fn db_record_value_change(
     source_key: &str,
     path: &str,
@@ -4016,7 +4067,13 @@ mod value_history_tests {
 
     #[tokio::test]
     async fn stores_only_changes_and_keeps_the_latest_hundred_per_field() {
-        let db = Database::connect("sqlite::memory:").await.unwrap();
+        let path = std::env::temp_dir().join(format!(
+            "homectl-sensor-history-{}-{}.db",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap()
+        ));
+        let url = format!("sqlite://{}?mode=rwc", path.display());
+        let db = Database::connect(&url).await.unwrap();
         db.execute_raw(Statement::from_string(DbBackend::Sqlite,
             "CREATE TABLE value_history (id INTEGER PRIMARY KEY AUTOINCREMENT, source_key TEXT NOT NULL, path TEXT NOT NULL, changed_at_ms BIGINT NOT NULL, value TEXT NOT NULL)".to_string())).await.unwrap();
         for index in 0..103 {
@@ -4043,6 +4100,37 @@ mod value_history_tests {
         assert_eq!(rows.len(), 100);
         assert_eq!(rows[0].value, serde_json::json!(102));
         assert_eq!(rows[99].value, serde_json::json!(3));
+        record_value_change_on(&db, "helper/mode", "/value", &serde_json::json!(true), 104)
+            .await
+            .unwrap();
+        record_value_change_on(
+            &db,
+            "dummy/second",
+            "/value",
+            &serde_json::json!({"temperature":21,"humidity":40}),
+            105,
+        )
+        .await
+        .unwrap();
+        let first = sensor_history_on(&db, None, None).await.unwrap();
+        assert_eq!(first.len(), 100);
+        assert_eq!(first[0].source_key, "dummy/second");
+        assert!(first
+            .iter()
+            .all(|entry| !entry.source_key.starts_with("helper/")));
+        let older = sensor_history_on(&db, None, Some(first.last().unwrap().id))
+            .await
+            .unwrap();
+        assert_eq!(older.len(), 1);
+        let filtered = sensor_history_on(&db, Some("dummy/sensor"), None)
+            .await
+            .unwrap();
+        assert_eq!(filtered.len(), 100);
+        assert_eq!(filtered[0].value, serde_json::json!(102));
+        assert!(sensor_history_on(&db, Some("missing/sensor"), None)
+            .await
+            .unwrap()
+            .is_empty());
         assert_eq!(
             value_history_on(&db, "dummy/sensor", "/other")
                 .await
@@ -4050,6 +4138,24 @@ mod value_history_tests {
                 .len(),
             1
         );
+        db.close().await.unwrap();
+        let reopened = Database::connect(&url).await.unwrap();
+        assert_eq!(
+            value_history_on(&reopened, "dummy/sensor", "/value")
+                .await
+                .unwrap()
+                .len(),
+            100
+        );
+        assert_eq!(
+            sensor_history_on(&reopened, Some("dummy/second"), None)
+                .await
+                .unwrap()[0]
+                .value,
+            serde_json::json!({"temperature":21,"humidity":40})
+        );
+        reopened.close().await.unwrap();
+        std::fs::remove_file(path).unwrap();
     }
 }
 

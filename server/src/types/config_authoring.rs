@@ -13,6 +13,18 @@ pub struct ValueHistoryEntry {
     pub value: Value,
 }
 
+/// A persisted sensor change; id is also the pagination cursor.
+#[derive(TS, Clone, Debug, Serialize, Deserialize)]
+#[ts(export)]
+pub struct SensorHistoryEntry {
+    #[ts(type = "number")]
+    pub id: i64,
+    pub source_key: String,
+    #[ts(type = "number")]
+    pub changed_at_ms: i64,
+    pub value: Value,
+}
+
 #[derive(TS, Clone, Debug, Serialize, Deserialize)]
 #[ts(export)]
 pub struct ValueFieldInfo {

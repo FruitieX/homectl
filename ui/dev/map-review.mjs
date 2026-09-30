@@ -153,14 +153,8 @@ export default async function (cdp, { width, url }) {
     });
     await cdp.send('Page.navigate', { url: 'http://127.0.0.1:3021/map' });
     await cdp.send('Page.bringToFront');
-    await until(
-      width < 768
-        ? '!!document.querySelector(\'[aria-label="Floorplan"]\')'
-        : `!!${button('Map review')}`,
-      'Floorplan selector available',
-    );
-    if (width < 768) await pick('Floorplan', 'Map review');
-    else await click(button('Map review'));
+    await until(`!!${button('Map review')}`, 'Floorplan selector available');
+    await click(button('Map review'));
     await until(
       `document.body.innerText.includes('The floorplan could not be loaded.')`,
       'Actionable read failure',
@@ -178,14 +172,13 @@ export default async function (cdp, { width, url }) {
     await options();
     await check(
       'View options use shared accessible selectors',
-      `document.querySelectorAll('button[role="combobox"]').length===${width < 768 ? 4 : 3} && !!document.querySelector('[aria-label="Open device or group"]')?.textContent.includes('Choose')`,
+      `document.querySelectorAll('button[role="combobox"]').length===3 && !!document.querySelector('[aria-label="Open device or group"]')?.textContent.includes('Choose')`,
     );
     await pick('Device labels', 'All devices');
     await pick('Group filter', 'Living room');
     // Keep the explicitly created wide plan after verifying the group selector.
     await key('Escape', 27);
-    if (width < 768) await pick('Floorplan', 'Map review');
-    else await click(button('Map review'));
+    await click(button('Map review'));
     await options();
     await pick('Open device or group', 'Living room lamp');
     await until(
@@ -230,7 +223,7 @@ export default async function (cdp, { width, url }) {
     if (width < 768)
       await check(
         'Floorplan selector shares the AppBar immediately before the assistant',
-        `(()=>{const selector=document.querySelector('[aria-label="Floorplan"]'), assistant=document.querySelector('[aria-label="Ask AI"]'), a=selector.getBoundingClientRect(), b=assistant.getBoundingClientRect();return Math.abs(a.top-b.top)<=6 && a.right<=b.left+1 && selector.closest('header').getBoundingClientRect().height<=65 && document.documentElement.scrollWidth<=innerWidth+1;})()`,
+        `(()=>{const selector=document.querySelector('#floorplan-tabs [role="tablist"]'), assistant=document.querySelector('[aria-label="Ask AI"]'), a=selector.getBoundingClientRect(), b=assistant.getBoundingClientRect();return Math.abs(a.top-b.top)<=6 && a.right<=b.left+1 && selector.closest('header').getBoundingClientRect().height<=65 && document.documentElement.scrollWidth<=innerWidth+1;})()`,
       );
     await shot('map');
     return { checks, passed: checks.every((c) => c.passed), width };

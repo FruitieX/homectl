@@ -1289,19 +1289,69 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { applied: true, scene_id: body?.scene_id ?? null });
   }
 
+  if (
+    path === '/api/v1/config/value-history' ||
+    path === '/api/v1/config/sensor-history'
+  ) {
+    const historyParams = new URL(req.url, 'http://fixture').searchParams;
+    const source =
+      historyParams.get('source_key') ?? historyParams.get('sensor');
+    const before = Number(historyParams.get('before') ?? Infinity);
+    const rows = (db.sensorHistory ?? [])
+      .filter(
+        (row) => (!source || row.source_key === source) && row.id < before,
+      )
+      .sort((a, b) => b.id - a.id)
+      .slice(0, 100);
+    return send(res, 200, {
+      success: true,
+      data: path.endsWith('value-history')
+        ? rows.map(({ changed_at_ms, value }) => ({ changed_at_ms, value }))
+        : rows,
+    });
+  }
+  if (path === '/api/__fixture/sensor-history' && method === 'POST') {
+    const body = await readBody(req);
+    db.sensorHistory = body.entries ?? [];
+    if (body.configs) db.config['device-sensor-configs'] = body.configs;
+    if (body.devices)
+      for (const device of body.devices) {
+        const i = db.devices.findIndex(
+          (d) =>
+            d.id === device.id && d.integration_id === device.integration_id,
+        );
+        if (i >= 0) db.devices[i] = device;
+        else db.devices.push(device);
+      }
+    for (const publish of statePublishers) publish();
+    return send(res, 200, { success: true });
+  }
   if (path === '/api/v1/devices' && method === 'GET') {
     return send(res, 200, { devices: db.devices });
   }
   if (path.startsWith('/api/v1/devices/') && method === 'PUT') {
     const id = decodeURIComponent(path.slice('/api/v1/devices/'.length));
     const body = await readBody(req);
-    const idx = db.devices.findIndex((d) => d.id === id);
-    if (idx >= 0) db.devices[idx] = { ...db.devices[idx], ...body };
-    return send(res, 200, {
-      success: true,
-      data: db.devices[idx],
-      write: writeOk,
-    });
+    const idx = db.devices.findIndex(
+      (d) => d.id === id && d.integration_id === body.integration_id,
+    );
+    if (idx < 0) return send(res, 404, { error: 'Unknown device' });
+    db.devices[idx] = { ...db.devices[idx], ...body };
+    if (body.data?.Sensor) {
+      const source_key = body.integration_id + '/' + id,
+        value = body.data.Sensor.value ?? body.data.Sensor;
+      const rows = (db.sensorHistory ??= []),
+        last = rows.filter((r) => r.source_key === source_key).at(-1);
+      if (JSON.stringify(last?.value) !== JSON.stringify(value))
+        rows.push({
+          id: Math.max(0, ...rows.map((r) => r.id)) + 1,
+          source_key,
+          changed_at_ms: Date.now(),
+          value,
+        });
+    }
+    for (const publish of statePublishers) publish();
+    return send(res, 200, { devices: [db.devices[idx]] });
   }
 
   const floorplanEditor =

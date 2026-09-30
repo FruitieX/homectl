@@ -173,30 +173,32 @@ export function AttentionDevices({ integration }: { integration?: string }) {
           period.
         </p>
       )}
-      {keys.slice(0, 5).map((key) => {
-        const health = query.data?.devices?.[key];
-        return (
-          <Link
-            key={key}
-            className="flex items-start gap-3 rounded-md border border-border p-3 hover:bg-muted/30"
-            to={
-              health
-                ? health.integration_id === 'computed'
-                  ? configItemHref('source', key.slice('computed/'.length))
-                  : configItemHref('device', key)
-                : `/config/diagnostics?q=${encodeURIComponent(key)}`
-            }
-          >
-            <span className="min-w-0">
-              <strong className="block text-sm">{health?.name ?? key}</strong>
-              <span className="block text-xs text-muted-foreground">
-                {health?.issues[0]?.message ??
-                  'A configuration reference needs repair. Open diagnostics to review it.'}
+      <div className="divide-y divide-border">
+        {keys.slice(0, 5).map((key) => {
+          const health = query.data?.devices?.[key];
+          return (
+            <Link
+              key={key}
+              className="flex items-start gap-3 py-3 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              to={
+                health
+                  ? health.integration_id === 'computed'
+                    ? configItemHref('source', key.slice('computed/'.length))
+                    : configItemHref('device', key)
+                  : `/config/diagnostics?q=${encodeURIComponent(key)}`
+              }
+            >
+              <span className="min-w-0">
+                <strong className="block text-sm">{health?.name ?? key}</strong>
+                <span className="block text-xs text-muted-foreground">
+                  {health?.issues[0]?.message ??
+                    'A configuration reference needs repair. Open diagnostics to review it.'}
+                </span>
               </span>
-            </span>
-          </Link>
-        );
-      })}
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }

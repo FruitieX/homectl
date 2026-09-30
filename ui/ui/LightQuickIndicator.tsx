@@ -49,8 +49,10 @@ export function LightQuickIndicator({
             if (
               next.pointerId === pointerId &&
               Math.hypot(next.clientX - clientX, next.clientY - clientY) > 8
-            )
+            ) {
+              suppressClick.current = true;
               cleanup();
+            }
           };
           const cleanup = () => {
             clearTimeout(timer);

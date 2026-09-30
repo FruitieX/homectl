@@ -103,7 +103,8 @@
 }
 @media (max-width: 767px) {
   .settings-dialog button,
-  .settings-dialog input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  .settings-dialog
+    input:not([type='checkbox']):not([type='radio']):not([type='range']),
   .settings-dialog select {
     min-height: 44px;
   }
@@ -705,4 +706,16 @@
   .settings-activity-summary {
     grid-template-columns: 9rem minmax(10rem, 1fr) auto minmax(0, 2fr);
   }
+}
+
+/* Navigation lists have a separate heading and uninterrupted row dividers. */
+.settings-section-list {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  gap: 10px;
+}
+.settings-section-list .settings-section-heading {
+  padding-inline: 4px;
 }

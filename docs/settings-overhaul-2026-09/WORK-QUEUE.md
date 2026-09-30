@@ -13,14 +13,16 @@ Track supporting evidence in [VISUAL-AUDIT.md](VISUAL-AUDIT.md),
 
 ## Latest follow-up — charts, radial controls and sensor history
 
-The complete outstanding checklist for the request beginning “the weather
+The completed checklist for the request beginning “the weather
 forecast widget table/charts tabs are a bit buggy…” is in
 [CHARTS-RADIAL-SENSOR-HISTORY.md](CHARTS-RADIAL-SENSOR-HISTORY.md).
 It supersedes the mobile dropdown and unconditional hold-to-select behavior
 below. Sensor history stays at the existing **100 changes per source/field**,
-following the user's revised preference. The first three chart fixes have local
-changes but remain unverified; the new radial design, selection rules, sensor
-quick controls and history views are still outstanding.
+following the user's revised preference. This follow-up is now implemented and
+verified, including the later Settings landing-page divider cleanup. Delivery
+includes 71 phone/desktop browser checks, the UI build/type check/251 tests and
+Rust database-retention/reopening coverage. Screenshots and details are linked
+from the checklist. No implementation items from this follow-up remain open.
 
 ## Current user priorities — 2026-09-30
 

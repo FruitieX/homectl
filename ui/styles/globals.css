@@ -214,7 +214,7 @@
    * "Now" price into the heading and drop the summary row so the chart keeps
    * as much height as possible.
    */
-  @container dashboard-widget (max-height: 12rem) {
+  @container dashboard-widget (max-height: 220px) {
     .dashboard-spot-card > * {
       --widget-padding: 0.75rem;
     }
@@ -1451,4 +1451,27 @@ html[data-density='comfortable'] {
   .dashboard-clock-calendar .dashboard-agenda-row:nth-child(n + 2) {
     display: none;
   }
+}
+
+@container dashboard-widget (max-height: 220px) {
+  .dashboard-spot-chart {
+    margin-top: 0;
+  }
+  .dashboard-spot-card > * {
+    --widget-padding: 8px;
+  }
+}
+@keyframes radial-light-open {
+  from {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.radial-light-control {
+  animation: radial-light-open 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-origin: center;
 }

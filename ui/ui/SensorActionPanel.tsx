@@ -20,7 +20,7 @@ type Props = {
   sensorConfig?: DeviceSensorConfig | null;
 };
 
-const sendSensorPayload = async (
+export const sendSensorPayload = async (
   apiEndpoint: string,
   device: Device,
   payload: unknown,

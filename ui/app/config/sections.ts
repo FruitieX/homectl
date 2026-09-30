@@ -8,6 +8,13 @@ export type ConfigSection = {
 
 export const configSections = [
   {
+    href: '/config/sensor-history',
+    label: 'Sensor activity',
+    description: 'Inspect recorded value changes across your sensors.',
+    group: 'Maintenance',
+    keywords: ['sensor', 'history', 'changes', 'events'],
+  },
+  {
     href: '/config/timers',
     label: 'Timers',
     description: 'Countdowns, scheduled actions and ready-by times.',

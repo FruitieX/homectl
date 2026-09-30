@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { SlidersHorizontal, X, Power } from 'lucide-react';
+import {
+  Palette,
+  Power,
+  SlidersHorizontal,
+  Thermometer,
+  X,
+  LoaderCircle,
+} from 'lucide-react';
 import type { Device } from '@/bindings/Device';
 import type { DeviceColor } from '@/bindings/DeviceColor';
 import { useConnectionStatus } from '@/hooks/websocket';
@@ -12,17 +19,14 @@ import {
 } from '@/lib/deviceCapabilities';
 import { ringBrightness, type LightHold } from '@/lib/lightQuickAdjust';
 import { getColor } from '@/lib/colors';
-import { LiveStatePreview, devicePreviewState } from './LiveStatePreview';
 import { Button } from './primitives/button';
-import { Slider } from './primitives/slider';
-import { Popover, PopoverAnchor, PopoverContent } from './primitives/popover';
 
-/** Shared by canvas markers and ordinary light indicators. No write until release. */
+type Adjustment = { brightness?: number; color?: DeviceColor };
+/** One radial surface for map and row indicators. Commands commit on release. */
 export function LightQuickPopover({
   device,
   anchor,
   hold,
-  onSelect,
   onClose,
   onDetails,
   displayNames = {},
@@ -30,308 +34,458 @@ export function LightQuickPopover({
   device: Device;
   anchor: { x: number; y: number };
   hold?: LightHold;
-  onSelect?: () => void;
   onClose: () => void;
   onDetails: () => void;
   displayNames?: Record<string, string>;
 }) {
+  const helpId = useId();
   const setState = useLiveDeviceControls();
-  const returnFocus = useRef(document.activeElement);
   const connected = useConnectionStatus() === 'connected';
-  const [draft, setDraft] = useState<number | null>(null);
-  const [pending, setPending] = useState(false);
-  const [holding, setHolding] = useState(Boolean(hold));
   const state =
     'Controllable' in device.data ? device.data.Controllable.state : null;
-  const capabilities =
+  const caps =
     'Controllable' in device.data
       ? device.data.Controllable.capabilities
       : null;
+  const colored = Boolean(caps?.hs || caps?.xy || caps?.rgb);
   const dimmable = supportsDeviceBrightness(device);
+  const [mode, setMode] = useState<'hs' | 'ct'>(() =>
+    state?.color && 'ct' in state.color && caps?.ct
+      ? 'ct'
+      : colored
+        ? 'hs'
+        : caps?.ct
+          ? 'ct'
+          : 'hs',
+  );
+  const [draft, setDraft] = useState<Adjustment | null>(null),
+    [pending, setPending] = useState(false);
   const enabled = connected && !isDeviceReadOnly(device) && !pending;
-  const level = draft ?? Math.round((state?.brightness ?? 1) * 100);
+  const root = useRef<HTMLDivElement>(null),
+    returnFocus = useRef(document.activeElement);
+  const color = getColor(device.data);
+  const hue = draft?.color && 'h' in draft.color ? draft.color.h : color.hue();
+  const saturation =
+    draft?.color && 's' in draft.color
+      ? draft.color.s
+      : color.saturationv() / 100;
+  const temperature =
+    draft?.color && 'ct' in draft.color
+      ? draft.color.ct
+      : state?.color && 'ct' in state.color
+        ? state.color.ct
+        : 4000;
+  const level = draft?.brightness ?? Math.round((state?.brightness ?? 1) * 100);
+  const cx = Math.max(140, Math.min(innerWidth - 140, anchor.x));
+  const cy = Math.max(208, Math.min(innerHeight - 162, anchor.y));
   const label = getDeviceDisplayLabel(device, displayNames);
-  const commit = async (brightness?: number, color?: DeviceColor) => {
+  const apply = async (value: Adjustment) => {
     if (!enabled) return;
     setPending(true);
     try {
       await setState(
         device,
-        brightness === undefined ? (state?.power ?? true) : brightness > 0,
-        brightness === undefined ? undefined : brightness / 100,
-        color,
+        value.brightness === undefined
+          ? (state?.power ?? true)
+          : value.brightness > 0,
+        value.brightness === undefined ? undefined : value.brightness / 100,
+        value.color,
       );
     } finally {
       setPending(false);
       setDraft(null);
     }
   };
-  const latest = useRef({ enabled, dimmable, commit, onSelect, onClose });
-  latest.current = { enabled, dimmable, commit, onSelect, onClose };
+  const latest = useRef({
+    enabled,
+    apply,
+    onClose,
+    mode,
+    caps,
+    dimmable,
+    cx,
+    cy,
+  });
+  latest.current = { enabled, apply, onClose, mode, caps, dimmable, cx, cy };
   useEffect(() => {
-    if (!hold) return;
-    setHolding(true);
-    setDraft(null);
-    let value: number | null = null;
-    let previous: number | null = null;
-    const move = (event: PointerEvent) => {
-      if (event.pointerId !== hold.pointerId) return;
-      const dx = event.clientX - hold.x,
-        dy = event.clientY - hold.y;
-      if (
-        !latest.current.enabled ||
-        !latest.current.dimmable ||
-        Math.hypot(dx, dy) < 42
-      )
-        return;
-      event.preventDefault();
-      let next = ringBrightness(dx, dy);
-      // Crossing twelve o'clock must not jump straight from full to dark.
-      if (previous !== null && Math.abs(next - previous) > 50)
-        next = previous > 50 ? 100 : 0;
-      previous = next;
-      value = next;
-      setDraft(next);
+    const previousFocus = returnFocus.current;
+    const outside = (e: PointerEvent) => {
+      if (!root.current?.contains(e.target as Node)) latest.current.onClose();
     };
-    const end = (event: PointerEvent) => {
-      if (event.pointerId !== hold.pointerId) return;
-      cleanup();
-      setHolding(false);
-      if (event.type === 'pointercancel') {
-        setDraft(null);
+    const escape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
         latest.current.onClose();
+      }
+    };
+    window.addEventListener('pointerdown', outside);
+    window.addEventListener('keydown', escape, true);
+    if (!hold)
+      root.current
+        ?.querySelector<HTMLButtonElement>(
+          '[aria-label="Close quick controls"]',
+        )
+        ?.focus();
+    return () => {
+      window.removeEventListener('pointerdown', outside);
+      window.removeEventListener('keydown', escape, true);
+      if (!hold && previousFocus instanceof HTMLElement) previousFocus.focus();
+    };
+  }, [hold]);
+  const start = (
+    pointerId: number,
+    region: 'brightness' | 'color',
+    origin: { x: number; y: number },
+    initial?: PointerEvent,
+  ) => {
+    let value: Adjustment | null = null,
+      previous: number | null = null;
+    const move = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId || !latest.current.enabled) return;
+      const dx = e.clientX - origin.x,
+        dy = e.clientY - origin.y,
+        r = Math.hypot(dx, dy);
+      if (region === 'brightness' && r < 108) return;
+      e.preventDefault();
+      if (region === 'brightness') {
+        if (!latest.current.dimmable) return;
+        let next = ringBrightness(dx, dy);
+        if (previous !== null && Math.abs(next - previous) > 90)
+          next = previous > 50 ? 100 : 0;
+        previous = next;
+        value = { brightness: next };
+      } else if (latest.current.mode === 'ct' && latest.current.caps?.ct) {
+        const range = latest.current.caps.ct;
+        value = {
+          color: {
+            ct: Math.round(
+              range.start +
+                ((range.end - range.start) * ringBrightness(dx, dy)) / 100,
+            ),
+          },
+        };
+      } else {
+        value = {
+          color: {
+            h: ringBrightness(dx, dy) * 3.6,
+            s: Math.max(0, Math.min(1, (r - 30) / 66)),
+          },
+        };
+      }
+      setDraft(value);
+    };
+    const end = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      if (value && e.type !== 'pointercancel') move(e);
+      cleanup();
+      if (e.type === 'pointercancel') {
+        setDraft(null);
         return;
       }
-      if (value === null) latest.current.onSelect?.();
-      else void latest.current.commit(value);
+      if (value) void latest.current.apply(value);
     };
-    const secondPointer = (event: PointerEvent) => {
-      if (event.pointerId === hold.pointerId) return;
+    const cancel = (e: PointerEvent) => {
+      if (e.pointerId === pointerId) return;
       cleanup();
-      setHolding(false);
       setDraft(null);
-      latest.current.onClose();
     };
     const cleanup = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
-      window.removeEventListener('pointerdown', secondPointer);
+      window.removeEventListener('pointerdown', cancel);
     };
     window.addEventListener('pointermove', move, { passive: false });
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
-    window.addEventListener('pointerdown', secondPointer);
+    window.addEventListener('pointerdown', cancel);
+    if (initial) move(initial);
     return cleanup;
-  }, [hold]);
+  };
+  const dragCleanup = useRef<(() => void) | undefined>(undefined);
+  useEffect(() => () => dragCleanup.current?.(), []);
+  useEffect(() => {
+    if (!hold) return;
+    const cleanup = start(hold.pointerId, 'brightness', { x: cx, y: cy });
+    return cleanup;
+  }, [hold, cx, cy]);
   if (!state) return null;
-  const color = getColor(device.data);
-  const colored = capabilities?.hs || capabilities?.xy || capabilities?.rgb;
-  return (
-    <>
-      {holding &&
-        dimmable &&
-        createPortal(
-          <div
-            className="pointer-events-none fixed z-[60] grid size-36 place-items-center rounded-full bg-background/90 text-primary shadow-xl"
-            style={{ left: anchor.x - 72, top: anchor.y - 72 }}
-            aria-hidden="true"
-          >
-            <svg className="absolute inset-0 size-full" viewBox="0 0 144 144">
-              <circle
-                cx="72"
-                cy="72"
-                r="58"
-                fill="none"
-                stroke="currentColor"
-                strokeOpacity=".15"
-                strokeWidth="10"
-              />
-              <circle
-                cx="72"
-                cy="72"
-                r="58"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="10"
-                pathLength="100"
-                strokeDasharray={`${level} 100`}
-                transform="rotate(-90 72 72)"
-                strokeLinecap={level ? 'round' : 'butt'}
-              />
-            </svg>
-            <div className="grid justify-items-center gap-1">
-              <LiveStatePreview
-                states={[{ ...state, brightness: level / 100 }]}
-                size={40}
-              />
-              <span className="text-sm font-semibold tabular-nums text-foreground">
-                {level}%
-              </span>
-            </div>
-          </div>,
-          document.body,
-        )}
-      <Popover
-        open
-        onOpenChange={(open) => {
-          if (!open && !holding) onClose();
-        }}
-      >
-        <PopoverAnchor asChild>
-          <span
-            className="pointer-events-none fixed"
-            style={{ left: anchor.x, top: anchor.y, width: 1, height: 1 }}
-          />
-        </PopoverAnchor>
-        <PopoverContent
-          side="bottom"
-          sideOffset={holding ? 80 : 16}
-          collisionPadding={12}
-          className="w-72 max-w-[calc(100vw-24px)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto space-y-3 rounded-xl"
-          aria-label={`${label} quick controls`}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            if (!hold && returnFocus.current instanceof HTMLElement)
-              returnFocus.current.focus();
-          }}
-          onEscapeKeyDown={() => onClose()}
-          onOpenAutoFocus={(event) => {
-            if (hold) event.preventDefault();
-          }}
-          onInteractOutside={(event) => {
-            if (holding) event.preventDefault();
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <LiveStatePreview states={[devicePreviewState(device)]} size={30} />
-            <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-              {label}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8"
-              aria-label="Close quick controls"
-              onClick={onClose}
-            >
-              <X className="size-4" />
-            </Button>
-          </div>
-          {!connected || isDeviceReadOnly(device) ? (
-            <p className="text-xs text-muted-foreground">
-              {!connected
-                ? 'Reconnecting…'
-                : 'Device is disabled or read-only.'}
-            </p>
-          ) : null}
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              {state.power ? 'On' : 'Off'}
-            </span>
-            <Button
-              size="icon"
-              variant={state.power ? 'secondary' : 'outline'}
-              aria-label={`Turn ${label} ${state.power ? 'off' : 'on'}`}
-              aria-pressed={state.power}
-              disabled={!enabled || holding}
-              onClick={async () => {
-                setPending(true);
-                try {
-                  await setState(device, !state.power);
-                } finally {
-                  setPending(false);
-                }
-              }}
-            >
-              <Power />
-            </Button>
-          </div>
-          {dimmable && (
-            <div>
-              <div className="flex justify-between text-xs">
-                <span>Brightness</span>
-                <span className="tabular-nums">{level}%</span>
-              </div>
-              <Slider
-                aria-label={`${label} brightness`}
-                className="min-h-11"
-                min={0}
-                max={100}
-                step={1}
-                value={[level]}
-                disabled={!enabled || holding}
-                onValueChange={([value]) => setDraft(value)}
-                onValueCommit={([value]) => void commit(value)}
-              />
-            </div>
-          )}
-          {capabilities?.ct && (
-            <div className="grid grid-cols-3 gap-1">
-              {[
-                ['Warm', 2700],
-                ['Neutral', 4000],
-                ['Cool', 6000],
-              ].map(([name, temperature]) => (
-                <Button
-                  key={name}
-                  size="sm"
-                  variant="outline"
-                  disabled={!enabled || holding}
-                  onClick={() =>
-                    void commit(undefined, {
-                      ct: Math.max(
-                        capabilities.ct!.start,
-                        Math.min(capabilities.ct!.end, Number(temperature)),
-                      ),
-                    })
-                  }
-                >
-                  {name}
-                </Button>
-              ))}
-            </div>
-          )}
+  const angle = (hue * Math.PI) / 180 - Math.PI / 2;
+  const ctAngle = caps?.ct
+    ? ((temperature - caps.ct.start) / (caps.ct.end - caps.ct.start)) *
+        2 *
+        Math.PI -
+      Math.PI / 2
+    : angle;
+  const selectionRadius = 30 + saturation * 66;
+  const disk =
+    mode === 'ct'
+      ? 'conic-gradient(from 0deg,#ffb35e,#fff4dc,#daedff,#a9ceff,#ffb35e)'
+      : 'radial-gradient(circle, white 34px, transparent 96px),conic-gradient(from 0deg, #f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)';
+  return createPortal(
+    <div
+      ref={root}
+      role="dialog"
+      aria-label={`${label} quick controls`}
+      aria-describedby={helpId}
+      className="radial-light-control fixed z-[60] w-[268px] touch-none text-center text-foreground"
+      style={{ left: cx - 134, top: cy - 134 }}
+    >
+      <div className="absolute -top-16 left-0 w-full">
+        <p className="mb-1 truncate text-xs font-medium">{label}</p>
+        <div className="flex justify-center gap-1 rounded-full">
           {colored && (
-            <div>
-              <div className="mb-1 text-xs text-muted-foreground">Color</div>
-              <Slider
-                aria-label={`${label} hue`}
-                className="min-h-11"
-                trackStyle={{
-                  background:
-                    'linear-gradient(to right, #ef4444,#eab308,#22c55e,#06b6d4,#3b82f6,#a855f7,#ef4444)',
-                }}
-                rangeClassName="bg-transparent"
-                min={0}
-                max={360}
-                step={1}
-                defaultValue={[Math.round(color.hue())]}
-                disabled={!enabled || holding}
-                onValueCommit={([h]) => void commit(undefined, { h, s: 1 })}
-              />
-            </div>
+            <Button
+              size="icon"
+              className="size-9 rounded-full bg-card shadow-md"
+              variant="ghost"
+              aria-label="Hue and saturation"
+              aria-pressed={mode === 'hs'}
+              style={
+                mode === 'hs'
+                  ? { boxShadow: '0 0 0 1px hsl(var(--primary))' }
+                  : undefined
+              }
+              onClick={() => setMode('hs')}
+            >
+              <Palette />
+            </Button>
           )}
-          {holding && (
-            <p className="text-xs text-muted-foreground">
-              {onSelect
-                ? 'Release to select. Drag onto the ring to dim.'
-                : 'Drag onto the ring to dim. Release to keep controls open.'}
-            </p>
+          {caps?.ct && (
+            <Button
+              size="icon"
+              className="size-9 rounded-full bg-card shadow-md"
+              variant="ghost"
+              aria-label="Color temperature"
+              aria-pressed={mode === 'ct'}
+              style={
+                mode === 'ct'
+                  ? { boxShadow: '0 0 0 1px hsl(var(--primary))' }
+                  : undefined
+              }
+              onClick={() => setMode('ct')}
+            >
+              <Thermometer />
+            </Button>
           )}
           <Button
+            size="icon"
+            className="size-9 rounded-full bg-card shadow-md"
             variant="ghost"
-            className="w-full"
+            aria-label="All light controls"
             onClick={() => {
               onClose();
               onDetails();
             }}
           >
-            <SlidersHorizontal className="size-4" />
-            All light controls
+            <SlidersHorizontal />
           </Button>
-        </PopoverContent>
-      </Popover>
-    </>
+          <Button
+            size="icon"
+            className="size-9 rounded-full bg-card shadow-md"
+            variant="ghost"
+            aria-label="Close quick controls"
+            onClick={onClose}
+          >
+            <X />
+          </Button>
+        </div>
+      </div>
+      <div className="relative size-[268px] rounded-full border border-border bg-card/95 shadow-2xl backdrop-blur-md">
+        <svg
+          viewBox="0 0 268 268"
+          className="pointer-events-none absolute inset-0 size-full"
+          aria-hidden="true"
+        >
+          <circle
+            cx="134"
+            cy="134"
+            r="119"
+            fill="none"
+            stroke="currentColor"
+            strokeOpacity=".12"
+            strokeWidth="14"
+          />
+          {dimmable && (
+            <circle
+              cx="134"
+              cy="134"
+              r="119"
+              fill="none"
+              stroke="currentColor"
+              className="text-primary"
+              strokeWidth="14"
+              pathLength="100"
+              strokeDasharray={`${level} 100`}
+              transform="rotate(-90 134 134)"
+              strokeLinecap={level ? 'round' : 'butt'}
+            />
+          )}
+        </svg>
+        {dimmable && (
+          <div
+            role="slider"
+            aria-label={`${label} brightness`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={level}
+            aria-disabled={!enabled}
+            tabIndex={enabled ? 0 : -1}
+            className="absolute inset-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onPointerDown={(e) => {
+              if (!enabled) return;
+              e.preventDefault();
+              dragCleanup.current?.();
+              dragCleanup.current = start(
+                e.pointerId,
+                'brightness',
+                { x: cx, y: cy },
+                e.nativeEvent,
+              );
+            }}
+            onKeyDown={(e) => {
+              let v = level;
+              if (e.key === 'ArrowRight' || e.key === 'ArrowUp')
+                v += e.shiftKey ? 10 : 1;
+              else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown')
+                v -= e.shiftKey ? 10 : 1;
+              else if (e.key === 'Home') v = 0;
+              else if (e.key === 'End') v = 100;
+              else return;
+              e.preventDefault();
+              void apply({ brightness: Math.max(0, Math.min(100, v)) });
+            }}
+          />
+        )}
+        <div
+          role={colored || caps?.ct ? 'slider' : undefined}
+          aria-label={
+            mode === 'ct'
+              ? `${label} color temperature`
+              : `${label} hue and saturation`
+          }
+          aria-valuemin={mode === 'ct' ? caps?.ct?.start : 0}
+          aria-valuemax={mode === 'ct' ? caps?.ct?.end : 360}
+          aria-valuenow={mode === 'ct' ? temperature : Math.round(hue)}
+          aria-valuetext={
+            mode === 'ct'
+              ? `${temperature} kelvin`
+              : `Hue ${Math.round(hue)} degrees, saturation ${Math.round(saturation * 100)} percent`
+          }
+          aria-disabled={!enabled}
+          tabIndex={enabled && (colored || caps?.ct) ? 0 : -1}
+          className="absolute left-[38px] top-[38px] size-48 rounded-full border-4 border-card outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          style={{
+            background: colored || caps?.ct ? disk : 'var(--color-muted)',
+          }}
+          onPointerDown={(e) => {
+            if (!enabled || !(colored || caps?.ct)) return;
+            e.stopPropagation();
+            e.preventDefault();
+            dragCleanup.current?.();
+            dragCleanup.current = start(
+              e.pointerId,
+              'color',
+              { x: cx, y: cy },
+              e.nativeEvent,
+            );
+          }}
+          onKeyDown={(e) => {
+            if (
+              !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(
+                e.key,
+              )
+            )
+              return;
+            e.preventDefault();
+            const d = e.key === 'ArrowUp' || e.key === 'ArrowRight' ? 1 : -1;
+            if (mode === 'ct' && caps?.ct)
+              void apply({
+                color: {
+                  ct: Math.max(
+                    caps.ct.start,
+                    Math.min(caps.ct.end, temperature + d * 100),
+                  ),
+                },
+              });
+            else
+              void apply({
+                color: {
+                  h: (hue + (e.altKey ? 0 : d * 5) + 360) % 360,
+                  s: Math.max(
+                    0,
+                    Math.min(1, saturation + (e.altKey ? d * 0.05 : 0)),
+                  ),
+                },
+              });
+          }}
+        >
+          {(colored || caps?.ct) && (
+            <span
+              className="pointer-events-none absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-md"
+              style={{
+                left:
+                  92 +
+                  Math.cos(mode === 'ct' ? ctAngle : angle) * selectionRadius,
+                top:
+                  92 +
+                  Math.sin(mode === 'ct' ? ctAngle : angle) * selectionRadius,
+                background:
+                  mode === 'hs'
+                    ? `hsl(${hue} ${saturation * 100}% 50%)`
+                    : color.hex(),
+              }}
+            />
+          )}
+        </div>
+        <button
+          type="button"
+          aria-label={`Turn ${label} ${state.power ? 'off' : 'on'}`}
+          aria-pressed={state.power}
+          disabled={!enabled}
+          className="absolute left-1/2 top-1/2 grid size-[68px] -translate-x-1/2 -translate-y-1/2 place-content-center rounded-full border-4 border-card bg-card text-foreground shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          onClick={async () => {
+            setPending(true);
+            try {
+              await setState(device, !state.power);
+            } finally {
+              setPending(false);
+            }
+          }}
+        >
+          {pending ? (
+            <LoaderCircle className="mx-auto size-5 animate-spin" />
+          ) : (
+            <Power
+              className={`mx-auto size-5 ${state.power ? 'text-primary' : 'text-muted-foreground'}`}
+            />
+          )}
+          <span className="mt-1 text-xs tabular-nums">
+            {dimmable ? `${level}%` : state.power ? 'On' : 'Off'}
+          </span>
+        </button>
+        <span className="pointer-events-none absolute bottom-8 left-0 w-full text-[10px] text-foreground/80">
+          {mode === 'ct' && caps?.ct
+            ? `${temperature} K`
+            : colored
+              ? `${Math.round(saturation * 100)}% saturation`
+              : ''}
+        </span>
+      </div>
+      <p
+        id={helpId}
+        className="mt-2 rounded-full bg-card/95 px-2 py-1 text-[10px] text-muted-foreground"
+      >
+        {!connected
+          ? 'Reconnecting…'
+          : isDeviceReadOnly(device)
+            ? 'Disabled or read-only'
+            : mode === 'ct'
+              ? 'Inner circle: temperature · outer ring: brightness'
+              : 'Inner circle: color · outer ring: brightness'}
+      </p>
+    </div>,
+    document.body,
   );
 }

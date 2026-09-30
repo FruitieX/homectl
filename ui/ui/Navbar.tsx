@@ -140,7 +140,7 @@ export const Navbar = () => {
       {(pathname === '/map' || isRoomMap) && (
         <div
           id="floorplan-tabs"
-          className="flex min-w-0 max-w-[40%] items-center gap-1 empty:hidden"
+          className="flex min-w-0 max-w-[52%] items-center gap-1 empty:hidden"
         />
       )}
       <AssistantButton

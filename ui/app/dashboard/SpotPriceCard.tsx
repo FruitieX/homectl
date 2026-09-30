@@ -143,7 +143,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
             >
               <ResponsiveChart
                 fit
-                className="dashboard-spot-chart mt-1 h-full min-h-0 min-w-0 overflow-hidden"
+                className="dashboard-spot-chart h-full min-h-0 min-w-0 overflow-hidden"
               >
                 {({ width, height }) => (
                   <SpotPriceChart

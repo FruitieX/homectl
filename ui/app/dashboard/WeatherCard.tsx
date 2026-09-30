@@ -1,4 +1,4 @@
-import { Sparkline } from '@/ui/charts/Sparkline';
+import { TimeSeriesPlot } from '@/ui/charts/TimeSeriesPlot';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { useInterval, useTimeout, useToggle } from 'usehooks-ts';
 import clsx from 'clsx';
@@ -406,12 +406,14 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
   return (
     <>
       <WidgetCard className="dashboard-weather-card col-span-1">
-        <button
-          type="button"
-          className="group flex h-full w-full items-stretch focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring rounded-[inherit] p-0 text-left hover:bg-muted/30"
-          onClick={toggleDetailsModal}
-        >
-          <CardContent className="flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
+        <div className="group relative flex h-full w-full text-left">
+          <button
+            type="button"
+            aria-label="Open weather details"
+            className="absolute inset-0 rounded-[inherit] hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={toggleDetailsModal}
+          />
+          <CardContent className="pointer-events-none relative flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
             <WidgetHeading
               icon={<CloudSun />}
               label={widget?.title || 'Weather'}
@@ -492,17 +494,66 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
                       ))}
                   </div>
                   <div
-                    className="dashboard-weather-trend relative min-h-0 flex-1"
+                    className="dashboard-weather-trend pointer-events-auto relative min-h-0 flex-1"
                     aria-label="Forecast temperature trend"
                   >
-                    <Sparkline
-                      className="absolute inset-0 h-full w-full text-primary/75"
-                      minSpan={3}
-                      points={hourlyData.map((series) => ({
-                        time: parseTime(series.time),
-                        value: series.data.instant.details.air_temperature,
-                      }))}
-                    />
+                    <div className="flex justify-between gap-2 text-[11px] text-muted-foreground">
+                      {['Low', 'High'].map((name, i) => {
+                        const point = hourlyData.reduce(
+                          (best, row) =>
+                            i === 0
+                              ? row.data.instant.details.air_temperature <
+                                best.data.instant.details.air_temperature
+                                ? row
+                                : best
+                              : row.data.instant.details.air_temperature >
+                                  best.data.instant.details.air_temperature
+                                ? row
+                                : best,
+                          hourlyData[0],
+                        );
+                        return (
+                          <span key={name}>
+                            {name}{' '}
+                            {point.data.instant.details.air_temperature.toFixed(
+                              1,
+                            )}
+                            ° ·{' '}
+                            {parseTime(point.time).toLocaleString([], {
+                              weekday: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: false,
+                            })}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <ResponsiveChart
+                      fit
+                      className="absolute inset-x-0 bottom-0 top-5 overflow-hidden"
+                    >
+                      {({ width, height }) => (
+                        <TimeSeriesPlot
+                          width={width}
+                          height={height}
+                          label="Weather forecast temperature"
+                          unit="°C"
+                          showLegend={false}
+                          showUnit={false}
+                          series={[
+                            {
+                              name: 'Temperature',
+                              points: hourlyData.map((series) => ({
+                                time: parseTime(series.time).getTime(),
+                                value:
+                                  series.data.instant.details.air_temperature,
+                              })),
+                            },
+                          ]}
+                        />
+                      )}
+                    </ResponsiveChart>
                   </div>
                 </>
               )}
@@ -530,7 +581,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
                 </p>
               )}
           </CardContent>
-        </button>
+        </div>
       </WidgetCard>
       <ResponsiveOverlay
         open={detailsModalOpen}
@@ -544,7 +595,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
             value={String(activeTab)}
             onValueChange={(value) => setActiveTab(Number(value))}
           >
-            <TabsList className="grid h-11 w-full grid-cols-2 rounded-lg bg-muted/60 p-1.5">
+            <TabsList className="grid h-[52px] w-full grid-cols-2 items-stretch rounded-lg bg-muted/60 p-1 [&>button]:min-h-0 [&>button]:py-0">
               <TabsTrigger value="0">Table</TabsTrigger>
               <TabsTrigger value="1">Charts</TabsTrigger>
             </TabsList>

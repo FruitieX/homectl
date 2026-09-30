@@ -30,7 +30,7 @@ use homectl_server::types::{
     automation_value::{HelperDefinition, HelperKind, HelperPersistence, HelperRuntimeStatus},
     config_authoring::{
         PreviewStep, PreviewValidationError, RoutinePreviewOverride, RoutinePreviewRequest,
-        RoutinePreviewResponse, ValueFieldInfo, ValueHistoryEntry,
+        RoutinePreviewResponse, SensorHistoryEntry, ValueFieldInfo, ValueHistoryEntry,
     },
     config_diagnostics::ConfigDiagnostics,
     device::{Device, DevicesState},
@@ -107,6 +107,7 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         RoutinePreviewResponse::export_all(&cfg)?;
         ValueFieldInfo::export_all(&cfg)?;
         ValueHistoryEntry::export_all(&cfg)?;
+        SensorHistoryEntry::export_all(&cfg)?;
         Device::export_all(&cfg)?;
         ExecutionPolicy::export_all(&cfg)?;
         GroupEvaluation::export_all(&cfg)?;
