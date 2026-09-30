@@ -1,0 +1,52 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+{
+ "driven": {
+  "passed": true,
+  "width": 430,
+  "checks": [
+   "Home shell loaded",
+   "Home fits the viewport",
+   "Home keeps the phone menu and all primary shortcuts",
+   "Shared phone navigation opens",
+   "Primary navigation opens /map",
+   "Navigation closes after choosing a destination",
+   "Map loads",
+   "Floorplan fits the viewport",
+   "Floorplan keeps the phone menu and all primary shortcuts",
+   "Shared phone navigation opens",
+   "Primary navigation opens /groups",
+   "Navigation closes after choosing a destination",
+   "Rooms fits the viewport",
+   "Rooms keeps the phone menu and all primary shortcuts",
+   "Shared phone navigation opens",
+   "Primary navigation opens /config",
+   "Navigation closes after choosing a destination",
+   "Settings landing page is ready",
+   "Settings fits the viewport",
+   "Settings keeps the phone menu and all primary shortcuts",
+   "Shared phone navigation opens",
+   "All settings categories have consistent icons in shared navigation",
+   "Settings category link navigates and closes menu",
+   "App settings fits the viewport",
+   "App settings keeps the phone menu and all primary shortcuts",
+   "Shared phone navigation opens",
+   "Floorplan editor opens from the shared settings navigation",
+   "Floorplan editor fits the viewport",
+   "Floorplan editor keeps the phone menu and all primary shortcuts",
+   "Editor retains a usable fixed canvas",
+   "Shared phone navigation opens",
+   "Primary navigation opens /",
+   "Navigation closes after choosing a destination",
+   "Home after editor fits the viewport",
+   "Home after editor keeps the phone menu and all primary shortcuts",
+   "Shared phone navigation opens",
+   "Shared Search opens the focused command palette",
+   "Escape closes Search without leaving another navigation overlay",
+   "Fullscreen hides shared navigation",
+   "Leaving fullscreen fits the viewport",
+   "Leaving fullscreen keeps the phone menu and all primary shortcuts"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/","viewport":{"width":430,"height":932},"problems":[]}

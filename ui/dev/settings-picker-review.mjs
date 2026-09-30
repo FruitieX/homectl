@@ -257,7 +257,7 @@ export default async function (cdp, { width, height, url }) {
     );
     if (width < 1024) {
       const trigger =
-        'document.querySelector(\'button[aria-label="Settings categories"]\')';
+        'document.querySelector(\'button[aria-label="Open navigation"]\')';
       await activate(trigger);
       await until('!!' + dialog, 'Categories open');
       if (height > 600) await model();
@@ -282,10 +282,10 @@ export default async function (cdp, { width, height, url }) {
           '.getBoundingClientRect();return r.top>=d.top&&r.bottom<=d.bottom})()',
       );
       await check(
-        'Category title and Close remain visible at end of list',
+        'Navigation header and Close remain visible at end of list',
         '(()=>{const d=' +
           dialog +
-          ".getBoundingClientRect();return [document.querySelector('[role=dialog] h2'),document.querySelector('[role=dialog] button[aria-label=Close]')].every(e=>{const r=e.getBoundingClientRect();return r.top>=d.top&&r.bottom<=d.bottom})})()",
+          ".getBoundingClientRect();return [document.querySelector('[role=dialog] a[aria-label=\"homectl home\"]'),document.querySelector('[role=dialog] button[aria-label=Close]')].every(e=>{const r=e.getBoundingClientRect();return r.top>=d.top&&r.bottom<=d.bottom})})()",
       );
       await screenshot('categories');
       await key('Escape', 27);

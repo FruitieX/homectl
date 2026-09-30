@@ -1,4 +1,5 @@
-import { SettingsBreadcrumbs } from '@/ui/settings/SettingsNavigation';
+import { SettingsBreadcrumbs } from '@/ui/settings/SettingsBreadcrumbs';
+import { AppNavigationMenu } from '@/ui/AppNavigation';
 import { Check, Edit, Expand, Plus, Settings2, Shrink } from 'lucide-react';
 import { useAtomValue } from 'jotai';
 import { Link, useLocation, useMatch } from 'react-router-dom';
@@ -92,6 +93,7 @@ export const Navbar = () => {
 
   return (
     <header className="relative z-20 flex h-16 shrink-0 items-center gap-1 border-b border-border/40 bg-background px-3 pt-[env(safe-area-inset-top)] sm:px-5 lg:px-8">
+      <AppNavigationMenu />
       <div className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-1">
         {isRoom ? (
           <nav

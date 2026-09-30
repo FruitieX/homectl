@@ -130,7 +130,7 @@ export default async function (cdp, { width, url }) {
     );
     if (width < 1024) {
       await click(
-        `document.querySelector('button[aria-label="Settings categories"]')`,
+        `document.querySelector('button[aria-label="Open navigation"]')`,
       );
     }
     await until(

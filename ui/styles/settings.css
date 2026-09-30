@@ -10,28 +10,6 @@
   margin-inline: auto;
   min-width: 0;
 }
-.settings-categories a {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  color: hsl(var(--muted-foreground));
-}
-.settings-categories a:hover {
-  background: hsl(var(--muted));
-  color: hsl(var(--foreground));
-}
-.settings-categories a:focus-visible {
-  outline: 2px solid hsl(var(--ring));
-  outline-offset: -2px;
-}
-.settings-categories a.active {
-  background: hsl(var(--primary) / 0.09);
-  color: hsl(var(--primary));
-  font-weight: 600;
-}
 .settings-section {
   border: 1px solid hsl(var(--border));
   background: hsl(var(--card));
@@ -88,11 +66,6 @@
   }
   .settings-savebar {
     padding: 10px 12px;
-  }
-  .settings-categories a {
-    min-height: 44px;
-    display: flex;
-    align-items: center;
   }
   .settings-workspace button,
   .settings-workspace input:not([type='checkbox']):not([type='radio']),

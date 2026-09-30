@@ -1,0 +1,44 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+{
+ "driven": {
+  "passed": true,
+  "width": 1440,
+  "checks": [
+   "Home shell loaded",
+   "Home fits the viewport",
+   "Home keeps the same sidebar element, width and primary link positions",
+   "Primary navigation opens /map",
+   "Map loads",
+   "Floorplan fits the viewport",
+   "Floorplan keeps the same sidebar element, width and primary link positions",
+   "Primary navigation opens /groups",
+   "Rooms fits the viewport",
+   "Rooms keeps the same sidebar element, width and primary link positions",
+   "Primary navigation opens /config",
+   "Settings landing page is ready",
+   "Settings fits the viewport",
+   "Settings keeps the same sidebar element, width and primary link positions",
+   "All settings categories have consistent icons in shared navigation",
+   "Settings category link navigates and closes menu",
+   "App settings fits the viewport",
+   "App settings keeps the same sidebar element, width and primary link positions",
+   "Floorplan editor opens from the shared settings navigation",
+   "Floorplan editor fits the viewport",
+   "Floorplan editor keeps the same sidebar element, width and primary link positions",
+   "Editor retains a usable fixed canvas",
+   "Editor marks Settings and its Floorplan category active",
+   "Collapsing categories retains the shared sidebar width",
+   "Primary navigation opens /",
+   "Home after editor fits the viewport",
+   "Home after editor keeps the same sidebar element, width and primary link positions",
+   "Shared Search opens the focused command palette",
+   "Escape closes Search without leaving another navigation overlay",
+   "Fullscreen hides shared navigation",
+   "Sidebar returns after fullscreen",
+   "Leaving fullscreen fits the viewport",
+   "Leaving fullscreen keeps the same sidebar element, width and primary link positions"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/","viewport":{"width":1440,"height":1000},"problems":[]}

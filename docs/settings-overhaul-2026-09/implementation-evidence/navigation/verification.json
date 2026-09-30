@@ -1,0 +1,33 @@
+{
+  "date": "2026-09-30",
+  "ui": {
+    "typecheck": "passed",
+    "lint": "passed with existing import/export warning",
+    "tests": 278,
+    "build": "passed with existing chunk-size warnings"
+  },
+  "browser": [
+    {
+      "viewport": "desktop",
+      "width": 1440,
+      "checks": 33,
+      "passed": true,
+      "problems": []
+    },
+    {
+      "viewport": "tablet",
+      "width": 1024,
+      "checks": 33,
+      "passed": true,
+      "problems": []
+    },
+    {
+      "viewport": "phone",
+      "width": 430,
+      "checks": 41,
+      "passed": true,
+      "problems": []
+    }
+  ],
+  "live_changes": false
+}

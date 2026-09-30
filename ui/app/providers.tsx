@@ -1,3 +1,4 @@
+import { AppSidebar } from '@/ui/AppNavigation';
 import { SettingsDraftGuard } from '@/ui/settings/SettingsDrafts';
 import { entityDraftStore } from '@/lib/entityDraft';
 import { HomectlLogo } from '@/ui/HomectlLogo';
@@ -12,10 +13,7 @@ import {
   useProvideWebsocketState,
 } from '@/hooks/websocket';
 import '@/styles/globals.css';
-import {
-  HomectlBottomNavigation,
-  HomectlNavigationRail,
-} from '@/ui/BottomNavigation';
+import { HomectlBottomNavigation } from '@/ui/BottomNavigation';
 import { Navbar } from '@/ui/Navbar';
 import { useProvideAppConfig } from '@/hooks/appConfig';
 import { useApplyAppearance } from '@/hooks/preferences';
@@ -163,7 +161,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
   return (
     <div className="app-viewport app-ambient relative flex min-h-0 flex-1 overflow-hidden bg-background text-foreground">
       <SettingsDraftGuard />
-      <HomectlNavigationRail />
+      <AppSidebar />
       <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
         <Navbar />
         {connectionStatus !== 'connected' ? (

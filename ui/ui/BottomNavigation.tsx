@@ -1,57 +1,28 @@
-import { SettingsNavigation } from '@/ui/settings/SettingsNavigation';
-import { HomectlLogo } from '@/ui/HomectlLogo';
 import { Link, useLocation } from 'react-router-dom';
 import { useSetAtom } from 'jotai';
-import { Cog, House, Layers3, Map, RefreshCw, Search } from 'lucide-react';
+import { RefreshCw, Search } from 'lucide-react';
+import {
+  primaryNavigationItems,
+  primaryNavigationActive,
+} from '@/ui/AppNavigation';
 import { useDeveloperMode } from '@/hooks/developerMode';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import { commandPaletteOpenAtom } from '@/ui/CommandPalette';
 import { Button } from '@/ui/primitives/button';
 import { cn } from '@/lib/cn';
 
-type Route = 'Dashboard' | 'Floorplan' | 'Groups' | 'Config';
-
-const getRoute = (pathname: string | null): Route => {
-  if (pathname === '/' || pathname === '/dashboard') {
-    return 'Dashboard';
-  } else if (pathname === '/map') {
-    return 'Floorplan';
-  } else if (pathname === '/groups') {
-    return 'Groups';
-  } else if (pathname?.startsWith('/groups/')) {
-    return 'Groups';
-  } else if (pathname?.startsWith('/config')) {
-    return 'Config';
-  } else if (pathname === '/settings') {
-    return 'Config';
-  } else {
-    return 'Dashboard';
-  }
-};
-
 export const HomectlBottomNavigation = () => {
   const pathname = useLocation().pathname;
-  const route = getRoute(pathname);
 
   const [isFullscreen] = useIsFullscreen();
   const [developerMode] = useDeveloperMode();
   const openPalette = useSetAtom(commandPaletteOpenAtom);
 
-  if (isFullscreen || pathname === '/config/floorplan') {
+  if (isFullscreen) {
     return null;
   }
 
-  const items = [
-    {
-      route: 'Dashboard' as const,
-      to: '/',
-      label: 'Home',
-      icon: House,
-    },
-    { route: 'Floorplan' as const, to: '/map', label: 'Floorplan', icon: Map },
-    { route: 'Groups' as const, to: '/groups', label: 'Rooms', icon: Layers3 },
-    { route: 'Config' as const, to: '/config', label: 'Settings', icon: Cog },
-  ];
+  const items = primaryNavigationItems;
 
   return (
     <div className="z-30 shrink-0 border-t border-border/50 bg-background px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-1.5    lg:hidden">
@@ -64,9 +35,9 @@ export const HomectlBottomNavigation = () => {
       >
         {items.slice(0, 1).map((item) => (
           <BottomNavLink
-            key={item.route}
+            key={item.to}
             item={item}
-            active={route === item.route}
+            active={primaryNavigationActive(item.to, pathname)}
           />
         ))}
         <Button
@@ -81,9 +52,9 @@ export const HomectlBottomNavigation = () => {
         </Button>
         {items.slice(1).map((item) => (
           <BottomNavLink
-            key={item.route}
+            key={item.to}
             item={item}
-            active={route === item.route}
+            active={primaryNavigationActive(item.to, pathname)}
           />
         ))}
         {developerMode ? (
@@ -128,120 +99,5 @@ const BottomNavLink = ({
         <span className="max-w-full truncate leading-tight">{item.label}</span>
       </Link>
     </Button>
-  );
-};
-
-export const HomectlNavigationRail = () => {
-  const pathname = useLocation().pathname;
-  const route = getRoute(pathname);
-  const [isFullscreen] = useIsFullscreen();
-  const [developerMode] = useDeveloperMode();
-  const openPalette = useSetAtom(commandPaletteOpenAtom);
-
-  if (isFullscreen) return null;
-  if (pathname === '/config/floorplan')
-    return (
-      <aside
-        className="hidden w-[60px] shrink-0 flex-col items-center gap-3 border-r border-border bg-background py-4 lg:flex"
-        aria-label="Application navigation"
-      >
-        {[
-          { href: '/', label: 'Home', icon: House },
-          { href: '/map', label: 'Map', icon: Map },
-          { href: '/config', label: 'Settings', icon: Cog },
-        ].map((item) => (
-          <Button
-            key={item.href}
-            asChild
-            variant="ghost"
-            size="icon"
-            title={item.label}
-            className={
-              item.href === '/config' ? 'bg-primary/10 text-primary' : ''
-            }
-          >
-            <Link to={item.href} aria-label={item.label}>
-              <item.icon />
-            </Link>
-          </Button>
-        ))}
-        <Button
-          variant="ghost"
-          size="icon"
-          title="Search · Ctrl K"
-          aria-label="Search"
-          onClick={() => openPalette(true)}
-        >
-          <Search />
-        </Button>
-      </aside>
-    );
-  if (pathname.startsWith('/config')) return <SettingsNavigation />;
-
-  const items = [
-    { route: 'Dashboard' as const, to: '/', label: 'Home', icon: House },
-    { route: 'Floorplan' as const, to: '/map', label: 'Floorplan', icon: Map },
-    { route: 'Groups' as const, to: '/groups', label: 'Rooms', icon: Layers3 },
-    { route: 'Config' as const, to: '/config', label: 'Settings', icon: Cog },
-  ];
-
-  return (
-    <aside className="relative z-30 hidden w-24 shrink-0 flex-col items-center border-r border-border/45 bg-background px-3 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)]  lg:flex">
-      <Link
-        to="/"
-        aria-label="homectl home"
-        className="mb-10 grid size-12 place-items-center rounded-2xl text-foreground"
-      >
-        <HomectlLogo className="size-8" />
-      </Link>
-      <nav
-        aria-label="Primary navigation"
-        className="flex w-full flex-1 flex-col gap-2"
-      >
-        <Button
-          type="button"
-          variant="ghost"
-          className="relative h-[4.6rem] w-full flex-col gap-2 rounded-[1.35rem] px-1 text-[0.68rem] font-semibold text-muted-foreground hover:bg-muted/50"
-          onClick={() => openPalette(true)}
-        >
-          <Search className="!size-5" strokeWidth={1.8} />
-          <span>Search</span>
-        </Button>
-        {items.map((item) => {
-          const Icon = item.icon;
-          const active = route === item.route;
-          return (
-            <Button
-              key={item.route}
-              asChild
-              variant="ghost"
-              className={cn(
-                'relative h-[4.6rem] w-full flex-col gap-2 rounded-[1.35rem] px-1 text-[0.68rem] font-semibold text-muted-foreground',
-                active && 'bg-primary/10 text-primary hover:bg-primary/12',
-              )}
-            >
-              <Link to={item.to} aria-current={active ? 'page' : undefined}>
-                {active ? (
-                  <span className="absolute -left-3 h-7 w-1 rounded-r-full bg-primary" />
-                ) : null}
-                <Icon className="!size-5" strokeWidth={active ? 2.4 : 1.8} />
-                <span>{item.label}</span>
-              </Link>
-            </Button>
-          );
-        })}
-        {developerMode ? (
-          <Button
-            type="button"
-            variant="ghost"
-            className="relative mt-auto h-[4.6rem] w-full flex-col gap-2 rounded-[1.35rem] px-1 text-[0.68rem] font-semibold text-muted-foreground hover:bg-muted/50"
-            onClick={() => window.location.reload()}
-          >
-            <RefreshCw className="!size-5" strokeWidth={1.8} />
-            <span>Refresh</span>
-          </Button>
-        ) : null}
-      </nav>
-    </aside>
   );
 };
