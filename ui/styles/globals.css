@@ -65,6 +65,13 @@
   color: hsl(var(--foreground));
 }
 
+/* Keep page actions and navigation above a software keyboard. The viewport
+   observer removes these variables on dismissal and during pinch zoom. */
+.app-viewport {
+  max-height: var(--app-visual-viewport-height, 100%);
+  top: var(--app-visual-viewport-top, 0px);
+}
+
 @layer utilities {
   .dashboard-widget-container {
     --widget-padding: 1rem;
@@ -1271,7 +1278,7 @@
   --muted-foreground: 156 7% 41%;
   --accent: 151 18% 89%;
   --accent-foreground: 158 32% 19%;
-  --destructive: 4 72% 51%;
+  --destructive: 4 72% 47%;
   --destructive-foreground: 48 35% 98%;
   --border: 150 10% 84%;
   --input: 150 10% 82%;
@@ -1304,8 +1311,8 @@
   --muted-foreground: 150 8% 63%;
   --accent: 154 18% 17%;
   --accent-foreground: 45 24% 92%;
-  --destructive: 3 62% 42%;
-  --destructive-foreground: 45 24% 94%;
+  --destructive: 3 80% 68%;
+  --destructive-foreground: 3 30% 10%;
   --border: 156 13% 19%;
   --input: 156 13% 21%;
   --ring: 151 55% 55%;

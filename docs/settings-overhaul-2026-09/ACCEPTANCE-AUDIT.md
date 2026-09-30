@@ -202,3 +202,44 @@ recovery and the named runtime lifecycle contracts; it does not claim an HTTP
 restore plus real-database restart test across every external integration. Nested
 legacy/unknown-field reconciliation, creation/deletion races and the wider
 accessibility matrix remain open.
+
+### Viewport, keyboard and contrast checkpoint — 2026-09-30
+
+Routine, scene and widget creation pages now keep Save/Create above a software
+keyboard, follow viewport panning, and restore full height after dismissal.
+Pinch zoom is excluded from keyboard detection. Phone buttons have at least
+44-pixel targets; text entry uses 16-pixel type, and long detail titles wrap.
+Search keeps its input and footer visible while the result list scrolls.
+Routine lane headings and destructive colors have separate light/dark values.
+
+The browser driver `ui/dev/settings-viewport-review.mjs` verifies native Tab,
+typing and Discard, visible actions, reduced motion, both system themes,
+page overflow and no configuration writes. Passing width matrix:
+
+| CSS viewport | Checks | Additional coverage |
+| --- | ---: | --- |
+| 360 × 800 | 37 | Phone keyboard/pan/dismiss/pinch model and search |
+| 390 × 844 | 37 | Same; final heading and error contrast |
+| 430 × 932 | 37 | Phone keyboard/pan/dismiss/pinch model and search |
+| 1280 × 900 | 18 | Desktop layout and headings |
+| 1440 × 1080 | 18 | Desktop; final heading and error contrast |
+| 640 × 450, DPR 2 | 21 | 200% equivalent reflow of 1280 × 900 |
+| 720 × 540, DPR 2 | 21 | 200% equivalent reflow of 1440 × 1080 |
+
+The final color pass was rerun at 390/1440 and both reflow sizes. Heading contrast
+is at least 4.94:1 in light mode and 7.87:1 in dark mode; the routine error is
+4.89:1 and 5.78:1. These are measured text/background pairs, not a whole-app
+accessibility certification. Computed oklab backgrounds are converted through
+Canvas before compositing. Other width logs precede the final error color change.
+
+Keyboard geometry uses injected VisualViewport values; zoom uses CSS dimensions
+and DPR emulation, not the browser toolbar. Physical mobile keyboards and the
+Linux kiosk remain untested. Entity-picker/navigation overlays and remaining
+page families still need their own keyboard/reflow acceptance. The local fixture
+now explicitly rejects schedule preview with 501, instead of accidentally
+handling it as a routine creation; those expected errors appear in the logs.
+
+Type checking, lint, production build and all 242 UI tests pass. The build retains
+the existing large-chunk warning. Evidence: `implementation-evidence/everyday/settings-viewport-*`;
+representative captures appear in the comparison gallery. Wider schema,
+restore/restart, recovery and accessibility gates remain open.

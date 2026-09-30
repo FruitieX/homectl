@@ -1,0 +1,194 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "routine: full page title remains readable",
+    "passed": true
+   },
+   {
+    "name": "routine: fits viewport",
+    "passed": true
+   },
+   {
+    "name": "routine: phone button targets stay at least 44px",
+    "passed": true
+   },
+   {
+    "name": "routine: reduced motion avoids page animations",
+    "passed": true
+   },
+   {
+    "name": "routine: save action stays in view",
+    "passed": true
+   },
+   {
+    "name": "Routine light headings and errors meet 4.5:1",
+    "passed": true,
+    "ratios": [
+     {
+      "name": "When",
+      "ratio": 4.941716562370348
+     },
+     {
+      "name": "The development fixture does not evaluate routine previews or conversions. Use the Rust server for these operations.",
+      "ratio": 4.889130896555033
+     },
+     {
+      "name": "Only if",
+      "ratio": 5.037223957700961
+     },
+     {
+      "name": "Then",
+      "ratio": 4.96877207597942
+     }
+    ]
+   },
+   {
+    "name": "routine: system dark theme applies",
+    "passed": true
+   },
+   {
+    "name": "Routine dark headings and errors meet 4.5:1",
+    "passed": true,
+    "ratios": [
+     {
+      "name": "When",
+      "ratio": 7.870168761625062
+     },
+     {
+      "name": "The development fixture does not evaluate routine previews or conversions. Use the Rust server for these operations.",
+      "ratio": 5.780500668331667
+     },
+     {
+      "name": "Only if",
+      "ratio": 9.502519768326462
+     },
+     {
+      "name": "Then",
+      "ratio": 9.08954236479076
+     }
+    ]
+   },
+   {
+    "name": "routine: keyboard leaves save above its top edge",
+    "passed": true
+   },
+   {
+    "name": "routine: keyboard pan keeps navigation and save visible",
+    "passed": true
+   },
+   {
+    "name": "routine: pinch zoom does not impose keyboard sizing",
+    "passed": true
+   },
+   {
+    "name": "routine: dismissal restores full-height layout",
+    "passed": true
+   },
+   {
+    "name": "scene: full page title remains readable",
+    "passed": true
+   },
+   {
+    "name": "scene: fits viewport",
+    "passed": true
+   },
+   {
+    "name": "scene: phone button targets stay at least 44px",
+    "passed": true
+   },
+   {
+    "name": "scene: reduced motion avoids page animations",
+    "passed": true
+   },
+   {
+    "name": "scene: save action stays in view",
+    "passed": true
+   },
+   {
+    "name": "scene: system dark theme applies",
+    "passed": true
+   },
+   {
+    "name": "scene: keyboard leaves save above its top edge",
+    "passed": true
+   },
+   {
+    "name": "scene: keyboard pan keeps navigation and save visible",
+    "passed": true
+   },
+   {
+    "name": "scene: pinch zoom does not impose keyboard sizing",
+    "passed": true
+   },
+   {
+    "name": "scene: dismissal restores full-height layout",
+    "passed": true
+   },
+   {
+    "name": "widget: full page title remains readable",
+    "passed": true
+   },
+   {
+    "name": "widget: fits viewport",
+    "passed": true
+   },
+   {
+    "name": "widget: phone button targets stay at least 44px",
+    "passed": true
+   },
+   {
+    "name": "widget: reduced motion avoids page animations",
+    "passed": true
+   },
+   {
+    "name": "widget: save action stays in view",
+    "passed": true
+   },
+   {
+    "name": "widget: system dark theme applies",
+    "passed": true
+   },
+   {
+    "name": "widget: keyboard leaves save above its top edge",
+    "passed": true
+   },
+   {
+    "name": "widget: keyboard pan keeps navigation and save visible",
+    "passed": true
+   },
+   {
+    "name": "widget: pinch zoom does not impose keyboard sizing",
+    "passed": true
+   },
+   {
+    "name": "widget: dismissal restores full-height layout",
+    "passed": true
+   },
+   {
+    "name": "Search dialog fits above the keyboard",
+    "passed": true
+   },
+   {
+    "name": "Search can reach its final result above the keyboard",
+    "passed": true
+   },
+   {
+    "name": "Search footer remains visible above the keyboard",
+    "passed": true
+   },
+   {
+    "name": "Phone search input avoids text-entry auto zoom",
+    "passed": true
+   },
+   {
+    "name": "All viewport journeys issue no writes",
+    "passed": true
+   }
+  ],
+  "reflowScale": 1,
+  "scope": "Compact density, reduced motion, both system themes; phone keyboard/pan/zoom uses an injected VisualViewport model"
+ }
+}
+{"url":"http://127.0.0.1:3021/config?reviewScale=1","viewport":{"width":390,"height":844},"problems":["log: Failed to load resource: the server responded with a status of 501 (Not Implemented)","log: Failed to load resource: the server responded with a status of 501 (Not Implemented)","log: Failed to load resource: the server responded with a status of 501 (Not Implemented)","log: Failed to load resource: the server responded with a status of 501 (Not Implemented)"]}

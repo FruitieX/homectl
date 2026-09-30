@@ -91,12 +91,17 @@
   .settings-workspace select {
     min-height: 44px;
   }
+  .settings-workspace button {
+    min-width: 44px;
+  }
 }
 @media (max-width: 767px) {
   .settings-dialog button {
     min-height: 44px;
   }
   .settings-dialog input:not([type='checkbox']):not([type='radio']),
+  .settings-dialog textarea,
+  .settings-workspace textarea,
   .settings-workspace input:not([type='checkbox']):not([type='radio']),
   .settings-workspace select {
     font-size: 16px;
@@ -229,15 +234,24 @@
 .flow-lane {
   min-width: 0;
   container-type: inline-size;
-  --flow-color: 152 45% 34%;
+  --flow-color: 152 45% 31%;
   scroll-margin-top: 16px;
   position: relative;
 }
 .flow-when {
-  --flow-color: 206 60% 42%;
+  --flow-color: 206 60% 39%;
 }
 .flow-if {
-  --flow-color: 38 45% 43%;
+  --flow-color: 38 60% 32%;
+}
+.dark .flow-lane {
+  --flow-color: 152 50% 65%;
+}
+.dark .flow-when {
+  --flow-color: 206 75% 70%;
+}
+.dark .flow-if {
+  --flow-color: 38 75% 68%;
 }
 .flow-lane > header {
   display: flex;

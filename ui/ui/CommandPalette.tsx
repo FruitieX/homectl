@@ -568,7 +568,7 @@ export function CommandPalette() {
           </CommandGroup>
         ))}
       </CommandList>
-      <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[0.7rem] text-muted-foreground">
+      <div className="flex shrink-0 items-center justify-between border-t border-border px-3 py-2 text-[0.7rem] text-muted-foreground">
         <span className="flex items-center gap-1">
           <ArrowRight className="size-3" />
           Select to open

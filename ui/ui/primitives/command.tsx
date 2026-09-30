@@ -29,7 +29,7 @@ export function CommandDialog({
   return (
     <Dialog {...props}>
       <DialogContent
-        className="overflow-hidden p-0 shadow-2xl sm:p-0 [&>button]:right-1 [&>button]:top-0.5"
+        className="flex overflow-hidden p-0 shadow-2xl sm:p-0 [&>button]:right-1 [&>button]:top-0"
         aria-describedby={undefined}
         onOpenAutoFocus={() => {
           returnFocus.current =
@@ -47,7 +47,12 @@ export function CommandDialog({
             returnFocus.current.focus();
         }}
       >
-        <Command>{children}</Command>
+        <Command
+          className="h-auto max-h-[calc(var(--app-visual-viewport-height,100dvh)-2rem)] min-h-0 flex-1"
+          label="Search homectl"
+        >
+          {children}
+        </Command>
       </DialogContent>
     </Dialog>
   );
@@ -58,11 +63,11 @@ export function CommandInput({
   ...props
 }: ComponentProps<typeof CommandPrimitive.Input>) {
   return (
-    <div className="flex items-center border-b border-border px-3">
+    <div className="flex shrink-0 items-center border-b border-border px-3">
       <Search className="mr-2 size-4 shrink-0 opacity-50" />
       <CommandPrimitive.Input
         className={cn(
-          'flex h-12 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50',
+          'flex h-12 min-h-[44px] w-full rounded-md bg-transparent py-3 text-[16px] outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 md:min-h-0 md:text-sm',
           className,
         )}
         {...props}
@@ -78,7 +83,7 @@ export function CommandList({
   return (
     <CommandPrimitive.List
       className={cn(
-        'max-h-80 overflow-y-auto overflow-x-hidden p-1.5',
+        'min-h-0 max-h-80 overflow-y-auto overflow-x-hidden p-1.5',
         className,
       )}
       {...props}

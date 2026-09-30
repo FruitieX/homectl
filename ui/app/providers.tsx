@@ -161,7 +161,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
   }, [queryClient]);
 
   return (
-    <div className="app-ambient relative flex min-h-0 flex-1 overflow-hidden bg-background text-foreground">
+    <div className="app-viewport app-ambient relative flex min-h-0 flex-1 overflow-hidden bg-background text-foreground">
       <SettingsDraftGuard />
       <HomectlNavigationRail />
       <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">

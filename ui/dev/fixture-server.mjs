@@ -2156,7 +2156,7 @@ const server = http.createServer(async (req, res) => {
     if (
       method === 'POST' &&
       endpoint === 'routines' &&
-      (rest === 'convert' || rest === 'preview')
+      ['convert', 'preview', 'schedule-preview'].includes(rest)
     ) {
       return send(res, 501, {
         success: false,

@@ -18,6 +18,25 @@ test('a keyboard-sized inset sizes the sheet to the visual viewport', () => {
   );
 });
 
+test('pinch zoom does not resize the app as if a keyboard opened', () => {
+  assert.equal(
+    resolveVisualViewportHeight({
+      layoutHeight: 844,
+      visualHeight: 422,
+      scale: 2,
+    }),
+    null,
+  );
+  assert.equal(
+    resolveVisualViewportHeight({
+      layoutHeight: 844,
+      visualHeight: 420,
+      scale: 1,
+    }),
+    420,
+  );
+});
+
 test('browser chrome changes leave the sheet on the dynamic viewport height', () => {
   assert.equal(
     resolveVisualViewportHeight({ layoutHeight: 915, visualHeight: 867 }),

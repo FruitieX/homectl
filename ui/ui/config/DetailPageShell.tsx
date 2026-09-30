@@ -79,7 +79,7 @@ export function DetailPageShell({
       <div className="flex flex-col gap-2">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
-            <h1 className="truncate text-2xl font-semibold text-foreground">
+            <h1 className="break-words text-2xl font-semibold text-foreground">
               {title}
             </h1>
           </div>

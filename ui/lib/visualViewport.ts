@@ -26,10 +26,15 @@ export const KEYBOARD_MIN_INSET_PX = 100;
 export function resolveVisualViewportHeight({
   layoutHeight,
   visualHeight,
+  scale = 1,
 }: {
   layoutHeight: number;
   visualHeight: number;
+  scale?: number;
 }): number | null {
+  // Pinch zoom narrows the visual viewport too; keep its normal pan/zoom
+  // geometry instead of treating it as a keyboard and shrinking the app.
+  if (!Number.isFinite(scale) || Math.abs(scale - 1) > 0.01) return null;
   if (!Number.isFinite(visualHeight) || visualHeight <= 0) {
     return null;
   }

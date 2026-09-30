@@ -28,6 +28,7 @@ function readHeight(): number | null {
   return resolveVisualViewportHeight({
     layoutHeight: window.innerHeight,
     visualHeight: viewport.height,
+    scale: viewport.scale,
   });
 }
 
@@ -145,22 +146,41 @@ export function useVisualViewportCssVariable(): void {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (height === null) {
-      root.style.removeProperty(visualViewportHeightVar);
-      root.style.removeProperty(visualViewportOffsetVar);
-      return;
-    }
-    root.style.setProperty(visualViewportHeightVar, `${Math.round(height)}px`);
-    // The visual viewport can also be scrolled (iOS does this to reveal a
-    // focused field), so measure its bottom, not just its height.
-    root.style.setProperty(
-      visualViewportOffsetVar,
-      `${Math.max(
-        0,
-        window.innerHeight -
-          (window.visualViewport?.offsetTop ?? 0) -
-          Math.round(height),
-      )}px`,
-    );
+    const update = () => {
+      const currentHeight = readHeight();
+      if (currentHeight === null) {
+        root.style.removeProperty(visualViewportHeightVar);
+        root.style.removeProperty(visualViewportOffsetVar);
+        root.style.removeProperty('--app-visual-viewport-top');
+        return;
+      }
+      root.style.setProperty(
+        visualViewportHeightVar,
+        `${Math.round(currentHeight)}px`,
+      );
+      root.style.setProperty(
+        '--app-visual-viewport-top',
+        `${window.visualViewport?.offsetTop ?? 0}px`,
+      );
+      // The visual viewport can also be scrolled (iOS does this to reveal a
+      // focused field), so measure its bottom, not just its height.
+      root.style.setProperty(
+        visualViewportOffsetVar,
+        `${Math.max(
+          0,
+          window.innerHeight -
+            (window.visualViewport?.offsetTop ?? 0) -
+            Math.round(currentHeight),
+        )}px`,
+      );
+    };
+    update();
+    // The keyboard can pan the viewport without changing its height.
+    window.visualViewport?.addEventListener('scroll', update);
+    window.visualViewport?.addEventListener('resize', update);
+    return () => {
+      window.visualViewport?.removeEventListener('scroll', update);
+      window.visualViewport?.removeEventListener('resize', update);
+    };
   }, [height]);
 }
