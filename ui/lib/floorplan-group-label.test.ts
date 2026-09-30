@@ -32,9 +32,7 @@ test('room labels wrap inside a narrow area at different zoom levels', () => {
     assert(
       result.x - result.width / 2 >= 0 && result.x + result.width / 2 <= 128,
     );
-    assert(
-      result.y - result.height / 2 >= 0 && result.y + result.height / 2 <= 192,
-    );
+    assert(result.y >= 0 && result.y + result.height <= 192);
     assert(
       result.lines.every((line) => line.length * 6 <= result.width * scale),
     );
@@ -49,11 +47,7 @@ test('multiline labels stay inside concave and disconnected group masks', () => 
   const result = layout(cells, 'Kitchen and dining area')!;
   assert(result);
   assert.equal(result.lines.join(' '), 'Kitchen and dining area');
-  for (
-    let y = result.y - result.height / 2;
-    y < result.y + result.height / 2;
-    y += 2
-  )
+  for (let y = result.y; y < result.y + result.height; y += 2)
     for (
       let x = result.x - result.width / 2;
       x < result.x + result.width / 2;
@@ -64,6 +58,30 @@ test('multiline labels stay inside concave and disconnected group masks', () => 
           (p) => p.x === Math.floor(x / 32) && p.y === Math.floor(y / 32),
         ),
       );
+});
+test('label anchors stay fixed through zoom and text reflow, including marker avoidance', () => {
+  const cells = [
+    ...rectangle(2, 2),
+    ...rectangle(7, 6, 0, 2),
+    ...rectangle(5, 4, 10, 0),
+  ];
+  const labels = [0.5, 0.75, 1, 1.5, 2, 4].map((scale) =>
+    getGroupLabelLayout({
+      cells,
+      text: 'Living room and reading corner by the window',
+      tileWidth: 32,
+      tileHeight: 32,
+      scale,
+      measure: (text) => text.length * 6,
+      avoid: [{ x: 112, y: 84 }],
+    })!,
+  );
+  assert(labels.every(Boolean));
+  assert(new Set(labels.map((label) => label.lines.join('\n'))).size > 1);
+  assert.deepEqual(
+    labels.map(({ x, y }) => ({ x, y })),
+    labels.map(() => ({ x: labels[0].x, y: labels[0].y })),
+  );
 });
 test('small group labels truncate safely; tiny or empty masks omit the label', () => {
   const result = layout(

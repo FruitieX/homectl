@@ -36,7 +36,7 @@ function wrap(
   return lines;
 }
 
-/** Fit wrapped text into a rectangle wholly inside the painted mask, in scene units. */
+/** Wrap in a stable mask rectangle. x is its center; y is the text's top edge. */
 export function getGroupLabelLayout({
   cells,
   text,
@@ -44,7 +44,7 @@ export function getGroupLabelLayout({
   tileHeight,
   scale,
   measure,
-  fontSize = 10,
+  fontSize = 11,
   avoid = [],
 }: {
   cells: readonly Point[];
@@ -64,13 +64,14 @@ export function getGroupLabelLayout({
     spans.push(row);
     byY.set(row.y, spans);
   }
-  const padding = 6 / scale,
-    lineHeight = (fontSize + 3) / scale;
+  // Choose the anchor in scene units, independent of zoom or wrapping.
+  const padding = 6;
   // Prefer wide spans near the top. Bound the search for very large masks.
   const starts = [...rows]
     .sort((a, b) => b.width - a.width || a.y - b.y)
     .slice(0, 64);
-  let best: Label | null = null,
+  let best: { x: number; y: number; width: number; height: number } | null =
+      null,
     bestScore = -Infinity;
   for (const start of starts) {
     let left = start.x,
@@ -91,39 +92,39 @@ export function getGroupLabelLayout({
       }
       const width = (right - left) * tileWidth - 2 * padding;
       const height = (y - start.y + 1) * tileHeight - 2 * padding;
-      const count = Math.min(4, Math.floor(height / lineHeight));
-      if (width * scale < 24) break;
-      if (count > 0) {
-        const all = wrap(text, width * scale, measure),
-          lines = all.slice(0, count);
-        if (all.length > count) {
-          let last = Array.from(lines.at(-1)!);
-          while (last.length && measure(last.join('') + '…') > width * scale)
-            last.pop();
-          lines[lines.length - 1] = last.join('') + '…';
-        }
+      if (width <= 0) break;
+      if (height > 0) {
         const x = ((left + right) * tileWidth) / 2;
-        const labelHeight = lines.length * lineHeight;
-        const centerY =
-          (start.y - 0.5) * tileHeight + padding + labelHeight / 2;
+        const top = (start.y - 0.5) * tileHeight + padding;
+        const reservedHeight = Math.min(height, 4 * (fontSize + 3));
         const collision = avoid.some(
           (p) =>
-            Math.abs(p.x - x) < width / 2 + 20 / scale &&
-            Math.abs(p.y - centerY) < labelHeight / 2 + 24 / scale,
+            Math.abs(p.x - x) < width / 2 + 20 &&
+            Math.abs(p.y - (top + reservedHeight / 2)) <
+              reservedHeight / 2 + 24,
         );
-        const score =
-          (all.length <= count ? 10000 : lines.join('').length * 10) -
-          (collision ? 20000 : 0) -
-          lines.length -
-          start.y;
-        if (score > bestScore) {
+        const score = width * reservedHeight - (collision ? 1e9 : 0) - start.y;
+        if (
+          score > bestScore ||
+          (score === bestScore && height > best!.height)
+        ) {
           bestScore = score;
-          best = { lines, x, y: centerY, width, height: labelHeight };
+          best = { x, y: top, width, height };
         }
-        if (all.length <= count) break;
       }
-      if (height >= 4 * lineHeight) break;
     }
   }
-  return best;
+  if (!best || best.width * scale < 24) return null;
+  const lineHeight = (fontSize + 3) / scale;
+  const count = Math.min(4, Math.floor(best.height / lineHeight));
+  if (!count) return null;
+  const all = wrap(text, best.width * scale, measure),
+    lines = all.slice(0, count);
+  if (all.length > count) {
+    let last = Array.from(lines.at(-1)!);
+    while (last.length && measure(last.join('') + '…') > best.width * scale)
+      last.pop();
+    lines[lines.length - 1] = last.join('') + '…';
+  }
+  return { ...best, lines, height: lines.length * lineHeight };
 }

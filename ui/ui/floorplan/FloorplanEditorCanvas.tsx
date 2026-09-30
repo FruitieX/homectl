@@ -40,7 +40,9 @@ import {
   DropdownMenuContent,
   DropdownMenuCheckboxItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from '@/ui/primitives/dropdown-menu';
+import { FloorplanLayerToggles } from './FloorplanLayerToggles';
 export type EditorTool =
   'select' | 'devices' | 'rooms' | 'walls' | 'erase' | 'hand' | 'layout';
 export const tileColors: Record<TileType, string> = {
@@ -52,7 +54,14 @@ export const tileColors: Record<TileType, string> = {
 };
 type View = { x: number; y: number; scale: number };
 type Gesture =
-  | { kind: 'pan'; x: number; y: number }
+  | {
+      kind: 'pan';
+      x: number;
+      y: number;
+      room?: string;
+      origin?: GridPoint;
+      moved?: boolean;
+    }
   | { kind: 'pinch'; distance: number; x: number; y: number }
   | { kind: 'move'; before: FloorplanGrid; key: string; offset: GridPoint }
   | {
@@ -77,9 +86,11 @@ export function FloorplanEditorCanvas({
   shape,
   room,
   roomErase,
+  roomSelected,
   selected,
   centerTarget,
   onSelect,
+  onSelectRoom,
   onInspect,
   pending,
   onPlaced,
@@ -101,9 +112,11 @@ export function FloorplanEditorCanvas({
   shape: DrawShape;
   room: string;
   roomErase: boolean;
+  roomSelected: boolean;
   selected: string | null;
   centerTarget: { key: string; serial: number } | null;
   onSelect: (key: string) => void;
+  onSelectRoom: (id: string) => void;
   onInspect: () => void;
   pending: string | null;
   onPlaced: () => void;
@@ -229,8 +242,7 @@ export function FloorplanEditorCanvas({
       const device = gridRef.current.devices.find(
         (d) => d.deviceKey === selected,
       );
-      const points =
-        tool === 'rooms' ? gridRef.current.groups[room] : undefined;
+      const points = roomSelected ? gridRef.current.groups[room] : undefined;
       const position = points?.length
         ? {
             x: points.reduce((n, p) => n + p.x, 0) / points.length,
@@ -255,6 +267,7 @@ export function FloorplanEditorCanvas({
     mobile,
     selected,
     room,
+    roomSelected,
     tool,
     fit,
     size.width,
@@ -397,21 +410,17 @@ export function FloorplanEditorCanvas({
       for (const [id, points] of Object.entries(grid.groups)) {
         ctx.fillStyle = getFloorplanGroupFill(
           id,
-          tool === 'rooms' && id === room ? 0.45 : 0.15,
+          roomSelected && id === room ? 0.45 : 0.15,
         );
         for (const p of points) ctx.fillRect(p.x * tw, p.y * th, tw, th);
-        if (tool === 'rooms' && id === room) {
+        if (roomSelected && id === room) {
           ctx.strokeStyle = getFloorplanGroupStroke(id, 0.65);
           ctx.lineWidth = 1 / view.scale;
           for (const p of points) ctx.strokeRect(p.x * tw, p.y * th, tw, th);
         }
-        if (
-          floorplanLabels(grid).groups &&
-          points.length &&
-          !(mobile && tray === 'library')
-        ) {
+        if (floorplanLabels(grid).groups && points.length) {
           ctx.save();
-          const fontSize = mobile ? 9 : 11;
+          const fontSize = 11;
           ctx.font = '500 ' + fontSize + 'px system-ui';
           const label = getGroupLabelLayout({
             cells: points,
@@ -426,15 +435,14 @@ export function FloorplanEditorCanvas({
             ctx.translate(label.x, label.y);
             ctx.scale(1 / view.scale, 1 / view.scale);
             ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle = getFloorplanGroupStroke(id);
-            label.lines.forEach((line, i) =>
-              ctx.fillText(
-                line,
-                0,
-                (i - (label.lines.length - 1) / 2) * (fontSize + 3),
-              ),
-            );
+            ctx.textBaseline = 'top';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 0.6;
+            ctx.fillStyle = '#47584e';
+            label.lines.forEach((line, i) => {
+              ctx.strokeText(line, 0, i * (fontSize + 3));
+              ctx.fillText(line, 0, i * (fontSize + 3));
+            });
           }
           ctx.restore();
         }
@@ -565,6 +573,7 @@ export function FloorplanEditorCanvas({
     groups,
     tool,
     room,
+    roomSelected,
     selected,
     layers,
     wallOpacity,
@@ -699,7 +708,7 @@ export function FloorplanEditorCanvas({
             onPlaced();
             return;
           }
-          if (tool === 'select' || tool === 'devices') {
+          if ((tool === 'select' || tool === 'devices') && layers.devices) {
             const d = before.devices.find(
               (d) =>
                 Math.hypot(
@@ -721,7 +730,28 @@ export function FloorplanEditorCanvas({
             }
           }
           if (['select', 'devices', 'layout'].includes(tool)) {
-            gesture.current = { kind: 'pan', x: e.clientX, y: e.clientY };
+            const hitRoom =
+              tool === 'select' && layers.rooms
+                ? Object.entries(before.groups)
+                    .filter(([, cells]) =>
+                      cells.some(
+                        (cell) =>
+                          cell.x === Math.floor(p.x) &&
+                          cell.y === Math.floor(p.y),
+                      ),
+                    )
+                    .sort(
+                      ([a, ac], [b, bc]) =>
+                        ac.length - bc.length || a.localeCompare(b),
+                    )[0]?.[0]
+                : undefined;
+            gesture.current = {
+              kind: 'pan',
+              x: e.clientX,
+              y: e.clientY,
+              room: hitRoom,
+              origin: { x: e.clientX, y: e.clientY },
+            };
             setIsPanning(true);
             return;
           }
@@ -775,6 +805,14 @@ export function FloorplanEditorCanvas({
             g.x = cx;
             g.y = cy;
           } else if (g.kind === 'pan') {
+            if (g.room && !g.moved) {
+              if (
+                Math.hypot(e.clientX - g.origin!.x, e.clientY - g.origin!.y) <=
+                6
+              )
+                return;
+              g.moved = true;
+            }
             const dx = e.clientX - g.x,
               dy = e.clientY - g.y;
             setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
@@ -796,7 +834,12 @@ export function FloorplanEditorCanvas({
             if (!touches.current.size) end(false);
           } else {
             const moved = gesture.current?.kind === 'move';
+            const pickedRoom =
+              gesture.current?.kind === 'pan' && !gesture.current.moved
+                ? gesture.current.room
+                : undefined;
             end(false);
+            if (pickedRoom) onSelectRoom(pickedRoom);
             if (moved) onInspect();
           }
         }}
@@ -930,6 +973,22 @@ export function FloorplanEditorCanvas({
                 }
               </DropdownMenuCheckboxItem>
             ))}
+            <DropdownMenuSeparator />
+            <div className="p-2">
+              <FloorplanLayerToggles
+                label="Labels"
+                value={floorplanLabels(grid)}
+                onChange={(labelVisibility) => {
+                  const before = gridRef.current;
+                  emit({ ...before, labelVisibility });
+                  onCommit(before);
+                }}
+              />
+              <p className="mt-2 max-w-64 text-xs text-muted-foreground">
+                Saved with this floorplan. Room labels also need the Room areas
+                layer.
+              </p>
+            </div>
             {background && (
               <label className="block px-3 py-2 text-xs">
                 Wall opacity{' '}
@@ -950,7 +1009,9 @@ export function FloorplanEditorCanvas({
       <div className="fp-canvas-hint">
         {hover
           ? `X ${hover.x.toFixed(1)} · Y ${hover.y.toFixed(1)}`
-          : 'Wheel to zoom · Space + drag to pan'}
+          : tool === 'select'
+            ? 'Tap a room area to select · Drag to pan'
+            : 'Wheel to zoom · Space + drag to pan'}
       </div>
     </div>
   );

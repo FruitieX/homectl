@@ -141,6 +141,7 @@ export function FloorplanEditorWorkspace({
     [roomErase, setRoomErase] = useState(false),
     [snap, setSnap] = useState<DeviceSnap>(0.25),
     [selected, setSelected] = useState<string | null>(null),
+    [pickedRoom, setPickedRoom] = useState(false),
     [centerTarget, setCenterTarget] = useState<{
       key: string;
       serial: number;
@@ -220,6 +221,7 @@ export function FloorplanEditorWorkspace({
     }
     if (value === 'erase' && tool === 'erase') value = 'walls';
     setTool(value);
+    setPickedRoom(false);
     setSearch('');
     setPending(null);
     if (value === 'rooms' && shape === 'line') setShape('freehand');
@@ -274,7 +276,12 @@ export function FloorplanEditorWorkspace({
     info = devices.find((d) => d.key === selected),
     selectedRoom = groups.find((g) => g.id === room),
     roomPoints = grid?.groups[room] ?? [];
-  const mode = tool === 'select' || tool === 'hand' ? 'devices' : tool;
+  const inspectingRoom = tool === 'rooms' || (tool === 'select' && pickedRoom);
+  const mode = inspectingRoom
+    ? 'rooms'
+    : tool === 'select' || tool === 'hand'
+      ? 'devices'
+      : tool;
   const togglePanel = (which: 'library' | 'inspector') => {
     if (window.innerWidth < 900)
       setTray((current) => (current === which ? null : which));
@@ -644,7 +651,8 @@ export function FloorplanEditorWorkspace({
                   />
                 </label>
                 <p className="fp-explanation">
-                  Paint where a room belongs. Its membership stays unchanged.
+                  Paint where a room belongs. Its membership stays unchanged.{' '}
+                  Use Select to pick an existing area on the canvas.
                 </p>
                 {[
                   ...groups,
@@ -847,9 +855,20 @@ export function FloorplanEditorWorkspace({
             shape={shape}
             room={room}
             roomErase={roomErase}
+            roomSelected={inspectingRoom}
             selected={selected}
             centerTarget={centerTarget}
-            onSelect={setSelected}
+            onSelect={(key) => {
+              setPickedRoom(false);
+              setSelected(key);
+            }}
+            onSelectRoom={(id) => {
+              setRoom(id);
+              setPickedRoom(true);
+              setSelected(null);
+              setInspector(true);
+              setTray('inspector');
+            }}
             onInspect={() => {
               setInspector(true);
               setTray('inspector');
@@ -890,7 +909,7 @@ export function FloorplanEditorWorkspace({
             <div>
               <span className="fp-eyebrow">PROPERTIES</span>
               <h2>
-                {tool === 'rooms'
+                {inspectingRoom
                   ? 'Room area'
                   : tool === 'walls' || tool === 'erase'
                     ? 'Drawing'
@@ -912,7 +931,7 @@ export function FloorplanEditorWorkspace({
             </Button>
           </div>
           <div className="fp-panel-content">
-            {tool === 'rooms' ? (
+            {inspectingRoom ? (
               <>
                 <div className="fp-selection">
                   <span
@@ -928,11 +947,26 @@ export function FloorplanEditorWorkspace({
                     <small>Area on {name}</small>
                   </div>
                 </div>
-                <div className="fp-section-heading">
-                  <Brush />
-                  Paint area
-                </div>
-                {shapeControls}
+                {tool === 'rooms' ? (
+                  <>
+                    <div className="fp-section-heading">
+                      <Brush />
+                      Paint area
+                    </div>
+                    {shapeControls}
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      chooseTool('rooms');
+                      setTray(null);
+                    }}
+                  >
+                    <Brush />
+                    Edit room area
+                  </Button>
+                )}
                 <div className="fp-metric">
                   <span>Area</span>
                   <strong>{roomPoints.length} tiles</strong>

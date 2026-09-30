@@ -529,17 +529,17 @@ function syncGroupLabel(
     textureScale = getLabelTextureScale(scale);
   const label = entry.label;
   label.text = group.name;
-  label.style.fontSize = 10 * textureScale;
+  label.style.fontSize = 11 * textureScale;
   label.style.stroke = {
     color: 0xffffff,
-    alpha: 0.75,
-    width: 2 * textureScale,
+    alpha: 0.9,
+    width: 0.6 * textureScale,
   };
   label.scale.set(1 / (textureScale * scale));
   label.visible = false;
   if (!visible) return;
   label.style.align = 'center';
-  label.style.lineHeight = 13 * textureScale;
+  label.style.lineHeight = 14 * textureScale;
   const layout = getGroupLabelLayout({
     cells: group.cells,
     text: group.name,
@@ -575,13 +575,13 @@ function syncGroups(
         text: group.name,
         style: {
           fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-          fontSize: 10,
-          fontWeight: '400',
-          fill: 0x64746c,
+          fontSize: 11,
+          fontWeight: '500',
+          fill: 0x47584e,
         },
       });
-      label.anchor.set(0.5);
-      label.alpha = 0.85;
+      label.anchor.set(0.5, 0);
+      label.alpha = 1;
       entry = {
         drawKey: '',
         graphics: new Graphics(),

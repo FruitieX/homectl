@@ -26,7 +26,7 @@ export default async function (cdp, { width, url }) {
   const pause = (ms = 180) => new Promise((r) => setTimeout(r, ms));
   const until = async (expression, name) => {
     for (let i = 0; i < 60; i++) {
-      if (await evaluate(expression)) {
+      if (await evaluate(`Boolean(${expression})`)) {
         checks.push(name);
         return;
       }
@@ -150,6 +150,106 @@ export default async function (cdp, { width, url }) {
       'Label fixture loaded in editor',
     );
     await shot('editor-wrapped');
+    const world = async (x, y) =>
+      evaluate(
+        `(()=>{const c=document.querySelector('canvas'),r=c.getBoundingClientRect(),d=c.dataset;return{x:r.x+Number(d.viewX)+(${x}+.5)*Number(d.tileWidth)*Number(d.zoom),y:r.y+Number(d.viewY)+(${y}+.5)*Number(d.tileHeight)*Number(d.zoom)}})()`,
+      );
+    const gesture = async (start, end) => {
+      if (width < 900) {
+        await cdp.send('Input.dispatchTouchEvent', {
+          type: 'touchStart',
+          touchPoints: [{ ...start, id: 1 }],
+        });
+        if (end)
+          await cdp.send('Input.dispatchTouchEvent', {
+            type: 'touchMove',
+            touchPoints: [{ ...end, id: 1 }],
+          });
+        await cdp.send('Input.dispatchTouchEvent', {
+          type: 'touchEnd',
+          touchPoints: [],
+        });
+      } else {
+        await cdp.send('Input.dispatchMouseEvent', {
+          type: 'mousePressed',
+          ...start,
+          button: 'left',
+          buttons: 1,
+          clickCount: 1,
+        });
+        if (end)
+          await cdp.send('Input.dispatchMouseEvent', {
+            type: 'mouseMoved',
+            ...end,
+            button: 'left',
+            buttons: 1,
+          });
+        await cdp.send('Input.dispatchMouseEvent', {
+          type: 'mouseReleased',
+          ...(end ?? start),
+          button: 'left',
+          buttons: 0,
+          clickCount: 1,
+        });
+      }
+      await pause();
+    };
+    const clean = `document.querySelector('.settings-savebar').dataset.dirty==='false'`;
+    const start = await world(2, 2);
+    await gesture(start, { x: start.x + 60, y: start.y + 30 });
+    await until(
+      `!document.querySelector('[aria-label="Selection properties"] h2').textContent.includes('Room area')&&${clean}`,
+      'Dragging over a room pans without selecting it or editing the draft',
+    );
+    await click(
+      `document.querySelector('[aria-label="Fit entire floorplan"]')`,
+    );
+    await gesture(await world(2, 2));
+    await until(
+      `document.querySelector('[aria-label="Selection properties"] .fp-selection strong').textContent.includes('Living room and reading corner')&&document.querySelector('.fp-stage').dataset.tool==='select'&&${clean}`,
+      'Canvas tap selects the room, opens its properties and leaves Select active',
+    );
+    await shot('editor-room-selection');
+    await click(button('Edit room area'));
+    await until(
+      `document.querySelector('.fp-stage').dataset.tool==='rooms'&&${clean}`,
+      'Selected room can enter painting explicitly without changing its mask',
+    );
+    await gesture(await world(10, 2));
+    await until(
+      `document.querySelector('.settings-savebar').dataset.dirty==='true'`,
+      'Explicit room painting edits the selected room',
+    );
+    await click(`document.querySelector('[aria-label="Undo"]')`);
+    await until(clean, 'Undo restores the selected room mask');
+    await click(`document.querySelector('[aria-label="View layers"]')`);
+    const quickLabels = `document.querySelector('[role="menu"] [role="group"][aria-label="Labels"]')`;
+    await until(
+      `!!${quickLabels}`,
+      'Labels are directly accessible from the canvas View layers menu',
+    );
+    const quickGroupToggle = `[...${quickLabels}.querySelectorAll('button')].find(b=>b.textContent.trim()==='Groups')`;
+    await click(quickGroupToggle);
+    await until(
+      `${quickGroupToggle}.getAttribute('aria-pressed')==='false'&&document.querySelector('.settings-savebar').dataset.dirty==='true'`,
+      'Canvas label toggle keeps the menu open and participates in the draft',
+    );
+    await click(quickGroupToggle);
+    await until(
+      `${quickGroupToggle}.getAttribute('aria-pressed')==='true'`,
+      'Canvas group labels can be enabled again without closing the menu',
+    );
+    await cdp.send('Input.dispatchKeyEvent', {
+      type: 'keyDown',
+      key: 'Escape',
+    });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape' });
+    await click(`document.querySelector('[aria-label="Undo"]')`);
+    await click(`document.querySelector('[aria-label="Undo"]')`);
+    await until(
+      clean,
+      'Canvas label toggles participate in Undo, including legacy defaults',
+    );
     await click(`document.querySelector('[aria-label="Layout tool"]')`);
     const row = `document.querySelector('[aria-label="Editor library"] [role="group"][aria-label="Labels"]')`;
     const toggle = (name) =>

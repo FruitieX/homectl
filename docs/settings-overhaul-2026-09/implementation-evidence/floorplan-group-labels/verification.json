@@ -1,0 +1,79 @@
+{
+  "checks": 46,
+  "results": [
+    {
+      "passed": true,
+      "width": 1440,
+      "checks": [
+        "Settings categories loaded",
+        "Every settings landing category has an icon",
+        "Every settings sidebar/mobile menu item has an icon",
+        "Label fixture loaded in editor",
+        "Dragging over a room pans without selecting it or editing the draft",
+        "Canvas tap selects the room, opens its properties and leaves Select active",
+        "Selected room can enter painting explicitly without changing its mask",
+        "Explicit room painting edits the selected room",
+        "Undo restores the selected room mask",
+        "Labels are directly accessible from the canvas View layers menu",
+        "Canvas label toggle keeps the menu open and participates in the draft",
+        "Canvas group labels can be enabled again without closing the menu",
+        "Canvas label toggles participate in Undo, including legacy defaults",
+        "Editor offers independent labels for lights, sensors and groups",
+        "Label defaults saved",
+        "Editor stores the independent defaults through the floorplan API",
+        "Saved editor reopened",
+        "Reload preserves all three label defaults",
+        "Group labels enabled and saved",
+        "New floorplan appears in map tabs",
+        "Map displays wrapped room label",
+        "Map inherits saved light, sensor and group label defaults",
+        "Hiding groups preserves their separate label preference and keeps options open"
+      ],
+      "browser": {
+        "url": "http://127.0.0.1:3021/config/floorplan",
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "problems": []
+      }
+    },
+    {
+      "passed": true,
+      "width": 430,
+      "checks": [
+        "Settings categories loaded",
+        "Every settings landing category has an icon",
+        "Every settings sidebar/mobile menu item has an icon",
+        "Label fixture loaded in editor",
+        "Dragging over a room pans without selecting it or editing the draft",
+        "Canvas tap selects the room, opens its properties and leaves Select active",
+        "Selected room can enter painting explicitly without changing its mask",
+        "Explicit room painting edits the selected room",
+        "Undo restores the selected room mask",
+        "Labels are directly accessible from the canvas View layers menu",
+        "Canvas label toggle keeps the menu open and participates in the draft",
+        "Canvas group labels can be enabled again without closing the menu",
+        "Canvas label toggles participate in Undo, including legacy defaults",
+        "Editor offers independent labels for lights, sensors and groups",
+        "Label defaults saved",
+        "Editor stores the independent defaults through the floorplan API",
+        "Saved editor reopened",
+        "Reload preserves all three label defaults",
+        "Group labels enabled and saved",
+        "New floorplan appears in map tabs",
+        "Map displays wrapped room label",
+        "Map inherits saved light, sensor and group label defaults",
+        "Hiding groups preserves their separate label preference and keeps options open"
+      ],
+      "browser": {
+        "url": "http://127.0.0.1:3021/config/floorplan",
+        "viewport": {
+          "width": 430,
+          "height": 932
+        },
+        "problems": []
+      }
+    }
+  ]
+}

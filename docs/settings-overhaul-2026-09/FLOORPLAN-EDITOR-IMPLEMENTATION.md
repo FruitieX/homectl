@@ -94,6 +94,35 @@ before and after drawing. Type checking, lint and the production build pass
 (existing lint/chunk warnings only). See
 [verification and captures](implementation-evidence/floorplan-draft-layout/).
 
+## Follow-up: readable group labels and canvas selection
+
+- [x] Map and editor group labels use consistent 11 px medium-weight text with
+      stronger contrast and a thin 0.6 px white halo instead of the thick outline.
+- [x] Labels choose a fixed rectangle and top anchor in floorplan coordinates.
+      Zoom changes wrapping/truncation within that rectangle, without relocating
+      labels to another part of the room. Marker avoidance also stays independent
+      of zoom. Concave and disconnected masks still keep text inside painted cells.
+- [x] **View layers** (the layers button beside canvas zoom) now includes
+      **Labels → Lights / Sensors / Groups**, alongside the existing
+      **Layout → Labels** controls. The **Room areas** layer must be enabled to
+      display group labels. Label changes are saved with the floorplan and support
+      Undo. Phone library trays no longer explicitly suppress group labels.
+- [x] With **Select** active, click/tap a painted group area to highlight it and
+      open its properties. Select stays active so another area can be picked.
+      **Edit room area** explicitly enters painting. Device markers take priority;
+      overlapping groups prefer the smaller area, then a deterministic ID order.
+- [x] Dragging an area pans instead of selecting it; middle-drag, Space-drag,
+      Hand, pinch/cancel and the dedicated painting modes retain their conventions.
+      Hidden room areas cannot be selected. Phone properties frame the selected
+      group above the tray.
+
+Verification: UI type check, lint, **279 tests** and production build pass
+(existing warnings only). The expanded desktop/phone browser batch verifies
+selection versus pan/paint, label controls, Undo, saved defaults and reloads.
+The layout regression test checks stable anchors across six zoom levels with
+marker avoidance and changing line breaks. All browser writes use isolated
+fixtures. [Screenshots and results](implementation-evidence/floorplan-group-labels/).
+
 ## Main files
 
 | Area | Source |
