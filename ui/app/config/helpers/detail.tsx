@@ -15,6 +15,7 @@ import { useEntityDraft } from '@/hooks/useEntityDraft';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { entityDraftStore } from '@/lib/entityDraft';
+import { routineReferences } from '@/lib/configUsage';
 import { configItemHref } from '@/lib/configItemHref';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
@@ -118,20 +119,6 @@ function CurrentValue({ status }: { status: HelperRuntimeStatus }) {
   );
 }
 
-/** Native helper references only; script source text is not a reliable dependency index. */
-function usesHelper(value: unknown, id: string): boolean {
-  if (!value || typeof value !== 'object') return false;
-  if (Array.isArray(value)) return value.some((item) => usesHelper(item, id));
-  const row = value as Record<string, unknown>;
-  if (
-    (row.kind === 'helper' ||
-      row.action === 'set_helper' ||
-      row.action === 'activate_scene_from_helper') &&
-    (row.helper === id || row.helper_id === id)
-  )
-    return true;
-  return Object.values(row).some((item) => usesHelper(item, id));
-}
 export default function HelperDetailPage() {
   const { id } = useParams(),
     creating = id === 'new',
@@ -230,7 +217,7 @@ export default function HelperDetailPage() {
     }
   }
   const related = routines.data.filter((row) =>
-    usesHelper(row.definition_v2, id ?? ''),
+    routineReferences(row.definition_v2).helpers.has(id ?? ''),
   );
   return (
     <DetailPageShell

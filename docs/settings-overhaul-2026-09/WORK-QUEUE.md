@@ -794,10 +794,42 @@ Evidence: `ui/dev/mqtt-repair-review.mjs`,
 `implementation-evidence/collections/mqtt-repair-*` and the
 [comparison gallery](implementation-evidence/comparison/index.html#mqtt-repair).
 
-Next in the reference audit: computed-source scene usage currently assumes every
-scene target is an object; malformed targets need safe inspection. Helper/source
-visibility and complete reference reconciliation, restore/restart, transport,
+The reference follow-up below resolves the unsafe computed-source scene-target
+inspection found during this checkpoint. Helper/source visibility and complete
+reference reconciliation, restore/restart, transport,
 activity and final cross-family accessibility/cleanup gates remain open.
+
+### Source and helper reference audit — 2026-09-30
+
+Source usage inspection now tolerates null, primitive and unknown scene targets;
+group/device maps are inspected separately so equal keys cannot overwrite each
+other. Source details link to direct scenes, room membership and declared routine
+source/device dependencies, including saved aliases and script device declarations.
+Each catalog has independent error/loading/Retry states. The page explicitly
+allows for additional legacy, script-body and indirect dependencies.
+
+Helper usage now recognizes dynamic scene selection (`helper_enum`), which the
+previous recursive lookup missed. The shared routine reader follows declared
+condition/action/declaration fields, avoiding false positives in JSON operands,
+helper values, script text and extensions. Four unit tests cover nested conditions,
+branches, timer captures, scene cycles, rollout origins, malformed values and
+canonical/alias identity. All 250 UI tests, type/lint/build pass with the existing
+backup-effect and bundle-size warnings.
+
+Eleven native browser checks pass at both 390/1440 px: malformed scene inspection,
+alias and canonical destinations, selection-helper usage, excluded JSON lookalikes,
+independent failed-reference Retry, retained name drafts and related
+navigation without writes or page exceptions. Expected 503s are injected catalog
+failures. Screenshots were reviewed. Evidence: `ui/dev/config-usage-review.mjs`,
+`implementation-evidence/collections/config-usage-*` and the
+[comparison gallery](implementation-evidence/comparison/index.html#config-usage).
+The test owns its temporary source/helper and intercepts reference catalogs;
+no household configuration or automation execution is involved.
+
+Remaining: helper visibility and widget-consumer links, broader reference and
+recovery reconciliation, full restore/restart, MQTT transport/discovery, activity,
+accessibility and superseded-surface cleanup. This checkpoint does not claim a
+complete dependency index or automatic script-body analysis.
 
 ## 7. Delivery and durable evidence
 

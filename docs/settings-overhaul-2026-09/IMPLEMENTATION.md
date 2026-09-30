@@ -615,3 +615,15 @@ range defaults now match the generic MQTT runtime. All 246 UI tests, type/lint/b
 and the targeted Rust schema test pass. See the
 [work queue checkpoint](WORK-QUEUE.md#mqtt-range-and-collection-repair--2026-09-30)
 for evidence and limits. Broader reference/recovery/accessibility gates remain open.
+
+### Source/helper reference reconciliation — 2026-09-30
+
+The missing scene-selection helper dependency and malformed source scene-target
+lookup are fixed. Source details now include direct room and declared routine
+references, with independent catalog Retry and explicit limits for indirect, legacy
+and script-body dependencies. Four unit tests and 11 browser checks at each
+390/1440 px cover declared-field traversal, aliases, malformed values, JSON
+lookalikes, retained drafts and related links. All 250 UI tests and type/lint/build
+pass. See the [work queue checkpoint](WORK-QUEUE.md#source-and-helper-reference-audit--2026-09-30)
+for evidence; visibility, widget-consumer and wider recovery/accessibility gates
+remain open.

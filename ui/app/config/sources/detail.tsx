@@ -8,6 +8,8 @@ import {
   useSources,
   useSourcePresets,
   useScenes,
+  useGroups,
+  useRoutines,
   type SourceConfig,
   type SourceComputeConfig,
 } from '@/hooks/useConfig';
@@ -18,6 +20,11 @@ import { useEntityDraft } from '@/hooks/useEntityDraft';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { entityDraftStore } from '@/lib/entityDraft';
+import {
+  groupUsesDeviceKeys,
+  routineReferences,
+  sceneUsesDeviceKeys,
+} from '@/lib/configUsage';
 import { configItemHref } from '@/lib/configItemHref';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
@@ -49,6 +56,8 @@ export default function SourceDetailPage() {
     health = useDeviceHealth(),
     presets = useSourcePresets(),
     scenes = useScenes(),
+    groups = useGroups(),
+    routines = useRoutines(),
     devices = useDevicesState();
   const { apiEndpoint } = useAppConfig(),
     { advanced } = useSettingsPreferences();
@@ -204,13 +213,32 @@ export default function SourceDetailPage() {
       `computed/${id}`,
       ...(Array.isArray(saved?.aliases) ? saved.aliases : []),
     ]);
-  const usedBy = scenes.data.filter((scene) =>
-    Object.values({ ...scene.group_states, ...scene.device_states }).some(
-      (target) =>
-        'integration_id' in target &&
-        keys.has(`${target.integration_id}/${target.device_id}`),
-    ),
-  );
+  const usage = [
+    {
+      kind: 'scene' as const,
+      label: 'Scenes',
+      query: scenes,
+      rows: scenes.data.filter((scene) => sceneUsesDeviceKeys(scene, keys)),
+    },
+    {
+      kind: 'group' as const,
+      label: 'Rooms & groups',
+      query: groups,
+      rows: groups.data.filter((group) => groupUsesDeviceKeys(group, keys)),
+    },
+    {
+      kind: 'routine' as const,
+      label: 'Routines',
+      query: routines,
+      rows: routines.data.filter((row) => {
+        const refs = routineReferences(row.definition_v2);
+        return (
+          refs.sources.has(id ?? '') ||
+          [...refs.devices].some((key) => keys.has(key))
+        );
+      }),
+    },
+  ];
   return (
     <DetailPageShell
       crumbs={[]}
@@ -713,38 +741,44 @@ export default function SourceDetailPage() {
             <SettingsSection
               id="usage"
               title="Used by"
-              description="Scenes with direct references to this source or its aliases. Scripts and routines may also reference its output device."
+              description="Direct references to this source or its aliases, including declared script devices. Legacy automations, script bodies and indirect dependencies may add more."
             >
-              {scenes.error ? (
-                <p role="alert">
-                  Could not load references.{' '}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void scenes.refetch()}
-                  >
-                    Retry
-                  </Button>
-                </p>
-              ) : scenes.loading ? (
-                <p>Loading references…</p>
-              ) : usedBy.length ? (
-                <div className="flex flex-wrap gap-3">
-                  {usedBy.map((scene) => (
-                    <Link
-                      key={scene.id}
-                      className="text-sm text-primary underline"
-                      to={configItemHref('scene', scene.id)}
-                    >
-                      {scene.name}
-                    </Link>
-                  ))}
+              {usage.map(({ kind, label, query, rows }) => (
+                <div key={kind} className="space-y-2">
+                  <h3 className="text-xs font-medium">{label}</h3>
+                  {query.error ? (
+                    <p role="alert">
+                      Could not load references.{' '}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        aria-label={`Retry ${label.toLowerCase()} references`}
+                        onClick={() => void query.refetch()}
+                      >
+                        Retry
+                      </Button>
+                    </p>
+                  ) : query.loading ? (
+                    <p>Loading references…</p>
+                  ) : rows.length ? (
+                    <div className="flex flex-wrap gap-3">
+                      {rows.map((row) => (
+                        <Link
+                          key={row.id}
+                          className="text-sm text-primary underline"
+                          to={configItemHref(kind, row.id)}
+                        >
+                          {row.name}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No direct references in {label.toLowerCase()}.
+                    </p>
+                  )}
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No direct scene references.
-                </p>
-              )}
+              ))}
             </SettingsSection>
           )}
           <EntitySaveBar

@@ -1,0 +1,53 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Malformed scene target does not hide alias scene reference",
+    "passed": true
+   },
+   {
+    "name": "Direct computed-source routine reference is linked",
+    "passed": true
+   },
+   {
+    "name": "Group failure leaves other reference families visible",
+    "passed": true
+   },
+   {
+    "name": "Reference Retry preserves source draft",
+    "passed": true
+   },
+   {
+    "name": "Canonical room destination is used",
+    "passed": true
+   },
+   {
+    "name": "Related-page navigation retains source edits",
+    "passed": true
+   },
+   {
+    "name": "Helper scene-selection dependency is linked",
+    "passed": true
+   },
+   {
+    "name": "JSON operands do not invent helper dependencies",
+    "passed": true
+   },
+   {
+    "name": "Script uncertainty remains explicit",
+    "passed": true
+   },
+   {
+    "name": "Read, repair and related navigation cause no configuration writes or page exceptions",
+    "passed": true
+   },
+   {
+    "name": "No horizontal overflow",
+    "passed": true
+   }
+  ],
+  "scope": "Owned helper/source and intercepted reference catalogs in isolated fixture; no execution or household writes"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":1440,"height":1000},"problems":["log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)"]}
