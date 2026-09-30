@@ -4190,6 +4190,8 @@ mod consistency_tests {
         export.scenes = serde_json::from_value(json!([
             {"id":"evening","name":"Evening","hidden":false,"script":null,
              "device_states":{
+                "dummy/raw-null":null,"dummy/raw-boolean":false,"dummy/raw-list":[false,null],
+                "dummy/unknown-color":{"color":{"future":123},"future":{"keep":true}},
                 "dummy/off":{"power":false,"brightness":0,"transition":0,"color":null,"future":{"__proto__":{"keep":true}}},
                 "dummy/link":{"scene_id":"missing","device_keys":[],"group_keys":["second","first"],"transition":null},
                 "dummy/source":{"integration_id":"circadian","device_id":"daylight","brightness":0.55}},

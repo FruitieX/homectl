@@ -17,7 +17,8 @@ import {
   sceneTargetDraftPath,
   type SceneDraftContext,
 } from '@/lib/sceneDraft';
-import { sceneTargetMode } from '@/lib/sceneTargets';
+import { sceneTargetMode, sceneTargetIssue } from '@/lib/sceneTargets';
+import { UnsupportedSceneTarget } from './unsupported-target';
 import { configItemHref } from '@/lib/configItemHref';
 import { entityDraftStore } from '@/lib/entityDraft';
 import { formatColorExact } from '@/lib/deviceColor';
@@ -69,6 +70,18 @@ export function SceneTargetRow({
   const { advanced } = useSettingsPreferences();
   const [showDescriptor, setShowDescriptor] = useState(false);
   const mode = sceneTargetMode(config);
+  if (mode === 'unsupported')
+    return (
+      <UnsupportedSceneTarget
+        kind={kind}
+        targetKey={targetKey}
+        name={name}
+        value={config}
+        issue={sceneTargetIssue(config)!}
+        onReplace={() => onChange({})}
+        onRemove={onRemove}
+      />
+    );
   const prefix = `${kind === 'group' ? 'group_states' : 'device_states'}/${targetKey}`;
   const patch = (value: Record<string, unknown>) =>
     onChange(patchSceneTarget(config, value));

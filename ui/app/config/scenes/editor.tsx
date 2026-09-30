@@ -305,7 +305,10 @@ export function SceneEditor({ id }: { id?: string }) {
     if (!scene) return;
     const field = kind === 'group' ? 'group_states' : 'device_states';
     const targets = Object.fromEntries(
-      ids.map((id) => [id, scene[field][id] ?? {}]),
+      ids.map((id) => [
+        id,
+        Object.hasOwn(scene[field], id) ? scene[field][id] : {},
+      ]),
     );
     const removed = Object.keys(scene[field])
       .filter((id) => !ids.includes(id))

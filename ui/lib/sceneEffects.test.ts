@@ -22,6 +22,25 @@ const context = {
   },
 };
 
+test('malformed target effects stay unresolved without invented device changes', () => {
+  const result = resolveSceneEffects(
+    {
+      device_states: {
+        'mqtt/living_room_lamp': null,
+        'mqtt/hallway_strip': { scene_id: 'x', device_keys: 'bad' },
+      },
+    } as unknown as Parameters<typeof resolveSceneEffects>[0],
+    context,
+  );
+  assert.equal(result.unresolvedCount, 2);
+  assert.equal(result.affectedDeviceCount, 0);
+  assert.ok(
+    result.targets.every(
+      (target) => target.mode === 'unsupported' && target.repair,
+    ),
+  );
+});
+
 test('a room target expands to the devices it changes', () => {
   const effects = resolveSceneEffects(
     {

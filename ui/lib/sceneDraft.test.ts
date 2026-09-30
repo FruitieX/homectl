@@ -7,6 +7,37 @@ import {
   type SceneDraftContext,
 } from './sceneDraft.ts';
 import { orderedSceneTargets, resolveDeviceLink } from './sceneTargets.ts';
+
+test('raw malformed targets survive unrelated validation and never create a known preview', () => {
+  const targets = {
+    'test/a': null,
+    'test/b': { color: { future: 123 } },
+    'test/c': false,
+  };
+  const rawScene = {
+    id: 'raw',
+    name: 'Raw',
+    hidden: false,
+    group_states: {},
+    device_states: targets,
+  };
+  const before = JSON.stringify(rawScene);
+  assert.deepEqual(
+    validateSceneDraft(
+      rawScene as unknown as Parameters<typeof validateSceneDraft>[0],
+    ),
+    [],
+  );
+  for (const value of Object.values(targets))
+    assert.ok(
+      resolveDraftTarget(
+        value as unknown as Parameters<typeof resolveDraftTarget>[0],
+        'test/a',
+        { scenes: [], groups: [], devices: {} },
+      ).reason,
+    );
+  assert.equal(JSON.stringify(rawScene), before);
+});
 const scene = {
   id: 'source',
   name: 'Source',

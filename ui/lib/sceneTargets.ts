@@ -6,7 +6,67 @@
 
 export type SceneTargetKind = 'device' | 'group';
 
-export type SceneTargetMode = 'state' | 'device-link' | 'scene-link';
+export type SceneTargetMode =
+  'state' | 'device-link' | 'scene-link' | 'unsupported';
+
+/** Raw scene JSON can outlive the editor/schema that produced it. */
+export function sceneTargetIssue(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return 'The saved target is not a state or link object.';
+  const v = value as Record<string, unknown>;
+  if ('integration_id' in v && 'scene_id' in v)
+    return 'The saved target contains both a device link and a scene link.';
+  for (const field of [
+    'integration_id',
+    'device_id',
+    'scene_id',
+    'mirror_from_group',
+  ])
+    if (
+      (field === 'mirror_from_group' ? v[field] != null : field in v) &&
+      typeof v[field] !== 'string'
+    )
+      return `The saved ${field} is not text.`;
+  for (const field of ['power', 'use_scene_transition'])
+    if (
+      (field === 'use_scene_transition' ? field in v : v[field] != null) &&
+      typeof v[field] !== 'boolean'
+    )
+      return `The saved ${field} is not a boolean.`;
+  for (const field of ['brightness', 'transition'])
+    if (v[field] != null && typeof v[field] !== 'number')
+      return `The saved ${field} is not a number.`;
+  for (const field of ['device_keys', 'group_keys'])
+    if (
+      v[field] != null &&
+      (!Array.isArray(v[field]) ||
+        !v[field].every((key) => typeof key === 'string'))
+    )
+      return `The saved ${field} is not a list of IDs.`;
+  if (v.color != null) {
+    if (typeof v.color !== 'object' || Array.isArray(v.color))
+      return 'The saved color is not a supported color object.';
+    const color = v.color as Record<string, unknown>;
+    const channels =
+      'h' in color
+        ? ['h', 's']
+        : 'ct' in color
+          ? ['ct']
+          : 'r' in color
+            ? ['r', 'g', 'b']
+            : 'x' in color
+              ? ['x', 'y']
+              : [];
+    if (
+      !channels.length ||
+      channels.some(
+        (key) => typeof color[key] !== 'number' || !Number.isFinite(color[key]),
+      )
+    )
+      return 'The saved color has unknown or incomplete channels.';
+  }
+  return null;
+}
 
 export type SceneTargetDescriptor = {
   key: string;
@@ -109,11 +169,12 @@ function brightnessText(config: Config): string | null {
   return `${Math.round(brightness * 100)}% brightness`;
 }
 
-export function sceneTargetMode(config: Config): SceneTargetMode {
+export function sceneTargetMode(config: unknown): SceneTargetMode {
+  if (sceneTargetIssue(config)) return 'unsupported';
   // Presence of the key decides the shape (the same rule the editors use); an
   // empty value means "not chosen yet", not "a different kind of target".
-  if (hasField(config, 'scene_id')) return 'scene-link';
-  if (hasField(config, 'integration_id')) return 'device-link';
+  if (hasField(config as Config, 'scene_id')) return 'scene-link';
+  if (hasField(config as Config, 'integration_id')) return 'device-link';
   return 'state';
 }
 
@@ -129,6 +190,14 @@ export function describeSceneTarget(
   } = {},
 ): SceneTargetDescriptor {
   const mode = sceneTargetMode(config);
+  if (mode === 'unsupported')
+    return {
+      key,
+      kind,
+      mode,
+      summary: 'Saved target needs review',
+      unresolvedReason: sceneTargetIssue(config),
+    };
 
   if (mode === 'scene-link') {
     const sceneId = String(read(config, 'scene_id') ?? '');

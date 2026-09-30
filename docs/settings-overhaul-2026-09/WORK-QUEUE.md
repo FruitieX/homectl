@@ -623,6 +623,41 @@ Lint exits successfully with the existing backup-effect cleanup warning; the
 build retains its large-chunk warning. Shared routine/scene/widget viewport
 checks pass at 390/1440 px after the section-grid correction.
 
+### Malformed scene target repair — 2026-09-30
+
+Raw scene target values can be null, primitive JSON or an unsupported shape,
+because scene rows retain their original JSON independently of runtime parsing.
+The editor, scene summaries and effect summaries now identify those values
+without crashing or inventing a known state preview. Repair rows show the reason,
+the original JSON, a related entity link, explicit replacement and removal.
+Unrelated edits preserve unsupported values; known numeric ranges still validate.
+
+Replacement asks for confirmation and states the default state being introduced.
+It updates only the draft. Cancel restores the repair button's focus; replacement
+focuses the new state controls. Discard restores the original raw value. Target
+multi-selection now checks key presence instead of using a null-coalescing
+default, fixing silent conversion of saved null targets into empty state objects.
+The desktop scene action column also now fits the shared icon button.
+
+`ui/dev/scene-repair-review.mjs` covers the scene list, read-only repair rows,
+saved JSON inspection, unrelated Save/reload, unchanged picker confirmation,
+Cancel, confirmation, focus, no early writes, Discard, explicit replacement and
+removal, sibling extension/false/zero/null preservation, row containment and no
+live commands or page exceptions. It uses temporary local fixture records and
+removes them afterward. No household configuration is changed.
+
+245 UI tests, type checking and production build pass. Lint exits successfully
+with the existing backup-effect cleanup warning; the build retains its existing
+large-chunk warning. A server API test verifies that an unrelated name edit
+preserves malformed targets in both its response and runtime configuration. The
+database reopen/JSON-restore test now includes null, false, list and unknown-color
+target payloads. Evidence: `implementation-evidence/collections/scene-repair-*`.
+These tests cover preserved storage and UI repair, not successful execution of
+unsupported definitions. Other cross-family recovery/accessibility gates remain
+open.
+
+Passing browser runs: 390 px: 16 checks; 1440 px: 16 checks.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

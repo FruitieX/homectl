@@ -28,7 +28,7 @@ covers. The top-level implementation gates stay open until reconciled here.
 | --- | --- | --- |
 | Foundation | Retained draft/CAS tests cover background refresh, in-flight edits, failures, inactive variants and nested conflict choices. Current entity pages use shared save bars. | Reconcile each editor's save boundary and errors; verify remaining return/focus/scroll paths and the named accessibility/viewport matrix. |
 | Rooms & groups settings | `settings-group-journey.js`, `group-journey.log`, graph cycle/missing-member/usage tests; live room journeys cover nested scope, missing/disabled/read-only members. | The current non-nullable GroupRow contract and derived device_keys are mapped in FIELD-COVERAGE.md. The 27-check collection journey covers empty/single/multiple saves, missing-member repair and deletion/creation races at 1440/390/360 px. Ordered/unresolved memberships now have reopen/JSON-restore evidence and SQLite/PostgreSQL migration tests. Remaining: configuration-editor zoom and cross-family recovery reconciliation. |
-| Scenes | Scene journey/API logs and draft/target tests cover explicit states, links, omission versus zero, precedence, unknown fields and cycles. Capture tests cover capability filtering and color conversion. | Scene creation/return now has 17 native checks per size, including retained drafts, focused selection, missing actions and deleted-scene repair. Complete variant/collection mapping and malformed target repair behavior remain. |
+| Scenes | Scene journey/API logs and draft/target tests cover explicit states, links, omission versus zero, precedence, unknown fields and cycles. Capture tests cover capability filtering and color conversion. | Scene creation/return now has 17 native checks per size, including retained drafts, focused selection, missing actions and deleted-scene repair. Malformed target repair now has native desktop/phone checks plus raw API/database preservation evidence below. Remaining: final color/capability and cross-family recovery reconciliation. |
 | Routines | Current routine checkpoints cover three-lane/phone presentation, nested conditions, stable IDs, script/native branches, conversion and retained edits. | All eight trigger kinds now have edited Save/reload evidence at both sizes, including schedule modes and optional report fields. Nested conditions, all comparison operators and group quantifiers now have 32 checks per size plus ten server condition/compiler tests; unsupported sources stay visible and are removed explicitly. Action/policy/declaration checkpoints now add edited field coverage (38/25/20 checks per size), with conversion and compiler contracts. Empty-cycle repair, focus/no-write validation and Discard now pass in the 19-check selection journey at both sizes, backed by the compiler test. Remaining: unavailable-reference and broader recovery. Raw definitions now have database reopen/JSON restore evidence. |
 | Devices and calibration | Device journeys, reporting-policy API tests, brightness/color/bulk checkpoints and disabled re-enable regression. | Consolidate calibration evidence into the older settings ledger; verify remaining capability/missing-catalog cases and related-reference coverage. |
 | Integrations, helpers, computed sources | Integration/helper/source journeys and preservation tests cover nested editing, omission, arrays, secrets and current-value separation. | Dummy multi-device editing now has 19 browser checks at each size plus Rust sensor/capability schema checks. MQTT lists/profile/credentials have 21 checks and reporting/rejected-save recovery has 9 at each size, backed by API and runtime rollback tests. Helpers now have 21 edited-type and 6 command checks at each size, plus phone conflict review and server persistence evidence. Computed sources have 16 edited-variant and 13 repair/preview checks per size, plus existing phone conflict/color checks. Source timing/error focus and chart readability now have 19 checks per size plus four curve/validation Rust tests. Remaining: module variants, visibility, complete references and database reconciliation. |
@@ -313,3 +313,38 @@ Verification: three API tests, both SQLite/PostgreSQL migration tests, and all
 Lint exits successfully with the existing backup-effect cleanup warning; the
 build retains its large-chunk warning. Shared routine/scene/widget viewport
 checks pass at 390/1440 px after the section-grid correction.
+
+### Malformed scene target repair — 2026-09-30
+
+Raw scene target values can be null, primitive JSON or an unsupported shape,
+because scene rows retain their original JSON independently of runtime parsing.
+The editor, scene summaries and effect summaries now identify those values
+without crashing or inventing a known state preview. Repair rows show the reason,
+the original JSON, a related entity link, explicit replacement and removal.
+Unrelated edits preserve unsupported values; known numeric ranges still validate.
+
+Replacement asks for confirmation and states the default state being introduced.
+It updates only the draft. Cancel restores the repair button's focus; replacement
+focuses the new state controls. Discard restores the original raw value. Target
+multi-selection now checks key presence instead of using a null-coalescing
+default, fixing silent conversion of saved null targets into empty state objects.
+The desktop scene action column also now fits the shared icon button.
+
+`ui/dev/scene-repair-review.mjs` covers the scene list, read-only repair rows,
+saved JSON inspection, unrelated Save/reload, unchanged picker confirmation,
+Cancel, confirmation, focus, no early writes, Discard, explicit replacement and
+removal, sibling extension/false/zero/null preservation, row containment and no
+live commands or page exceptions. It uses temporary local fixture records and
+removes them afterward. No household configuration is changed.
+
+245 UI tests, type checking and production build pass. Lint exits successfully
+with the existing backup-effect cleanup warning; the build retains its existing
+large-chunk warning. A server API test verifies that an unrelated name edit
+preserves malformed targets in both its response and runtime configuration. The
+database reopen/JSON-restore test now includes null, false, list and unknown-color
+target payloads. Evidence: `implementation-evidence/collections/scene-repair-*`.
+These tests cover preserved storage and UI repair, not successful execution of
+unsupported definitions. Other cross-family recovery/accessibility gates remain
+open.
+
+Passing browser runs: 390 px: 16 checks; 1440 px: 16 checks.

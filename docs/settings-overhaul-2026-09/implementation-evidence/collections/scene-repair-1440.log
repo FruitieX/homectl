@@ -1,0 +1,73 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Scene list remains usable with malformed target JSON",
+    "passed": true
+   },
+   {
+    "name": "Null and unknown color have explicit repair rows",
+    "passed": true
+   },
+   {
+    "name": "Saved null remains inspectable",
+    "passed": true
+   },
+   {
+    "name": "No guessed state controls for malformed targets",
+    "passed": true
+   },
+   {
+    "name": "Repair rows fit the page",
+    "passed": true
+   },
+   {
+    "name": "Unrelated save preserves raw null, color and extension values",
+    "passed": true
+   },
+   {
+    "name": "Unchanged selection preserves null repair row",
+    "passed": true
+   },
+   {
+    "name": "Unchanged selection does not write",
+    "passed": true
+   },
+   {
+    "name": "Cancel keeps the raw definition",
+    "passed": true
+   },
+   {
+    "name": "Cancel restores focus to the repair action",
+    "passed": true
+   },
+   {
+    "name": "Replacement is staged, not saved",
+    "passed": true
+   },
+   {
+    "name": "Replacement focuses the new state controls",
+    "passed": true
+   },
+   {
+    "name": "Discard restores unsupported raw definition",
+    "passed": true
+   },
+   {
+    "name": "Explicit replacement persists only the chosen target",
+    "passed": true
+   },
+   {
+    "name": "Explicit removal persists and preserves valid siblings",
+    "passed": true
+   },
+   {
+    "name": "No live commands or page exceptions",
+    "passed": true
+   }
+  ],
+  "scope": "Temporary synthetic scene; exact API payload preservation and reload, no household edits"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":1440,"height":1080},"problems":[]}

@@ -498,6 +498,61 @@ mod tests {
         assert_eq!(before, after);
     }
     #[tokio::test]
+    async fn unrelated_scene_edits_preserve_malformed_raw_targets() {
+        let handle = handle();
+        let mut original = row("raw-scene");
+        original.device_states = serde_json::from_value(serde_json::json!({
+            "dummy/lamp":null,"dummy/source":{"color":{"future":123},"future":[false,null,0]},
+            "missing/device":false
+        }))
+        .unwrap();
+        let input = original.clone();
+        handle
+            .mutate(move |state| {
+                Box::pin(async move {
+                    state.upsert_scene(input);
+                    state.apply_runtime_scenes();
+                })
+            })
+            .await
+            .unwrap();
+        let mut edited = original.clone();
+        edited.name = "Renamed without losing targets".into();
+        let expected = serde_json::to_value(&edited).unwrap();
+        let response = body(
+            update_scene(
+                edited.id.clone(),
+                SceneUpdate {
+                    scene: edited,
+                    expected: Some(original),
+                },
+                handle.clone(),
+            )
+            .await
+            .unwrap(),
+        )
+        .await;
+        assert_eq!(response["data"], expected);
+        let after = handle
+            .mutate(|state| {
+                Box::pin(async move {
+                    serde_json::to_value(
+                        state
+                            .runtime_config
+                            .scenes
+                            .iter()
+                            .find(|s| s.id == "raw-scene")
+                            .unwrap(),
+                    )
+                    .unwrap()
+                })
+            })
+            .await
+            .unwrap();
+        assert_eq!(after, expected);
+    }
+
+    #[tokio::test]
     async fn stale_scene_save_returns_current_and_preserves_configuration() {
         let handle = handle();
         let original = row("source_scene");

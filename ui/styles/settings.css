@@ -132,7 +132,7 @@
   display: grid;
   grid-template-columns:
     minmax(150px, 1.4fr) minmax(112px, 0.9fr) minmax(96px, 0.7fr)
-    minmax(160px, 1.2fr) minmax(150px, 1.1fr) 82px 32px;
+    minmax(160px, 1.2fr) minmax(150px, 1.1fr) 82px 2.75rem;
   align-items: center;
   column-gap: 14px;
   padding: 14px 0;

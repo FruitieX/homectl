@@ -6,11 +6,63 @@ import {
   describeSceneTarget,
   orderedSceneTargets,
   sceneTargetMode,
+  sceneTargetIssue,
   sceneTargetsSummary,
   sourceAliasKeys,
 } from './sceneTargets.ts';
 
 type Config = Record<string, unknown>;
+
+test('malformed raw targets remain unresolved instead of inventing a state', () => {
+  for (const raw of [
+    null,
+    false,
+    3,
+    'state',
+    [],
+    { power: 'on' },
+    { brightness: '0.2' },
+    { scene_id: [] },
+    { scene_id: null },
+    { integration_id: null },
+    { scene_id: 'a', use_scene_transition: null },
+    { scene_id: 'a', integration_id: 'b' },
+    { group_keys: [null] },
+    { color: false },
+    { color: { h: 10 } },
+    { color: { future: 123 } },
+  ]) {
+    assert.ok(sceneTargetIssue(raw));
+    assert.equal(sceneTargetMode(raw), 'unsupported');
+    const descriptor = describeSceneTarget(
+      'a',
+      { kind: 'device' },
+      raw as Config,
+    );
+    assert.equal(descriptor.mode, 'unsupported');
+    assert.ok(descriptor.unresolvedReason);
+  }
+  assert.equal(
+    sceneTargetIssue({
+      power: false,
+      brightness: 0,
+      transition: null,
+      color: null,
+      future: [false, null],
+    }),
+    null,
+  );
+  assert.equal(
+    sceneTargetIssue({
+      scene_id: 'a',
+      device_keys: [],
+      group_keys: null,
+      future: true,
+    }),
+    null,
+  );
+  assert.equal(sceneTargetIssue({}), null);
+});
 
 const WAY_TOO_LONG = 'x';
 

@@ -6,7 +6,7 @@ import type {
 } from '../hooks/useConfig';
 import type { DevicesState } from '../bindings/DevicesState';
 import type { DeviceColor } from '../bindings/DeviceColor';
-import { orderedSceneTargets } from './sceneTargets.ts';
+import { orderedSceneTargets, sceneTargetIssue } from './sceneTargets.ts';
 import { groupDeviceKey, inheritedGroupDevices } from './groupGraph.ts';
 import type { FieldError } from './configSection.ts';
 
@@ -54,6 +54,8 @@ export function resolveDraftTarget(
   context: SceneDraftContext,
   seen = new Set<string>(),
 ): DraftTargetState {
+  const issue = sceneTargetIssue(config);
+  if (issue) return { reason: issue };
   if ('integration_id' in config) {
     const key = canonicalDeviceKey(
       `${config.integration_id}/${config.device_id ?? ''}`,
@@ -147,6 +149,9 @@ export function validateSceneDraft(scene: Scene): FieldError[] {
     errors.push({ field: 'id', message: 'Choose a scene ID.' });
   for (const map of ['group_states', 'device_states'] as const)
     for (const [key, target] of Object.entries(scene[map])) {
+      // Unsupported raw definitions are preserved by their read-only repair
+      // rows. An unrelated edit must not erase them or require conversion.
+      if (sceneTargetIssue(target)) continue;
       const path = `${map}/${key}`;
       if ('scene_id' in target && !target.scene_id)
         errors.push({
@@ -216,5 +221,9 @@ export function validateSceneDraft(scene: Scene): FieldError[] {
 export function explicitTarget(
   config: SceneDeviceConfig,
 ): config is SceneDeviceState {
-  return !('scene_id' in config) && !('integration_id' in config);
+  return (
+    !sceneTargetIssue(config) &&
+    !('scene_id' in config) &&
+    !('integration_id' in config)
+  );
 }

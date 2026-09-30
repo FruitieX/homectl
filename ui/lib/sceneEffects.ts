@@ -7,7 +7,12 @@
  * resolves the final effect per device and says which target won.
  */
 
-import { resolveDeviceLink } from './sceneTargets.ts';
+import {
+  resolveDeviceLink,
+  sceneTargetMode,
+  sceneTargetIssue,
+  type SceneTargetMode,
+} from './sceneTargets.ts';
 
 export type SceneEffectTargetKind = 'device' | 'group' | 'scene';
 
@@ -15,10 +20,6 @@ type Config = object;
 
 function read(config: Config | null | undefined, field: string): unknown {
   return config ? (config as Record<string, unknown>)[field] : undefined;
-}
-
-function has(config: Config | null | undefined, field: string): boolean {
-  return config ? field in (config as Record<string, unknown>) : false;
 }
 
 export type SceneDeviceStateWords = {
@@ -90,7 +91,7 @@ export function describeSceneStateWords(
   return { changes, empty: changes.length === 0 };
 }
 
-export type SceneEffectMode = 'state' | 'device-link' | 'scene-link';
+export type SceneEffectMode = SceneTargetMode;
 
 export type SceneResolvedColor = { h: number; s: number };
 
@@ -276,11 +277,7 @@ export function resolveSceneEffects(
     kind: SceneEffectTargetKind,
     config: Config | undefined,
   ) => {
-    const mode: SceneEffectMode = has(config, 'scene_id')
-      ? 'scene-link'
-      : has(config, 'integration_id')
-        ? 'device-link'
-        : 'state';
+    const mode = sceneTargetMode(config);
 
     const target: SceneEffectTarget = {
       key,
@@ -296,6 +293,13 @@ export function resolveSceneEffects(
       missingMembers: [],
     };
 
+    if (mode === 'unsupported') {
+      target.unresolvedReason = sceneTargetIssue(config);
+      target.repair =
+        'Review the saved definition, replace it, or remove this target.';
+      targets.push(target);
+      return;
+    }
     if (kind === 'group' && !context.groups?.[key]) {
       target.unresolvedReason = `This room no longer exists`;
       target.repair = 'Pick another room, or remove this target.';

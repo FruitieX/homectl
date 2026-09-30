@@ -69,3 +69,9 @@ downgrade failure, repaired downgrade/re-upgrade, duplicate rejection, missing
 parent rejection and parent deletion cleanup. PostgreSQL runs in a local
 testcontainer; this is migration coverage rather than a full PostgreSQL API audit.
 See `implementation-evidence/collections/group-migration-tests.log`.
+
+Scene repair follow-up: the raw automation reopen/JSON-restore test also preserves
+null, false, list and unknown-color scene target values. The targeted rerun passes
+in `implementation-evidence/collections/scene-repair-database.log`. API raw-value
+preservation is separately verified in `scene-repair-api.log`; neither result
+claims those unsupported definitions execute successfully.
