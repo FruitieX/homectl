@@ -243,3 +243,27 @@ Type checking, lint, production build and all 242 UI tests pass. The build retai
 the existing large-chunk warning. Evidence: `implementation-evidence/everyday/settings-viewport-*`;
 representative captures appear in the comparison gallery. Wider schema,
 restore/restart, recovery and accessibility gates remain open.
+
+### Shared selection and category dialogs — 2026-09-30
+
+Entity pickers and phone settings navigation now respect the available visual
+viewport instead of overriding it with 85dvh. Their real dialog triggers restore
+keyboard focus after closing. Picker headings, search and Cancel/Done stay fixed
+while the member list scrolls; category headings and Close likewise stay visible
+when the last link receives focus. Phone dialog text inputs now have 44-pixel
+minimum height, consistent with the other settings fields.
+
+`ui/dev/settings-picker-review.mjs` uses a read-only intercepted catalog with 65
+additional groups, a cyclic candidate and an unavailable selected reference.
+It checks staged multi-selection, Cancel/Escape retention, Done versus Save,
+Discard, search beyond the first 40 entries, Show more, disabled cyclic choices,
+removable missing references, focus return, keyboard geometry and category-list
+scrolling. No configuration writes occur. Keyboard height/panning is simulated;
+this is not physical keyboard evidence. The 720 × 540 run checks a short viewport,
+not browser zoom. Logs and screenshots are in
+`implementation-evidence/everyday/settings-picker-*` and the comparison gallery.
+
+Type checking, lint and production build pass, with the existing large-chunk
+warning. The wider editor collection/persistence and recovery gates remain open.
+
+Passing runs: 1440 px: 17 checks; 390 px: 23 checks; 360 px: 23 checks; 720 px: 21 checks.

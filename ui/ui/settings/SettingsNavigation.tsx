@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogTrigger,
 } from '@/ui/primitives/dialog';
 
 function Categories({ close }: { close?: () => void }) {
@@ -71,16 +72,17 @@ export function SettingsBreadcrumbs() {
     resolved.startsWith(`${entry.href}/`),
   );
   return (
-    <>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="shrink-0 lg:hidden"
-        aria-label="Settings categories"
-        onClick={() => setOpen(true)}
-      >
-        <Menu />
-      </Button>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="shrink-0 lg:hidden"
+          aria-label="Settings categories"
+        >
+          <Menu />
+        </Button>
+      </DialogTrigger>
       <nav
         aria-label="Breadcrumb"
         className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground"
@@ -99,15 +101,15 @@ export function SettingsBreadcrumbs() {
           </>
         )}
       </nav>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[85dvh] overflow-auto">
-          <DialogHeader>
-            <DialogTitle>Settings</DialogTitle>
-            <DialogDescription>Choose a category.</DialogDescription>
-          </DialogHeader>
+      <DialogContent className="flex max-h-[min(85dvh,calc(var(--app-visual-viewport-height,100dvh)-2rem))] flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
+          <DialogTitle>Settings</DialogTitle>
+          <DialogDescription>Choose a category.</DialogDescription>
+        </DialogHeader>
+        <div className="min-h-0 flex-1 overflow-auto">
           <Categories close={() => setOpen(false)} />
-        </DialogContent>
-      </Dialog>
-    </>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -21,6 +21,10 @@
   background: hsl(var(--muted));
   color: hsl(var(--foreground));
 }
+.settings-categories a:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+}
 .settings-categories a.active {
   background: hsl(var(--primary) / 0.09);
   color: hsl(var(--primary));
@@ -96,7 +100,9 @@
   }
 }
 @media (max-width: 767px) {
-  .settings-dialog button {
+  .settings-dialog button,
+  .settings-dialog input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  .settings-dialog select {
     min-height: 44px;
   }
   .settings-dialog input:not([type='checkbox']):not([type='radio']),

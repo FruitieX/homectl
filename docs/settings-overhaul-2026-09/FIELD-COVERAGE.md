@@ -23,6 +23,17 @@ rows marked **open** are not acceptance sign-off. Paths below are relative to
 
 ## Collections required by the plan
 
+Group schema clarification (2026-09-30): the current API accepts `GroupRow`
+(`server/src/db/config_queries.rs`) with required `id`, `name`, `hidden`,
+`devices[]` and `linked_groups[]`. These fields are not nullable; the older
+optional `GroupConfig` is an import/runtime representation, not the editing
+contract. `device_keys[]` is derived in responses and deliberately omitted from
+editor writes. Group rows have no opaque extension map, so fixture-only unknown
+properties must not be used to claim server persistence of extensions. The
+shared-picker checkpoint covers staged selection, missing/cyclic references
+and keyboard behavior; explicit empty/single/multiple Save/reload coverage below
+is still a separate requirement.
+
 | Contract | Renderer and empty/add/remove behavior | Order | Existing fixture evidence and remaining work |
 | --- | --- | --- | --- |
 | Group `devices[]`, `linked_groups[]` | `app/config/groups/editor.tsx`, `shared.tsx`: separate direct-device and linked-group pickers; empty group allowed; missing members remain repairable | Membership; preserve submitted arrays | `dev/settings-group-journey.js` edits members and retains drafts/conflicts; `lib/groupGraph.test.ts` checks cycles/missing members. **Open:** enumerate empty/single/multiple fixtures separately. |

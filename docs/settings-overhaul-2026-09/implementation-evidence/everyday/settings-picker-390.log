@@ -1,0 +1,101 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Opening focuses search",
+    "passed": true
+   },
+   {
+    "name": "Large catalog starts at forty rows",
+    "passed": true
+   },
+   {
+    "name": "Draft starts with retained unavailable reference",
+    "passed": true
+   },
+   {
+    "name": "Search finds entries beyond the first forty",
+    "passed": true
+   },
+   {
+    "name": "Keyboard stages a selection",
+    "passed": true
+   },
+   {
+    "name": "Cancel returns focus to Add groups",
+    "passed": true
+   },
+   {
+    "name": "Cancel discards pending membership",
+    "passed": true
+   },
+   {
+    "name": "Cyclic group is explained and disabled",
+    "passed": true
+   },
+   {
+    "name": "Unavailable selection remains removable",
+    "passed": true
+   },
+   {
+    "name": "Unavailable reference can be deselected",
+    "passed": true
+   },
+   {
+    "name": "Escape returns focus to Add groups",
+    "passed": true
+   },
+   {
+    "name": "Escape preserves original membership",
+    "passed": true
+   },
+   {
+    "name": "Show more reveals remaining catalog",
+    "passed": true
+   },
+   {
+    "name": "Picker fits visible keyboard area",
+    "passed": true
+   },
+   {
+    "name": "Search and Done remain visible",
+    "passed": true
+   },
+   {
+    "name": "Done returns focus to Add groups",
+    "passed": true
+   },
+   {
+    "name": "Done updates page draft without saving",
+    "passed": true
+   },
+   {
+    "name": "Discard restores saved membership",
+    "passed": true
+   },
+   {
+    "name": "Categories dialog fits available height",
+    "passed": true
+   },
+   {
+    "name": "Final category can be reached by focus",
+    "passed": true
+   },
+   {
+    "name": "Category title and Close remain visible at end of list",
+    "passed": true
+   },
+   {
+    "name": "Categories Escape restores trigger focus",
+    "passed": true
+   },
+   {
+    "name": "No API writes or interception failures",
+    "passed": true
+   }
+  ],
+  "scope": "Synthetic catalog, native keys; phone keyboard geometry is injected, not physical hardware"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":390,"height":844},"problems":[]}
