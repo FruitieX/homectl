@@ -605,3 +605,13 @@ those historical remaining-work paragraphs do not describe the current UI.
 
 These are isolated browser/API/storage checks. Physical color matching and the
 broader accessibility/recovery matrix are not claimed complete.
+
+### MQTT repair reconciliation — 2026-09-30
+
+Malformed ranges and known string collections now have 16 native browser checks
+at each 390/1440 px, including explicit repair, original-value review, retained
+numeric drafts, validation focus, Discard, Save/reload and default removal. Schema
+range defaults now match the generic MQTT runtime. All 246 UI tests, type/lint/build
+and the targeted Rust schema test pass. See the
+[work queue checkpoint](WORK-QUEUE.md#mqtt-range-and-collection-repair--2026-09-30)
+for evidence and limits. Broader reference/recovery/accessibility gates remain open.

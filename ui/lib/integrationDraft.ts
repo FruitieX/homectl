@@ -5,6 +5,10 @@ import type {
 } from '../hooks/useConfig';
 import type { FieldError } from './configSection.ts';
 import { isDeviceColor } from './deviceColor.ts';
+export const isNumericRange = (value: unknown): value is [number, number] =>
+  Array.isArray(value) &&
+  value.length === 2 &&
+  value.every((entry) => typeof entry === 'number' && Number.isFinite(entry));
 export const readConfigPath = (config: unknown, path: string): unknown =>
   path
     .split('.')
@@ -107,12 +111,7 @@ export function validateIntegrationDraft(
     if (
       range !== undefined &&
       range !== null &&
-      (!Array.isArray(range) ||
-        range.length !== 2 ||
-        range.some(
-          (item) => typeof item !== 'number' || !Number.isFinite(item),
-        ) ||
-        range[0] >= range[1])
+      (!isNumericRange(range) || range[0] >= range[1])
     )
       errors.push({
         field: `config.${field}`,

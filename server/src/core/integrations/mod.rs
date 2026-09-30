@@ -519,10 +519,10 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                 generic_advanced(with_section(json_config_field("power_off_value", "Power off value", false, "JSON value that represents an off state.", Some(json!(false))), "Payload mapping")),
                 generic_advanced(with_section(text_config_field("color_field", "Color field", false, "JSON pointer to the color value.", Some("/color")), "Payload mapping")),
                 generic_advanced(with_section(text_config_field("brightness_field", "Brightness field", false, "JSON pointer to the brightness value.", Some("/brightness")), "Payload mapping")),
-                generic_advanced(with_section(json_config_field("brightness_range", "Brightness range", false, "Two-number JSON array describing the source brightness range.", Some(json!([0, 255]))), "Payload mapping")),
+                generic_advanced(with_section(json_config_field("brightness_range", "Brightness range", false, "Payload values corresponding to minimum and full brightness. Defaults to 0 and 1.", Some(json!([0, 1]))), "Payload mapping")),
                 generic_advanced(with_help_text(with_section(json_config_field("sensor_value_fields", "Sensor value fields", false, "JSON array of pointers to sensor values in incoming payloads.", Some(json!(["/temperature", "/humidity"]))), "Payload mapping"), "List every numeric or boolean sensor value to keep.")),
                 generic_advanced(with_section(text_config_field("transition_field", "Transition field", false, "JSON pointer to transition/fade duration.", Some("/transition")), "Payload mapping")),
-                generic_advanced(with_section(json_config_field("transition_range", "Transition range", false, "Two-number JSON array describing the transition duration range.", Some(json!([0, 600]))), "Payload mapping")),
+                generic_advanced(with_section(json_config_field("transition_range", "Transition range", false, "Payload values corresponding to zero and one second of transition. Defaults to 0 and 1.", Some(json!([0, 1]))), "Payload mapping")),
                 generic_advanced(with_section(text_config_field("capabilities_field", "Capabilities field", false, "JSON pointer to advertised device capabilities.", Some("/capabilities")), "Payload mapping")),
                 generic_advanced(with_section(json_config_field("capabilities_override", "Capabilities override", false, "Optional capabilities object that overrides discovered capabilities.", Some(json!({ "xy": true, "hs": false, "rgb": false, "ct": { "start": 2000, "end": 6500 } }))), "Payload mapping")),
                 generic_advanced(with_section(text_config_field("raw_field", "Raw payload field", false, "JSON pointer to store as raw device metadata.", Some("/raw")), "Payload mapping")),
@@ -1194,6 +1194,8 @@ mod tests {
 
         let field = |key: &str| schema.fields.iter().find(|field| field.key == key).unwrap();
         assert_eq!(field("mode").default_value, Some(json!("generic")));
+        assert_eq!(field("brightness_range").default_value, Some(json!([0, 1])));
+        assert_eq!(field("transition_range").default_value, Some(json!([0, 1])));
         assert_eq!(field("topic").visible_when.as_ref().unwrap().key, "mode");
         assert_eq!(
             field("topic").visible_when.as_ref().unwrap().equals,

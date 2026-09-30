@@ -14,12 +14,115 @@ import {
   writeConfigPath,
   integrationMode,
   integrationFieldVisible,
+  isNumericRange,
 } from '@/lib/integrationDraft';
 import { entityDraftStore } from '@/lib/entityDraft';
 const record = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+function NumericRange({
+  value,
+  field,
+  onChange,
+  draftKey,
+}: {
+  value: unknown;
+  field: IntegrationConfigFieldSchema;
+  onChange: (value: unknown) => void;
+  draftKey: string;
+}) {
+  const path = `config/${field.key}`;
+  const defaults = isNumericRange(field.default_value)
+    ? field.default_value
+    : [0, 1];
+  if (value != null && !isNumericRange(value))
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          This stored range needs two numeric endpoints. Its original value is
+          kept until you replace it or use the default.
+        </p>
+        <pre
+          className="overflow-x-auto rounded-lg bg-muted p-3 text-xs"
+          aria-label={`${field.label} stored value`}
+        >
+          {JSON.stringify(value, null, 2)}
+        </pre>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label={`Replace ${field.label}`}
+          onClick={() =>
+            void confirmDialog({
+              title: `Replace ${field.label.toLowerCase()}?`,
+              description: `Replace the stored value with ${defaults[0]} to ${defaults[1]}. You can adjust these endpoints before saving.`,
+              confirmLabel: 'Replace range',
+            }).then((confirmed) => {
+              if (!confirmed) return;
+              entityDraftStore.remapEditorPaths(draftKey, (slot) =>
+                slot === path || slot.startsWith(path + '/') ? null : slot,
+              );
+              onChange([...defaults]);
+            })
+          }
+        >
+          Replace range
+        </Button>
+      </div>
+    );
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {['Minimum', 'Maximum'].map((label, index) => {
+        const slot = `${path}/${index}`;
+        const input = entityDraftStore.get(draftKey)?.inputs?.[slot];
+        const errorId = `range-error-${encodeURIComponent(slot)}`;
+        return (
+          <label key={label} className="grid content-start gap-2 text-xs">
+            {label}
+            <Input
+              aria-label={`${field.label} ${label.toLowerCase()}`}
+              data-field={slot}
+              inputMode="decimal"
+              aria-invalid={Boolean(input?.error)}
+              aria-describedby={input?.error ? errorId : undefined}
+              value={
+                input?.raw ??
+                (isNumericRange(value) ? String(value[index]) : '')
+              }
+              placeholder={String(defaults[index])}
+              onChange={(event) => {
+                const raw = event.target.value;
+                const valid =
+                  /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(
+                    raw.trim(),
+                  ) && Number.isFinite(Number(raw));
+                entityDraftStore.stageInput(draftKey, slot, {
+                  raw,
+                  error: valid
+                    ? undefined
+                    : `${field.label} ${label.toLowerCase()}: enter a complete, finite number.`,
+                });
+                if (valid) {
+                  const next = isNumericRange(value)
+                    ? [...value]
+                    : [...defaults];
+                  next[index] = Number(raw);
+                  onChange(next);
+                }
+              }}
+            />
+            {input?.error && (
+              <span id={errorId} className="text-destructive">
+                {input.error}
+              </span>
+            )}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
 function StringEntries({
   value,
   onChange,
@@ -780,33 +883,12 @@ export function IntegrationField({
     );
   else if (field.key === 'brightness_range' || field.key === 'transition_range')
     control = (
-      <div className="grid grid-cols-2 gap-3">
-        {['Minimum', 'Maximum'].map((label, index) => (
-          <label key={label} className="grid gap-2 text-xs">
-            {label}
-            <Input
-              type="number"
-              step="any"
-              value={Array.isArray(value) ? (value[index] ?? '') : ''}
-              placeholder={
-                Array.isArray(field.default_value)
-                  ? String(field.default_value[index])
-                  : ''
-              }
-              onChange={(event) => {
-                const next = Array.isArray(value)
-                  ? [...value]
-                  : [undefined, undefined];
-                next[index] =
-                  event.target.value === ''
-                    ? undefined
-                    : Number(event.target.value);
-                update(next);
-              }}
-            />
-          </label>
-        ))}
-      </div>
+      <NumericRange
+        value={value}
+        field={field}
+        onChange={update}
+        draftKey={draftKey}
+      />
     );
   else if (field.key === 'capabilities_override')
     control = (

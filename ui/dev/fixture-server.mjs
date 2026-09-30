@@ -527,6 +527,16 @@ function buildIntegrationSchemas() {
         field({
           key: 'brightness_range',
           label: 'Brightness range',
+          default_value: [0, 1],
+          kind: 'json',
+          section: 'Payload mapping',
+          advanced: true,
+          visible_when: { key: 'mode', equals: 'generic' },
+        }),
+        field({
+          key: 'transition_range',
+          label: 'Transition range',
+          default_value: [0, 1],
           kind: 'json',
           section: 'Payload mapping',
           advanced: true,

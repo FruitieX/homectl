@@ -771,6 +771,34 @@ the named catalog/capability/reference cases; broader cross-family recovery,
 accessibility and real-device acceptance remain open. No household configuration
 or physical light was changed.
 
+### MQTT range and collection repair — 2026-09-30
+
+Malformed brightness/transition ranges previously rendered empty numeric controls
+or hid extra endpoints. They now display their original JSON and require explicit
+replacement or Use default. Replacement previews its endpoints in a confirmation
+and changes only the draft. Normal endpoint controls retain unfinished numeric
+input, identify the invalid field, survive navigation and block Save until valid.
+Resetting the range also clears its staged numeric input. Schema defaults and
+descriptions now match the generic MQTT runtime: both ranges default to `[0, 1]`;
+transition endpoints represent zero and one second, not a maximum duration.
+
+Sixteen native browser checks pass at both 390/1440 px. They cover malformed
+object/oversized ranges and malformed sensor/disabled-device collections, Cancel,
+Discard, explicit repair, validation focus, retained navigation, exact Save/reload,
+default removal, exponent input and unchanged extensions/false/null/secrets. No
+page exceptions or unexpected creates occur. The temporary integrations are
+disabled in an isolated fixture and removed afterward. Screenshots were inspected.
+All 246 UI tests, type/lint/build and the targeted Rust MQTT schema test pass.
+Existing backup-effect, bundle-size and Rust future-compatibility warnings remain.
+Evidence: `ui/dev/mqtt-repair-review.mjs`,
+`implementation-evidence/collections/mqtt-repair-*` and the
+[comparison gallery](implementation-evidence/comparison/index.html#mqtt-repair).
+
+Next in the reference audit: computed-source scene usage currently assumes every
+scene target is an object; malformed targets need safe inspection. Helper/source
+visibility and complete reference reconciliation, restore/restart, transport,
+activity and final cross-family accessibility/cleanup gates remain open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

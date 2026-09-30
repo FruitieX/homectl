@@ -1,0 +1,73 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Malformed range payloads remain visible without coercion",
+    "passed": true
+   },
+   {
+    "name": "Malformed lists expose their saved value types",
+    "passed": true
+   },
+   {
+    "name": "Cancel leaves saved data and draft untouched",
+    "passed": true
+   },
+   {
+    "name": "Replacement starts from the runtime defaults",
+    "passed": true
+   },
+   {
+    "name": "Discard and range repair issue no configuration writes",
+    "passed": true
+   },
+   {
+    "name": "Unfinished endpoint cannot save",
+    "passed": true
+   },
+   {
+    "name": "Validation focuses the unfinished endpoint",
+    "passed": true
+   },
+   {
+    "name": "Navigation preserves incomplete endpoints and other repairs",
+    "passed": true
+   },
+   {
+    "name": "Reversed endpoints cannot save",
+    "passed": true
+   },
+   {
+    "name": "Explicit repair saves exact ranges and repaired collections",
+    "passed": true
+   },
+   {
+    "name": "Repair preserves extension values, false, null and stored secrets",
+    "passed": true
+   },
+   {
+    "name": "Both repaired ranges survive reload",
+    "passed": true
+   },
+   {
+    "name": "Default removes range and unfinished input; exponent saves a number",
+    "passed": true
+   },
+   {
+    "name": "Default placeholders match actual runtime endpoints",
+    "passed": true
+   },
+   {
+    "name": "No page exceptions or unintended creates",
+    "passed": true
+   },
+   {
+    "name": "No horizontal page overflow",
+    "passed": true
+   }
+  ],
+  "scope": "Temporary disabled integration in an isolated marked fixture; no broker or household configuration used"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":1440,"height":1000},"problems":[]}

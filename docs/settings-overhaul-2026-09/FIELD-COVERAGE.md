@@ -573,3 +573,13 @@ backup-effect lint, build chunk-size and Rust future-compatibility warnings rema
 No household configuration was changed. Remaining integration work includes
 malformed MQTT collection/range repair reconciliation and the broader module and
 recovery audit; this checkpoint does not close the entire field gate.
+
+### MQTT repair reconciliation — 2026-09-30
+
+Malformed ranges and known string collections now have 16 native browser checks
+at each 390/1440 px, including explicit repair, original-value review, retained
+numeric drafts, validation focus, Discard, Save/reload and default removal. Schema
+range defaults now match the generic MQTT runtime. All 246 UI tests, type/lint/build
+and the targeted Rust schema test pass. See the
+[work queue checkpoint](WORK-QUEUE.md#mqtt-range-and-collection-repair--2026-09-30)
+for evidence and limits. Broader reference/recovery/accessibility gates remain open.
