@@ -1,0 +1,60 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Conversation list failure is visible instead of an empty welcome",
+    "passed": true
+   },
+   {
+    "name": "Retry fetches the conversation list again",
+    "passed": true
+   },
+   {
+    "name": "Failed detail stops loading and offers explicit recovery",
+    "passed": true
+   },
+   {
+    "name": "Unresolved conversation cannot send into the previous thread",
+    "passed": true
+   },
+   {
+    "name": "Retry opens the stored conversation",
+    "passed": true
+   },
+   {
+    "name": "Failed thread switch is visible instead of silently showing the old conversation",
+    "passed": true
+   },
+   {
+    "name": "Failed thread switch preserves the earlier conversation",
+    "passed": true
+   },
+   {
+    "name": "Failed entity search differs from no matches",
+    "passed": true
+   },
+   {
+    "name": "Search retry displays a genuine empty result",
+    "passed": true
+   },
+   {
+    "name": "New conversation sends neither the old thread ID nor its history",
+    "passed": true
+   },
+   {
+    "name": "New conversation view contains only its own messages",
+    "passed": true
+   },
+   {
+    "name": "Recovery controls fit the viewport",
+    "passed": true
+   },
+   {
+    "name": "Interception completed without errors",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":1440,"height":1080},"problems":["log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)","log: Failed to load resource: the server responded with a status of 404 (Not Found)","log: Failed to load resource: the server responded with a status of 503 (Service Unavailable)"]}

@@ -379,6 +379,22 @@ All 237 UI tests and type/lint/build pass. Evidence: `everyday/assistant-review-
 Conversation/search read failures, streaming cancellation and broader navigation/
 accessibility still need reconciliation; the whole assistant gate remains open.
 
+
+### Assistant conversation recovery — 2026-09-30
+
+13 native browser checks pass at 1440/390 px. Failed conversation lists,
+thread details and entity searches now display errors with Retry rather than
+empty results. Failed switches keep the earlier thread; unresolved selection
+disables the composer until the user retries or returns. Sending from the history
+list starts a new conversation without the previous thread ID/history. Previously
+the state reset and request construction used different snapshots, allowing the
+old ID to reach the request. The driver checks the actual submitted payload.
+
+Evidence: `ui/dev/assistant-read-recovery.mjs` and `everyday/assistant-reads-*`.
+503/404 resource errors are deliberately injected and expected in the logs.
+Type/lint/build pass; this is browser response recovery, not a provider execution
+test. Streaming/cancellation, reconnect and wider accessibility remain open.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

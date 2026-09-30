@@ -157,7 +157,8 @@ export function AssistantPanel() {
   // The list is a first-class view rather than a transient state: it stays
   // reachable while a reply streams (the stream keeps running in the thread
   // view), which is what made the back button look broken on a phone.
-  const showPastThreads = browsingThreads || thread.length === 0;
+  const showPastThreads =
+    browsingThreads || thread.length === 0 || loadingThreadId !== null;
   const threadsQuery = useAssistantThreads(state.open && showPastThreads);
   const pastThreads = threadsQuery.data ?? [];
   const deleteThread = useDeleteAssistantThread();
@@ -231,12 +232,6 @@ export function AssistantPanel() {
   ]);
 
   useEffect(() => {
-    if (loadedThread.isError && loadingThreadId) {
-      setLoadingThreadId(null);
-    }
-  }, [loadedThread.isError, loadingThreadId]);
-
-  useEffect(() => {
     const container = scrollRef.current;
     if (container) {
       container.scrollTop = container.scrollHeight;
@@ -249,10 +244,11 @@ export function AssistantPanel() {
 
   const submit = () => {
     const trimmed = prompt.trim();
-    if (!trimmed || isStreaming) {
+    if (!trimmed || isStreaming || loadingThreadId) {
       return;
     }
-    if (browsingThreads) {
+    const startingFresh = browsingThreads;
+    if (startingFresh) {
       // Typing in the past-conversations list starts a new thread.
       startFreshThread();
       setBrowsingThreads(false);
@@ -268,16 +264,17 @@ export function AssistantPanel() {
     setAttachments([]);
     setStreamText('');
     setStatus({ phase: 'sending', message: 'Sending…' });
-    const history = threadId
-      ? undefined
-      : buildAssistantHistory(threadHistory(thread));
+    const history =
+      threadId && !startingFresh
+        ? undefined
+        : buildAssistantHistory(startingFresh ? [] : threadHistory(thread));
 
     void send(
       {
         prompt: trimmed,
         attachments,
         history,
-        threadId: threadId ?? undefined,
+        threadId: startingFresh ? undefined : (threadId ?? undefined),
       },
       {
         onStatus: (next) => {
@@ -413,9 +410,7 @@ export function AssistantPanel() {
     }
     setThread((current) =>
       current.map((entry) =>
-        entry.id === id &&
-        entry.role === 'assistant' &&
-        entry.kind === 'action'
+        entry.id === id && entry.role === 'assistant' && entry.kind === 'action'
           ? { ...entry, results, historical: true }
           : entry,
       ),
@@ -499,12 +494,63 @@ export function AssistantPanel() {
           ref={scrollRef}
           className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1"
         >
+          {showPastThreads && !loadingThreadId && threadsQuery.isError && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                Could not load conversations.
+                {pastThreads.length > 0 &&
+                  ' Showing the last successful refresh.'}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  disabled={threadsQuery.isFetching}
+                  onClick={() => void threadsQuery.refetch()}
+                >
+                  Retry conversations
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
           {showPastThreads ? (
             loadingThreadId ? (
-              <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" />
-                Loading conversation…
-              </div>
+              loadedThread.isError ? (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    Could not open this conversation. Try again or return to the
+                    list.
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={loadedThread.isFetching}
+                        onClick={() => void loadedThread.refetch()}
+                      >
+                        Retry conversation
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setLoadingThreadId(null);
+                          setBrowsingThreads(true);
+                        }}
+                      >
+                        Back to conversations
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Loading conversation…
+                </div>
+              )
+            ) : threadsQuery.isLoading ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Loading conversations…
+              </p>
             ) : pastThreads.length > 0 ? (
               <div className="space-y-1.5">
                 <div className="max-h-72 space-y-0.5 overflow-y-auto overscroll-contain rounded-3xl border border-border bg-card p-1">
@@ -561,7 +607,7 @@ export function AssistantPanel() {
                   </div>
                 ) : null}
               </div>
-            ) : (
+            ) : !threadsQuery.isError ? (
               <div className="space-y-3 rounded-3xl border border-dashed border-border bg-muted/20 px-4 py-6 text-center">
                 <p className="text-sm text-muted-foreground">
                   {enabled
@@ -585,81 +631,85 @@ export function AssistantPanel() {
                   </div>
                 ) : null}
               </div>
-            )
+            ) : null
           ) : null}
 
           {showPastThreads
             ? null
             : thread.map((message) => {
-            if (message.role === 'user') {
-              return (
-                <div
-                  key={message.id}
-                  className="ml-auto flex max-w-[85%] flex-col items-end gap-1.5"
-                >
-                  {message.attachments.length > 0 ? (
-                    <div className="flex flex-wrap justify-end gap-1.5">
-                      {message.attachments.map((attachment) => (
-                        <AttachmentChip
-                          key={`${attachment.kind}:${attachment.id ?? ''}`}
-                          attachment={attachment}
-                        />
-                      ))}
+                if (message.role === 'user') {
+                  return (
+                    <div
+                      key={message.id}
+                      className="ml-auto flex max-w-[85%] flex-col items-end gap-1.5"
+                    >
+                      {message.attachments.length > 0 ? (
+                        <div className="flex flex-wrap justify-end gap-1.5">
+                          {message.attachments.map((attachment) => (
+                            <AttachmentChip
+                              key={`${attachment.kind}:${attachment.id ?? ''}`}
+                              attachment={attachment}
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+                      <p className="rounded-2xl bg-primary px-3 py-2 text-sm text-primary-foreground">
+                        {message.text}
+                      </p>
                     </div>
-                  ) : null}
-                  <p className="rounded-2xl bg-primary px-3 py-2 text-sm text-primary-foreground">
-                    {message.text}
-                  </p>
-                </div>
-              );
-            }
-            if (message.kind === 'error') {
-              return (
-                <Alert key={message.id} variant="destructive">
-                  <AlertDescription>{message.error}</AlertDescription>
-                </Alert>
-              );
-            }
-            if (message.kind === 'action') {
-              return (
-                <ActionCard
-                  key={message.id}
-                  action={message.action}
-                  results={message.results ?? null}
-                  readOnly={
-                    message.historical === true && message.results === undefined
-                  }
-                  onApplied={(results) =>
-                    recordActionResults(message.id, results)
-                  }
-                  onDiscard={() => discardMessage(message.id)}
-                />
-              );
-            }
-            if (message.kind === 'text') {
-              return <MarkdownMessage key={message.id} text={message.text} />;
-            }
-            return (
-              <PlanCard
-                key={message.id}
-                plan={message.plan}
-                initialResults={message.results ?? null}
-                initialAcceptedOperationIds={message.acceptedOperationIds}
-                readOnly={
-                  message.historical === true && message.results === undefined
+                  );
                 }
-                onApplied={(results, acceptedOperationIds) =>
-                  recordPlanResults(
-                    message.id,
-                    message.plan.planId,
-                    results,
-                    acceptedOperationIds,
-                  )
+                if (message.kind === 'error') {
+                  return (
+                    <Alert key={message.id} variant="destructive">
+                      <AlertDescription>{message.error}</AlertDescription>
+                    </Alert>
+                  );
                 }
-                onDiscard={() => discardMessage(message.id)}
-              />
-            );
-          })}
+                if (message.kind === 'action') {
+                  return (
+                    <ActionCard
+                      key={message.id}
+                      action={message.action}
+                      results={message.results ?? null}
+                      readOnly={
+                        message.historical === true &&
+                        message.results === undefined
+                      }
+                      onApplied={(results) =>
+                        recordActionResults(message.id, results)
+                      }
+                      onDiscard={() => discardMessage(message.id)}
+                    />
+                  );
+                }
+                if (message.kind === 'text') {
+                  return (
+                    <MarkdownMessage key={message.id} text={message.text} />
+                  );
+                }
+                return (
+                  <PlanCard
+                    key={message.id}
+                    plan={message.plan}
+                    initialResults={message.results ?? null}
+                    initialAcceptedOperationIds={message.acceptedOperationIds}
+                    readOnly={
+                      message.historical === true &&
+                      message.results === undefined
+                    }
+                    onApplied={(results, acceptedOperationIds) =>
+                      recordPlanResults(
+                        message.id,
+                        message.plan.planId,
+                        results,
+                        acceptedOperationIds,
+                      )
+                    }
+                    onDiscard={() => discardMessage(message.id)}
+                  />
+                );
+              })}
 
           {isStreaming ? (
             <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/20 p-3">
@@ -713,6 +763,23 @@ export function AssistantPanel() {
                     <p className="px-3 py-2 text-xs text-muted-foreground">
                       Searching…
                     </p>
+                  ) : searchResults.isError ? (
+                    <div
+                      role="alert"
+                      className="space-y-2 px-3 py-2 text-xs text-destructive"
+                    >
+                      <p>
+                        Could not search entities. Your attachments are
+                        unchanged.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void searchResults.refetch()}
+                      >
+                        Retry search
+                      </Button>
+                    </div>
                   ) : searchHits.length === 0 ? (
                     <p className="px-3 py-2 text-xs text-muted-foreground">
                       No matching entities.
@@ -753,7 +820,7 @@ export function AssistantPanel() {
                 ? 'Describe the change, for example “dim the office lights at sunset”'
                 : 'Describe a change…'
             }
-            disabled={!enabled || isStreaming}
+            disabled={!enabled || isStreaming || loadingThreadId !== null}
             onChange={(event) => setPrompt(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
@@ -811,7 +878,12 @@ export function AssistantPanel() {
               ) : null}
               <Button
                 type="button"
-                disabled={!enabled || !prompt.trim() || isStreaming}
+                disabled={
+                  !enabled ||
+                  !prompt.trim() ||
+                  isStreaming ||
+                  loadingThreadId !== null
+                }
                 onClick={submit}
               >
                 {isStreaming ? <Loader2 className="animate-spin" /> : <Send />}
