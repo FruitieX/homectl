@@ -17,16 +17,19 @@ and the [mockup versus implementation gallery](implementation-evidence/floorplan
 
 ## Current review
 
-### Shared navigation · Study 08
+### Shared navigation · Study 08 (implemented)
 
 [Desktop/phone screenshot comparison](navigation-review.html) ·
 [Interactive sidebar study](navigation-study.html) ·
 [Design notes and tradeoffs](NAVIGATION-STUDY.md).
 
-Compares a refined full sidebar with a compact labeled rail and an expandable,
-optionally pinned settings panel. Focuses on hierarchy, spacing and the complete
-settings catalog; both share a phone drawer with group shortcuts. Concepts for
-review, using synthetic data and the approved Compact palette.
+The compact labeled rail with an expandable settings panel was selected.
+Production uses two states, open and closed: entering settings opens the panel,
+leaving settings closes it. There is no pinning or overlay mode. The shared
+phone drawer retains group shortcuts and the full settings catalog.
+See [implementation behavior and verification](UNIFIED-NAVIGATION.md) and
+[mockup versus implementation](implementation-evidence/compact-rail/index.html).
+The original concept comparison remains available with synthetic data.
 
 ### Quick adjust · Study 07
 

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>homectl · compact rail implementation</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #f5f7f3;
+        color: #293d32;
+        font:
+          14px/1.6 system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 1540px;
+        margin: auto;
+        padding: 32px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+      }
+      h2 {
+        font-size: 19px;
+        margin-top: 30px;
+      }
+      p {
+        max-width: 850px;
+        color: #607568;
+      }
+      a {
+        color: #356b51;
+      }
+      .pair {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+      figure {
+        margin: 0;
+        border: 1px solid #dce4dc;
+        border-radius: 8px;
+        overflow: hidden;
+        background: white;
+      }
+      figcaption {
+        padding: 12px 16px;
+      }
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .phones {
+        grid-template-columns: repeat(3, minmax(0, 340px));
+      }
+      @media (max-width: 700px) {
+        main {
+          padding: 18px;
+        }
+        .pair {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Compact rail + settings panel</h1>
+      <p>
+        Approved B, implemented with open/closed states and no pinning. Settings
+        opens its panel; other application areas show only the rail. Screenshots
+        use isolated synthetic fixtures.
+      </p>
+      <p>
+        <a href="../../UNIFIED-NAVIGATION.md">Behavior and verification</a> ·
+        <a href="../../navigation-review.html">Original concept comparison</a>
+      </p>
+      <h2>Approved direction and production implementation</h2>
+      <div class="pair">
+        <figure>
+          <figcaption>
+            B mockup — the original study toolbar and pin control are prototype
+            UI.
+          </figcaption>
+          <a href="../../previews/navigation-study/b-settings.png"
+            ><img
+              src="../../previews/navigation-study/b-settings.png"
+              alt="Approved compact rail and settings panel mockup"
+          /></a>
+        </figure>
+        <figure>
+          <figcaption>
+            Implementation — same navigation hierarchy with the real routine
+            editor.
+          </figcaption>
+          <a href="desktop-routine.png"
+            ><img
+              src="desktop-routine.png"
+              alt="Implemented rail and expanded settings panel on routine details"
+          /></a>
+        </figure>
+      </div>
+      <h2>Open and closed</h2>
+      <div class="pair">
+        <figure>
+          <figcaption>
+            Closing the panel returns space to the current editor.
+          </figcaption>
+          <a href="desktop-routine-closed.png"
+            ><img
+              src="desktop-routine-closed.png"
+              alt="Routine editor with only the compact rail visible"
+          /></a>
+        </figure>
+        <figure>
+          <figcaption>Outside settings the panel is always closed.</figcaption>
+          <a href="desktop-map.png"
+            ><img
+              src="desktop-map.png"
+              alt="Floorplan with the shared compact rail"
+          /></a>
+        </figure>
+      </div>
+      <h2>Phones</h2>
+      <div class="pair phones">
+        <figure>
+          <figcaption>One shared navigation drawer.</figcaption>
+          <a href="phone-settings.png"
+            ><img
+              src="phone-settings.png"
+              alt="Phone navigation showing primary destinations and settings categories"
+          /></a>
+        </figure>
+        <figure>
+          <figcaption>Group shortcuts reach later categories.</figcaption>
+          <a href="phone-maintenance.png"
+            ><img
+              src="phone-maintenance.png"
+              alt="Phone navigation scrolled to Maintenance"
+          /></a>
+        </figure>
+        <figure>
+          <figcaption>The floorplan retains its AppBar tabs.</figcaption>
+          <a href="phone-map.png"
+            ><img
+              src="phone-map.png"
+              alt="Phone floorplan with tabs in the header"
+          /></a>
+        </figure>
+      </div>
+      <h2>Smaller desktop and dark theme</h2>
+      <div class="pair">
+        <figure>
+          <figcaption>
+            1024 px desktop: docks adapt to leave room for the canvas.
+          </figcaption>
+          <a href="tablet-editor.png"
+            ><img
+              src="tablet-editor.png"
+              alt="Floorplan editor with expanded settings panel on a smaller desktop"
+          /></a>
+        </figure>
+        <figure>
+          <figcaption>
+            Colors follow the application's existing theme and accent.
+          </figcaption>
+          <a href="desktop-dark.png"
+            ><img src="desktop-dark.png" alt="Shared navigation in dark theme"
+          /></a>
+        </figure>
+      </div>
+    </main>
+  </body>
+</html>

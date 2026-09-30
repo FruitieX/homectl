@@ -1,7 +1,24 @@
 # Shared sidebar concept study
 
-Requested 2026-09-30. Status: **concepts for review**. The current shared
-application navigation remains unchanged.
+Requested 2026-09-30. Status: **B selected and implemented**, with the simpler
+open/closed behavior below. The original concepts remain as a design archive.
+
+## Confirmed implementation direction
+
+- Keep the compact labeled rail and expandable settings panel from B.
+- Remove pinning and overlay states: the panel is either open beside the rail
+  or closed, with no stored preference.
+- Leaving settings closes the panel. Entering settings opens it, including
+  direct links and browser Back.
+- Clicking Settings from another area opens `/config` with its panel open.
+- Within settings, Settings toggles the panel without changing the page.
+  Overview is the panel's landing-page link. Close or Escape while focused in
+  the panel collapses it and returns focus to Settings.
+- Retain the shared phone drawer, search, category shortcuts and bottom
+  navigation. Keep the floorplan selector in the phone AppBar.
+
+See [implementation and verification](UNIFIED-NAVIGATION.md) and the
+[mockup versus implementation screenshots](implementation-evidence/compact-rail/index.html).
 
 ## User direction
 
@@ -98,8 +115,8 @@ Interactive: concept/context/theme switching, category navigation, Settings
 disclosure, collapsing/expanding, rail panel pin/unpin/close, phone drawer and
 group shortcuts, command-palette search with Ctrl+K or Cmd+K, Escape dismissal.
 
-Before implementation, choose the default and settle whether collapse/pin
-preferences are remembered locally per browser or shared. On kiosk/fullscreen
+The decisions above supersede the prototype's pinning and persistence options.
+On kiosk/fullscreen
 screens, preserve the existing policy of hiding application navigation. Actual
 implementation must use the existing drawer/dialog focus handling, accessible
 labels, keyboard navigation, reduced-motion support, text wrapping at zoom and
@@ -119,6 +136,7 @@ hierarchy, collapse/expand, pin/unpin, stable canvas width with the floating
 panel, outside/Escape dismissal, phone touch rows, group jumping, bringing the
 active category into view, global search and light/dark previews.
 
-Seven presentation states were also captured without browser errors. Results:
+Seven presentation states were also captured without browser errors. Study results:
 [verification](previews/navigation-study/verification.log). No production files,
-server configuration or live devices were changed.
+server configuration or live devices were changed during the concept study.
+Production verification is recorded separately in the implementation document.

@@ -1,58 +1,79 @@
 # Shared application navigation
 
-Implemented 2026-09-30.
+Implemented 2026-09-30. The user selected **B: compact rail with an expandable
+settings panel** from [Study 08](NAVIGATION-STUDY.md), simplified to open/closed
+states. This replaces the earlier full shared sidebar.
 
-## Requirement
+[Mockup versus implementation gallery](implementation-evidence/compact-rail/index.html).
 
-Merge the settings sidebar, everyday navigation rail and floorplan editor's mini
-rail into a consistent application layout. The previous shell explicitly chose
-three different components and widths based on the route, so changing pages
-replaced the navigation and moved its controls.
+## Desktop behavior
 
-## Delivered
+- One shared 76 px rail on Home, Floorplan, Rooms and all configuration pages.
+  Logo, Search, primary links and connection status keep their positions across
+  routes. Icons have short visible captions.
+- Settings adds a 248 px panel beside the rail. The total width is 324 px when
+  open, 76 px when closed. There is no pinning, overlay state or stored preference.
+- Clicking Settings from another area opens `/config` and its panel. Leaving
+  settings closes the panel; entering settings opens it, including browser Back
+  and direct links.
+- Within settings, clicking Settings toggles the panel without changing the
+  page. Overview opens the landing page. Navigating between categories preserves
+  a deliberate collapse.
+- The Close button or Escape while focus is within the panel collapses it and
+  returns focus to the Settings rail link. Escape elsewhere remains available
+  to the page's editor, popovers and dialogs.
+- All **19 sections plus Overview** use the existing shared catalog, grouped
+  under Your home, Automations, Appearance and Maintenance. Only this list
+  scrolls; the active category is brought into view when navigating or reopening.
+- Nested routes and legacy aliases keep the correct category highlighted.
+  Modifier clicks retain normal link behavior for opening another tab.
 
-- One `AppSidebar` and `NavigationContent` composition on every desktop page:
-  the same logo, Search button, primary destinations, icons, spacing, active
-  styles, border and width. Width follows the selected display density, rather
-  than the current page.
-- Home, Floorplan, Rooms and Settings remain in the same positions. Settings
-  categories appear within the shared sidebar, with a common expandable section
-  and a separately scrolling list. Opening settings reveals its categories;
-  their expansion is shared for the current session and can be changed with
-  the chevron. Primary navigation stays visible while the categories scroll.
-- The same navigation content opens from a menu button in every phone/tablet
-  header. Choosing a destination dismisses the menu. Search closes the menu
-  and focuses the command palette without the closing menu taking focus back.
-- Bottom navigation reads the same primary destination definitions. The editor
-  now has the same phone shortcuts as other pages. Its fixed canvas and editing
-  tools continue to fit within the shared shell.
-- Breadcrumbs only render location information; their separate settings-only
-  menu was removed. Legacy settings aliases and nested routes retain their
-  active category indication.
-- Fullscreen hides application navigation and restores it when leaving
-  fullscreen. Developer Refresh uses the shared composition.
-- Remove the old settings sidebar, the editor-specific branch, the duplicate
-  route lists and unused settings navigation CSS. The shared component owns
-  its styling, so it works before a settings stylesheet is loaded.
+## Phone and tablet behavior
+
+Below the desktop breakpoint, one labeled drawer replaces the rail and panel:
+
+- Brand and a single Close button, global Search, then the four primary links
+  in a compact strip.
+- On settings pages, the same complete catalog with 44 px touch rows and group
+  shortcuts. The active category is visible when the drawer reopens.
+- Choosing a destination dismisses the drawer. Settings opens the landing page;
+  reopening navigation there reveals the categories. Outside settings the
+  drawer shows primary destinations and Search.
+- Dialog focus trapping, Escape/scrim dismissal, safe-area insets and visual
+  viewport sizing use the existing primitives. Search closes navigation and
+  focuses the command palette without stealing focus back.
+- Bottom navigation and the phone AppBar's floorplan tabs remain in place.
+
+## Integration and styling
+
+`ui/ui/AppNavigation.tsx` owns the common layout and transient panel state;
+`ui/ui/app-navigation.css` owns its styling. Theme, accent and text sizing use
+the existing application tokens. Long labels wrap at larger text sizes; focus
+outlines and reduced-motion behavior are explicit. The screenshot fixtures use
+the approved Compact density and emerald accent.
+
+The floorplan editor narrows its docks when the expanded panel leaves less
+than 800 px of workspace, preserving usable canvas space at the 1024 px desktop
+breakpoint. Closing the settings panel returns that width to the editor.
+Fullscreen continues to hide navigation. Developer Refresh is available in
+the shared rail/drawer. Connection status reflects the actual WebSocket state;
+prototype attention badges and pinning controls were not copied.
+
+No server endpoints, persisted configuration, household automations or physical
+devices were changed.
 
 ## Verification
 
-UI type checking, lint, all **278 tests** and the production build pass. Lint's
-existing import/export cleanup warning and existing build chunk-size warnings
-remain.
+UI type checking, lint, **289 tests** and the production build pass. The existing
+import/export cleanup warning and build chunk-size warnings remain.
 
-Native Chromium review at **1440 × 1000**, **1024 × 768** and **430 × 932** covers:
+Native Chromium reviews at **1440 × 1000**, **1024 × 768** and **430 × 932** cover
+stable rail positions; settings entry/exit, collapse/reopen and Back; the complete
+catalog and active category; fixed editor sizing; phone touch rows and group
+jumps; search focus; fullscreen; enlarged text; and light/dark presentation.
+All runs pass with no browser console/page errors and **zero configuration or
+device writes**, using guarded local fixtures. Screenshots and results are in
+[compact rail evidence](implementation-evidence/compact-rail/).
 
-- Home → Floorplan → Rooms → Settings → App settings → Floorplan editor → Home.
-- The same sidebar DOM element, width and primary link dimensions across
-  desktop routes; no horizontal page overflow.
-- The phone menu and bottom shortcuts on every page, including the editor.
-- All 18 settings categories plus Overview and their icons; active parent and
-  category links; expanding/collapsing categories.
-- A usable editor canvas at the desktop breakpoint and on a phone.
-- Search focus, Escape dismissal and fullscreen enter/exit.
-
-All batches pass with no browser console/page errors. These checks use the
-guarded local fixture and do not write configuration or command physical
-devices. Results and screenshots are in
-[shared navigation evidence](implementation-evidence/navigation/).
+The earlier full-sidebar iteration and its acceptance captures remain in
+[the previous navigation evidence](implementation-evidence/navigation/).

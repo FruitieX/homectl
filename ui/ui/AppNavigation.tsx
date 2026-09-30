@@ -1,8 +1,13 @@
 import { atom, useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useEffect, useState } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  ChevronDown,
   Cog,
   House,
   Layers3,
@@ -11,22 +16,31 @@ import {
   Menu,
   RefreshCw,
   Search,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { configSections, configSectionAliases } from 'app/config/sections';
 import { useDeveloperMode } from '@/hooks/developerMode';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
+import { useConnectionStatus } from '@/hooks/websocket';
 import { commandPaletteOpenAtom } from '@/ui/CommandPalette';
 import { HomectlLogo } from '@/ui/HomectlLogo';
 import { Button } from '@/ui/primitives/button';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogTitle,
   DialogTrigger,
 } from '@/ui/primitives/dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/ui/primitives/tooltip';
 import { cn } from '@/lib/cn';
+import './app-navigation.css';
 
 export const primaryNavigationItems = [
   { to: '/', label: 'Home', icon: House },
@@ -41,14 +55,42 @@ export function primaryNavigationActive(to: string, pathname: string) {
   return pathname === to || pathname.startsWith(to + '/');
 }
 
-// Shared across desktop and the phone menu; navigating does not replace the shell.
-const settingsExpandedAtom = atom<boolean | null>(null);
-const linkClass = (active: boolean) =>
-  cn(
-    'flex min-h-10 min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring max-md:min-h-[44px]',
-    active &&
-      'bg-primary/10 font-medium text-primary hover:bg-primary/12 hover:text-primary',
-  );
+const settingsPanelOpenAtom = atom(true);
+const navigationGroups = [
+  'Your home',
+  'Automations',
+  'Appearance',
+  'Maintenance',
+] as const;
+// Order by task rather than when each category was added to the catalog.
+const sectionOrder = [
+  '/config/groups',
+  '/config/devices',
+  '/config/integrations',
+  '/config/sensors',
+  '/config/widget-sources',
+  '/config/scenes',
+  '/config/routines',
+  '/config/timers',
+  '/config/blocks',
+  '/config/helpers',
+  '/config/sources',
+  '/config/routine-history',
+  '/config/floorplan',
+  '/config/dashboard',
+  '/config/settings',
+  '/config/diagnostics',
+  '/config/sensor-history',
+  '/config/logs',
+  '/config/import-export',
+];
+const orderedSections = [...configSections].sort((a, b) => {
+  const rank = (href: string) => {
+    const index = sectionOrder.indexOf(href);
+    return index < 0 ? Infinity : index;
+  };
+  return rank(a.href) - rank(b.href);
+});
 
 function NavigationLink({
   to,
@@ -60,182 +102,283 @@ function NavigationLink({
   to: string;
   label: string;
   Icon: LucideIcon;
-  active?: boolean;
+  active: boolean;
   close?: () => void;
 }) {
-  const { pathname } = useLocation();
-  const current =
-    active ??
-    (pathname === to ||
-      (to !== '/' && to !== '/config' && pathname.startsWith(to + '/')));
   return (
     <Link
       to={to}
       onClick={close}
-      className={linkClass(current)}
-      aria-current={current ? 'page' : undefined}
+      className={cn('app-category-link', active && 'is-current')}
+      aria-current={active ? 'page' : undefined}
     >
-      <Icon aria-hidden className="size-4 shrink-0" />
-      <span className="min-w-0">{label}</span>
+      <Icon aria-hidden />
+      <span>{label}</span>
     </Link>
   );
 }
 
-/** One composition for every application page, including the editor. */
-function NavigationContent({ close }: { close?: () => void }) {
+/** Shared catalog and row treatment for the desktop panel and phone drawer. */
+function SettingsCategories({
+  mobile = false,
+  close,
+}: {
+  mobile?: boolean;
+  close?: () => void;
+}) {
   const { pathname } = useLocation();
-  const inSettings = primaryNavigationActive('/config', pathname);
-  const [settingsExpanded, setSettingsExpanded] = useAtom(settingsExpandedAtom);
-  const expanded = settingsExpanded ?? inSettings;
-  const [developerMode] = useDeveloperMode();
-  const openPalette = useSetAtom(commandPaletteOpenAtom);
-  useEffect(() => {
-    if (inSettings) setSettingsExpanded(true);
-  }, [inSettings, setSettingsExpanded]);
+  const path =
+    pathname === '/settings'
+      ? '/config'
+      : (configSectionAliases[pathname] ?? pathname);
+  const scroller = useRef<HTMLElement>(null);
+  const currentGroup = orderedSections.find(
+    (section) => path === section.href || path.startsWith(section.href + '/'),
+  )?.group;
+  useLayoutEffect(() => {
+    const container = scroller.current;
+    const active = container?.querySelector<HTMLElement>(
+      '[aria-current="page"]',
+    );
+    if (!active || !container) return;
+    const bounds = container.getBoundingClientRect(),
+      row = active.getBoundingClientRect();
+    if (row.top < bounds.top || row.bottom > bounds.bottom) {
+      container.scrollTop +=
+        row.top < bounds.top
+          ? row.top - bounds.top
+          : row.bottom - bounds.bottom;
+    }
+  }, [pathname]);
+  const jump = (group: string) => {
+    const container = scroller.current;
+    const section = container?.querySelector<HTMLElement>(
+      `[data-navigation-group="${group}"]`,
+    );
+    if (!container || !section) return;
+    container.scrollTo({
+      top:
+        container.scrollTop +
+        section.getBoundingClientRect().top -
+        container.getBoundingClientRect().top,
+      behavior: matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'instant'
+        : 'smooth',
+    });
+  };
   return (
     <>
-      <Link
-        to="/"
-        onClick={close}
-        aria-label="homectl home"
-        className="flex h-14 shrink-0 items-center gap-3 px-3 text-base font-semibold"
-      >
-        <HomectlLogo className="size-6" />
-        <span>homectl</span>
-      </Link>
-      <Button
-        variant="outline"
-        aria-label="Search"
-        className="mb-3 min-h-11 shrink-0 justify-start gap-3 px-3"
-        onClick={() => {
-          close?.();
-          openPalette(true);
-        }}
-      >
-        <Search aria-hidden className="size-4" />
-        Search
-        <kbd className="ml-auto hidden text-[10px] text-muted-foreground lg:inline">
-          Ctrl K
-        </kbd>
-      </Button>
-      <nav aria-label="Primary navigation" className="shrink-0 space-y-1">
-        {primaryNavigationItems.map((item) =>
-          item.to === '/config' ? (
-            <div key={item.to} className="relative">
-              <NavigationLink
-                to={item.to}
-                label={item.label}
-                Icon={item.icon}
-                active={inSettings}
-                close={close}
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 size-8 -translate-y-1/2"
-                aria-label={
-                  expanded
-                    ? 'Collapse settings categories'
-                    : 'Expand settings categories'
-                }
-                aria-expanded={expanded}
-                aria-controls={
-                  close
-                    ? 'mobile-settings-navigation'
-                    : 'desktop-settings-navigation'
-                }
-                onClick={() => setSettingsExpanded(!expanded)}
-              >
-                <ChevronDown
-                  className={cn(
-                    'size-4 transition-transform',
-                    !expanded && '-rotate-90',
-                  )}
-                />
-              </Button>
-            </div>
-          ) : (
-            <NavigationLink
-              key={item.to}
-              to={item.to}
-              label={item.label}
-              Icon={item.icon}
-              active={primaryNavigationActive(item.to, pathname)}
-              close={close}
-            />
-          ),
-        )}
-      </nav>
-      <div className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border pt-3 [scrollbar-width:thin]">
-        {expanded && (
-          <nav
-            aria-label="Settings categories"
-            id={
-              close
-                ? 'mobile-settings-navigation'
-                : 'desktop-settings-navigation'
-            }
-            className="space-y-1"
-          >
-            <NavigationLink
-              to="/config"
-              label="Overview"
-              Icon={LayoutGrid}
-              close={close}
-            />
-            {(
-              ['Your home', 'Automations', 'Appearance', 'Maintenance'] as const
-            ).map((group) => (
-              <div key={group}>
-                <p className="mb-1 mt-4 px-3 text-xs font-medium text-muted-foreground">
-                  {group}
-                </p>
-                {configSections
-                  .filter((section) => section.group === group)
-                  .map((section) => (
-                    <NavigationLink
-                      key={section.href}
-                      to={section.href}
-                      label={section.label}
-                      Icon={section.icon}
-                      active={
-                        (configSectionAliases[pathname] ?? pathname) ===
-                          section.href ||
-                        (configSectionAliases[pathname] ?? pathname).startsWith(
-                          section.href + '/',
-                        )
-                      }
-                      close={close}
-                    />
-                  ))}
-              </div>
-            ))}
-          </nav>
-        )}
-      </div>
-      {developerMode && (
-        <Button
-          variant="ghost"
-          className="mt-2 min-h-11 shrink-0 justify-start gap-3 px-3"
-          onClick={() => window.location.reload()}
+      {mobile && (
+        <div
+          className="app-navigation-jumps"
+          role="group"
+          aria-label="Jump to settings group"
         >
-          <RefreshCw className="size-4" />
-          Refresh
-        </Button>
+          {navigationGroups.map((group) => (
+            <button
+              key={group}
+              className={cn(currentGroup === group && 'is-current')}
+              aria-label={`Jump to ${group}`}
+              onClick={() => jump(group)}
+            >
+              {group === 'Your home' ? 'Home' : group}
+            </button>
+          ))}
+        </div>
       )}
+      <nav
+        ref={scroller}
+        aria-label="Settings categories"
+        className="app-settings-categories"
+      >
+        <NavigationLink
+          to="/config"
+          label="Overview"
+          Icon={LayoutGrid}
+          active={path === '/config'}
+          close={close}
+        />
+        {navigationGroups.map((group) => (
+          <section key={group} data-navigation-group={group}>
+            <h3>{group}</h3>
+            {orderedSections
+              .filter((section) => section.group === group)
+              .map((section) => (
+                <NavigationLink
+                  key={section.href}
+                  to={section.href}
+                  label={section.label}
+                  Icon={section.icon}
+                  active={
+                    path === section.href || path.startsWith(section.href + '/')
+                  }
+                  close={close}
+                />
+              ))}
+          </section>
+        ))}
+      </nav>
     </>
   );
 }
 
+function NavigationStatus({ compact = false }: { compact?: boolean }) {
+  const connection = useConnectionStatus();
+  const label =
+    connection === 'connected'
+      ? 'Connected'
+      : connection === 'connecting'
+        ? 'Connecting…'
+        : connection === 'reconnecting'
+          ? 'Reconnecting…'
+          : 'Disconnected';
+  return (
+    <div
+      className={cn('app-navigation-status', compact && 'is-compact')}
+      role="status"
+      title={`Live connection: ${label}`}
+    >
+      <span
+        className={cn(
+          'app-navigation-status-dot',
+          connection !== 'connected' && 'is-offline',
+        )}
+        aria-hidden
+      />
+      <span className={compact ? 'sr-only' : undefined}>{label}</span>
+    </div>
+  );
+}
+
+/** The rail stays in the same position on every page. Only settings add a panel. */
 export function AppSidebar() {
+  const { pathname } = useLocation();
+  const inSettings = primaryNavigationActive('/config', pathname);
+  const [panelOpen, setPanelOpen] = useAtom(settingsPanelOpenAtom);
   const [fullscreen] = useIsFullscreen();
+  const [developerMode] = useDeveloperMode();
+  const openPalette = useSetAtom(commandPaletteOpenAtom);
+  const settingsTrigger = useRef<HTMLAnchorElement>(null);
+  // Reset at the settings boundary, before paint. Category navigation preserves
+  // a deliberate collapse; entering settings (also via Back/deep links) opens it.
+  useLayoutEffect(() => setPanelOpen(inSettings), [inSettings, setPanelOpen]);
+  const expanded = inSettings && panelOpen;
+  const closePanel = () => {
+    setPanelOpen(false);
+    settingsTrigger.current?.focus();
+  };
+  const settingsClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      event.button !== 0 ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    if (inSettings) {
+      event.preventDefault();
+      setPanelOpen(!panelOpen);
+    } else setPanelOpen(true);
+  };
   if (fullscreen) return null;
   return (
     <aside
       aria-label="Application navigation"
-      className="relative z-30 hidden w-60 shrink-0 flex-col border-r border-border bg-background px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-[env(safe-area-inset-top)] lg:flex"
+      className="app-navigation hidden lg:flex"
     >
-      <NavigationContent />
+      <div className="app-navigation-rail">
+        <Link to="/" aria-label="homectl home" className="app-navigation-mark">
+          <HomectlLogo />
+        </Link>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="app-rail-search"
+              aria-label="Search"
+              onClick={() => openPalette(true)}
+            >
+              <Search aria-hidden />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            Search your home · Ctrl K
+          </TooltipContent>
+        </Tooltip>
+        <nav aria-label="Primary navigation" className="app-rail-links">
+          {primaryNavigationItems.map((item) => (
+            <Link
+              key={item.to}
+              ref={item.to === '/config' ? settingsTrigger : undefined}
+              to={item.to}
+              onClick={item.to === '/config' ? settingsClick : undefined}
+              className={cn(
+                'app-rail-link',
+                primaryNavigationActive(item.to, pathname) && 'is-current',
+              )}
+              aria-current={
+                primaryNavigationActive(item.to, pathname) ? 'page' : undefined
+              }
+              aria-expanded={item.to === '/config' ? expanded : undefined}
+              aria-controls={
+                item.to === '/config' && expanded
+                  ? 'desktop-settings-panel'
+                  : undefined
+              }
+            >
+              <item.icon aria-hidden />
+              <span>{item.label}</span>
+            </Link>
+          ))}
+        </nav>
+        <div className="app-rail-footer">
+          {developerMode && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Refresh"
+              title="Refresh"
+              onClick={() => window.location.reload()}
+            >
+              <RefreshCw aria-hidden />
+            </Button>
+          )}
+          <NavigationStatus compact />
+        </div>
+      </div>
+      {expanded && (
+        <section
+          id="desktop-settings-panel"
+          aria-label="Settings panel"
+          className="app-settings-panel"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && !event.defaultPrevented) {
+              event.preventDefault();
+              closePanel();
+            }
+          }}
+        >
+          <header className="app-settings-panel-header">
+            <h2>Settings</h2>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Close settings panel"
+              title="Close settings panel"
+              onClick={closePanel}
+            >
+              <X aria-hidden />
+            </Button>
+          </header>
+          <SettingsCategories />
+          <footer className="app-settings-panel-footer">
+            <span>Configuration</span>
+            <span>{configSections.length} sections</span>
+          </footer>
+        </section>
+      )}
     </aside>
   );
 }
@@ -243,7 +386,11 @@ export function AppSidebar() {
 export function AppNavigationMenu() {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
+  const inSettings = primaryNavigationActive('/config', pathname);
+  const setPanelOpen = useSetAtom(settingsPanelOpenAtom);
   const paletteOpen = useAtomValue(commandPaletteOpenAtom);
+  const openPalette = useSetAtom(commandPaletteOpenAtom);
+  const [developerMode] = useDeveloperMode();
   useEffect(() => setOpen(false), [pathname]);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -258,7 +405,8 @@ export function AppNavigationMenu() {
         </Button>
       </DialogTrigger>
       <DialogContent
-        className="left-0 top-[var(--app-visual-viewport-top,0px)] flex h-[var(--app-visual-viewport-height,100dvh)] max-h-none w-[min(20rem,calc(100vw-2rem))] max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-y-0 border-l-0 bg-background px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-[env(safe-area-inset-top)] data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:p-3"
+        showClose={false}
+        className="app-navigation-drawer left-0 top-[var(--app-visual-viewport-top,0px)] flex h-[var(--app-visual-viewport-height,100dvh)] max-h-none w-[min(340px,calc(100vw-44px))] max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-y-0 border-l-0 p-0 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:p-0"
         onCloseAutoFocus={(event) => {
           if (paletteOpen) event.preventDefault();
         }}
@@ -267,7 +415,76 @@ export function AppNavigationMenu() {
         <DialogDescription className="sr-only">
           Navigate your home and settings.
         </DialogDescription>
-        <NavigationContent close={() => setOpen(false)} />
+        <header className="app-drawer-header">
+          <Link
+            to="/"
+            className="app-drawer-brand"
+            aria-label="homectl home"
+            onClick={() => setOpen(false)}
+          >
+            <span className="app-navigation-mark">
+              <HomectlLogo />
+            </span>
+            homectl
+          </Link>
+          <DialogClose asChild>
+            <Button variant="ghost" size="icon" aria-label="Close navigation">
+              <X />
+            </Button>
+          </DialogClose>
+        </header>
+        <Button
+          variant="outline"
+          className="app-drawer-search"
+          aria-label="Search"
+          onClick={() => {
+            setOpen(false);
+            openPalette(true);
+          }}
+        >
+          <Search aria-hidden />
+          <span>Search your home</span>
+        </Button>
+        <nav aria-label="Primary navigation" className="app-drawer-primary">
+          {primaryNavigationItems.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              className={cn(
+                'app-rail-link',
+                primaryNavigationActive(item.to, pathname) && 'is-current',
+              )}
+              aria-current={
+                primaryNavigationActive(item.to, pathname) ? 'page' : undefined
+              }
+              onClick={() => {
+                if (item.to === '/config') setPanelOpen(true);
+                setOpen(false);
+              }}
+            >
+              <item.icon aria-hidden />
+              <span>{item.label}</span>
+            </Link>
+          ))}
+        </nav>
+        {inSettings ? (
+          <SettingsCategories mobile close={() => setOpen(false)} />
+        ) : (
+          <div className="min-h-0 flex-1" />
+        )}
+        <footer className="app-drawer-footer">
+          <NavigationStatus />
+          {developerMode && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Refresh"
+              onClick={() => window.location.reload()}
+            >
+              <RefreshCw aria-hidden />
+            </Button>
+          )}
+        </footer>
       </DialogContent>
     </Dialog>
   );
