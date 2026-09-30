@@ -1,4 +1,5 @@
 import { validFloorplanLayers } from './floorplan-labels.ts';
+import type { SensorMarkerKind } from './sensorMarker.ts';
 
 export type TileType = 'empty' | 'floor' | 'wall' | 'door' | 'window';
 
@@ -30,6 +31,7 @@ type ResizeOffsets = {
 type FloorplanDeviceType = 'controllable' | 'sensor' | 'other';
 
 export interface AvailableFloorplanDevice {
+  sensorMarker?: SensorMarkerKind;
   key: string;
   name: string;
   type: FloorplanDeviceType;

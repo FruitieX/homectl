@@ -1,0 +1,32 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+{
+ "driven": {
+  "passed": true,
+  "width": 1440,
+  "checks": [
+   "Sensor floorplan available",
+   "Sensor map renders",
+   "Button icon retains long-press quick controls",
+   "Saved button mapping remains available when current event is off",
+   "Editor renders matching sensor glyphs",
+   "Room preview renders seven matching vector icons"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/map","viewport":{"width":1440,"height":1000},"problems":[]}
+{
+ "driven": {
+  "passed": true,
+  "width": 430,
+  "checks": [
+   "Sensor floorplan available",
+   "Sensor map renders",
+   "Button icon retains long-press quick controls",
+   "Saved button mapping remains available when current event is off",
+   "Editor renders matching sensor glyphs",
+   "Room preview renders seven matching vector icons"
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/map","viewport":{"width":430,"height":932},"problems":[]}

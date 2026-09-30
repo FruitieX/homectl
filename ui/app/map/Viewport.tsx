@@ -190,6 +190,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
     devices: visibleDevices,
     groups,
     displayNames: deviceDisplayNameMap,
+    sensorConfigs: deviceSensorConfigMap,
     includeGroups: visibleLayers.groups,
   });
   floorplanScene.labelVisibility = labels;

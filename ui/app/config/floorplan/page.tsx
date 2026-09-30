@@ -23,6 +23,7 @@ import {
   useFloorplans,
   useGroups,
   useDeviceDisplayNames,
+  useDeviceSensorConfigs,
   ConfigApiError,
 } from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
@@ -34,6 +35,7 @@ import {
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { getDeviceKey } from '@/lib/device';
+import { getSensorMarkerKind } from '@/lib/sensorMarker';
 import { getResolvedDeviceColorState } from '@/lib/colors';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { readFloorplanDraft } from '@/lib/floorplanDraft';
@@ -181,7 +183,8 @@ function FloorplanEditor({
     { advanced } = useSettingsPreferences();
   const devices = useDevicesApi(),
     groups = useGroups(),
-    names = useDeviceDisplayNames();
+    names = useDeviceDisplayNames(),
+    sensorConfigs = useDeviceSensorConfigs();
   const [fileError, setFileError] = useState(''),
     [busy, setBusy] = useState(false),
     [epoch, setEpoch] = useState(0),
@@ -267,6 +270,15 @@ function FloorplanEditor({
               ? ('controllable' as const)
               : ('other' as const),
         groupIds: memberGroups[getDeviceKey(device)] ?? [],
+        sensorMarker:
+          'Sensor' in device.data
+            ? getSensorMarkerKind(
+                device,
+                sensorConfigs.data.find(
+                  (row) => row.device_ref === getDeviceKey(device),
+                ),
+              )
+            : undefined,
         preview: state
           ? {
               color: state.color.hex(),

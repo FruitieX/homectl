@@ -22,6 +22,7 @@ import {
   placeSelectedDeviceOnGrid,
 } from '@/lib/floorplan-editor';
 import { floorplanLabels } from '@/lib/floorplan-labels';
+import { sensorMarkerPaths, type SensorMarkerKind } from '@/lib/sensorMarker';
 import {
   getGroupLabelLayout,
   GROUP_LABEL_FONT_SIZE,
@@ -57,6 +58,15 @@ export const tileColors: Record<TileType, string> = {
   window: '#91bac4',
 };
 type View = { x: number; y: number; scale: number };
+const sensorPaths = new Map<SensorMarkerKind, Path2D[]>();
+function sensorIconPaths(kind: SensorMarkerKind) {
+  let paths = sensorPaths.get(kind);
+  if (!paths) {
+    paths = sensorMarkerPaths[kind].map((d) => new Path2D(d));
+    sensorPaths.set(kind, paths);
+  }
+  return paths;
+}
 type Gesture =
   | {
       kind: 'pan';
@@ -524,7 +534,7 @@ export function FloorplanEditorCanvas({
       ctx.strokeStyle = '#d9e4dc';
       ctx.lineWidth = 2.5;
       ctx.stroke();
-      if (preview) {
+      if (preview && info?.type !== 'sensor') {
         ctx.beginPath();
         ctx.arc(
           0,
@@ -552,7 +562,19 @@ export function FloorplanEditorCanvas({
         ctx.font = '600 12px system-ui';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(info?.type === 'sensor' ? 'S' : info ? '●' : '?', 0, 1);
+        if (info?.type === 'sensor') {
+          ctx.save();
+          const iconScale = (r * 1.5) / 24;
+          ctx.scale(iconScale, iconScale);
+          ctx.translate(-12, -12);
+          ctx.strokeStyle = '#456e60';
+          ctx.lineWidth = 1.8;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          for (const path of sensorIconPaths(info.sensorMarker ?? 'unknown'))
+            ctx.stroke(path);
+          ctx.restore();
+        } else ctx.fillText(info ? '●' : '?', 0, 1);
       }
       const labels = floorplanLabels(grid);
       if (

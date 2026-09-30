@@ -5,6 +5,8 @@ import { type Device } from '@/bindings/Device';
 import { type FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { getResolvedDeviceColorState } from '@/lib/colors';
 import { getDeviceKey } from '@/lib/device';
+import { getSensorMarkerKind, type SensorMarkerKind } from '@/lib/sensorMarker';
+import type { DeviceSensorConfig } from '@/lib/sensorInteraction';
 import {
   getFloorplanDevicePositions,
   getFloorplanRenderMetrics,
@@ -38,6 +40,7 @@ export interface FloorplanSceneLight {
 }
 
 export interface FloorplanSceneSensor {
+  markerKind?: SensorMarkerKind;
   deviceKey: string;
   x: number;
   y: number;
@@ -70,6 +73,7 @@ export interface FloorplanScene {
 }
 
 interface BuildFloorplanSceneInput {
+  sensorConfigs?: Record<string, DeviceSensorConfig>;
   healthByDevice?: Record<string, DeviceHealth>;
   grid: FloorplanGrid | null;
   image?: HTMLImageElement;
@@ -479,6 +483,7 @@ export function buildFloorplanScene({
   devices,
   groups,
   displayNames,
+  sensorConfigs,
   deviceVisualOverrides,
   includeGroups = true,
   deviceKeys,
@@ -529,6 +534,7 @@ export function buildFloorplanScene({
 
     if ('Sensor' in device.data) {
       sensors.push({
+        markerKind: getSensorMarkerKind(device, sensorConfigs?.[deviceKey]),
         deviceKey,
         x: position.x,
         y: position.y,

@@ -1,5 +1,6 @@
 import type { FloorplanScene } from '@/lib/floorplan-scene';
 import { reachabilityLabels } from '@/lib/deviceReachability';
+import { sensorMarkerPaths } from '@/lib/sensorMarker';
 
 /** Lightweight static preview: no GPU context per room and no blurry canvas scaling. */
 export function FloorplanThumbnail({
@@ -135,12 +136,28 @@ export function FloorplanThumbnail({
           <title>
             {sensor.label} {sensor.statusLabel ?? ''}
           </title>
-          <circle
-            r={radius * 0.7}
-            fill="hsl(var(--primary))"
+          <rect
+            x={-radius}
+            y={-radius}
+            width={radius * 2}
+            height={radius * 2}
+            rx={radius * 0.45}
+            fill="#172027"
             stroke="hsl(var(--card))"
-            strokeWidth={radius * 0.25}
+            strokeWidth={radius * 0.15}
           />
+          <g
+            transform={`scale(${(radius * 1.5) / 24}) translate(-12 -12)`}
+            fill="none"
+            stroke="#d7eee6"
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {sensorMarkerPaths[sensor.markerKind ?? 'unknown'].map((d, i) => (
+              <path key={i} d={d} />
+            ))}
+          </g>
         </g>
       ))}
     </svg>

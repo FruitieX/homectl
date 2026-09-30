@@ -3,6 +3,7 @@ import {
   Application,
   Container,
   Graphics,
+  GraphicsContext,
   Sprite,
   Text,
   Texture,
@@ -11,6 +12,7 @@ import { useEffect, useRef } from 'react';
 
 import { cn } from '@/lib/cn';
 import { floorplanLabels } from '@/lib/floorplan-labels';
+import { sensorMarkerSvg, type SensorMarkerKind } from '@/lib/sensorMarker';
 import {
   getGroupLabelLayout,
   GROUP_LABEL_FONT_SIZE,
@@ -110,6 +112,19 @@ interface SensorLabelRenderEntry {
   container: Container;
   label: Text;
   status: Text | null;
+  statusBackground: Graphics;
+  labelBackground: Graphics;
+}
+
+// Vector contexts are shared; zoom never stretches a bitmap icon.
+const sensorIconContexts = new Map<SensorMarkerKind, GraphicsContext>();
+function sensorIconContext(kind: SensorMarkerKind) {
+  let context = sensorIconContexts.get(kind);
+  if (!context) {
+    context = new GraphicsContext().svg(sensorMarkerSvg(kind));
+    sensorIconContexts.set(kind, context);
+  }
+  return context;
 }
 
 interface GroupRenderEntry {
@@ -837,14 +852,15 @@ function drawSensorMarker(
       width: 1.5,
       alpha: 0.85,
     });
-  if (!sensor.statusLabel) {
-    graphics
-      .circle(sensor.x, sensor.y, 4 * sensor.scale)
-      .fill({ color: sensor.color ? rgbToHex(sensor.color) : 0x7da8bc });
-    graphics
-      .circle(sensor.x, sensor.y, 8 * sensor.scale)
-      .stroke({ color: 0x7da8bc, width: sensor.scale, alpha: 0.45 });
-  }
+  const context = sensorIconContext(sensor.markerKind ?? 'unknown');
+  let icon = graphics.children[0] as Graphics | undefined;
+  if (!icon) {
+    icon = new Graphics({ context });
+    graphics.addChild(icon);
+  } else if (icon.context !== context) icon.context = context;
+  const iconScale = (19 / 24) * sensor.scale;
+  icon.scale.set(iconScale);
+  icon.position.set(sensor.x - 12 * iconScale, sensor.y - 12 * iconScale);
 }
 
 function syncMarkers(
@@ -918,18 +934,27 @@ function createSensorLabel(
     text: sensor.label,
     style: {
       align: 'center',
-      fill: 0xe5e7eb,
+      fill: 0x20342b,
       fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
       fontSize: 11 * sensor.scale * textureScale,
-      fontWeight: '700',
-      stroke: { color: 0x0f172a, width: 3 * textureScale },
+      fontWeight: '500',
     },
   });
   label.anchor.set(0.5, 0);
   label.scale.set(1 / textureScale);
   container.addChild(label);
 
-  return { container, label, status: null } satisfies SensorLabelRenderEntry;
+  const statusBackground = new Graphics();
+  const labelBackground = new Graphics();
+  container.addChildAt(statusBackground, 0);
+  container.addChildAt(labelBackground, 0);
+  return {
+    container,
+    label,
+    status: null,
+    statusBackground,
+    labelBackground,
+  } satisfies SensorLabelRenderEntry;
 }
 
 function syncSensorLabel(
@@ -942,9 +967,13 @@ function syncSensorLabel(
   const labelScale = 1 / (textureScale * Math.max(viewScale, 0.0001));
   entry.label.text = sensor.label;
   entry.label.style.fontSize = 11 * sensor.scale * textureScale;
-  entry.label.style.stroke = { color: 0x0f172a, width: 2 * textureScale };
   entry.label.scale.set(labelScale);
-  entry.label.position.set(sensor.x, sensor.y + 22 * sensor.scale);
+  entry.label.position.set(
+    sensor.x,
+    sensor.y + 14 * sensor.scale + 5 / viewScale,
+  );
+  entry.labelBackground.clear();
+  entry.statusBackground.clear();
 
   if (!sensor.statusLabel) {
     if (entry.status) {
@@ -952,6 +981,7 @@ function syncSensorLabel(
       destroyDisplayObject(entry.status);
       entry.status = null;
     }
+    drawDeviceLabelBackground(entry, viewScale);
     return;
   }
 
@@ -966,14 +996,40 @@ function syncSensorLabel(
         fontWeight: '800',
       },
     });
-    entry.status.anchor.set(0.5);
+    entry.status.anchor.set(0.5, 0);
     entry.container.addChild(entry.status);
   }
 
   entry.status.text = sensor.statusLabel;
   entry.status.style.fontSize = 9 * sensor.scale * textureScale;
   entry.status.scale.set(labelScale);
-  entry.status.position.set(sensor.x, sensor.y);
+  entry.status.position.set(
+    sensor.x,
+    sensor.y + 14 * sensor.scale + 4 / viewScale,
+  );
+  const width = entry.status.width * viewScale;
+  const height = entry.status.height * viewScale;
+  entry.statusBackground
+    .roundRect(-width / 2 - 3, -1, width + 6, height + 2, 3)
+    .fill({ color: 0x172027, alpha: 0.95 });
+  entry.statusBackground.position.copyFrom(entry.status.position);
+  entry.statusBackground.scale.set(1 / viewScale);
+  entry.label.position.y =
+    entry.status.position.y + entry.status.height + 5 / viewScale;
+  drawDeviceLabelBackground(entry, viewScale);
+}
+
+function drawDeviceLabelBackground(
+  entry: SensorLabelRenderEntry,
+  viewScale: number,
+) {
+  const width = entry.label.width * viewScale;
+  const height = entry.label.height * viewScale;
+  entry.labelBackground
+    .roundRect(-width / 2 - 3, -1, width + 6, height + 2, 3)
+    .fill({ color: 0xffffff, alpha: 0.95 });
+  entry.labelBackground.position.copyFrom(entry.label.position);
+  entry.labelBackground.scale.set(1 / viewScale);
 }
 
 function sceneLabels(scene: FloorplanScene): FloorplanScene['sensors'] {

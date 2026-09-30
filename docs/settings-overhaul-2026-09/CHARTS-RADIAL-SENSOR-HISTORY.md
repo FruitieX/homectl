@@ -2,6 +2,29 @@
 
 Updated: 2026-09-30.
 
+## Follow-up: sensor markers by type
+
+Requested and implemented 2026-09-30:
+
+- [x] Replace text-only sensor markers with distinct line icons: an on/off
+  switch that reflects boolean state, a push button, dimmer sliders, a numeric
+  gauge, a text/event bubble, a color palette and a power symbol for on/off
+  buttons. Unknown inputs use a neutral signal icon.
+- [x] Use saved sensor interaction types first, then existing payload/event
+  inference. Saved button/dimmer icons stay stable across events such as Off.
+  Do not guess physical sensor roles or measurement units from device names.
+- [x] Share vector paths between the map, floorplan editor and room previews.
+  Icons remain visible with labels disabled; existing taps and long presses
+  retain their behavior. There are no new settings or backend fields.
+- [x] Move the current reading below the icon. Device names use dark text on
+  a light backing, matching the readable group-label direction.
+
+Verification: UI typecheck, lint, production build and 289 unit tests pass.
+Desktop/phone fixture reviews cover map rendering, button quick controls while
+its current event is Off, the editor and all seven typed icons in SVG room
+previews. Screenshots and results are in
+[sensor icon evidence](implementation-evidence/sensor-icons/verification.log).
+
 ## Follow-up: readable labels and quick Restore scene
 
 Requested 2026-09-30:

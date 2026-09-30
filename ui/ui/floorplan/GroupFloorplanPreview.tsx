@@ -9,7 +9,10 @@ import {
 import { useIntersectionObserver } from 'usehooks-ts';
 
 import type { FlattenedGroupConfig } from '@/bindings/FlattenedGroupConfig';
-import { useDeviceDisplayNames } from '@/hooks/useConfig';
+import {
+  useDeviceDisplayNames,
+  useDeviceSensorConfigs,
+} from '@/hooks/useConfig';
 import { useImageState } from '@/hooks/useImageState';
 import { useAllFloorplans } from '@/hooks/useStoredFloorplan';
 import { useDevicesByKeysState, useGroupsState } from '@/hooks/websocket';
@@ -89,6 +92,11 @@ export function GroupFloorplanPreview({
   const { floorplans } = useAllFloorplans();
   const groups = useGroupsState();
   const { data: displayNames } = useDeviceDisplayNames();
+  const { data: sensorConfigs } = useDeviceSensorConfigs();
+  const sensorConfigMap = useMemo(
+    () => Object.fromEntries(sensorConfigs.map((row) => [row.device_ref, row])),
+    [sensorConfigs],
+  );
   const [unavailable, setUnavailable] = useState(false);
   const [rendererGeneration, setRendererGeneration] = useState(0);
   const previewId = useId();
@@ -141,6 +149,7 @@ export function GroupFloorplanPreview({
         devices,
         groups: groups ?? {},
         displayNames: displayNameMap,
+        sensorConfigs: sensorConfigMap,
         deviceKeys: placedKeys,
       }),
     [
@@ -150,6 +159,7 @@ export function GroupFloorplanPreview({
       devices,
       groups,
       displayNameMap,
+      sensorConfigMap,
       placedKeys,
     ],
   );
