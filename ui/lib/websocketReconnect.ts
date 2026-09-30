@@ -1,9 +1,5 @@
 export type SocketReadiness =
-  | 'none'
-  | 'connecting'
-  | 'open'
-  | 'closing'
-  | 'closed';
+  'none' | 'connecting' | 'open' | 'closing' | 'closed';
 
 export type ResumeAction = 'reconnect' | 'wait' | 'probe';
 
@@ -12,6 +8,9 @@ export type ResumeAction = 'reconnect' | 'wait' | 'probe';
  * socket that the browser still reports as open as dead.
  */
 export const RESUME_PROBE_TIMEOUT_MS = 2_000;
+
+/** Allow a full initial/resync snapshot time to arrive on a slow connection. */
+export const STATE_SYNC_TIMEOUT_MS = 10_000;
 
 export const RECONNECT_BASE_DELAY_MS = 1_000;
 

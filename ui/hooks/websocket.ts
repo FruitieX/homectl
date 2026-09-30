@@ -25,6 +25,7 @@ import {
   RESUME_PROBE_TIMEOUT_MS,
   decideResumeAction,
   reconnectDelayMs,
+  STATE_SYNC_TIMEOUT_MS,
   socketReadiness,
 } from '@/lib/websocketReconnect';
 
@@ -132,6 +133,7 @@ export const useProvideWebsocketState = () => {
     let ws: WebSocket | null = null;
     let disposed = false;
     let probeTimeout: NodeJS.Timeout | null = null;
+    let resyncRequested = false;
     // Set when we close a socket ourselves because the app came back to the
     // foreground, so its close handler reconnects at once instead of waiting
     // out a backoff.
@@ -175,6 +177,35 @@ export const useProvideWebsocketState = () => {
       connect();
     };
 
+    const waitForState = (socket: WebSocket, reconnectImmediately = false) => {
+      if (probeTimeout !== null) return;
+      probeTimeout = setTimeout(
+        () => {
+          probeTimeout = null;
+          if (disposed || ws !== socket || socket.readyState !== WebSocket.OPEN)
+            return;
+          console.log('ws did not deliver fresh state, reconnecting');
+          reconnectOnClose = reconnectImmediately;
+          socket.close();
+        },
+        reconnectImmediately ? RESUME_PROBE_TIMEOUT_MS : STATE_SYNC_TIMEOUT_MS,
+      );
+    };
+
+    const requestState = (socket: WebSocket, reconnectImmediately = false) => {
+      // Keep the displayed snapshot, but suspend live controls until a full
+      // state arrives. A command acknowledgement or malformed message is not
+      // evidence that a missed state update has been recovered.
+      setConnectionStatus('reconnecting');
+      setWebsocket(null);
+      revisionRef.current = null;
+      waitForState(socket, reconnectImmediately);
+      if (!resyncRequested) {
+        resyncRequested = true;
+        socket.send(JSON.stringify({ Resync: {} }));
+      }
+    };
+
     /**
      * Runs when the app is foregrounded or the network comes back. Phones
      * suspend the page and hand back a socket that the browser still reports
@@ -195,22 +226,8 @@ export const useProvideWebsocketState = () => {
         case 'wait':
           return;
         case 'probe': {
-          const probed = ws;
-          clearProbeTimeout();
-          probeTimeout = setTimeout(() => {
-            probeTimeout = null;
-            if (disposed || ws === null || ws !== probed) {
-              return;
-            }
-            if (ws.readyState !== WebSocket.OPEN) {
-              return;
-            }
-            console.log('ws did not answer after resume, reconnecting');
-            reconnectOnClose = true;
-            ws.close();
-          }, RESUME_PROBE_TIMEOUT_MS);
           // Doubles as a state refresh for whatever changed while suspended.
-          probed?.send(JSON.stringify({ Resync: {} }));
+          if (ws) requestState(ws, true);
           return;
         }
       }
@@ -229,6 +246,11 @@ export const useProvideWebsocketState = () => {
       );
       console.log('Opening ws connection...');
 
+      if (ws) {
+        disconnectDeviceCommands(ws);
+        ws.onclose = null;
+        ws.close();
+      }
       ws = new WebSocket(wsEndpoint);
       const socket = ws;
 
@@ -236,16 +258,15 @@ export const useProvideWebsocketState = () => {
         if (ws !== socket) {
           return;
         }
-        reconnectAttempts.current = 0;
         revisionRef.current = null;
-        setConnectionStatus('connected');
+        resyncRequested = false;
+        waitForState(socket);
       };
 
       socket.onmessage = function incoming(data) {
         if (ws !== socket) {
           return;
         }
-        clearProbeTimeout();
         let msg: WebSocketResponse;
         try {
           msg = JSON.parse(data.data as string) as WebSocketResponse;
@@ -253,6 +274,7 @@ export const useProvideWebsocketState = () => {
           console.warn('Ignoring invalid WebSocket message', error);
           return;
         }
+        if (!msg || typeof msg !== 'object') return;
 
         if ('DeviceCommandResult' in msg) {
           receiveDeviceCommandResult(socket, msg.DeviceCommandResult);
@@ -268,6 +290,9 @@ export const useProvideWebsocketState = () => {
           )
             window.location.reload();
         } else if ('State' in msg) {
+          clearProbeTimeout();
+          resyncRequested = false;
+          reconnectAttempts.current = 0;
           revisionRef.current = msg.State.revision ?? null;
           setRevision(msg.State.revision ?? null);
           setDevices(msg.State.devices);
@@ -278,6 +303,8 @@ export const useProvideWebsocketState = () => {
           setTimers(msg.State.timers);
           setHelperStatuses(msg.State.helper_statuses);
           setUiState(msg.State.ui_state);
+          setWebsocket(socket);
+          setConnectionStatus('connected');
         } else if ('Patch' in msg) {
           const patch = msg.Patch;
           const decision = decidePatchAction(
@@ -289,7 +316,7 @@ export const useProvideWebsocketState = () => {
           }
           if (decision === 'resync') {
             if (socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({ Resync: {} }));
+              requestState(socket);
             }
             return;
           }
@@ -350,7 +377,7 @@ export const useProvideWebsocketState = () => {
         setConnectionStatus('reconnecting');
       };
 
-      setWebsocket(socket);
+      setWebsocket(null);
     }
 
     connect();

@@ -1,0 +1,72 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Socket open alone does not enable live controls",
+    "passed": true
+   },
+   {
+    "name": "Startup shows the retained-value warning on this viewport",
+    "passed": true
+   },
+   {
+    "name": "Fresh snapshot enables controls and clears the warning",
+    "passed": true
+   },
+   {
+    "name": "A revision gap preserves displayed state and the unsaved draft",
+    "passed": true
+   },
+   {
+    "name": "Further patches do not flood resync requests",
+    "passed": true
+   },
+   {
+    "name": "Duplicate patches do not overwrite fresh state",
+    "passed": true
+   },
+   {
+    "name": "The next sequential patch updates live state",
+    "passed": true
+   },
+   {
+    "name": "Unrelated traffic does not mark a resumed socket ready",
+    "passed": true
+   },
+   {
+    "name": "Physical socket reconnect still waits for a snapshot",
+    "passed": true
+   },
+   {
+    "name": "Recovery sends no commands or configuration saves",
+    "passed": true
+   },
+   {
+    "name": "Explicit action uses the recovered socket and intended device",
+    "passed": true
+   },
+   {
+    "name": "Acknowledged command leaves the configuration draft untouched",
+    "passed": true
+   },
+   {
+    "name": "Unconfirmed commands are not replayed after reconnect",
+    "passed": true
+   },
+   {
+    "name": "Lost acknowledgement reports uncertainty without inventing device state",
+    "passed": true
+   },
+   {
+    "name": "Recovery banner and editor fit the viewport",
+    "passed": true
+   },
+   {
+    "name": "Interception completed without errors",
+    "passed": true
+   }
+  ]
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":390,"height":844},"problems":[]}

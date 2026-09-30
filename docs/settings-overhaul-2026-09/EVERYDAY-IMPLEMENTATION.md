@@ -397,3 +397,25 @@ response body stops provider work with Cancelled. No external provider is used.
 Evidence: `ui/dev/assistant-stream-review.mjs`, `everyday/assistant-stream-*`.
 Remaining everyday gates include navigation/reconnect, widget option defaults,
 overlay consistency and the named accessibility matrix.
+
+### Live-state reconnect acceptance — 2026-09-30
+
+16 native checks pass at 1440/390 px using a temporary loopback WebSocket server
+with fixture state. Opening a socket no longer enables controls before fresh
+state arrives. Revision gaps and foreground/network probes retain displayed
+values and the unsaved configuration draft, suspend live commands, and request
+one full resync. Duplicate patches are ignored; the next sequential patch applies.
+Only a State reply clears the recovery timeout; malformed envelopes and unrelated
+command acknowledgements do not. Failed probes and dropped sockets reconnect.
+Startup/resync allows ten seconds for a full snapshot; a resumed connection keeps
+the existing two-second probe timeout. Backoff resets only after fresh state.
+
+The reconnect banner now appears on desktop as well as phone and identifies
+displayed values as potentially out of date. Socket replacement releases pending
+command promises. An acknowledged command works after reconnect; a lost
+acknowledgement reports uncertainty and is never automatically replayed. No
+configuration writes occur and the display-name draft remains intact.
+All 241 UI tests and type/lint/build pass. Evidence: `ui/dev/reconnect-review.mjs`
+and `everyday/reconnect-*`. These are real local socket interruptions with
+synthetic state, not household network/hardware tests. Navigation/search, widget
+option defaults, overlay consistency and wider accessibility remain open.
