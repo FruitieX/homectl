@@ -4177,6 +4177,14 @@ mod consistency_tests {
             .await
             .unwrap();
         let mut export = db_export_config_from_connection(&db).await.unwrap();
+        export.groups = serde_json::from_value(json!([
+            {"id":"empty","name":"Empty room","hidden":false,"devices":[],"linked_groups":[]},
+            {"id":"single","name":"One device","hidden":true,"devices":[{"integration_id":"dummy","device_id":"one"}],"linked_groups":["empty"]},
+            {"id":"multiple","name":"Several members","hidden":false,
+             "devices":[{"integration_id":"missing","device_id":"unavailable"},{"integration_id":"dummy","device_id":"one"}],
+             "linked_groups":["single","unavailable-group","empty"]}
+        ])).unwrap();
+        let expected_groups = serde_json::to_value(&export.groups).unwrap();
         // These are storage contracts. Unknown fields and missing references
         // must survive even when compilation/materialization cannot use them.
         export.scenes = serde_json::from_value(json!([
@@ -4224,6 +4232,10 @@ mod consistency_tests {
                 .collect::<std::collections::BTreeMap<_, _>>()
         };
         assert_eq!(
+            keyed(serde_json::to_value(&saved.groups).unwrap()),
+            keyed(expected_groups.clone())
+        );
+        assert_eq!(
             keyed(serde_json::to_value(&saved.scenes).unwrap()),
             keyed(expected_scenes.clone())
         );
@@ -4236,6 +4248,10 @@ mod consistency_tests {
         let restored = database().await;
         import_config_on(&restored, &restored_export).await.unwrap();
         let result = db_export_config_from_connection(&restored).await.unwrap();
+        assert_eq!(
+            keyed(serde_json::to_value(&result.groups).unwrap()),
+            keyed(expected_groups)
+        );
         assert_eq!(
             keyed(serde_json::to_value(&result.scenes).unwrap()),
             keyed(expected_scenes)

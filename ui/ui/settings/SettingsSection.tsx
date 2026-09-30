@@ -19,7 +19,7 @@ export function SettingsSection({
       aria-labelledby={id ? `${id}-title` : undefined}
     >
       <div className="settings-section-heading">
-        <div>
+        <div className="min-w-0">
           <h2 id={id ? `${id}-title` : undefined} tabIndex={-1}>
             {title}
           </h2>

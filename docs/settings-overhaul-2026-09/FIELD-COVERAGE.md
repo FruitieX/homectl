@@ -31,12 +31,12 @@ contract. `device_keys[]` is derived in responses and deliberately omitted from
 editor writes. Group rows have no opaque extension map, so fixture-only unknown
 properties must not be used to claim server persistence of extensions. The
 shared-picker checkpoint covers staged selection, missing/cyclic references
-and keyboard behavior; explicit empty/single/multiple Save/reload coverage below
-is still a separate requirement.
+and keyboard behavior; the following collection checkpoint separately verifies empty/single/multiple
+Save/reload and database persistence.
 
 | Contract | Renderer and empty/add/remove behavior | Order | Existing fixture evidence and remaining work |
 | --- | --- | --- | --- |
-| Group `devices[]`, `linked_groups[]` | `app/config/groups/editor.tsx`, `shared.tsx`: separate direct-device and linked-group pickers; empty group allowed; missing members remain repairable | Membership; preserve submitted arrays | `dev/settings-group-journey.js` edits members and retains drafts/conflicts; `lib/groupGraph.test.ts` checks cycles/missing members. **Open:** enumerate empty/single/multiple fixtures separately. |
+| Group `devices[]`, `linked_groups[]` | `app/config/groups/editor.tsx`, `shared.tsx`: separate direct-device and linked-group pickers; empty group allowed; missing members remain repairable | Membership; preserve submitted arrays | `dev/settings-group-journey.js` edits members and retains drafts/conflicts; `lib/groupGraph.test.ts` checks cycles/missing members. `dev/group-collections-review.mjs` adds 27 checks at 1440/390/360 px: exact empty/single/multiple Save/reload, retained missing references, replacement, deletion and creation races. Database reopen/restore and SQLite/PostgreSQL migration tests cover ordered and unresolved memberships. |
 | Scene `group_states`, `device_states` maps | `app/config/scenes/editor.tsx`, `target-row.tsx`: add multiple targets; remove a target; empty maps remain maps | Group map uses `group_state_order`; device overrides are separate | `dev/scene-collections-review.mjs` now edits both link variants, persists multi-add/remove and target replacement, removes all targets, and reloads empty maps. Existing scene journey covers color editing and Discard. |
 | Scene `group_state_order[]` | Same editor; target actions move earlier/later; removed targets leave the order list; unresolved order entries normalized by resolver helper | Explicit precedence; remaining targets deterministic | Scene journey edits and saves order; `lib/sceneDraft.test.ts` and `sceneTargets.test.ts` cover ordering/resolution. |
 | Scene-link `device_keys[]`, `group_keys[]` | Scene target row's linked-scene scope controls; selected device/group collections | Scope membership, not action sequence | `dev/scene-collections-review.mjs` edits multiple devices/groups, removes unavailable references, and distinguishes empty arrays from omitted default scope. These are stored activation descriptors: target-level scene links resolve the same device regardless of these scopes (`core/scenes.rs` and `lib/sceneDraft.test.ts`). |

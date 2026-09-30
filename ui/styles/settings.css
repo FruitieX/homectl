@@ -36,6 +36,7 @@
   border-radius: 8px;
   padding: 18px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   min-width: 0;
   scroll-margin-top: 18px;

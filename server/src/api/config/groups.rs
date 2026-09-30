@@ -236,6 +236,50 @@ mod tests {
         assert!(validate_group_change(&rows, &row("a", &["b", "missing"])).is_ok());
     }
     #[tokio::test]
+    async fn deleted_group_cannot_be_recreated_by_a_stale_editor() {
+        use crate::core::state::actor::spawn_state_actor;
+        let (mut state, _events) = crate::core::event::tests::test_state();
+        let original = row("removed-room", &[]);
+        state.upsert_group(original.clone());
+        state.apply_runtime_groups();
+        let snapshot = state.snapshot.clone();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = spawn_state_actor(state, snapshot.clone(), tx);
+        handle
+            .mutate(|state| {
+                Box::pin(async move {
+                    assert!(state.delete_group("removed-room"));
+                    state.apply_runtime_groups();
+                })
+            })
+            .await
+            .unwrap();
+        let response = update_group(
+            "removed-room".into(),
+            GroupUpdate {
+                group: original.clone(),
+                expected: Some(original),
+            },
+            handle,
+        )
+        .await
+        .unwrap()
+        .into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = warp::hyper::body::to_bytes(response.into_body())
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(body["error"].as_str().unwrap().contains("deleted"));
+        assert!(!snapshot
+            .load()
+            .runtime_config
+            .groups
+            .iter()
+            .any(|row| row.id == "removed-room"));
+    }
+
+    #[tokio::test]
     async fn concurrent_edits_return_current_without_changing_state() {
         use crate::core::state::actor::spawn_state_actor;
         let (mut state, _events) = crate::core::event::tests::test_state();

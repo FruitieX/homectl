@@ -2232,6 +2232,11 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { success: true, data: { applied: true } });
       const item = { ...body };
       const idx = list.findIndex((i) => i.id === item.id);
+      if (endpoint === 'groups' && idx >= 0)
+        return send(res, 409, {
+          success: false,
+          error: 'This ID is already in use. Choose another ID.',
+        });
       if (idx >= 0) list[idx] = item;
       else list.push(item);
       return send(res, 200, { success: true, data: item, write: writeOk });

@@ -133,54 +133,60 @@ export function SelectedDeviceRows({
           <li
             key={key}
             data-target-key={key}
-            className="flex items-center gap-3 px-3 py-2"
+            className="flex flex-wrap items-center gap-3 px-3 py-2"
           >
             {state && <StatePreview {...state} source="Requested" />}
-            <div className="min-w-0 flex-1">
+            <div className={`min-w-0 flex-1 ${missing ? 'basis-[140px]' : ''}`}>
               <Link
-                className="block truncate text-sm hover:underline"
+                className={`block text-sm hover:underline ${missing ? 'break-words' : 'truncate'}`}
                 to={configItemHref('device', key)}
               >
                 {labelFor(device)}
               </Link>
               {(advanced || missing) && (
-                <p className="truncate text-xs text-muted-foreground">{key}</p>
+                <p
+                  className={`text-xs text-muted-foreground ${missing ? 'break-all' : 'truncate'}`}
+                >
+                  {key}
+                </p>
               )}
             </div>
-            {missing ? (
-              <Badge variant="warning" className="shrink-0 gap-1">
-                <AlertTriangle aria-hidden className="size-3" />
-                Missing
-              </Badge>
-            ) : null}
-            {missing && onStartReplace ? (
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              {missing ? (
+                <Badge variant="warning" className="shrink-0 gap-1">
+                  <AlertTriangle aria-hidden className="size-3" />
+                  Missing
+                </Badge>
+              ) : null}
+              {missing && onStartReplace ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    replacing ? onCancelReplace?.() : onStartReplace(key)
+                  }
+                >
+                  {replacing ? 'Cancel' : 'Replace'}
+                </Button>
+              ) : null}
+              {/* A labelled action rather than a bare ×, so it reads and is
+                reachable the same way for everyone. */}
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-destructive"
+                aria-label={`Remove ${labelFor(device)} from this group`}
                 onClick={() =>
-                  replacing ? onCancelReplace?.() : onStartReplace(key)
+                  onChange(
+                    devices.filter((entry) => groupDeviceKey(entry) !== key),
+                  )
                 }
               >
-                {replacing ? 'Cancel' : 'Replace'}
+                <Trash2 aria-hidden className="size-4" />
               </Button>
-            ) : null}
-            {/* A labelled action rather than a bare ×, so it reads and is
-                reachable the same way for everyone. */}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-destructive"
-              aria-label={`Remove ${labelFor(device)} from this group`}
-              onClick={() =>
-                onChange(
-                  devices.filter((entry) => groupDeviceKey(entry) !== key),
-                )
-              }
-            >
-              <Trash2 aria-hidden className="size-4" />
-            </Button>
+            </div>
           </li>
         );
       })}

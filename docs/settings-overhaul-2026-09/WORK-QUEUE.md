@@ -577,6 +577,52 @@ warning. The wider editor collection/persistence and recovery gates remain open.
 
 Passing runs: 1440 px: 17 checks; 390 px: 23 checks; 360 px: 23 checks; 720 px: 21 checks.
 
+### Room/group collections and repair — 2026-09-30
+
+27 native browser checks pass at 1440, 390 and 360 px in
+`ui/dev/group-collections-review.mjs`. Temporary local records cover:
+
+- Missing devices/groups remain visible and survive an unrelated name save.
+- Replacing a missing device, then saving/reloading empty, single and multiple
+  direct-device/linked-group selections produces exact arrays. Each Save sends
+  expected state and omits derived `device_keys`; Done alone does not write.
+- A deleted group cannot be recreated by a stale save; the error retains the
+  draft. A concurrent creation using the same ID leaves the existing group
+  intact and retains the new draft, which can be saved under another ID.
+- Missing-member actions and section content fit the phone viewport. The
+  screenshot audit found hidden horizontal overflow inside sections; sections
+  now use a shrinkable grid track, headings can shrink, and missing-device repair
+  controls wrap beneath a readable identifier. The checks measure sections and
+  controls, in addition to the document viewport.
+
+The fixture now rejects duplicate group creation, matching the real API. Expected
+404/409 responses are recorded in the browser logs. All temporary rows are
+removed; no household configuration changes occur.
+
+Database verification exposed a mismatch: the API allowed missing linked groups,
+but a child foreign key rejected their persistence and silently removed incoming
+links when a child was deleted. Migration
+`m20260930000000_repairable_group_links` keeps the parent ownership constraint
+and uniqueness while allowing unresolved child IDs. Its table rebuild is
+transactional, preserves order/data/indexes, and works on SQLite and PostgreSQL.
+Downgrade with unresolved children fails without deleting them; repairing those
+references permits downgrade. Existing valid rows and repeated upgrades are
+covered by the migration tests.
+
+The raw-automation database reopen/JSON-restore regression now also includes
+empty/single/multiple groups, hidden true/false, ordered memberships and missing
+device/group references. The server API regression checks that stale updates
+cannot recreate a deleted group; existing conflict/duplicate and cycle tests
+remain included. Evidence lives under
+`implementation-evidence/collections/group-*`, with visual captures in the
+comparison gallery. Broader recovery and accessibility gates remain open.
+
+Verification: three API tests, both SQLite/PostgreSQL migration tests, and all
+17 database consistency tests pass. Type checking and production build pass.
+Lint exits successfully with the existing backup-effect cleanup warning; the
+build retains its large-chunk warning. Shared routine/scene/widget viewport
+checks pass at 390/1440 px after the section-grid correction.
+
 ## 7. Delivery and durable evidence
 
 - [ ] Maintain a browseable screenshot comparison gallery with mockup, before

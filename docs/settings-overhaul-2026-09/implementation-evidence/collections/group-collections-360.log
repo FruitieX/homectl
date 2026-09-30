@@ -1,0 +1,117 @@
+{
+ "driven": {
+  "passed": true,
+  "checks": [
+   {
+    "name": "Missing device and group remain visible",
+    "passed": true
+   },
+   {
+    "name": "Missing member section and repair actions fit the page",
+    "passed": true
+   },
+   {
+    "name": "Unrelated name edit persists exact membership",
+    "passed": true
+   },
+   {
+    "name": "Unrelated name edit writes once with expected state",
+    "passed": true
+   },
+   {
+    "name": "Unrelated name edit reload renders exact counts",
+    "passed": true
+   },
+   {
+    "name": "Missing device replacement persists exact membership",
+    "passed": true
+   },
+   {
+    "name": "Missing device replacement writes once with expected state",
+    "passed": true
+   },
+   {
+    "name": "Missing device replacement reload renders exact counts",
+    "passed": true
+   },
+   {
+    "name": "Empty selections are staged before Save",
+    "passed": true
+   },
+   {
+    "name": "Empty arrays persists exact membership",
+    "passed": true
+   },
+   {
+    "name": "Empty arrays writes once with expected state",
+    "passed": true
+   },
+   {
+    "name": "Empty arrays reload renders exact counts",
+    "passed": true
+   },
+   {
+    "name": "Empty collections have useful states",
+    "passed": true
+   },
+   {
+    "name": "Single selections persists exact membership",
+    "passed": true
+   },
+   {
+    "name": "Single selections writes once with expected state",
+    "passed": true
+   },
+   {
+    "name": "Single selections reload renders exact counts",
+    "passed": true
+   },
+   {
+    "name": "Multiple selections persists exact membership",
+    "passed": true
+   },
+   {
+    "name": "Multiple selections writes once with expected state",
+    "passed": true
+   },
+   {
+    "name": "Multiple selections reload renders exact counts",
+    "passed": true
+   },
+   {
+    "name": "Multiple member sections fit the page",
+    "passed": true
+   },
+   {
+    "name": "Deleted group is not recreated",
+    "passed": true
+   },
+   {
+    "name": "Deletion error retains edited name",
+    "passed": true
+   },
+   {
+    "name": "Discard clears the unsaved deletion draft",
+    "passed": true
+   },
+   {
+    "name": "No page overflow",
+    "passed": true
+   },
+   {
+    "name": "Creation race preserves the existing group",
+    "passed": true
+   },
+   {
+    "name": "Creation race retains the new draft",
+    "passed": true
+   },
+   {
+    "name": "Changing the conflicted ID creates the retained draft",
+    "passed": true
+   }
+  ],
+  "scope": "Temporary local fixture record; exact serialized payloads and page reload, not database durability"
+ }
+}
+{"url":"http://127.0.0.1:3021/config","viewport":{"width":360,"height":800},"problems":["log: Failed to load resource: the server responded with a status of 404 (Not Found)","log: Failed to load resource: the server responded with a status of 409 (Conflict)"]}

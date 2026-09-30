@@ -9,6 +9,8 @@ use crate::db::schema::{
 use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm_migration::prelude::*;
 
+mod group_links;
+
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -32,6 +34,7 @@ impl MigratorTrait for Migrator {
             Box::new(M20260922000002RoutineHistory),
             Box::new(M20260923000000ValueHistory),
             Box::new(M20260929000000ScenarioSuites),
+            Box::new(group_links::RepairableGroupLinks),
         ]
     }
 }

@@ -27,7 +27,7 @@ covers. The top-level implementation gates stay open until reconciled here.
 | Gate | Current evidence | Still needed before closing the full gate |
 | --- | --- | --- |
 | Foundation | Retained draft/CAS tests cover background refresh, in-flight edits, failures, inactive variants and nested conflict choices. Current entity pages use shared save bars. | Reconcile each editor's save boundary and errors; verify remaining return/focus/scroll paths and the named accessibility/viewport matrix. |
-| Rooms & groups settings | `settings-group-journey.js`, `group-journey.log`, graph cycle/missing-member/usage tests; live room journeys cover nested scope, missing/disabled/read-only members. | Explicit collection/nullable/unknown-field mapping and final narrow/zoom checks for the configuration editor. |
+| Rooms & groups settings | `settings-group-journey.js`, `group-journey.log`, graph cycle/missing-member/usage tests; live room journeys cover nested scope, missing/disabled/read-only members. | The current non-nullable GroupRow contract and derived device_keys are mapped in FIELD-COVERAGE.md. The 27-check collection journey covers empty/single/multiple saves, missing-member repair and deletion/creation races at 1440/390/360 px. Ordered/unresolved memberships now have reopen/JSON-restore evidence and SQLite/PostgreSQL migration tests. Remaining: configuration-editor zoom and cross-family recovery reconciliation. |
 | Scenes | Scene journey/API logs and draft/target tests cover explicit states, links, omission versus zero, precedence, unknown fields and cycles. Capture tests cover capability filtering and color conversion. | Scene creation/return now has 17 native checks per size, including retained drafts, focused selection, missing actions and deleted-scene repair. Complete variant/collection mapping and malformed target repair behavior remain. |
 | Routines | Current routine checkpoints cover three-lane/phone presentation, nested conditions, stable IDs, script/native branches, conversion and retained edits. | All eight trigger kinds now have edited Save/reload evidence at both sizes, including schedule modes and optional report fields. Nested conditions, all comparison operators and group quantifiers now have 32 checks per size plus ten server condition/compiler tests; unsupported sources stay visible and are removed explicitly. Action/policy/declaration checkpoints now add edited field coverage (38/25/20 checks per size), with conversion and compiler contracts. Empty-cycle repair, focus/no-write validation and Discard now pass in the 19-check selection journey at both sizes, backed by the compiler test. Remaining: unavailable-reference and broader recovery. Raw definitions now have database reopen/JSON restore evidence. |
 | Devices and calibration | Device journeys, reporting-policy API tests, brightness/color/bulk checkpoints and disabled re-enable regression. | Consolidate calibration evidence into the older settings ledger; verify remaining capability/missing-catalog cases and related-reference coverage. |
@@ -267,3 +267,49 @@ Type checking, lint and production build pass, with the existing large-chunk
 warning. The wider editor collection/persistence and recovery gates remain open.
 
 Passing runs: 1440 px: 17 checks; 390 px: 23 checks; 360 px: 23 checks; 720 px: 21 checks.
+
+### Room/group collections and repair — 2026-09-30
+
+27 native browser checks pass at 1440, 390 and 360 px in
+`ui/dev/group-collections-review.mjs`. Temporary local records cover:
+
+- Missing devices/groups remain visible and survive an unrelated name save.
+- Replacing a missing device, then saving/reloading empty, single and multiple
+  direct-device/linked-group selections produces exact arrays. Each Save sends
+  expected state and omits derived `device_keys`; Done alone does not write.
+- A deleted group cannot be recreated by a stale save; the error retains the
+  draft. A concurrent creation using the same ID leaves the existing group
+  intact and retains the new draft, which can be saved under another ID.
+- Missing-member actions and section content fit the phone viewport. The
+  screenshot audit found hidden horizontal overflow inside sections; sections
+  now use a shrinkable grid track, headings can shrink, and missing-device repair
+  controls wrap beneath a readable identifier. The checks measure sections and
+  controls, in addition to the document viewport.
+
+The fixture now rejects duplicate group creation, matching the real API. Expected
+404/409 responses are recorded in the browser logs. All temporary rows are
+removed; no household configuration changes occur.
+
+Database verification exposed a mismatch: the API allowed missing linked groups,
+but a child foreign key rejected their persistence and silently removed incoming
+links when a child was deleted. Migration
+`m20260930000000_repairable_group_links` keeps the parent ownership constraint
+and uniqueness while allowing unresolved child IDs. Its table rebuild is
+transactional, preserves order/data/indexes, and works on SQLite and PostgreSQL.
+Downgrade with unresolved children fails without deleting them; repairing those
+references permits downgrade. Existing valid rows and repeated upgrades are
+covered by the migration tests.
+
+The raw-automation database reopen/JSON-restore regression now also includes
+empty/single/multiple groups, hidden true/false, ordered memberships and missing
+device/group references. The server API regression checks that stale updates
+cannot recreate a deleted group; existing conflict/duplicate and cycle tests
+remain included. Evidence lives under
+`implementation-evidence/collections/group-*`, with visual captures in the
+comparison gallery. Broader recovery and accessibility gates remain open.
+
+Verification: three API tests, both SQLite/PostgreSQL migration tests, and all
+17 database consistency tests pass. Type checking and production build pass.
+Lint exits successfully with the existing backup-effect cleanup warning; the
+build retains its large-chunk warning. Shared routine/scene/widget viewport
+checks pass at 390/1440 px after the section-grid correction.

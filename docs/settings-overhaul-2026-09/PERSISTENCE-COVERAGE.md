@@ -9,12 +9,12 @@ SQLite queries and migrations. They do not command household devices.
 Command: `nix develop -c cargo test --manifest-path server/Cargo.toml --lib db::config_queries::consistency_tests`
 
 Result: **17 passed, 0 failed**. Exact output:
-[database consistency log](implementation-evidence/collections/authoring-database-consistency.log).
+[database consistency log](implementation-evidence/collections/group-database-tests.log).
 Test implementations are in `server/src/db/config_queries.rs`.
 
 | Stored contract | Exact test | Scope proved |
 | --- | --- | --- |
-| Raw scene/routine definitions | `raw_automation_definitions_survive_database_reopen_and_json_restore` | File-backed close/reopen and JSON restore preserve scene target maps/order, links/scopes, script text, false/zero/null/omitted values and opaque extension data; native branches, mixed and whole scripts, stable node IDs, routine revision/version and unknown action payloads. Legacy rows retain default v1/revision 1 with no v2 body; old scenes default to empty ordering. Storage accepts raw definitions independently of compiler/resolver validity; this is not runtime acceptance of unknown actions or missing references. |
+| Group memberships and raw scene/routine definitions | `raw_automation_definitions_survive_database_reopen_and_json_restore` | File-backed close/reopen and JSON restore preserve empty/single/multiple groups, hidden true/false, ordered device/group memberships and unresolved references; scene target maps/order, links/scopes, script text, false/zero/null/omitted values and opaque extension data; native branches, mixed and whole scripts, stable node IDs, routine revision/version and unknown action payloads. Legacy rows retain default v1/revision 1 with no v2 body; old scenes default to empty ordering. Storage accepts raw definitions independently of compiler/resolver validity; this is not runtime acceptance of unknown actions or missing references. |
 | Computed sources | `computed_source_fields_survive_database_reopen_and_json_restore` | Closes a file-backed database, reopens it, exports JSON and imports into a second database. Preserves built-in/custom/pinned computation representations, revision, enabled state, Helsinki zone, 1001 ms refresh, ordered aliases, zero versus omitted brightness, script body and structured parameters including null/false/empty text. Older exports omitting `sources` deserialize empty and replace old source rows. This is storage coverage, not evaluation of the supplied scripts/preset parameters. |
 | Sensors, timers, floorplans and everyday widgets | `everyday_collections_survive_database_reopen_and_json_restore` | Same close/reopen/JSON restore path. Preserves sensor list, group list and member order; disabled sensors and extension data; all three user-timer modes, device/group/scene targets, icons and Helsinki date/repeat settings; multiple floorplans, image bytes/metadata, absent images and grid JSON; stable dashboard IDs, fractional dimensions/order and room/scene/climate/timer options. This does not assert image decoding, live timer execution or widget rendering. |
 | Helper definitions and values | `helper_definitions_and_durable_values_round_trip` | All four types, numeric bounds, false/zero/empty initial values, ordered enum options and hidden true/false/omitted fields. Durable current value/revision exports; session values do not. Missing helper collections default empty. |
@@ -56,3 +56,16 @@ Widget follow-up: the everyday collection test now includes edited and empty opt
 objects for all 17 widget types. Its targeted rerun passes; exact fields/default
 mapping and evidence are in [WIDGET-OPTIONS.md](WIDGET-OPTIONS.md). The broader
 17-test checkpoint above remains a historical suite result.
+
+## Repairable linked-group persistence
+
+Migration `m20260930000000_repairable_group_links` removes only the child
+foreign key from group links. Parent ownership/cascade, uniqueness, stored order
+and indexes remain. This aligns durable storage with the API contract permitting
+missing references for repair. Both `sqlite_group_links_remain_repairable` and
+`postgres_group_links_remain_repairable` pass in `server/tests/group_link_migration.rs`.
+They cover populated upgrades, child deletion, missing references, transactional
+downgrade failure, repaired downgrade/re-upgrade, duplicate rejection, missing
+parent rejection and parent deletion cleanup. PostgreSQL runs in a local
+testcontainer; this is migration coverage rather than a full PostgreSQL API audit.
+See `implementation-evidence/collections/group-migration-tests.log`.
