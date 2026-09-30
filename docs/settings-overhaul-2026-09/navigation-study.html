@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>homectl · shared navigation study</title>
+    <link rel="stylesheet" href="navigation-study.css" />
+  </head>
+  <body>
+    <header class="study-bar">
+      <a class="study-title" href="navigation-review.html"
+        >Navigation study <span>↗</span></a
+      >
+      <div class="study-options" role="group" aria-label="Navigation concept">
+        <button data-direction="full">A · Full sidebar</button>
+        <button data-direction="rail">B · Rail + panel</button>
+      </div>
+      <div class="study-context" role="group" aria-label="Preview page">
+        <button data-context="routine">Settings</button>
+        <button data-context="home">Home</button>
+        <button data-context="map">Floorplan</button>
+      </div>
+      <button
+        id="theme"
+        class="study-theme"
+        aria-label="Switch preview theme"
+      ></button>
+    </header>
+    <div id="app"></div>
+    <dialog id="search-dialog" aria-labelledby="search-title">
+      <form method="dialog">
+        <button class="icon-button close-search" aria-label="Close search">
+          ×
+        </button>
+      </form>
+      <h2 id="search-title">Search your home</h2>
+      <label class="search-input"
+        ><span id="search-icon"></span
+        ><input
+          id="search-field"
+          placeholder="Try rooms, scenes or settings…"
+          autocomplete="off"
+      /></label>
+      <p class="search-note">Prototype navigation · example home</p>
+      <div id="search-results"></div>
+    </dialog>
+    <script src="navigation-study.js"></script>
+  </body>
+</html>

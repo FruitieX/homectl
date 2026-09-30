@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>homectl · shared navigation concepts</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #f5f7f3;
+        color: #293d32;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        font-size: 14px;
+      }
+      main {
+        max-width: 1540px;
+        margin: auto;
+        padding: 40px 32px 70px;
+      }
+      header {
+        max-width: 880px;
+        margin-bottom: 30px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        color: #6e8374;
+        letter-spacing: 0.7px;
+      }
+      h1 {
+        font-size: 32px;
+        font-weight: 650;
+        letter-spacing: -1px;
+        margin: 10px 0 13px;
+      }
+      h2 {
+        font-size: 20px;
+        letter-spacing: -0.4px;
+        margin: 0 0 10px;
+        font-weight: 600;
+      }
+      p {
+        color: #75867b;
+        font-size: 13px;
+        line-height: 1.7;
+        margin: 8px 0 15px;
+      }
+      a {
+        color: #356b51;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .links {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 20px 0;
+      }
+      .links a {
+        border: 1px solid #d9e4d9;
+        border-radius: 6px;
+        background: white;
+        padding: 9px 12px;
+        font-size: 12px;
+      }
+      .links a:first-child {
+        background: #376b54;
+        color: white;
+        border-color: #376b54;
+      }
+      .comparison {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+      }
+      .card {
+        border: 1px solid #dce4dc;
+        border-radius: 10px;
+        overflow: hidden;
+        background: white;
+      }
+      .card > div {
+        padding: 20px 22px;
+      }
+      .card p {
+        font-size: 12px;
+        margin-bottom: 10px;
+      }
+      .card img {
+        width: 100%;
+        height: auto;
+        display: block;
+        border-top: 1px solid #e1e7df;
+      }
+      .card .open {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .number {
+        background: #e4ede5;
+        color: #477153;
+        border-radius: 5px;
+        padding: 3px 7px;
+        font-size: 11px;
+        display: inline-block;
+        margin-right: 6px;
+        vertical-align: 2px;
+      }
+      .subhead {
+        margin: 42px 0 20px;
+      }
+      .phone-row {
+        display: grid;
+        grid-template-columns: 380px minmax(0, 1fr);
+        gap: 28px;
+        align-items: start;
+      }
+      .phone-row img {
+        width: 100%;
+        border: 1px solid #dce4dc;
+        border-radius: 10px;
+      }
+      .notes {
+        padding: 22px;
+        background: #fff;
+        border: 1px solid #dce4dc;
+        border-radius: 10px;
+      }
+      .notes h2 {
+        font-size: 18px;
+      }
+      .notes ul {
+        padding-left: 18px;
+        color: #667d6e;
+        line-height: 1.8;
+        font-size: 13px;
+      }
+      .notes li {
+        margin: 8px 0;
+      }
+      .secondary {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 22px;
+      }
+      .secondary img {
+        display: block;
+        width: 100%;
+        border: 1px solid #dce4dc;
+        border-radius: 8px;
+      }
+      .secondary h3 {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .fineprint {
+        margin-top: 28px;
+        padding-top: 18px;
+        border-top: 1px solid #dce4dc;
+        font-size: 11px;
+      }
+      .before img {
+        display: block;
+        width: 100%;
+        border: 1px solid #dce4dc;
+        border-radius: 8px;
+      }
+      .before {
+        margin-top: 40px;
+      }
+      @media (max-width: 800px) {
+        main {
+          padding: 25px 18px 50px;
+        }
+        h1 {
+          font-size: 26px;
+        }
+        .comparison,
+        .phone-row,
+        .secondary {
+          grid-template-columns: 1fr;
+        }
+        .phone-row > a {
+          max-width: 430px;
+          margin: auto;
+        }
+        .card > div {
+          padding: 17px;
+        }
+        .before {
+          margin-top: 28px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">
+          Shared navigation · concept study · 30 September 2026
+        </p>
+        <h1>A clearer way around homectl.</h1>
+        <p>
+          Two approaches to hierarchy, spacing and settings navigation. Both use
+          the approved Compact green/slate palette, consistent icons and the
+          same 19 settings sections. The surrounding screens are synthetic
+          examples for comparing the navigation.
+        </p>
+        <div class="links">
+          <a href="navigation-study.html">Open interactive study ↗</a
+          ><a href="navigation-study.html?direction=full">A · Full sidebar</a
+          ><a href="navigation-study.html?direction=rail">B · Rail + panel</a
+          ><a href="NAVIGATION-STUDY.md">Design notes</a>
+        </div>
+      </header>
+      <section class="comparison" aria-label="Desktop concepts">
+        <article class="card">
+          <div>
+            <h2><span class="number">A</span>Refined full sidebar</h2>
+            <p>
+              Everyday pages first, settings below. A compact secondary list has
+              a single active row, quieter headings and consistent spacing.
+              Primary navigation and connection status stay fixed while settings
+              scroll.
+            </p>
+            <p>
+              <strong>244 px expanded · 76 px collapsed.</strong> Familiar and
+              easy to scan. Its settings list needs some scrolling because the
+              primary destinations share the same column.
+            </p>
+            <a class="open" href="navigation-study.html?direction=full"
+              >Try collapse, search and settings navigation ↗</a
+            >
+          </div>
+          <a href="previews/navigation-study/a-settings.png"
+            ><img
+              src="previews/navigation-study/a-settings.png"
+              width="1440"
+              height="1000"
+              alt="A full sidebar with distinct primary navigation, grouped settings and the active Routines row."
+          /></a>
+        </article>
+        <article class="card">
+          <div>
+            <h2><span class="number">B</span>Compact rail + settings panel</h2>
+            <p>
+              A stable rail carries the everyday destinations. Settings open
+              beside it, with much more vertical room for their categories. Pin
+              the panel for configuration sessions, or float it over the page.
+            </p>
+            <p>
+              <strong>76 px rail · 324 px with a pinned panel.</strong> All
+              settings fit at this desktop height. A pinned panel costs more
+              width; closing it gives that space back to the page.
+            </p>
+            <a class="open" href="navigation-study.html?direction=rail"
+              >Try pin, unpin and close ↗</a
+            >
+          </div>
+          <a href="previews/navigation-study/b-settings.png"
+            ><img
+              src="previews/navigation-study/b-settings.png"
+              width="1440"
+              height="1000"
+              alt="B compact labeled rail with a separate settings panel showing every settings section."
+          /></a>
+        </article>
+      </section>
+      <div class="subhead">
+        <h2>One phone navigation for both.</h2>
+        <p>
+          Explicit labels and touch targets, with a compact strip of everyday
+          destinations above the settings list.
+        </p>
+      </div>
+      <section class="phone-row">
+        <a href="navigation-study.html?direction=full&menu=open"
+          ><img
+            src="previews/navigation-study/phone-navigation.png"
+            width="430"
+            height="932"
+            alt="Phone navigation drawer with four everyday destinations, group shortcuts and a scrollable settings list."
+        /></a>
+        <div class="notes">
+          <h2>What changes in both concepts</h2>
+          <ul>
+            <li>
+              Separate everyday navigation from the longer settings list.
+              Distinguish the parent section from the actual selected page.
+            </li>
+            <li>
+              Align every icon and label. Keep long names on one line at normal
+              desktop size; let text wrap when needed in the eventual app.
+            </li>
+            <li>
+              Order settings by purpose: rooms and devices first, then
+              connections; scenes and routines first within automations.
+            </li>
+            <li>
+              Keep the whole settings catalog reachable. Phone group shortcuts
+              jump directly to Home, Automations, Appearance or Maintenance.
+            </li>
+            <li>
+              Open navigation brings the current category into view. Close
+              dismisses the drawer; choosing a page closes it too.
+            </li>
+            <li>
+              Search remains global, with Ctrl+K and a single command palette.
+            </li>
+            <li>
+              Use the same navigation on the floorplan, routine editors,
+              dashboard and settings. Floorplan tabs remain in the phone AppBar
+              beside the assistant button.
+            </li>
+          </ul>
+          <p>
+            <a href="navigation-study.html?direction=rail&menu=open"
+              >Try the phone adaptation ↗</a
+            >
+          </p>
+          <p>
+            <strong>My initial preference:</strong> B for frequent configuration
+            and canvas work, with an unpinned panel by default; A for the
+            simpler, fully labeled everyday experience. They can share one
+            component and offer an explicit expanded/collapsed preference.
+          </p>
+        </div>
+      </section>
+      <div class="subhead">
+        <h2>Check the other contexts.</h2>
+        <p>
+          The navigation should work with the content, rather than consume space
+          that an editor needs.
+        </p>
+      </div>
+      <section class="secondary">
+        <article>
+          <h3>Rail closed · floorplan gets the space</h3>
+          <a
+            href="navigation-study.html?direction=rail&context=map&panel=closed"
+            ><img
+              src="previews/navigation-study/b-map.png"
+              width="1440"
+              height="1000"
+              alt="Compact rail on the floorplan with the settings panel closed."
+          /></a>
+        </article>
+        <article>
+          <h3>Unpinned · settings float over the canvas</h3>
+          <a
+            href="navigation-study.html?direction=rail&context=map&pinned=false"
+            ><img
+              src="previews/navigation-study/b-overlay.png"
+              width="1440"
+              height="1000"
+              alt="Settings panel floating over the floorplan without changing the canvas width."
+          /></a>
+        </article>
+        <article>
+          <h3>Full sidebar · everyday home overview</h3>
+          <a
+            href="navigation-study.html?direction=full&context=home&settings=closed"
+            ><img
+              src="previews/navigation-study/a-home.png"
+              width="1440"
+              height="1000"
+              alt="Full sidebar with settings collapsed alongside the home dashboard."
+          /></a>
+        </article>
+        <article>
+          <h3>Dark theme · same hierarchy and spacing</h3>
+          <a href="navigation-study.html?direction=rail&theme=dark"
+            ><img
+              src="previews/navigation-study/b-dark.png"
+              width="1440"
+              height="1000"
+              alt="Rail and settings panel in dark green/slate Compact styling."
+          /></a>
+        </article>
+      </section>
+      <section class="before">
+        <h2>Current implementation · reference</h2>
+        <p>
+          The existing sidebar fills both the Settings parent and Routines
+          child, mixes primary and secondary row treatment, and wraps longer
+          names. These concepts make those levels more distinct.
+        </p>
+        <a href="previews/navigation-study/current.png"
+          ><img
+            src="previews/navigation-study/current.png"
+            width="1440"
+            height="1000"
+            alt="Current shared sidebar before this concept study, captured against synthetic fixtures."
+            loading="lazy"
+        /></a>
+      </section>
+      <p class="fineprint">
+        Design review only. Navigation, search, disclosure, panel pinning, theme
+        previews and group shortcuts are interactive. Household data, counts and
+        timestamps are illustrative; no app configuration or physical devices
+        are changed.
+      </p>
+    </main>
+  </body>
+</html>

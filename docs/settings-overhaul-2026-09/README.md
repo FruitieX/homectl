@@ -17,6 +17,17 @@ and the [mockup versus implementation gallery](implementation-evidence/floorplan
 
 ## Current review
 
+### Shared navigation · Study 08
+
+[Desktop/phone screenshot comparison](navigation-review.html) ·
+[Interactive sidebar study](navigation-study.html) ·
+[Design notes and tradeoffs](NAVIGATION-STUDY.md).
+
+Compares a refined full sidebar with a compact labeled rail and an expandable,
+optionally pinned settings panel. Focuses on hierarchy, spacing and the complete
+settings catalog; both share a phone drawer with group shortcuts. Concepts for
+review, using synthetic data and the approved Compact palette.
+
 ### Quick adjust · Study 07
 
 [Interactive continuous-gesture study](quick-adjust-study.html) ·

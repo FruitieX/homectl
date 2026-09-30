@@ -1,0 +1,53 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+../docs/settings-overhaul-2026-09/navigation-study.js 77ms
+../docs/settings-overhaul-2026-09/navigation-review.html 65ms
+../docs/settings-overhaul-2026-09/verify-navigation-study.mjs 8ms
+{
+ "driven": {
+  "passed": true,
+  "width": 1440,
+  "checks": [
+   "No horizontal document overflow",
+   "Full sidebar includes all 19 sections and Overview",
+   "Full sidebar emphasizes one actual current page",
+   "Collapsing gives the page a 76 px rail",
+   "Collapsed full sidebar opens settings without moving the page",
+   "Escape closes the floating settings panel",
+   "Pinned rail panel reserves its exact width",
+   "Rail panel preserves the complete settings catalog",
+   "Unpinning gives space back while keeping settings visible",
+   "Floorplan and settings share a stable rail",
+   "Clicking outside dismisses an unpinned panel",
+   "Category navigation updates heading and destination",
+   "Theme preview changes without navigation changes",
+   "Ctrl+K opens and focuses global search",
+   "Search finds settings without drilling through groups",
+   "Search result navigates and closes the palette",
+   "No horizontal overflow after navigation and theme changes"
+  ]
+ }
+}
+{"url":"file:///home/rasse/homectl/docs/settings-overhaul-2026-09/navigation-study.html","viewport":{"width":1440,"height":1000},"problems":[]}
+{
+ "driven": {
+  "passed": true,
+  "width": 430,
+  "checks": [
+   "No horizontal document overflow",
+   "Phone drawer has explicit labels and a bounded width",
+   "Every phone settings row has a 44 px touch target",
+   "Phone group shortcuts scroll to later settings",
+   "Selecting a category navigates and dismisses the drawer",
+   "Reopening brings the current category into view",
+   "Rail concept shares the same phone drawer",
+   "Escape closes phone navigation",
+   "Theme preview changes without navigation changes",
+   "Ctrl+K opens and focuses global search",
+   "Search finds settings without drilling through groups",
+   "Search result navigates and closes the palette",
+   "No horizontal overflow after navigation and theme changes"
+  ]
+ }
+}
+{"url":"file:///home/rasse/homectl/docs/settings-overhaul-2026-09/navigation-study.html","viewport":{"width":430,"height":932},"problems":[]}

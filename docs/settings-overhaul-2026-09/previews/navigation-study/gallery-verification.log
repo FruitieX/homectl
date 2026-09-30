@@ -1,0 +1,9 @@
+warning: Git tree '/home/rasse/homectl' is dirty
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+{
+ "evaluated": {
+  "passed": true,
+  "images": 8
+ }
+}
+{"url":"file:///home/rasse/homectl/docs/settings-overhaul-2026-09/navigation-review.html","viewport":{"width":1520,"height":1320},"problems":[]}
