@@ -192,6 +192,17 @@ Real-time updates available via WebSocket connection for device state changes an
 
 ### AI configuration assistant
 
+The assistant shares its current automation authoring reference across draft,
+plan and chat prompts (`server/src/api/config/assistant-automation-reference.md`).
+Update it alongside schema/ABI changes and keep the executable example tests
+in `assistant.rs` current. Plans support `block` entities (action, condition,
+JavaScript function) as well as helpers with computations; catalog context
+includes signatures, bounded bodies, freshness/read-only metadata and timezone.
+Only accepted operations apply, in dependency order and against refreshed live
+snapshots. Shared block writes/deletes reuse the editor mutation/persistence
+path; edits since review reject stale block operations. See
+[JavaScript reuse](docs/javascript-reuse.md#configuration-assistant).
+
 Optional natural-language configuration assistant. It is disabled unless
 provider settings exist; `GET /api/v1/config/assistant/status` reports whether
 it is enabled and which model it uses.

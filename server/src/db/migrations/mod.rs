@@ -1605,6 +1605,68 @@ impl MigrationTrait for M20260910000000ColorCalibration {
     }
 }
 
+struct AutomationBlocksMigration;
+impl MigrationName for AutomationBlocksMigration {
+    fn name(&self) -> &str {
+        "m20260930000000_automation_blocks"
+    }
+}
+#[async_trait::async_trait]
+impl MigrationTrait for AutomationBlocksMigration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(AutomationBlocks::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(AutomationBlocks::Id)
+                            .text()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(AutomationBlocks::Document).text().not_null())
+                    .to_owned(),
+            )
+            .await
+    }
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(AutomationBlocks::Table).to_owned())
+            .await
+    }
+}
+
+struct ComputedHelpersMigration;
+impl MigrationName for ComputedHelpersMigration {
+    fn name(&self) -> &str {
+        "m20261001000000_computed_helpers"
+    }
+}
+#[async_trait::async_trait]
+impl MigrationTrait for ComputedHelpersMigration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(AutomationValues::Table)
+                    .add_column(ColumnDef::new(AutomationValues::Compute).text().null())
+                    .to_owned(),
+            )
+            .await
+    }
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(AutomationValues::Table)
+                    .drop_column(AutomationValues::Compute)
+                    .to_owned(),
+            )
+            .await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1683,67 +1745,5 @@ mod tests {
             row.try_get::<String>("", "actions").unwrap(),
             "[{\"action\":\"noop\"}]"
         );
-    }
-}
-
-struct AutomationBlocksMigration;
-impl MigrationName for AutomationBlocksMigration {
-    fn name(&self) -> &str {
-        "m20260930000000_automation_blocks"
-    }
-}
-#[async_trait::async_trait]
-impl MigrationTrait for AutomationBlocksMigration {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .create_table(
-                Table::create()
-                    .table(AutomationBlocks::Table)
-                    .if_not_exists()
-                    .col(
-                        ColumnDef::new(AutomationBlocks::Id)
-                            .text()
-                            .not_null()
-                            .primary_key(),
-                    )
-                    .col(ColumnDef::new(AutomationBlocks::Document).text().not_null())
-                    .to_owned(),
-            )
-            .await
-    }
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(Table::drop().table(AutomationBlocks::Table).to_owned())
-            .await
-    }
-}
-
-struct ComputedHelpersMigration;
-impl MigrationName for ComputedHelpersMigration {
-    fn name(&self) -> &str {
-        "m20261001000000_computed_helpers"
-    }
-}
-#[async_trait::async_trait]
-impl MigrationTrait for ComputedHelpersMigration {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(AutomationValues::Table)
-                    .add_column(ColumnDef::new(AutomationValues::Compute).text().null())
-                    .to_owned(),
-            )
-            .await
-    }
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .alter_table(
-                Table::alter()
-                    .table(AutomationValues::Table)
-                    .drop_column(AutomationValues::Compute)
-                    .to_owned(),
-            )
-            .await
     }
 }

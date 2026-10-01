@@ -12,6 +12,7 @@ export const assistantEntityKindLabels: Record<AssistantEntityKind, string> = {
   integration: 'Integration',
   helper: 'Helper',
   computed_source: 'Computed source',
+  block: 'Block',
 };
 
 const entityFieldLabels: Partial<
@@ -66,6 +67,16 @@ const entityFieldLabels: Partial<
     initial_value: 'Initial value',
     persistence: 'Persistence',
     hidden: 'Hidden',
+    compute: 'Computation',
+  },
+  block: {
+    id: 'ID',
+    name: 'Name',
+    kind: 'Kind',
+    description: 'Description',
+    inputs: 'Typed inputs',
+    body: 'Definition',
+    revision: 'Revision',
   },
   computed_source: {
     id: 'ID',
@@ -276,6 +287,7 @@ export function operationTarget(
 const ignoredDiffFields: Partial<Record<AssistantEntityKind, string[]>> = {
   routine: ['revision'],
   computed_source: ['revision'],
+  block: ['revision'],
   device: ['name', 'kind'],
 };
 
@@ -287,9 +299,12 @@ export function operationFieldChanges(
   operation: AssistantOperation,
 ): ChangedField[] {
   const ignored = new Set(ignoredDiffFields[operation.kind] ?? []);
-  return diffTopLevelFields(operation.before, operation.after).filter(
-    (field) => !ignored.has(field.key),
-  );
+  return diffTopLevelFields(operation.before, operation.after)
+    .filter((field) => !ignored.has(field.key))
+    .map((field) => ({
+      ...field,
+      label: assistantFieldLabel(operation.kind, field.key),
+    }));
 }
 
 export function operationChangeSummary(operation: AssistantOperation): string {

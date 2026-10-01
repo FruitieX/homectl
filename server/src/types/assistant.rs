@@ -21,6 +21,7 @@ pub enum AssistantEntityKind {
     Integration,
     Helper,
     ComputedSource,
+    Block,
 }
 
 impl AssistantEntityKind {
@@ -34,11 +35,12 @@ impl AssistantEntityKind {
             Self::Integration => "integration",
             Self::Helper => "helper",
             Self::ComputedSource => "computed_source",
+            Self::Block => "block",
         }
     }
 
     /// Kinds the deterministic search endpoint can query.
-    pub fn searchable() -> [Self; 8] {
+    pub fn searchable() -> [Self; 9] {
         [
             Self::Routine,
             Self::Scene,
@@ -48,6 +50,7 @@ impl AssistantEntityKind {
             Self::Integration,
             Self::Helper,
             Self::ComputedSource,
+            Self::Block,
         ]
     }
 }

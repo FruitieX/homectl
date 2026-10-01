@@ -106,8 +106,18 @@ impl RuntimeConfigSnapshot {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        // Boa's syntax parser is recursive. Ordinary nested action objects and
+        // reusable script wrappers can exceed Tokio's default 2 MiB stack in
+        // debug builds; match the 8 MiB stack used by tests and the main thread.
+        .thread_stack_size(8 * 1024 * 1024)
+        .build()?
+        .block_on(run())
+}
+
+async fn run() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     color_eyre::install()?;
     #[cfg(feature = "tokio-console")]

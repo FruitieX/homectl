@@ -157,3 +157,41 @@ API:
 
 See [blocks](automation-blocks.md), [script actions](routine-scripts.md), and
 [implementation and verification](javascript-reuse-implementation.md).
+
+## Configuration assistant
+
+The built-in assistant can search/attach Action, Condition and Function blocks,
+reuse their typed signatures, and propose creating, updating or deleting them.
+The shared authoring reference covers visual calls, JavaScript steps, fixed
+function imports, strict condition results, computed helpers, light-profile
+sources, scene selection, rollout and timers. The routine-only draft endpoint
+uses the same reference but cannot create dependent entities; ask in the main
+assistant panel for a plan that creates a block/helper alongside its routine.
+
+Context includes existing reusable definitions, helper computation/read-only
+status and current helper freshness, device sensor values, room/scene IDs and
+the configured schedule timezone. Block source bodies are included within a
+bounded catalog budget; attach a block to supply its full definition when its
+body is omitted from the summary.
+
+Plans validate dependency order, typed calls, function/helper graphs, existing
+enabled callers and source imports before review. Only selected operations are
+applied. Missing or rejected dependencies make a caller fail visibly rather
+than implicitly creating unaccepted entities. Each application revalidates
+against the latest state. Shared block changes use the editor's mutation and
+transactional persistence path; edits advance affected callers' revisions.
+A block changed after review requires a new plan instead of overwriting that
+edit. In-use blocks cannot be deleted until their callers are removed.
+
+Generated JavaScript remains a proposal: schema/syntax validation cannot prove
+its behavior. Review the source and use **Preview draft** or stored scenarios
+before enabling an automation. Creating a proposal and previewing its scripts
+never dispatch device commands.
+
+The assistant integration tests exercise a combined function/block/helper/source/
+routine plan, script-worker previews, shared-edit revision propagation, selective
+acceptance, stale review protection and database restoration. Executable prompt
+examples and schema-variant coverage checks help keep the reference current.
+These tests also caught a Boa syntax-parser stack overflow on ordinary nested
+scripts; the server runtime now reserves an 8 MiB thread stack to match the test
+and main-thread stack size. Script execution remains in supervised workers.

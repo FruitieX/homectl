@@ -1999,3 +1999,285 @@ fn assistant_chat_persists_threads_for_continue_and_delete() {
     server.stop();
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
+
+fn reuse_plan_fixture() -> Value {
+    serde_json::from_str(include_str!("fixtures/assistant-reuse-plan.json")).unwrap()
+}
+
+#[test]
+fn assistant_creates_reusable_javascript_and_computed_entities_after_review() {
+    let fixture = reuse_plan_fixture();
+    let provider = MockProvider::start(vec![
+        MockResponse::completion_stream(&fixture.to_string()),
+        MockResponse::completion(&json!({"operations":[{"op":"update","kind":"block","target_id":"scaled_step","after":{"name":"Shared dim calculation"}}]}).to_string()),
+    ]);
+    let mut server = start_server_with_env(
+        Some(&provider),
+        vec![(
+            "HOMECTL_ASSISTANT_TIMEZONE".into(),
+            "Europe/Helsinki".into(),
+        )],
+    );
+    let client = Client::new();
+    let before = device_state(&server.base_url, &client, "dummy", "lamp");
+    let response = chat(
+        &server.base_url,
+        &client,
+        json!({"prompt":"Create shared JavaScript functions, dim action and condition blocks, a computed helper and profile, and a routine using them"}),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let stream = response.text().unwrap();
+    let proposal = sse_event_data(&stream, "plan").unwrap_or_else(|| panic!("{stream}"));
+    assert_eq!(proposal["operations"].as_array().unwrap().len(), 6);
+    let config = stored_config(&server.base_url, &client);
+    assert!(
+        config["blocks"].as_array().unwrap().is_empty(),
+        "Proposals must not persist anything"
+    );
+    let request: Value = serde_json::from_str(&provider.request_bodies.lock().unwrap()[0]).unwrap();
+    let prompt = request["messages"][0]["content"].as_str().unwrap();
+    for required in [
+        "api.functions.call",
+        "read-only",
+        "call_block",
+        "run_script",
+        "automation_catalog",
+        "Europe/Helsinki",
+    ] {
+        assert!(
+            prompt.contains(required),
+            "Missing authoring context: {required}"
+        );
+    }
+    assert!(!prompt.contains("return [ ... ]"));
+    let accepted: Vec<_> = proposal["operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|op| op["opId"].as_str().unwrap())
+        .collect();
+    let applied: Value = checked_reuse_apply(
+        &mut server,
+        &client,
+        proposal["planId"].as_str().unwrap(),
+        &accepted,
+    )
+    .json()
+    .unwrap();
+    assert!(
+        applied["data"]["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|result| result["ok"] == true),
+        "{applied}"
+    );
+    let config = stored_config(&server.base_url, &client);
+    assert_eq!(config["blocks"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        config["helpers"][0]["compute"]["script"]["functions"],
+        json!(["scaled_step"])
+    );
+    assert_eq!(
+        config["sources"][0]["compute"]["functions"],
+        json!(["scaled_step"])
+    );
+    assert_eq!(
+        config["routines"][0]["definition_v2"]["program"]["steps"][0]["block_id"],
+        "dim_lights"
+    );
+    let search: Value = search(&server.base_url, &client, "kind=block&q=scaled_step")
+        .json()
+        .unwrap();
+    assert_eq!(search["data"][0]["kind"], "block");
+    assert_eq!(search["data"][0]["id"], "scaled_step");
+    let function = config["blocks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|block| block["id"] == "scaled_step")
+        .unwrap();
+    let preview = client
+        .post(format!("{}/api/v1/config/reuse-preview", server.base_url))
+        .json(&json!({"kind":"block","block":function,"inputs":{"value":0.2}}))
+        .send()
+        .unwrap();
+    assert_eq!(preview.status(), StatusCode::OK);
+    assert_eq!(preview.json::<Value>().unwrap()["data"]["value"], 0.4);
+    let preview = client
+        .post(format!("{}/api/v1/config/reuse-preview", server.base_url))
+        .json(&json!({"kind":"helper","helper":config["helpers"][0]}))
+        .send()
+        .unwrap();
+    assert_eq!(preview.status(), StatusCode::OK);
+    assert_eq!(preview.json::<Value>().unwrap()["data"]["value"], 0.2);
+    let action = config["blocks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|block| block["id"] == "dim_lights")
+        .unwrap();
+    let preview=client.post(format!("{}/api/v1/config/reuse-preview",server.base_url)).json(&json!({"kind":"block","block":action,"inputs":{"targets":{"devices":[{"integration_id":"dummy","device_id":"lamp"}]},"step":0.1}})).send().unwrap();
+    assert_eq!(preview.status(), StatusCode::OK);
+    let preview: Value = preview.json().unwrap();
+    let step = preview["data"]["script_results"][0]["branches"][0]["steps"][0]["step"]
+        .as_f64()
+        .unwrap();
+    assert!((step - 0.2).abs() < 1e-6, "{preview}");
+    assert_eq!(preview["data"]["dispatched"], false);
+    assert_eq!(
+        device_state(&server.base_url, &client, "dummy", "lamp")["data"],
+        before["data"],
+        "Creating/previewing automation must not control lights"
+    );
+    let (update_id, _) = create_plan(
+        &server.base_url,
+        &client,
+        json!({"prompt":"Rename scaled_step to Shared dim calculation"}),
+    );
+    let updated: Value = apply_plan(&server.base_url, &client, &update_id, &["op-1"])
+        .json()
+        .unwrap();
+    assert_eq!(updated["data"]["results"][0]["ok"], true, "{updated}");
+    let updated_config = stored_config(&server.base_url, &client);
+    assert_eq!(
+        updated_config["blocks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|block| block["id"] == "scaled_step")
+            .unwrap()["revision"],
+        2
+    );
+    assert_eq!(
+        updated_config["helpers"][0]["compute"]["revision"],
+        config["helpers"][0]["compute"]["revision"]
+            .as_i64()
+            .unwrap()
+            + 1
+    );
+    for field in ["sources", "routines"] {
+        assert_eq!(
+            updated_config[field][0]["revision"],
+            config[field][0]["revision"].as_i64().unwrap_or(1) + 1
+        );
+    }
+    let config = updated_config;
+    server.stop();
+    let restarted = TestServer::with_config(TestServerConfig {
+        database_url: Some(format!(
+            "sqlite://{}?mode=rwc",
+            server.temp_dir.join("homectl.db").display()
+        )),
+        ..Default::default()
+    })
+    .unwrap();
+    let restored = stored_config(&restarted.base_url, &client);
+    for field in ["blocks", "helpers", "sources", "routines"] {
+        assert_eq!(
+            restored[field], config[field],
+            "{field} must survive restart"
+        );
+    }
+}
+
+#[test]
+fn assistant_block_updates_preserve_edits_made_after_review() {
+    let provider=MockProvider::start(vec![MockResponse::completion(&json!({"operations":[{"op":"update","kind":"block","target_id":"scaled_step","after":{"name":"Assistant name"}}]}).to_string())]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+    let mut block = reuse_plan_fixture()["operations"][5]["after"].clone();
+    let response = client
+        .put(format!(
+            "{}/api/v1/config/blocks/scaled_step",
+            server.base_url
+        ))
+        .json(&block)
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let (id, proposal) = create_plan(
+        &server.base_url,
+        &client,
+        json!({"prompt":"Rename scaled step","attachments":[{"kind":"block","id":"scaled_step"}]}),
+    );
+    assert_eq!(proposal["operations"][0]["before"]["name"], "Scaled step");
+    let request: Value = serde_json::from_str(&provider.request_bodies.lock().unwrap()[0]).unwrap();
+    assert!(request["messages"][0]["content"]
+        .as_str()
+        .unwrap()
+        .contains("return inputs.value * inputs.factor;"));
+    block["description"] = json!("Edited in the block editor after assistant review");
+    let response = client
+        .put(format!(
+            "{}/api/v1/config/blocks/scaled_step",
+            server.base_url
+        ))
+        .json(&block)
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response: Value = apply_plan(&server.base_url, &client, &id, &["op-1"])
+        .json()
+        .unwrap();
+    assert_eq!(response["data"]["results"][0]["ok"], false);
+    assert!(response["data"]["results"][0]["error"]
+        .as_str()
+        .unwrap()
+        .contains("changed since"));
+    let config = stored_config(&server.base_url, &client);
+    assert_eq!(config["blocks"][0]["name"], "Scaled step");
+    assert_eq!(config["blocks"][0]["description"], block["description"]);
+}
+
+#[test]
+fn assistant_does_not_apply_rejected_reuse_dependencies() {
+    let provider = MockProvider::start(vec![MockResponse::completion(
+        &reuse_plan_fixture().to_string(),
+    )]);
+    let mut server = start_server(Some(&provider));
+    let client = Client::new();
+    let (id, _) = checked_reuse_plan(
+        &mut server,
+        &client,
+        json!({"prompt":"Create a reusable dim function, blocks, helpers and routine"}),
+    );
+    // Only the routine is accepted. None of its new dependencies may be created implicitly.
+    let response: Value = apply_plan(&server.base_url, &client, &id, &["op-1"])
+        .json()
+        .unwrap();
+    assert_eq!(response["data"]["results"][0]["ok"], false);
+    let config = stored_config(&server.base_url, &client);
+    for field in ["blocks", "helpers", "sources", "routines"] {
+        assert!(config[field].as_array().unwrap().is_empty(), "{field}");
+    }
+}
+
+// Retain server diagnostics when a worker/runtime failure closes an HTTP request.
+fn checked_reuse_plan(server: &mut TestServer, client: &Client, body: Value) -> (String, Value) {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        create_plan(&server.base_url, client, body)
+    }))
+    .unwrap_or_else(|_| {
+        panic!(
+            "Plan request failed. Server diagnostics:\n{}",
+            server.stop_with_logs()
+        )
+    })
+}
+fn checked_reuse_apply(
+    server: &mut TestServer,
+    client: &Client,
+    id: &str,
+    accepted: &[&str],
+) -> reqwest::blocking::Response {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        apply_plan(&server.base_url, client, id, accepted)
+    }))
+    .unwrap_or_else(|_| {
+        panic!(
+            "Apply request failed. Server diagnostics:\n{}",
+            server.stop_with_logs()
+        )
+    })
+}

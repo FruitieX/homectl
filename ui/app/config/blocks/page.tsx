@@ -1,5 +1,6 @@
 import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, ChevronRight } from 'lucide-react';
+import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { useBlocks } from '@/hooks/useConfig';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { ConfigPageHeader } from '../page-header';
@@ -7,6 +8,7 @@ import { Button } from '@/ui/primitives/button';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { Skeleton } from '@/ui/primitives/skeleton';
 export default function BlocksPage() {
+  useAssistantPageContext({ kind: 'block' });
   const api = useBlocks();
   const [params, setParams] = useSearchParams();
   const q = params.get('q') ?? '';

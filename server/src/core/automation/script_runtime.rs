@@ -887,6 +887,82 @@ fn fnv1a(text: &str) -> u64 {
     hash
 }
 
+impl ScriptExecution {
+    pub fn take_native_plan(&mut self, request_id: u64) -> Option<super::plan::RoutinePlan> {
+        self.pending_native_plans.remove(&request_id)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn prepare_native_script_blocks(
+        &mut self,
+        plan: super::plan::RoutinePlan,
+        mode: ExecutionMode,
+        frame: &FrameContext<'_>,
+        intents: &super::plan::IntentTracker,
+        frame_id: EventId,
+        origin: EventOrigin,
+        causation: EventCausation,
+        now_ms: i64,
+        triggering_device: Option<DeviceKey>,
+    ) -> Result<PreparedScriptRun, String> {
+        if self.pending_native_plans.len() >= 64 {
+            return Err("too many pending routine script runs".into());
+        }
+        let owner = ScriptOwnerId::routine(plan.routine_id.0.clone());
+        let mut contexts = Vec::new();
+        let mut source = String::from("const __actions = []; const __memory = Object.assign(Object.create(null), (ctx.state.memory || {}).__homectl_script_steps || {});\n");
+        for step in &plan.steps {
+            let super::plan::PlannedStepBody::Script { spec } = &step.body else {
+                continue;
+            };
+            let mut context = self
+                .build_handler_context(&owner, spec, frame, frame_id, origin, causation, now_ms)?;
+            let id = serde_json::to_string(&step.action_id.0).expect("node id JSON");
+            context["state"]["memory"] =
+                context["state"]["memory"]["__homectl_script_steps"][&step.action_id.0].clone();
+            let index = contexts.len();
+            contexts.push(context);
+            source.push_str(&format!(r#"
+{{
+  const result = (function(ctx) {{
+{}
+  }})(ctx.blocks[{}]);
+  if (!result || !Array.isArray(result.actions) || Object.keys(result).some(k => k !== 'actions' && k !== 'next_state')) throw new Error('Invalid result for script block ' + {});
+  __actions.push({{ action: 'choose', id: {}, branches: [{{ id: {} + '/result', condition: {{kind:'literal', value:true}}, steps: result.actions.map((action, index) => Object.assign({{}}, action, {{id: {} + '/' + index}})) }}] }});
+  if (result.next_state != null) __memory[{}] = result.next_state;
+}}
+"#, spec.source_body, index, id, id, id, id, id));
+        }
+        source.push_str(
+            "return { actions: __actions, next_state: { __homectl_script_steps: __memory } };\n",
+        );
+        let combined = ScriptSpec {
+            api_version: 1,
+            source_body: source,
+            functions: Vec::new(),
+            inputs: BTreeMap::new(),
+            declarations: Vec::new(),
+            limits_profile: "default".into(),
+        };
+        let mut run = self.prepare_handler_invocation(
+            &plan.routine_id,
+            plan.definition_revision,
+            &combined,
+            mode,
+            frame,
+            intents,
+            frame_id,
+            origin,
+            causation,
+            now_ms,
+            triggering_device,
+        )?;
+        run.context["blocks"] = Value::Array(contexts);
+        self.pending_native_plans.insert(run.token.request_id, plan);
+        Ok(run)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -1551,81 +1627,5 @@ mod tests {
             &BTreeMap::new(),
         );
         assert_eq!(scripts.coordinator().owner_kind(&owner), None);
-    }
-}
-
-impl ScriptExecution {
-    pub fn take_native_plan(&mut self, request_id: u64) -> Option<super::plan::RoutinePlan> {
-        self.pending_native_plans.remove(&request_id)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub fn prepare_native_script_blocks(
-        &mut self,
-        plan: super::plan::RoutinePlan,
-        mode: ExecutionMode,
-        frame: &FrameContext<'_>,
-        intents: &super::plan::IntentTracker,
-        frame_id: EventId,
-        origin: EventOrigin,
-        causation: EventCausation,
-        now_ms: i64,
-        triggering_device: Option<DeviceKey>,
-    ) -> Result<PreparedScriptRun, String> {
-        if self.pending_native_plans.len() >= 64 {
-            return Err("too many pending routine script runs".into());
-        }
-        let owner = ScriptOwnerId::routine(plan.routine_id.0.clone());
-        let mut contexts = Vec::new();
-        let mut source = String::from("const __actions = []; const __memory = Object.assign(Object.create(null), (ctx.state.memory || {}).__homectl_script_steps || {});\n");
-        for step in &plan.steps {
-            let super::plan::PlannedStepBody::Script { spec } = &step.body else {
-                continue;
-            };
-            let mut context = self
-                .build_handler_context(&owner, spec, frame, frame_id, origin, causation, now_ms)?;
-            let id = serde_json::to_string(&step.action_id.0).expect("node id JSON");
-            context["state"]["memory"] =
-                context["state"]["memory"]["__homectl_script_steps"][&step.action_id.0].clone();
-            let index = contexts.len();
-            contexts.push(context);
-            source.push_str(&format!(r#"
-{{
-  const result = (function(ctx) {{
-{}
-  }})(ctx.blocks[{}]);
-  if (!result || !Array.isArray(result.actions) || Object.keys(result).some(k => k !== 'actions' && k !== 'next_state')) throw new Error('Invalid result for script block ' + {});
-  __actions.push({{ action: 'choose', id: {}, branches: [{{ id: {} + '/result', condition: {{kind:'literal', value:true}}, steps: result.actions.map((action, index) => Object.assign({{}}, action, {{id: {} + '/' + index}})) }}] }});
-  if (result.next_state != null) __memory[{}] = result.next_state;
-}}
-"#, spec.source_body, index, id, id, id, id, id));
-        }
-        source.push_str(
-            "return { actions: __actions, next_state: { __homectl_script_steps: __memory } };\n",
-        );
-        let combined = ScriptSpec {
-            api_version: 1,
-            source_body: source,
-            functions: Vec::new(),
-            inputs: BTreeMap::new(),
-            declarations: Vec::new(),
-            limits_profile: "default".into(),
-        };
-        let mut run = self.prepare_handler_invocation(
-            &plan.routine_id,
-            plan.definition_revision,
-            &combined,
-            mode,
-            frame,
-            intents,
-            frame_id,
-            origin,
-            causation,
-            now_ms,
-            triggering_device,
-        )?;
-        run.context["blocks"] = Value::Array(contexts);
-        self.pending_native_plans.insert(run.token.request_id, plan);
-        Ok(run)
     }
 }

@@ -376,3 +376,47 @@ test('upsertAssistantAttachment replaces matching kind/id pairs', () => {
     [{ ...routine, label: 'A2' }, scene],
   );
 });
+
+test('reusable block review shows authoring fields and ignores server revisions', () => {
+  const operation: AssistantOperation = {
+    opId: 'block-change',
+    op: 'update',
+    kind: 'block',
+    targetId: 'scale',
+    label: 'Scale',
+    before: {
+      id: 'scale',
+      name: 'Scale',
+      revision: 1,
+      body: { kind: 'javascript' },
+      inputs: {},
+    },
+    after: {
+      id: 'scale',
+      name: 'Scale',
+      revision: 2,
+      body: {
+        kind: 'javascript',
+        spec: { source_body: 'return inputs.value * 2;' },
+      },
+      inputs: { value: { kind: { kind: 'number' }, label: 'Value' } },
+    },
+  };
+  assert.equal(operationTarget(operation)?.kind, 'block');
+  assert.deepEqual(
+    operationFieldChanges(operation).map((field) => field.label),
+    ['Definition', 'Typed inputs'],
+  );
+  assert.equal(
+    operationChangeSummary(operation),
+    'Change Definition and Typed inputs',
+  );
+  assert.deepEqual(
+    upsertAssistantAttachment([], { kind: 'block', id: 'scale' }),
+    [{ kind: 'block', id: 'scale' }],
+  );
+});
+
+test('computed-helper review labels computation explicitly', () => {
+  assert.equal(assistantFieldLabel('helper', 'compute'), 'Computation');
+});

@@ -3,12 +3,4 @@
 /**
  * Entity kinds the assistant can plan operations for.
  */
-export type AssistantEntityKind =
-  | 'routine'
-  | 'scene'
-  | 'group'
-  | 'device'
-  | 'floorplan'
-  | 'integration'
-  | 'helper'
-  | 'computed_source';
+export type AssistantEntityKind = "routine" | "scene" | "group" | "device" | "floorplan" | "integration" | "helper" | "computed_source" | "block";

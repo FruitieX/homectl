@@ -58,6 +58,7 @@ use crate::types::assistant::{
     AssistantSearchResult, AssistantThread, AssistantThreadOutcomeRequest, AssistantThreadProposal,
     AssistantUsage,
 };
+use crate::types::automation_block::AutomationBlock;
 use crate::types::automation_source::SourceDefinition;
 use crate::types::automation_value::HelperDefinition;
 use crate::types::device::{Device, DeviceData, DeviceKey, DeviceRef};
@@ -1075,6 +1076,7 @@ fn build_catalog(snapshot: &RuntimeSnapshot, configured_timezone: Option<&str>) 
                 "name": device_label(snapshot, &key.to_string(), &device.name),
                 "kind": "sensor",
                 "state": sensor,
+                "sensorConfiguration": snapshot.runtime_config.device_sensor_configs.iter().find(|row|row.device_ref == key.to_string()),
             }),
             DeviceData::Controllable(controllable) => json!({
                 "deviceRef": device_ref,
@@ -1103,6 +1105,8 @@ fn build_catalog(snapshot: &RuntimeSnapshot, configured_timezone: Option<&str>) 
                 "id": group.id,
                 "name": group.name,
                 "hidden": group.hidden,
+                "devices": group.devices,
+                "linked_groups": group.linked_groups,
             })
         })
         .collect();
@@ -1120,6 +1124,28 @@ fn build_catalog(snapshot: &RuntimeSnapshot, configured_timezone: Option<&str>) 
         })
         .collect();
 
+    let mut body_budget = 32 * 1024;
+    let blocks: Vec<Value> = snapshot
+        .runtime_config
+        .blocks
+        .iter()
+        .map(|block| {
+            let mut entry = json!({"id":block.id,"name":block.name,"description":block.description,
+            "kind":block.kind,"inputs":block.inputs,"revision":block.revision,
+            "implementation":if block.body["kind"] == "javascript" {"javascript"} else {"visual"},
+            "output":block.body.get("output"),"functions":block.body.pointer("/spec/functions")});
+            let bytes = serde_json::to_vec(&block.body)
+                .map(|body| body.len())
+                .unwrap_or(usize::MAX);
+            if bytes <= 8 * 1024 && bytes <= body_budget {
+                entry["body"] = block.body.clone();
+                body_budget -= bytes;
+            } else {
+                entry["bodyOmitted"] = json!(true);
+            }
+            entry
+        })
+        .collect();
     let helpers: Vec<Value> = snapshot
         .runtime_config
         .helpers
@@ -1130,6 +1156,10 @@ fn build_catalog(snapshot: &RuntimeSnapshot, configured_timezone: Option<&str>) 
                 "name": helper.name,
                 "kind": helper.kind,
                 "initialValue": helper.initial_value,
+                "readOnly": helper.compute.is_some(),
+                "compute": helper.compute,
+                "runtime": snapshot.helper_statuses.iter().find(|status|status.id == helper.id)
+                    .map(|status|json!({"value":status.value,"revision":status.revision,"compute_status":status.compute_status})),
             })
         })
         .collect();
@@ -1174,6 +1204,7 @@ fn build_catalog(snapshot: &RuntimeSnapshot, configured_timezone: Option<&str>) 
             "groups": groups,
             "scenes": scenes,
             "helpers": helpers,
+            "blocks": blocks,
             "sources": sources,
             "routines": routines,
         }),
@@ -1235,57 +1266,7 @@ fn truncate(value: &str, max_chars: usize) -> String {
 }
 
 /// Shared v2 schema reference for the routine draft and plan prompts.
-const ROUTINE_DEFINITION_REFERENCE: &str = r#"RoutineDefinitionV2 shape:
-{
-  "triggers": [ ... ],              // required, 1..16
-  "condition": { ... },             // optional, defaults to {"kind":"literal","value":true}
-  "program": { ... },               // required
-  "execution": { ... }              // optional, defaults to {"mode":"queued","max_actions":16}
-}
-
-Trigger kinds (each has "id"):
-- {"kind":"report","id":"t1","device":DEVICE_REF}                            // fires on every device report pulse
-- {"kind":"state_change","id":"t1","device":DEVICE_REF,"mode":"transition"}  // "transition" (default) or "level"
-- {"kind":"predicate_transition","id":"t1","predicate":CONDITION}            // fires when CONDITION turns true
-- {"kind":"predicate_for","id":"t1","predicate":CONDITION,"duration_ms":300000}
-- {"kind":"schedule","id":"t1","schedule":{"cron":"0 0 7 * * *","timezone":"Europe/Helsinki"}}
-- {"kind":"timer_fired","id":"t1","timer":"TIMER_ID"}
-- {"kind":"startup","id":"t1"}                                               // server start seeding
-- {"kind":"manual","id":"t1"}                                                // only explicit invocation
-
-Condition kinds:
-- {"kind":"literal","value":true}
-- {"kind":"all","conditions":[CONDITION, ...]}
-- {"kind":"any","conditions":[CONDITION, ...]}
-- {"kind":"not","condition":CONDITION}
-- {"kind":"comparison","source":SOURCE,"operator":"eq","value":true}
-  operators: eq, ne, gt, gte, lt, lte, contains, starts_with, exists, truthy, regex
-- {"kind":"group","group_id":"GROUP_ID","quantifier":"any","power":true}
-  quantifiers: all, any, none, partial; optionally add "scene":"SCENE_ID"
-
-Value sources:
-- {"kind":"device","device":DEVICE_REF,"path":"/value"}   // sensor value
-- {"kind":"device","device":DEVICE_REF,"path":"/power"}   // controllable intent
-- {"kind":"helper","helper":"HELPER_ID"}
-- {"kind":"computed_source","source":"SOURCE_ID","path":"/value"}
-
-Native steps (each has "id"; program is {"kind":"native","steps":[...]}):
-- {"action":"activate_scene","id":"a1","scene_id":"SCENE_ID","targets":TARGETS,"transition_ms":500}
-- {"action":"cycle_scenes","id":"a1","scenes":[{"scene_id":"SCENE_ID"}],"nowrap":false}
-- {"action":"set_power","id":"a1","device":DEVICE_REF,"power":true}
-- {"action":"dim","id":"a1","targets":TARGETS,"step":-1.0}                    // step in -1.0..1.0
-- {"action":"randomize_color","id":"a1","targets":TARGETS,"transition_ms":250}
-- {"action":"choose","id":"a1","branches":[{"id":"b1","condition":CONDITION,"steps":[ ... ]}]}
-- {"action":"schedule_timer","id":"a1","timer":"TIMER_ID","delay_ms":300000}
-- {"action":"replace_timer","id":"a1","timer":"TIMER_ID","delay_ms":300000}
-- {"action":"cancel_timer","id":"a1","timer":"TIMER_ID"}
-- {"action":"set_helper","id":"a1","helper":"HELPER_ID","value":true}
-- {"action":"invoke_routine","id":"a1","routine_id":"ROUTINE_ID","mode":"fire_and_forget"}
-
-TARGETS: {"devices":[DEVICE_REF, ...],"groups":["GROUP_ID", ...]}
-DEVICE_REF: {"integration_id":"...","device_id":"..."}  // copy verbatim from the catalog
-
-Script programs (last resort): {"kind":"script","spec":{"api_version":1,"source_body":"return [ ... ]","declarations":[{"kind":"device","device":DEVICE_REF}]}}"#;
+const ROUTINE_DEFINITION_REFERENCE: &str = include_str!("assistant-automation-reference.md");
 
 fn system_prompt(catalog_json: &str) -> String {
     format!(
@@ -1295,7 +1276,7 @@ Respond with a single JSON object and nothing else:
 {{"name": "<short routine name>", "definition": <RoutineDefinitionV2>, "notes": "<optional assumptions>"}}
 
 Rules:
-- Only reference entities that appear in the CATALOG below. Never invent device ids, groups, scenes, helpers, sources, or routine ids. If the request needs an entity that does not exist, pick the closest catalog entity and explain the substitution in "notes".
+- Only reference entities that appear in the CATALOG below. Never invent device ids, groups, scenes, helpers, sources, or routine ids. If a required entity is missing, explain it in "notes"; never silently substitute a different device or behavior. This endpoint drafts one routine only; new blocks/helpers require a reviewed configuration plan.
 - Every node id ("id" on triggers, steps, and branches) must be a unique short string within the routine, e.g. "t1", "a1".
 - Prefer native programs. Only use a script program when the request cannot be expressed natively.
 - Schedules use six-field cron: "second minute hour day-of-month month day-of-week" and should include the timezone from the catalog.
@@ -1858,6 +1839,22 @@ fn kind_entities(
                 )
             })
             .collect(),
+        AssistantEntityKind::Block => snapshot
+            .runtime_config
+            .blocks
+            .iter()
+            .map(|block| {
+                (
+                    block.id.clone(),
+                    block.name.clone(),
+                    format!(
+                        "{} block · {}",
+                        serde_json::to_value(block.kind).unwrap().as_str().unwrap(),
+                        block.description
+                    ),
+                )
+            })
+            .collect(),
         AssistantEntityKind::Helper => snapshot
             .runtime_config
             .helpers
@@ -1866,7 +1863,15 @@ fn kind_entities(
                 (
                     helper.id.0.clone(),
                     helper.name.clone(),
-                    format!("{} helper", helper.kind.code()),
+                    format!(
+                        "{} {}helper",
+                        helper.kind.code(),
+                        if helper.compute.is_some() {
+                            "computed "
+                        } else {
+                            ""
+                        }
+                    ),
                 )
             })
             .collect(),
@@ -3222,11 +3227,12 @@ fn operation_sort_key(operation: &AssistantOperation, index: usize) -> (u8, u8, 
         AssistantEntityKind::Integration => 0,
         AssistantEntityKind::Floorplan => 1,
         AssistantEntityKind::Device => 2,
-        AssistantEntityKind::Helper => 3,
-        AssistantEntityKind::ComputedSource => 4,
-        AssistantEntityKind::Group => 5,
-        AssistantEntityKind::Scene => 6,
-        AssistantEntityKind::Routine => 7,
+        AssistantEntityKind::Block => 3,
+        AssistantEntityKind::Helper => 4,
+        AssistantEntityKind::ComputedSource => 5,
+        AssistantEntityKind::Group => 6,
+        AssistantEntityKind::Scene => 7,
+        AssistantEntityKind::Routine => 8,
     };
     let phase = match operation.op {
         AssistantOpKind::Create => 0,
@@ -3234,11 +3240,79 @@ fn operation_sort_key(operation: &AssistantOperation, index: usize) -> (u8, u8, 
         AssistantOpKind::Delete => 2,
     };
     let rank = if operation.op == AssistantOpKind::Delete {
-        7 - rank
+        8 - rank
     } else {
         rank
     };
     (phase, rank, index)
+}
+
+/// Dependency order within and across entity kinds, including functions imported
+/// by blocks and computed-helper dependencies. Never add unaccepted operations.
+fn order_plan_operations(
+    mut pending: Vec<(usize, AssistantOperation)>,
+    sort_phases: bool,
+) -> Result<Vec<(usize, AssistantOperation)>, String> {
+    fn references(body: &Value, kind: AssistantEntityKind, id: &str) -> bool {
+        if kind == AssistantEntityKind::Block {
+            return automation::blocks::references(body, id);
+        }
+        match body {
+            Value::String(text) => {
+                text == id
+                    || (kind == AssistantEntityKind::ComputedSource
+                        && text == &format!("computed/{id}"))
+            }
+            Value::Array(items) => items.iter().any(|body| references(body, kind, id)),
+            Value::Object(map) => {
+                map.contains_key(id)
+                    || map.iter().any(|(key, body)| {
+                        !matches!(
+                            key.as_str(),
+                            "id" | "name" | "label" | "description" | "source_body"
+                        ) && references(body, kind, id)
+                    })
+            }
+            _ => false,
+        }
+    }
+    fn depends_on(operation: &AssistantOperation, dependency: &AssistantOperation) -> bool {
+        let (body, target) = if operation.op == AssistantOpKind::Delete
+            && dependency.op == AssistantOpKind::Delete
+        {
+            (dependency.before.as_ref(), operation_target(operation).ok())
+        } else if operation.op != AssistantOpKind::Delete
+            && dependency.op != AssistantOpKind::Delete
+        {
+            (
+                operation.after.as_ref(),
+                dependency
+                    .target_id
+                    .clone()
+                    .or_else(|| dependency.after.as_ref().and_then(operation_entity_id)),
+            )
+        } else {
+            return false;
+        };
+        let kind = if operation.op == AssistantOpKind::Delete {
+            operation.kind
+        } else {
+            dependency.kind
+        };
+        body.zip(target)
+            .is_some_and(|(body, id)| references(body, kind, &id))
+    }
+    if sort_phases {
+        pending.sort_by_key(|(index, operation)| operation_sort_key(operation, *index));
+    }
+    let mut ordered = Vec::with_capacity(pending.len());
+    while !pending.is_empty() {
+        let next = pending.iter().enumerate().position(|(index,(_, operation))| {
+            !pending.iter().enumerate().any(|(other,(_,dependency))|index != other && depends_on(operation,dependency))
+        }).ok_or_else(||"Plan operations contain a dependency cycle. Split conflicting changes or remove the cycle.".to_string())?;
+        ordered.push(pending.remove(next));
+    }
+    Ok(ordered)
 }
 
 async fn apply_assistant_plan(
@@ -3276,7 +3350,10 @@ async fn apply_assistant_plan(
             StatusCode::BAD_REQUEST,
         ));
     }
-    selected.sort_by_key(|(index, operation)| operation_sort_key(operation, *index));
+    selected = match order_plan_operations(selected, true) {
+        Ok(operations) => operations,
+        Err(error) => return Ok(error_response(&error, StatusCode::BAD_REQUEST)),
+    };
 
     // The plan stays in the store: applying the same proposal again is a
     // supported action, and every operation is re-validated against the live
@@ -3290,11 +3367,10 @@ async fn apply_assistant_plan(
     // Re-validate against the live snapshot: entities may have changed since
     // the plan was produced. Per-op failures are reported in the response
     // instead of aborting the whole apply.
-    let live = snapshot.load();
-    let validation = PlanValidation::new(&live, catalog_from_snapshot_export(&live));
-
     let mut results = Vec::with_capacity(selected.len());
     for (_, operation) in selected {
+        let live = snapshot.load();
+        let validation = PlanValidation::new(&live, catalog_from_snapshot_export(&live));
         let outcome =
             apply_plan_operation(&handle, &live, &_write_guard, &validation, &operation).await;
         results.push(AssistantOperationResult {
@@ -3317,6 +3393,17 @@ async fn apply_plan_operation(
     validation: &PlanValidation<'_>,
     operation: &AssistantOperation,
 ) -> Result<(), String> {
+    if operation.kind == AssistantEntityKind::Block
+        && operation.op != AssistantOpKind::Create
+        && operation.before
+            != entity_snapshot(
+                live,
+                operation.kind,
+                operation.target_id.as_deref().unwrap_or_default(),
+            )
+    {
+        return Err("This block changed since the plan was reviewed. Request a new plan.".into());
+    }
     let provider = ProviderOperation {
         op: operation.op,
         kind: operation.kind,
@@ -3367,6 +3454,8 @@ async fn apply_create(
     operation: &AssistantOperation,
 ) -> Result<(), String> {
     match operation.kind {
+        AssistantEntityKind::Block => write_assistant_block(handle, operation).await,
+
         AssistantEntityKind::Group => {
             let group: GroupRow = parse_validated_body(operation)?;
             write_group(handle, group.clone()).await?;
@@ -3440,6 +3529,8 @@ async fn apply_update(
     operation: &AssistantOperation,
 ) -> Result<(), String> {
     match operation.kind {
+        AssistantEntityKind::Block => write_assistant_block(handle, operation).await,
+
         AssistantEntityKind::Group => {
             let group: GroupRow = parse_validated_body(operation)?;
             write_group(handle, group.clone()).await?;
@@ -3575,6 +3666,20 @@ async fn apply_delete(
 ) -> Result<(), String> {
     let target_id = operation_target(operation)?;
     match operation.kind {
+        AssistantEntityKind::Block => {
+            handle
+                .mutate(move |state| {
+                    Box::pin(async move { super::blocks::remove_block(state, target_id.clone()) })
+                })
+                .await
+                .map_err(|e| e.to_string())?
+                .map_err(|(_, message)| message)?;
+            config_queries::db_delete_block(&operation_target(operation)?)
+                .await
+                .map(|_| ())
+                .map_err(persisted)
+        }
+
         AssistantEntityKind::Group => {
             if !delete_group_state(handle, target_id.clone()).await? {
                 return Err(format!("group '{target_id}' no longer exists"));
@@ -3670,6 +3775,35 @@ async fn apply_delete(
             }
         }
     }
+}
+
+async fn write_assistant_block(
+    handle: &StateHandle,
+    operation: &AssistantOperation,
+) -> Result<(), String> {
+    let block: AutomationBlock = parse_validated_body(operation)?;
+    let expected = operation
+        .before
+        .clone()
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    let create_only = operation.op == AssistantOpKind::Create;
+    let (block, routines, helpers, sources) = handle
+        .mutate(move |state| {
+            Box::pin(async move { super::blocks::write_block(state, block, expected, create_only) })
+        })
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|(_, body)| {
+            body["error"]
+                .as_str()
+                .unwrap_or("Invalid block")
+                .to_string()
+        })?;
+    config_queries::db_save_block_change(&block, &routines, &helpers, &sources)
+        .await
+        .map_err(persisted)
 }
 
 async fn write_group(handle: &StateHandle, group: GroupRow) -> Result<(), String> {
@@ -3949,10 +4083,33 @@ fn build_plan_context(
         }
     }
 
+    let mut match_budget = 64 * 1024;
+    let matches: Vec<Value> = search_prompt(snapshot, prompt)
+        .into_iter()
+        .map(|matched| {
+            let snapshot = entity_snapshot(snapshot, matched.kind, &matched.id);
+            let mut value = serde_json::to_value(matched).unwrap_or_default();
+            if let Some(snapshot) = snapshot {
+                let bytes = serde_json::to_vec(&snapshot)
+                    .map(|body| body.len())
+                    .unwrap_or(usize::MAX);
+                if bytes <= 16 * 1024 && bytes <= match_budget {
+                    value["snapshot"] = snapshot;
+                    match_budget -= bytes;
+                } else {
+                    value["snapshotOmitted"] = json!(true);
+                }
+            }
+            value
+        })
+        .collect();
+    let timezone = setting_source(&snapshot.runtime_config.widget_settings)
+        .string("timezone", "HOMECTL_ASSISTANT_TIMEZONE");
     Ok(json!({
         "attachments": attached,
-        "matches": search_prompt(snapshot, prompt),
+        "matches": matches,
         "devices": build_context_devices(snapshot),
+        "automation_catalog": build_catalog(snapshot, timezone.as_deref()).value,
         "live_state": build_live_state(
             snapshot,
             attachments,
@@ -4209,6 +4366,12 @@ fn entity_snapshot(
             redact_integration_secrets(&mut value, &row.plugin);
             Some(value)
         }
+        AssistantEntityKind::Block => snapshot
+            .runtime_config
+            .blocks
+            .iter()
+            .find(|block| block.id == id)
+            .and_then(|block| serde_json::to_value(block).ok()),
         AssistantEntityKind::Helper => snapshot
             .runtime_config
             .helpers
@@ -4299,13 +4462,15 @@ pub(super) fn redact_integration_secrets(value: &mut Value, plugin: &str) {
 
 fn plan_system_prompt(context_json: &str) -> String {
     format!(
-        r#"You are the homectl configuration assistant. You translate a plain-language request into a reviewed plan of configuration operations across routines, scenes, groups, devices, floorplans, integrations, helpers, and computed sources. Nothing is written until the user accepts the plan.
+        r#"You are the homectl configuration assistant. You translate a plain-language request into a reviewed plan of configuration operations across routines, scenes, groups, devices, floorplans, integrations, helpers, reusable blocks/functions, and computed sources. Nothing is written until the user accepts the plan.
 
 Respond with a single JSON object and nothing else:
-{{"summary": "<one or two sentences for review>", "operations": [{{"op": "create|update|delete", "kind": "routine|scene|group|device|floorplan|integration|helper|computed_source", "target_id": "<existing id; update/delete only>", "label": "<short review label>", "after": <final entity state>, "warnings": ["<optional warning>"]}}]}}
+{{"summary": "<one or two sentences for review>", "operations": [{{"op": "create|update|delete", "kind": "routine|scene|group|device|floorplan|integration|helper|computed_source|block", "target_id": "<existing id; update/delete only>", "label": "<short review label>", "after": <final entity state>, "warnings": ["<optional warning>"]}}]}}
 
 Rules:
-- Only reference entities that appear in CONTEXT. Never invent ids. Unknown target ids are rejected.
+- Reference existing entities in CONTEXT or entities explicitly created in this same plan. New entities need unique descriptive IDs; never invent existing target IDs. Put dependencies before callers: shared functions, blocks/helpers/sources, then routines. Unknown references and dependency cycles are rejected.
+- CONTEXT.automation_catalog lists reusable signatures, helper computations, scenes/groups and timezone even when they were not attached. Attached/matched entities contain full bodies. Reuse only entities that actually fit.
+- If essential behavior is ambiguous or a required physical device is missing, use an answer to ask a focused question instead of guessing an unrelated target.
 - CONTEXT.live_state holds current device values, configured integrations, and a bounded tail of recent server logs (oldest first). Consult it for questions about the current state or why something did or did not happen. It is read-only background and never a plan target.
 - create requires "after" with a new unique "id"; it must not include target_id.
 - update requires target_id plus an "after" patch; "after" is merged over the current entity, so include only the fields that change.
@@ -4363,16 +4528,21 @@ fn chat_system_prompt(context_json: &str) -> String {
         r#"You are the homectl assistant. Decide which single JSON response fits the request and include a top-level "kind" field:
 - {{"kind": "action", "summary": "<one short sentence>", "changes": [{{"device_key": "integration/device", "power": true, "brightness": 0.4, "color": {{"h": 320, "s": 0.8}}}}]}} for one-off light-state changes to devices listed under "controllable_devices". Omit fields you do not want to change; brightness is 0..1; color h is degrees and s is 0..1 and only allowed when the device's capabilities allow color; resolve room or group names to their member device keys. Never invent device keys.
 - {{"kind": "plan", ...}} for configuration changes, following the plan contract below.
-- {{"kind": "answer", "answer": "<concise markdown prose>"}} when the user asks a question, wants an explanation, or needs troubleshooting that does not require changing configuration. Ground every claim in CONTEXT: use live_state.devices for current values, live_state.integrations for connected systems, and live_state.recent_logs for what the server just did. If the logs do not show the answer, say what you can and cannot tell from the recent sample. Never claim to have changed anything; answers write nothing.
+- {{"kind": "answer", "answer": "<concise markdown prose>"}} when the user asks a question, wants an explanation, or needs troubleshooting that does not require changing configuration. Ground every claim in CONTEXT.config: use live_state.devices for current values, live_state.integrations for connected systems, and live_state.recent_logs for what the server just did. If the logs do not show the answer, say what you can and cannot tell from the recent sample. Never claim to have changed anything; answers write nothing.
 
 Always include "threadName": a short (2-5 word) title for this conversation, for example "Entryway motion lights".
 
 Prefer "answer" for questions and explanations. Use "action" or "plan" only when the user asks for a change to happen; nothing is written until the user applies.
 
-Use CONTEXT.live_state (current device values, integrations, recent server logs) to answer troubleshooting questions about the current state or recent behavior.
+Use CONTEXT.config.live_state (current device values, integrations, recent server logs) to answer troubleshooting questions about the current state or recent behavior.
 
 {PLAN_PROMPT}"#,
-        PLAN_PROMPT = plan_system_prompt(context_json),
+        PLAN_PROMPT = plan_system_prompt(context_json)
+            .replace("CONTEXT.live_state", "CONTEXT.config.live_state")
+            .replace(
+                "CONTEXT.automation_catalog",
+                "CONTEXT.config.automation_catalog"
+            ),
     )
 }
 
@@ -4475,6 +4645,7 @@ struct PlanValidation<'a> {
     created_ids: StdMutex<HashSet<String>>,
     staged_groups: StdMutex<HashSet<String>>,
     staged_scenes: StdMutex<HashSet<String>>,
+    staged_config: StdMutex<ConfigExport>,
 }
 
 impl<'a> PlanValidation<'a> {
@@ -4503,6 +4674,7 @@ impl<'a> PlanValidation<'a> {
             created_ids: StdMutex::new(HashSet::new()),
             staged_groups: StdMutex::new(HashSet::new()),
             staged_scenes: StdMutex::new(HashSet::new()),
+            staged_config: StdMutex::new((*snapshot.runtime_config).clone()),
         }
     }
 
@@ -4528,6 +4700,47 @@ impl<'a> PlanValidation<'a> {
 
     fn entity_snapshot(&self, kind: AssistantEntityKind, id: &str) -> Option<Value> {
         entity_snapshot(self.snapshot, kind, id)
+    }
+
+    fn candidate_config(
+        &self,
+        kind: AssistantEntityKind,
+        body: &Value,
+    ) -> Result<ConfigExport, String> {
+        let mut config = self
+            .staged_config
+            .lock()
+            .map_err(|_| "Configuration catalog unavailable")?
+            .clone();
+        macro_rules! upsert {
+            ($rows:ident, $ty:ty) => {{
+                let row: $ty = serde_json::from_value(body.clone()).map_err(|e| e.to_string())?;
+                config.$rows.retain(|old| old.id != row.id);
+                config.$rows.push(row);
+            }};
+        }
+        match kind {
+            AssistantEntityKind::Block => upsert!(blocks, AutomationBlock),
+            AssistantEntityKind::Helper => upsert!(helpers, HelperDefinition),
+            AssistantEntityKind::ComputedSource => upsert!(sources, SourceDefinition),
+            AssistantEntityKind::Routine => upsert!(routines, RoutineRow),
+            AssistantEntityKind::Group => upsert!(groups, GroupRow),
+            AssistantEntityKind::Scene => upsert!(scenes, SceneRow),
+            _ => {}
+        }
+        Ok(config)
+    }
+
+    fn validate_reuse_candidate(
+        &self,
+        kind: AssistantEntityKind,
+        body: &Value,
+        op_id: &str,
+    ) -> Result<(), String> {
+        let config = self.candidate_config(kind, body)?;
+        let catalog = ConfigCatalog::new(self.snapshot.devices.0.keys().cloned(), &config);
+        super::validate_routine_catalog(&config, &catalog)
+            .map_err(|error| format!("{op_id}: {error}"))
     }
 
     fn build_operation(
@@ -4565,7 +4778,7 @@ impl<'a> PlanValidation<'a> {
                 if !self
                     .created_ids
                     .lock()
-                    .map(|mut ids| ids.insert(id.clone()))
+                    .map(|mut ids| ids.insert(format!("{}:{id}", operation.kind.code())))
                     .unwrap_or(true)
                 {
                     return Err(format!(
@@ -4587,9 +4800,6 @@ impl<'a> PlanValidation<'a> {
                         }
                     }
                     _ => {}
-                }
-                if let Ok(mut catalog) = self.catalog.lock() {
-                    catalog.stage_created(operation.kind.code(), &id, &after);
                 }
                 (None, None, Some(after))
             }
@@ -4635,7 +4845,36 @@ impl<'a> PlanValidation<'a> {
                     "Deleting {} '{target_id}' is permanent.",
                     operation.kind.code()
                 ));
-                warnings.extend(self.reference_warnings(operation.kind, &target_id));
+                let references = self.reference_warnings(operation.kind, &target_id);
+                if operation.kind == AssistantEntityKind::Block && !references.is_empty() {
+                    return Err(format!(
+                        "{op_id}: block '{target_id}' is in use; remove its callers first"
+                    ));
+                }
+                warnings.extend(references);
+                if let Ok(mut config) = self.staged_config.lock() {
+                    match operation.kind {
+                        AssistantEntityKind::Block => {
+                            config.blocks.retain(|row| row.id != target_id);
+                        }
+                        AssistantEntityKind::Routine => {
+                            config.routines.retain(|row| row.id != target_id);
+                        }
+                        AssistantEntityKind::Helper => {
+                            config.helpers.retain(|row| row.id.0 != target_id);
+                        }
+                        AssistantEntityKind::ComputedSource => {
+                            config.sources.retain(|row| row.id.0 != target_id);
+                        }
+                        _ => {}
+                    }
+                    *self
+                        .catalog
+                        .lock()
+                        .map_err(|_| "Routine catalog unavailable")? =
+                        ConfigCatalog::new(self.snapshot.devices.0.keys().cloned(), &config);
+                }
+
                 (Some(target_id), Some(before), None)
             }
         };
@@ -4653,6 +4892,20 @@ impl<'a> PlanValidation<'a> {
                     before.as_ref(),
                 )
             });
+
+        if let Some(body) = &after {
+            let config = self.candidate_config(operation.kind, body)?;
+            *self
+                .staged_config
+                .lock()
+                .map_err(|_| "Configuration catalog unavailable")? = config;
+            if let Some(id) = operation_entity_id(body) {
+                self.catalog
+                    .lock()
+                    .map_err(|_| "Routine catalog unavailable")?
+                    .stage_created(operation.kind.code(), &id, body);
+            }
+        }
 
         Ok(AssistantOperation {
             op_id,
@@ -4681,6 +4934,7 @@ impl<'a> PlanValidation<'a> {
             AssistantEntityKind::Device => self.validate_device(target_id, body, op_id),
             AssistantEntityKind::Floorplan => self.validate_floorplan(target_id, body, op_id),
             AssistantEntityKind::Integration => self.validate_integration(target_id, body, op_id),
+            AssistantEntityKind::Block => self.validate_block(target_id, body, op_id),
             AssistantEntityKind::Helper => self.validate_helper(target_id, body, op_id),
             AssistantEntityKind::ComputedSource => self.validate_source(target_id, body, op_id),
         }
@@ -5004,13 +5258,35 @@ impl<'a> PlanValidation<'a> {
             .map_err(|error| format!("{op_id}: integration body could not be normalized: {error}"))
     }
 
-    fn validate_helper(
+    fn validate_block(
         &self,
         target_id: Option<&str>,
         body: Value,
         op_id: &str,
     ) -> Result<Value, String> {
-        let definition: HelperDefinition = serde_json::from_value(body)
+        let mut block: AutomationBlock = serde_json::from_value(body)
+            .map_err(|error| format!("{op_id}: invalid block: {error}"))?;
+        validate_entity_id(&block.id).map_err(|error| format!("{op_id}: {error}"))?;
+        if target_id.is_some_and(|target| target != block.id) {
+            return Err(format!("{op_id}: block id does not match targetId"));
+        }
+        block.revision = 1;
+        let body = serde_json::to_value(block).map_err(|error| error.to_string())?;
+        self.validate_reuse_candidate(AssistantEntityKind::Block, &body, op_id)?;
+        Ok(body)
+    }
+
+    fn validate_helper(
+        &self,
+        target_id: Option<&str>,
+        mut body: Value,
+        op_id: &str,
+    ) -> Result<Value, String> {
+        // Server-owned computation revisions are optional in provider proposals.
+        if let Some(compute) = body.get_mut("compute").and_then(Value::as_object_mut) {
+            compute.insert("revision".into(), json!(1));
+        }
+        let mut definition: HelperDefinition = serde_json::from_value(body)
             .map_err(|error| format!("{op_id}: invalid helper body: {error}"))?;
         let id = definition.id.0.trim();
         if id.is_empty() {
@@ -5024,11 +5300,15 @@ impl<'a> PlanValidation<'a> {
                 ));
             }
         }
+        if let Some(compute) = &mut definition.compute {
+            compute.revision = 1;
+        }
         definition
             .validate()
             .map_err(|error| format!("{op_id}: invalid helper: {error}"))?;
-        serde_json::to_value(&definition)
-            .map_err(|error| format!("{op_id}: helper body could not be normalized: {error}"))
+        let body = serde_json::to_value(&definition).map_err(|error| error.to_string())?;
+        self.validate_reuse_candidate(AssistantEntityKind::Helper, &body, op_id)?;
+        Ok(body)
     }
 
     fn validate_source(
@@ -5055,9 +5335,9 @@ impl<'a> PlanValidation<'a> {
             .map_err(|error| format!("{op_id}: invalid computed source: {error}"))?;
         // Revisions are server-owned.
         source.revision = 1;
-        serde_json::to_value(&source).map_err(|error| {
-            format!("{op_id}: computed source body could not be normalized: {error}")
-        })
+        let body = serde_json::to_value(&source).map_err(|error| error.to_string())?;
+        self.validate_reuse_candidate(AssistantEntityKind::ComputedSource, &body, op_id)?;
+        Ok(body)
     }
 
     /// Approximate, deterministic in-use warnings for deletes. References are
@@ -5121,6 +5401,40 @@ impl<'a> PlanValidation<'a> {
                     .count();
                 groups + scenes
             }
+            AssistantEntityKind::Block => {
+                let config = self.staged_config.lock().unwrap();
+                config
+                    .blocks
+                    .iter()
+                    .filter(|block| {
+                        block.id != id && automation::blocks::references(&block.body, id)
+                    })
+                    .count()
+                    + config
+                        .routines
+                        .iter()
+                        .filter(|routine| {
+                            routine
+                                .definition_v2
+                                .as_ref()
+                                .is_some_and(|body| automation::blocks::references(body, id))
+                        })
+                        .count()
+                    + config
+                        .helpers
+                        .iter()
+                        .filter(|helper| {
+                            helper.compute.as_ref().is_some_and(|compute| {
+                                automation::blocks::references(&json!(compute.script), id)
+                            })
+                        })
+                        .count()
+                    + config
+                        .sources
+                        .iter()
+                        .filter(|source| automation::blocks::references(&json!(source.compute), id))
+                        .count()
+            }
             AssistantEntityKind::Helper | AssistantEntityKind::ComputedSource => {
                 self.routine_mentions(id)
             }
@@ -5163,9 +5477,50 @@ fn validate_plan_operations(
         .filter(|summary| !summary.is_empty());
     let validation = PlanValidation::new(snapshot, catalog);
 
-    let mut operations = Vec::with_capacity(provider.operations.len());
-    for (index, operation) in provider.operations.into_iter().enumerate() {
-        operations.push(validation.build_operation(format!("op-{}", index + 1), operation)?);
+    let pending: Vec<_> = provider
+        .operations
+        .into_iter()
+        .enumerate()
+        .map(|(index, operation)| {
+            (
+                index,
+                AssistantOperation {
+                    op_id: format!("op-{}", index + 1),
+                    op: operation.op,
+                    kind: operation.kind,
+                    target_id: operation.target_id,
+                    label: operation.label.unwrap_or_default(),
+                    before: None,
+                    after: operation.after,
+                    warnings: operation.warnings,
+                },
+            )
+        })
+        .collect();
+    // Delete ordering needs existing references; only used for ordering, not trusted validation.
+    let pending = pending
+        .into_iter()
+        .map(|(index, mut operation)| {
+            if operation.op == AssistantOpKind::Delete {
+                operation.before = operation
+                    .target_id
+                    .as_deref()
+                    .and_then(|id| entity_snapshot(snapshot, operation.kind, id));
+            }
+            (index, operation)
+        })
+        .collect();
+    let mut operations = Vec::new();
+    for (_, operation) in order_plan_operations(pending, false)? {
+        let provider = ProviderOperation {
+            op: operation.op,
+            kind: operation.kind,
+            target_id: operation.target_id,
+            label: Some(operation.label),
+            after: operation.after,
+            warnings: operation.warnings,
+        };
+        operations.push(validation.build_operation(operation.op_id, provider)?);
     }
 
     let summary = summary
@@ -6453,6 +6808,8 @@ mod tests {
         assert!(prompt.contains("\"kind\": \"action\""));
         assert!(prompt.contains("\"kind\": \"answer\""));
         assert!(prompt.contains("controllable_devices"));
+        assert!(prompt.contains("CONTEXT.config.automation_catalog"));
+        assert!(prompt.contains("CONTEXT.config.live_state"));
         assert!(prompt.contains("live_state"));
         assert!(prompt.contains("target_id"));
     }
@@ -6993,6 +7350,274 @@ mod tests {
             },
         })
         .unwrap()
+    }
+    fn reuse_provider_plan() -> Value {
+        serde_json::from_str(
+            &include_str!("../../../tests/fixtures/assistant-reuse-plan.json")
+                .replace("\"lamp\"", "\"sensor\""),
+        )
+        .unwrap()
+    }
+
+    fn reuse_export() -> ConfigExport {
+        let mut config = empty_export();
+        for operation in reuse_provider_plan()["operations"].as_array().unwrap() {
+            match operation["kind"].as_str().unwrap() {
+                "block" => config
+                    .blocks
+                    .push(serde_json::from_value(operation["after"].clone()).unwrap()),
+                "helper" => {
+                    let mut body = operation["after"].clone();
+                    body["compute"]["revision"] = json!(1);
+                    config.helpers.push(serde_json::from_value(body).unwrap());
+                }
+                "computed_source" => config
+                    .sources
+                    .push(serde_json::from_value(operation["after"].clone()).unwrap()),
+                "routine" => config
+                    .routines
+                    .push(serde_json::from_value(operation["after"].clone()).unwrap()),
+                _ => unreachable!(),
+            }
+        }
+        config
+    }
+
+    #[test]
+    fn assistant_validates_a_dependency_ordered_reuse_plan() {
+        let snapshot = snapshot_with_config_and_devices(empty_export(), vec![sensor_device()]);
+        let (_, operations) = validate_provider(&snapshot, reuse_provider_plan()).unwrap();
+        let ids: Vec<_> = operations
+            .iter()
+            .map(|op| op.after.as_ref().unwrap()["id"].as_str().unwrap())
+            .collect();
+        let caller = ids.iter().position(|id| *id == "reuse_routine").unwrap();
+        for dependency in ["dim_lights", "has_step", "computed_step"] {
+            assert!(ids.iter().position(|id| *id == dependency).unwrap() < caller);
+        }
+        let function = ids.iter().position(|id| *id == "scaled_step").unwrap();
+        assert!(function < ids.iter().position(|id| *id == "dim_lights").unwrap());
+        assert!(function < ids.iter().position(|id| *id == "computed_step").unwrap());
+        assert!(function < ids.iter().position(|id| *id == "profile").unwrap());
+        assert!(operations.iter().all(|op| op.before.is_none()));
+    }
+
+    #[test]
+    fn assistant_context_exposes_reuse_and_read_only_helper_contracts() {
+        let mut config = reuse_export();
+        config
+            .widget_settings
+            .push(assistant_setting_row(json!({"timezone":"Europe/Helsinki"})));
+        let snapshot = snapshot_with_config_and_devices(config, vec![sensor_device()]);
+        let context = build_plan_context(
+            &snapshot,
+            &[AssistantAttachment {
+                kind: AssistantEntityKind::Block,
+                id: Some("dim_lights".into()),
+                label: None,
+            }],
+            "reuse scaled step",
+        )
+        .unwrap();
+        assert_eq!(
+            context["attachments"][0]["snapshot"]["body"]["spec"]["functions"],
+            json!(["scaled_step"])
+        );
+        let catalog = &context["automation_catalog"];
+        assert_eq!(catalog["timezone"], "Europe/Helsinki");
+        assert_eq!(catalog["helpers"][0]["readOnly"], true);
+        assert_eq!(
+            catalog["helpers"][0]["compute"]["script"]["functions"],
+            json!(["scaled_step"])
+        );
+        assert!(catalog["blocks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|block| block["id"] == "scaled_step" && block["output"]["kind"] == "number"));
+        assert_eq!(
+            search_snapshot(&snapshot, AssistantEntityKind::Block, "scaled_step", 10)[0].id,
+            "scaled_step"
+        );
+        for prompt in [
+            system_prompt("{}"),
+            plan_system_prompt("{}"),
+            chat_system_prompt("{}"),
+        ] {
+            assert!(prompt.contains("call_block") && prompt.contains("run_script"));
+            assert!(prompt.contains("api.functions.call") && prompt.contains("api.unknown"));
+            assert!(
+                prompt.contains("Computed helpers are read-only")
+                    && prompt.contains("known false -> known true")
+            );
+            assert!(!prompt.contains("return [ ... ]"));
+        }
+    }
+
+    #[test]
+    fn assistant_authoring_examples_match_the_compiler_and_worker() {
+        use crate::types::automation_definition::ScriptSpec;
+        let mut config = empty_export();
+        for line in ROUTINE_DEFINITION_REFERENCE.lines().filter(|line| {
+            line.starts_with("{\"id\":\"scaled_step\"") || line.starts_with("{\"id\":\"dim_room\"")
+        }) {
+            config.blocks.push(serde_json::from_str(line).unwrap());
+        }
+        assert_eq!(config.blocks.len(), 2);
+        let catalog = ConfigCatalog::from_export(&config)
+            .with_group(crate::types::group::GroupId("hall".into()));
+        automation::blocks::validate_catalog(&catalog).unwrap();
+        let definition = json!({"triggers":[{"kind":"manual","id":"start"}],"program":{"kind":"native","steps":[{"action":"call_block","id":"dim","block_id":"dim_room","inputs":{"room":"hall","step":0.2}}]}});
+        let compiled = automation::compile_definition_value(&definition, &catalog).unwrap();
+        let crate::types::automation_definition::Program::Native(program) =
+            compiled.normalized.program
+        else {
+            panic!()
+        };
+        let crate::types::automation_definition::NativeAction::RunScript { spec, .. } =
+            &program.steps[0]
+        else {
+            panic!()
+        };
+        let output = crate::core::js_worker::engine::execute_script(
+            &spec.source_body,
+            &json!({"inputs":spec.inputs}),
+            65536,
+        )
+        .unwrap();
+        assert_eq!(output["actions"][0]["step"], 0.4);
+        // The runtime action contract accepts these examples, not a bare array.
+        automation::parse_routine_handler_outcome(&output, automation::MAX_SCRIPT_STATE_BYTES)
+            .unwrap();
+        let function_spec:ScriptSpec=serde_json::from_value(json!({"api_version":1,"source_body":"return api.functions.call('scaled_step',{value:0.2});","functions":["scaled_step"]})).unwrap();
+        let resolved = automation::reuse::resolve_spec(&function_spec, &catalog).unwrap();
+        assert_eq!(
+            crate::core::js_worker::engine::execute_script(
+                &resolved.source_body,
+                &json!({}),
+                65536
+            )
+            .unwrap(),
+            json!(0.4)
+        );
+    }
+
+    #[test]
+    fn assistant_rejects_missing_functions_and_invalid_block_arguments() {
+        let snapshot = snapshot_with_config_and_devices(reuse_export(), vec![sensor_device()]);
+        let invalid = json!({"operations":[{"op":"create","kind":"helper","after":{"id":"broken","name":"Broken","kind":{"kind":"number"},"initial_value":0,"compute":{"script":{"api_version":1,"source_body":"return 0;","functions":["missing"]},"helpers":[],"enabled":true,"refresh_ms":60000}}}]});
+        assert!(validate_provider(&snapshot, invalid)
+            .unwrap_err()
+            .contains("missing"));
+        let mut plan = reuse_provider_plan();
+        let mut routine = plan["operations"][0]["after"].clone();
+        routine["id"] = json!("bad_inputs");
+        routine["definition_v2"]["program"]["steps"][0]["inputs"]["step"] = json!("not a number");
+        plan["operations"] = json!([{"op":"create","kind":"routine","after":routine}]);
+        assert!(validate_provider(&snapshot, plan)
+            .unwrap_err()
+            .contains("number"));
+    }
+
+    #[test]
+    fn assistant_rejects_cycles_writing_computed_helpers_and_script_edge_triggers() {
+        let snapshot = snapshot_with_config_and_devices(reuse_export(), vec![sensor_device()]);
+        let mut helper = json!({"id":"first","name":"First","kind":{"kind":"boolean"},"initial_value":false,"compute":{"script":{"api_version":1,"source_body":"return true;"},"helpers":["second"],"enabled":true,"refresh_ms":60000}});
+        let mut other = helper.clone();
+        other["id"] = json!("second");
+        other["compute"]["helpers"] = json!(["first"]);
+        assert!(validate_provider(&snapshot,json!({"operations":[{"op":"create","kind":"helper","after":helper},{"op":"create","kind":"helper","after":other}]})).unwrap_err().contains("cycle"));
+        helper = json!({"id":"writer","name":"Writer","definition_v2":{"triggers":[{"id":"manual","kind":"manual"}],"program":{"kind":"native","steps":[{"id":"write","action":"set_helper","helper":"computed_step","value":0.5}]}}});
+        assert!(validate_provider(
+            &snapshot,
+            json!({"operations":[{"op":"create","kind":"routine","after":helper}]})
+        )
+        .unwrap_err()
+        .contains("cannot be written"));
+        let mut definition = valid_definition();
+        definition["triggers"] = json!([{"id":"edge","kind":"predicate_transition","predicate":{"kind":"block","block_id":"has_step","inputs":{}}}]);
+        assert!(validate_provider(&snapshot,json!({"operations":[{"op":"create","kind":"routine","after":{"id":"bad_edge","name":"Bad edge","definition_v2":definition}}]})).is_err());
+    }
+
+    #[test]
+    fn assistant_blocks_in_use_cannot_be_deleted() {
+        let snapshot = snapshot_with_config_and_devices(reuse_export(), vec![sensor_device()]);
+        let error = validate_provider(
+            &snapshot,
+            json!({"operations":[{"op":"delete","kind":"block","target_id":"scaled_step"}]}),
+        )
+        .unwrap_err();
+        assert!(error.contains("in use"), "{error}");
+        let (_,operations)=validate_provider(&snapshot,json!({"operations":[{"op":"delete","kind":"block","target_id":"dim_lights"},{"op":"delete","kind":"routine","target_id":"reuse_routine"}]})).unwrap();
+        assert_eq!(operations[0].kind, AssistantEntityKind::Routine);
+    }
+    #[test]
+    fn authoring_reference_covers_current_discriminated_schema_variants() {
+        use crate::types::automation_definition::{
+            ConditionExpr, NativeAction, SceneSelection, ScriptDeclaration, TriggerSpec,
+            ValueSource,
+        };
+        use crate::types::automation_source::SourceCompute;
+        let tag = regex::Regex::new(r#""(?:action|kind)": "([^"]+)""#).unwrap();
+        for schema in [
+            <NativeAction as ts_rs::TS>::decl(&ts_rs::Config::default()),
+            <TriggerSpec as ts_rs::TS>::decl(&ts_rs::Config::default()),
+            <ConditionExpr as ts_rs::TS>::decl(&ts_rs::Config::default()),
+            <ValueSource as ts_rs::TS>::decl(&ts_rs::Config::default()),
+            <ScriptDeclaration as ts_rs::TS>::decl(&ts_rs::Config::default()),
+            <SourceCompute as ts_rs::TS>::decl(&ts_rs::Config::default()),
+            <SceneSelection as ts_rs::TS>::decl(&ts_rs::Config::default()),
+        ] {
+            let variants: Vec<_> = tag
+                .captures_iter(&schema)
+                .map(|capture| capture[1].to_string())
+                .collect();
+            assert!(!variants.is_empty(), "No tags found in schema: {schema}");
+            for variant in variants {
+                assert!(ROUTINE_DEFINITION_REFERENCE.contains(&variant),"Add '{variant}' to the assistant authoring reference when changing automation schemas");
+            }
+        }
+    }
+
+    #[test]
+    fn catalog_bounds_large_bodies_but_attached_blocks_keep_their_source() {
+        let mut config = reuse_export();
+        let block = config
+            .blocks
+            .iter_mut()
+            .find(|block| block.id == "scaled_step")
+            .unwrap();
+        block.body["spec"]["source_body"] = json!(format!(
+            "/* {} */ return inputs.value * inputs.factor;",
+            "x".repeat(9000)
+        ));
+        let snapshot = snapshot_with_config_and_devices(config, vec![sensor_device()]);
+        let context = build_plan_context(
+            &snapshot,
+            &[AssistantAttachment {
+                kind: AssistantEntityKind::Block,
+                id: Some("scaled_step".into()),
+                label: None,
+            }],
+            "scaled_step",
+        )
+        .unwrap();
+        let signature = context["automation_catalog"]["blocks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|block| block["id"] == "scaled_step")
+            .unwrap();
+        assert_eq!(signature["bodyOmitted"], true);
+        assert!(signature.get("body").is_none());
+        assert!(
+            context["attachments"][0]["snapshot"]["body"]["spec"]["source_body"]
+                .as_str()
+                .unwrap()
+                .len()
+                > 9000
+        );
+        assert_eq!(context["matches"][0]["snapshot"]["id"], "scaled_step");
     }
 }
 

@@ -1,5 +1,6 @@
 use super::*;
 use crate::core::automation::{self, blocks};
+use crate::core::state::AppState;
 use crate::types::automation_block::AutomationBlock;
 
 #[derive(Deserialize)]
@@ -53,65 +54,13 @@ async fn save_block(
         Ok(g) => g,
         Err(_) => return Ok(actor_unavailable()),
     };
-    let result=handle.mutate(move |state| Box::pin(async move {
-        let mut block=request.block;
-        let current=state.runtime_config.blocks.iter().find(|b| b.id==id);
-        if request.create_only && current.is_some() { return Err((StatusCode::CONFLICT,serde_json::json!({"success":false,"error":"This block ID is already in use."}))); }
-        if let Some(expected)=&request.expected {
-            match current {
-                None=>return Err((StatusCode::NOT_FOUND,serde_json::json!({"success":false,"error":"This block was deleted. Your draft is still here."}))),
-                Some(current) if current!=expected=>return Err((StatusCode::CONFLICT,serde_json::json!({"success":false,"error":"This block changed elsewhere.","current":current}))),
-                _=>{}
-            }
-        }
-        block.revision=current.map(|b| b.revision.saturating_add(1)).unwrap_or(1);
-        let mut config=state.runtime_config.clone();
-        config.blocks.retain(|b| b.id!=id);
-        config.blocks.push(block.clone());
-        let catalog=ConfigCatalog::new(state.devices.get_state().0.keys().cloned(),&config);
-        blocks::validate_catalog(&catalog).map_err(|e| (StatusCode::BAD_REQUEST,serde_json::json!({"success":false,"error":e.to_string()})))?;
-        // Resolve indirect users as well, so edits invalidate pending work and
-        // every caller is revalidated before the shared definition changes.
-        let mut affected=std::collections::HashSet::from([id]);
-        loop {
-            let before=affected.len();
-            for parent in &config.blocks {
-                if affected.iter().any(|id| blocks::references(&parent.body,id)) { affected.insert(parent.id.clone()); }
-            }
-            if affected.len()==before { break; }
-        }
-        let mut changed=Vec::new();
-        for routine in &mut config.routines {
-            if routine.definition_v2.as_ref().is_some_and(|v| affected.iter().any(|id| blocks::references(v,id))) {
-                if routine.enabled { automation::compile_row(routine,&catalog).map_err(|e| (StatusCode::BAD_REQUEST,serde_json::json!({"success":false,"error":format!("Routine '{}': {}",routine.name,e.summary())})))?; }
-                routine.revision=automation::next_revision(Some(routine));
-                changed.push(routine.clone());
-            }
-        }
-        automation::reuse::validate_helpers(&config,&catalog).map_err(|error|(StatusCode::BAD_REQUEST,serde_json::json!({"success":false,"error":error})))?;
-        let mut changed_helpers=Vec::new();
-        for helper in &mut config.helpers {
-            if let Some(compute)=&mut helper.compute {
-                if affected.iter().any(|id| blocks::references(&serde_json::to_value(&compute.script).unwrap_or_default(),id)) {
-                    compute.revision=compute.revision.saturating_add(1);changed_helpers.push(helper.clone());
-                }
-            }
-        }
-        let mut changed_sources=Vec::new();
-        for source in &mut config.sources {
-            if affected.iter().any(|id|blocks::references(&serde_json::to_value(&source.compute).unwrap_or_default(),id)) {
-                automation::reuse::resolve_source(&source.compute,&catalog).map_err(|error|(StatusCode::BAD_REQUEST,serde_json::json!({"success":false,"error":error})))?;
-                source.revision=source.revision.saturating_add(1);changed_sources.push(source.clone());
-            }
-        }
-        state.runtime_config=config;
-        for helper in &changed_helpers {state.helpers.upsert_definition(helper.clone()).map_err(|error|(StatusCode::BAD_REQUEST,serde_json::json!({"success":false,"error":error})))?;}
-        state.scripts.sync_helper_owners(&state.helpers);
-        if !changed_sources.is_empty() {state.apply_runtime_sources();}
-        state.apply_runtime_routines();
-        state.schedule_ws_broadcast(SnapshotChanges { runtime_config:true,..SnapshotChanges::none() });
-        Ok((block,changed,changed_helpers,changed_sources))
-    })).await;
+    let result = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                write_block(state, request.block, request.expected, request.create_only)
+            })
+        })
+        .await;
     let (block, changed, changed_helpers, changed_sources) = match result {
         Ok(Ok(v)) => v,
         Ok(Err((status, body))) => {
@@ -131,82 +80,163 @@ async fn save_block(
     ))
 }
 
+/// Shared actor mutation for editor saves and reviewed assistant operations.
+/// The caller holds the config write guard and persists the returned changes together.
+pub(super) type BlockChange = (
+    AutomationBlock,
+    Vec<RoutineRow>,
+    Vec<crate::types::automation_value::HelperDefinition>,
+    Vec<crate::types::automation_source::SourceDefinition>,
+);
+pub(super) fn write_block(
+    state: &mut AppState,
+    block: AutomationBlock,
+    expected: Option<AutomationBlock>,
+    create_only: bool,
+) -> Result<BlockChange, (StatusCode, serde_json::Value)> {
+    let id = block.id.clone();
+    blocks::validate_block(&block).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({"error":e.to_string()}),
+        )
+    })?;
+    let mut block = block;
+    let current = state.runtime_config.blocks.iter().find(|b| b.id == id);
+    if create_only && current.is_some() {
+        return Err((
+            StatusCode::CONFLICT,
+            serde_json::json!({"success":false,"error":"This block ID is already in use."}),
+        ));
+    }
+    if let Some(expected) = &expected {
+        match current {
+            None => {
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    serde_json::json!({"success":false,"error":"This block was deleted. Your draft is still here."}),
+                ))
+            }
+            Some(current) if current != expected => {
+                return Err((
+                    StatusCode::CONFLICT,
+                    serde_json::json!({"success":false,"error":"This block changed elsewhere.","current":current}),
+                ))
+            }
+            _ => {}
+        }
+    }
+    block.revision = current.map(|b| b.revision.saturating_add(1)).unwrap_or(1);
+    let mut config = state.runtime_config.clone();
+    config.blocks.retain(|b| b.id != id);
+    config.blocks.push(block.clone());
+    let catalog = ConfigCatalog::new(state.devices.get_state().0.keys().cloned(), &config);
+    blocks::validate_catalog(&catalog).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({"success":false,"error":e.to_string()}),
+        )
+    })?;
+    // Resolve indirect users as well, so edits invalidate pending work and
+    // every caller is revalidated before the shared definition changes.
+    let mut affected = std::collections::HashSet::from([id]);
+    loop {
+        let before = affected.len();
+        for parent in &config.blocks {
+            if affected
+                .iter()
+                .any(|id| blocks::references(&parent.body, id))
+            {
+                affected.insert(parent.id.clone());
+            }
+        }
+        if affected.len() == before {
+            break;
+        }
+    }
+    let mut changed = Vec::new();
+    for routine in &mut config.routines {
+        if routine
+            .definition_v2
+            .as_ref()
+            .is_some_and(|v| affected.iter().any(|id| blocks::references(v, id)))
+        {
+            if routine.enabled {
+                automation::compile_row(routine,&catalog).map_err(|e| (StatusCode::BAD_REQUEST,serde_json::json!({"success":false,"error":format!("Routine '{}': {}",routine.name,e.summary())})))?;
+            }
+            routine.revision = automation::next_revision(Some(routine));
+            changed.push(routine.clone());
+        }
+    }
+    automation::reuse::validate_helpers(&config, &catalog).map_err(|error| {
+        (
+            StatusCode::BAD_REQUEST,
+            serde_json::json!({"success":false,"error":error}),
+        )
+    })?;
+    let mut changed_helpers = Vec::new();
+    for helper in &mut config.helpers {
+        if let Some(compute) = &mut helper.compute {
+            if affected.iter().any(|id| {
+                blocks::references(
+                    &serde_json::to_value(&compute.script).unwrap_or_default(),
+                    id,
+                )
+            }) {
+                compute.revision = compute.revision.saturating_add(1);
+                changed_helpers.push(helper.clone());
+            }
+        }
+    }
+    let mut changed_sources = Vec::new();
+    for source in &mut config.sources {
+        if affected.iter().any(|id| {
+            blocks::references(
+                &serde_json::to_value(&source.compute).unwrap_or_default(),
+                id,
+            )
+        }) {
+            automation::reuse::resolve_source(&source.compute, &catalog).map_err(|error| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    serde_json::json!({"success":false,"error":error}),
+                )
+            })?;
+            source.revision = source.revision.saturating_add(1);
+            changed_sources.push(source.clone());
+        }
+    }
+    state.runtime_config = config;
+    for helper in &changed_helpers {
+        state
+            .helpers
+            .upsert_definition(helper.clone())
+            .map_err(|error| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    serde_json::json!({"success":false,"error":error}),
+                )
+            })?;
+    }
+    state.scripts.sync_helper_owners(&state.helpers);
+    if !changed_sources.is_empty() {
+        state.apply_runtime_sources();
+    }
+    state.apply_runtime_routines();
+    state.schedule_ws_broadcast(SnapshotChanges {
+        runtime_config: true,
+        ..SnapshotChanges::none()
+    });
+    Ok((block, changed, changed_helpers, changed_sources))
+}
+
 async fn delete_block(id: String, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
     let _guard = match config_write_lock(&handle).await {
         Ok(g) => g,
         Err(_) => return Ok(actor_unavailable()),
     };
     let result = handle
-        .mutate(move |state| {
-            Box::pin(async move {
-                if !state.runtime_config.blocks.iter().any(|b| b.id == id) {
-                    return Err((StatusCode::NOT_FOUND, "Block not found.".to_string()));
-                }
-                let users: Vec<_> = state
-                    .runtime_config
-                    .routines
-                    .iter()
-                    .filter(|r| {
-                        r.definition_v2
-                            .as_ref()
-                            .is_some_and(|v| blocks::references(v, &id))
-                    })
-                    .map(|r| r.name.clone())
-                    .chain(
-                        state
-                            .runtime_config
-                            .blocks
-                            .iter()
-                            .filter(|b| b.id != id && blocks::references(&b.body, &id))
-                            .map(|b| b.name.clone()),
-                    )
-                    .collect();
-                let mut users = users;
-                users.extend(
-                    state
-                        .runtime_config
-                        .helpers
-                        .iter()
-                        .filter(|helper| {
-                            helper.compute.as_ref().is_some_and(|compute| {
-                                blocks::references(
-                                    &serde_json::to_value(&compute.script).unwrap_or_default(),
-                                    &id,
-                                )
-                            })
-                        })
-                        .map(|helper| helper.name.clone()),
-                );
-                users.extend(
-                    state
-                        .runtime_config
-                        .sources
-                        .iter()
-                        .filter(|source| {
-                            blocks::references(
-                                &serde_json::to_value(&source.compute).unwrap_or_default(),
-                                &id,
-                            )
-                        })
-                        .map(|source| source.name.clone()),
-                );
-                if !users.is_empty() {
-                    return Err((
-                        StatusCode::CONFLICT,
-                        format!(
-                            "This block is used by: {}. Remove those calls first.",
-                            users.join(", ")
-                        ),
-                    ));
-                }
-                state.runtime_config.blocks.retain(|b| b.id != id);
-                state.schedule_ws_broadcast(SnapshotChanges {
-                    runtime_config: true,
-                    ..SnapshotChanges::none()
-                });
-                Ok(id)
-            })
-        })
+        .mutate(move |state| Box::pin(async move { remove_block(state, id) }))
         .await;
     let id = match result {
         Ok(Ok(id)) => id,
@@ -221,6 +251,78 @@ async fn delete_block(id: String, handle: StateHandle) -> Result<impl Reply, war
         available,
         StatusCode::OK,
     ))
+}
+
+pub(super) fn remove_block(
+    state: &mut AppState,
+    id: String,
+) -> Result<String, (StatusCode, String)> {
+    if !state.runtime_config.blocks.iter().any(|b| b.id == id) {
+        return Err((StatusCode::NOT_FOUND, "Block not found.".to_string()));
+    }
+    let users: Vec<_> = state
+        .runtime_config
+        .routines
+        .iter()
+        .filter(|r| {
+            r.definition_v2
+                .as_ref()
+                .is_some_and(|v| blocks::references(v, &id))
+        })
+        .map(|r| r.name.clone())
+        .chain(
+            state
+                .runtime_config
+                .blocks
+                .iter()
+                .filter(|b| b.id != id && blocks::references(&b.body, &id))
+                .map(|b| b.name.clone()),
+        )
+        .collect();
+    let mut users = users;
+    users.extend(
+        state
+            .runtime_config
+            .helpers
+            .iter()
+            .filter(|helper| {
+                helper.compute.as_ref().is_some_and(|compute| {
+                    blocks::references(
+                        &serde_json::to_value(&compute.script).unwrap_or_default(),
+                        &id,
+                    )
+                })
+            })
+            .map(|helper| helper.name.clone()),
+    );
+    users.extend(
+        state
+            .runtime_config
+            .sources
+            .iter()
+            .filter(|source| {
+                blocks::references(
+                    &serde_json::to_value(&source.compute).unwrap_or_default(),
+                    &id,
+                )
+            })
+            .map(|source| source.name.clone()),
+    );
+    if !users.is_empty() {
+        return Err((
+            StatusCode::CONFLICT,
+            format!(
+                "This block is used by: {}. Remove those calls first.",
+                users.join(", ")
+            ),
+        ));
+    }
+    state.runtime_config.blocks.retain(|b| b.id != id);
+    state.schedule_ws_broadcast(SnapshotChanges {
+        runtime_config: true,
+        ..SnapshotChanges::none()
+    });
+    Ok(id)
 }
 
 #[cfg(test)]

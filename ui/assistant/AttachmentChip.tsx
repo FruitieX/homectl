@@ -1,5 +1,6 @@
 import {
   Boxes,
+  Puzzle,
   Cog,
   Cpu,
   LayoutGrid,
@@ -25,6 +26,7 @@ const entityKindIcons: Record<AssistantEntityKind, LucideIcon> = {
   integration: LayoutGrid,
   helper: Cog,
   computed_source: Sigma,
+  block: Puzzle,
 };
 
 export function AssistantEntityIcon({

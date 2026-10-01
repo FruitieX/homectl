@@ -1,0 +1,200 @@
+{
+  "summary": "Create a shared dim calculation, reusable blocks, a computed helper and source, and a routine for review.",
+  "operations": [
+    {
+      "op": "create",
+      "kind": "routine",
+      "after": {
+        "id": "reuse_routine",
+        "name": "Reusable dim routine",
+        "enabled": false,
+        "semantics_version": 2,
+        "definition_v2": {
+          "triggers": [
+            {
+              "kind": "manual",
+              "id": "start"
+            }
+          ],
+          "condition": {
+            "kind": "block",
+            "block_id": "has_step",
+            "inputs": {}
+          },
+          "program": {
+            "kind": "native",
+            "steps": [
+              {
+                "id": "dim",
+                "action": "call_block",
+                "block_id": "dim_lights",
+                "inputs": {
+                  "targets": {
+                    "devices": [
+                      {
+                        "integration_id": "dummy",
+                        "device_id": "lamp"
+                      }
+                    ]
+                  },
+                  "step": 0.1
+                }
+              }
+            ]
+          }
+        },
+        "rules": [],
+        "actions": []
+      }
+    },
+    {
+      "op": "create",
+      "kind": "block",
+      "after": {
+        "id": "dim_lights",
+        "name": "Dim lights",
+        "kind": "action",
+        "inputs": {
+          "targets": {
+            "label": "Lights",
+            "kind": {
+              "kind": "targets"
+            }
+          },
+          "step": {
+            "label": "Step",
+            "kind": {
+              "kind": "number"
+            },
+            "default": 0.1
+          }
+        },
+        "body": {
+          "kind": "javascript",
+          "spec": {
+            "api_version": 1,
+            "source_body": "return {actions:[api.actions.dim({targets:inputs.targets,step:api.functions.call('scaled_step',{value:inputs.step})})]};",
+            "functions": [
+              "scaled_step"
+            ],
+            "declarations": [],
+            "limits_profile": "default"
+          }
+        }
+      }
+    },
+    {
+      "op": "create",
+      "kind": "helper",
+      "after": {
+        "id": "computed_step",
+        "name": "Computed step",
+        "kind": {
+          "kind": "number",
+          "min": 0,
+          "max": 1
+        },
+        "initial_value": 0,
+        "compute": {
+          "script": {
+            "api_version": 1,
+            "source_body": "return api.functions.call('scaled_step',{value:0.1});",
+            "functions": [
+              "scaled_step"
+            ],
+            "declarations": [],
+            "limits_profile": "default"
+          },
+          "helpers": [],
+          "enabled": true,
+          "refresh_ms": 60000
+        }
+      }
+    },
+    {
+      "op": "create",
+      "kind": "block",
+      "after": {
+        "id": "has_step",
+        "name": "Has dim step",
+        "kind": "condition",
+        "inputs": {
+          "helper": {
+            "label": "Step helper",
+            "kind": {
+              "kind": "helper"
+            },
+            "default": "computed_step"
+          }
+        },
+        "body": {
+          "kind": "javascript",
+          "spec": {
+            "api_version": 1,
+            "source_body": "const step=api.values.get(inputs.helper); if (!step) return api.unknown('Step unavailable'); return step.value > 0;",
+            "functions": [],
+            "declarations": [],
+            "limits_profile": "default"
+          }
+        }
+      }
+    },
+    {
+      "op": "create",
+      "kind": "computed_source",
+      "after": {
+        "id": "profile",
+        "name": "Profile",
+        "enabled": true,
+        "timezone": "Europe/Helsinki",
+        "refresh_interval_ms": 60000,
+        "compute": {
+          "kind": "script",
+          "source_body": "return {value:{brightness:api.functions.call('scaled_step',{value:0.1})}};",
+          "functions": [
+            "scaled_step"
+          ],
+          "params": {}
+        }
+      }
+    },
+    {
+      "op": "create",
+      "kind": "block",
+      "after": {
+        "id": "scaled_step",
+        "name": "Scaled step",
+        "description": "Multiply a relative dim step by a factor.",
+        "kind": "function",
+        "inputs": {
+          "value": {
+            "label": "Step",
+            "kind": {
+              "kind": "number"
+            }
+          },
+          "factor": {
+            "label": "Factor",
+            "kind": {
+              "kind": "number"
+            },
+            "default": 2
+          }
+        },
+        "body": {
+          "kind": "javascript",
+          "output": {
+            "kind": "number"
+          },
+          "spec": {
+            "api_version": 1,
+            "source_body": "return inputs.value * inputs.factor;",
+            "functions": [],
+            "declarations": [],
+            "limits_profile": "default"
+          }
+        }
+      }
+    }
+  ]
+}

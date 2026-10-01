@@ -71,8 +71,13 @@ impl ConfigCatalog {
             "routine" => {
                 self.routines.insert(id.to_string().into());
             }
-            "source" => {
+            "source" | "computed_source" => {
                 self.sources.insert(SourceId(id.to_string()));
+            }
+            "block" => {
+                if let Ok(block) = serde_json::from_value(body.clone()) {
+                    self.blocks.insert(id.to_string(), block);
+                }
             }
             "helper" => {
                 if let Ok(definition) = serde_json::from_value::<HelperDefinition>(body.clone()) {

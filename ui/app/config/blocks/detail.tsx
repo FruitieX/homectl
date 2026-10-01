@@ -1,3 +1,4 @@
+import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { useMemo, useState } from 'react';
 import type { ScriptSpec } from '@/bindings/ScriptSpec';
 import { ScriptConfiguration, newScript } from '@/ui/ScriptConfiguration';
@@ -83,6 +84,11 @@ export default function BlockDetailPage() {
   const devices = useDevicesState() ?? {};
   const groups = useGroupsState() ?? {};
   const saved = api.data.find((b) => b.id === id);
+  useAssistantPageContext(
+    saved
+      ? { kind: 'block', id: saved.id, label: saved.name }
+      : { kind: 'block' },
+  );
   const copy = api.data.find((b) => b.id === params.get('copyFrom'));
   const empty = useMemo<AutomationBlock>(
     () =>
