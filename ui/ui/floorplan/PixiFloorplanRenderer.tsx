@@ -12,6 +12,7 @@ import { useEffect, useRef } from 'react';
 
 import { cn } from '@/lib/cn';
 import { floorplanLabels } from '@/lib/floorplan-labels';
+import { quickControlDismissGuard } from '@/lib/quickControlDismiss';
 import { sensorMarkerSvg, type SensorMarkerKind } from '@/lib/sensorMarker';
 import {
   getGroupLabelLayout,
@@ -1745,6 +1746,11 @@ export function PixiFloorplanRenderer({
     };
 
     const handlePointerUp = (event: PointerEvent) => {
+      // A press that dismissed a quick-control popover only closed it; the
+      // map must not also open whatever the tap landed on.
+      const dismissedPopover = quickControlDismissGuard.consume(
+        event.pointerId,
+      );
       const activeGesture = activeGestureRef.current;
       pointers.delete(event.pointerId);
 
@@ -1759,6 +1765,7 @@ export function PixiFloorplanRenderer({
       clearActiveLongPress();
 
       if (
+        !dismissedPopover &&
         event.type !== 'pointercancel' &&
         !activeGesture.moved &&
         !activeGesture.longPressFired &&

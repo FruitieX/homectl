@@ -24,6 +24,7 @@ import {
 } from '@/lib/lightQuickAdjust';
 import { getColor } from '@/lib/colors';
 import { exceedsLongPressTolerance } from '@/lib/longPress';
+import { quickControlDismissGuard } from '@/lib/quickControlDismiss';
 import { Button } from './primitives/button';
 
 const SURFACE_SIZE = 268;
@@ -253,7 +254,12 @@ export function LightQuickPopover({
   useEffect(() => {
     const previousFocus = returnFocus.current;
     const outside = (e: PointerEvent) => {
-      if (!root.current?.contains(e.target as Node)) latest.current.onClose();
+      if (root.current?.contains(e.target as Node)) return;
+      // The dismissing tap only closes the popover: the pointer's press is
+      // consumed so the map cannot also act on the light, sensor or room it
+      // landed on.
+      quickControlDismissGuard.dismiss(e.pointerId);
+      latest.current.onClose();
     };
     const escape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {

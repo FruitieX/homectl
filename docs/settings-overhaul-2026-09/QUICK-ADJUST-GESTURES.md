@@ -16,6 +16,11 @@ the new single-finger switching gestures are interactive concepts for review.
 - The popover states how many writable selected lights it controls and labels
   differing values **Mixed**. Opening it sends no commands. Full controls opens
   the same selection; dismissing quick controls keeps selection active.
+- A tap outside the quick controls only dismisses them. Dismissal is driven by
+  that tap's pointerdown, and the pointer's press is consumed, so the light,
+  sensor or room under the tap does not also open. The sensor quick controls
+  follow the same rule; holding another light while they are open still
+  switches to it.
 - Power, brightness and color use the existing live device command path and
   scene autosave preference for each light. Color preserves each light's power
   and brightness; brightness preserves color and switches power according to
@@ -93,6 +98,18 @@ The study has its own mouse/touch browser batch covering each handoff in both
 directions without pointer release, boundary crossings, no brightness jump,
 unchanged inactive values, retained controls after release, and power hold.
 No live household devices or configuration were changed.
+
+Dismissal is covered by a dedicated isolated-fixture batch in both viewports:
+tapping past the light controls onto another light, a room area, or plain floor
+opens nothing and sends no device command; a later tap still opens the light or
+room under it; holding another light while controls are open still switches to
+it; and the sensor quick controls follow the same rule.
+
+```sh
+CDP_PORT=9337 node ui/dev/cdp-probe.mjs \
+  --url http://127.0.0.1:3021/map --width 430 --height 932 \
+  --driver-file ui/dev/quick-dismiss-review.mjs
+```
 
 Verification passed: **274 UI tests**, type check and production build;
 lint retains the existing import/export cleanup warning. **126 application

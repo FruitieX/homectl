@@ -472,9 +472,10 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
                     Tap a device or group to open controls. Drag to pan and
                     pinch to zoom. Hold a light for quick controls; with a
                     selection active, hold a selected light to adjust the
-                    selection. Use Select in quick controls or the device panel
-                    to start selecting. Ctrl-click also selects. Hold a group to
-                    select its devices.
+                    selection. A tap outside quick controls only closes them.
+                    Use Select in quick controls or the device panel to start
+                    selecting. Ctrl-click also selects. Hold a group to select
+                    its devices.
                   </p>
                 </details>
               </PopoverContent>

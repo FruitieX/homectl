@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Power,
   Plus,
@@ -19,6 +19,7 @@ import {
   type DeviceSensorConfig,
 } from '@/lib/sensorInteraction';
 import { sendSensorPayload } from './SensorActionPanel';
+import { quickControlDismissGuard } from '@/lib/quickControlDismiss';
 import { Button } from './primitives/button';
 import { Input } from './primitives/input';
 import { Popover, PopoverAnchor, PopoverContent } from './primitives/popover';
@@ -39,6 +40,21 @@ export function SensorQuickPopover({
 }) {
   const { apiEndpoint } = useAppConfig();
   const connected = useConnectionStatus() === 'connected';
+  const root = useRef<HTMLDivElement>(null);
+  const latest = useRef({ onClose });
+  latest.current = { onClose };
+  useEffect(() => {
+    // Dismiss on the pointerdown itself, like the light popover: the map then
+    // ignores this pointer's press, and Radix's click-deferred dismissal never
+    // applies to an already closed popover.
+    const outside = (e: PointerEvent) => {
+      if (root.current?.contains(e.target as Node)) return;
+      quickControlDismissGuard.dismiss(e.pointerId);
+      latest.current.onClose();
+    };
+    window.addEventListener('pointerdown', outside);
+    return () => window.removeEventListener('pointerdown', outside);
+  }, []);
   const { sensor, interaction, eventButtons } = useSensorInteraction(
     device,
     sensorConfig,
@@ -82,6 +98,7 @@ export function SensorQuickPopover({
         />
       </PopoverAnchor>
       <PopoverContent
+        ref={root}
         collisionPadding={12}
         aria-label={`${device.name} sensor quick controls`}
         aria-busy={pending}
