@@ -2,6 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { scaleLinear, scaleTime } from '@visx/scale';
 
 import { enforceMinimumSpan, minimumSpanForUnit } from './axisSpan';
+import { ChartReading } from './ChartReading';
+import { useChartInteraction } from './hooks/useChartInteraction';
 
 export type PlotPoint = {
   time: number;
@@ -54,6 +56,7 @@ export function TimeSeriesPlot({
   valueLabels,
   xAxis = 'time',
   yAxis = 'ticks',
+  onTap,
 }: {
   series: PlotSeries[];
   width: number;
@@ -68,10 +71,15 @@ export function TimeSeriesPlot({
   valueLabels?: Record<number, string>;
   xAxis?: 'time' | 'day-time';
   yAxis?: 'ticks' | 'range';
+  onTap?: () => void;
 }) {
   const id = useId();
   const [keyboardInspect, setKeyboardInspect] = useState(false);
-  const touchInspect = useRef(false);
+  const [inspectionPoint, setInspectionPoint] = useState<{
+    clientX: number;
+    clientY: number;
+    touch: boolean;
+  } | null>(null);
   const [active, setActive] = useState<number | null>(null);
   const chartRoot = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -247,6 +255,12 @@ export function TimeSeriesPlot({
     Math.abs(y(rangeTicks[0]) - y(rangeTicks[1])) < 24;
   const inspect = (event: React.PointerEvent<SVGSVGElement>) => {
     if (times.length === 0) return;
+    setKeyboardInspect(false);
+    setInspectionPoint({
+      clientX: event.clientX,
+      clientY: event.clientY,
+      touch: event.pointerType !== 'mouse',
+    });
     const box = event.currentTarget.getBoundingClientRect();
     const time = x
       .invert(((event.clientX - box.left) * width) / box.width)
@@ -258,6 +272,14 @@ export function TimeSeriesPlot({
     });
     setActive(nearestIndex);
   };
+  const interaction = useChartInteraction<SVGSVGElement>({
+    inspect,
+    clear: () => {
+      setActive(null);
+      setKeyboardInspect(false);
+    },
+    onTap,
+  });
   return (
     <div
       ref={chartRoot}
@@ -323,28 +345,12 @@ export function TimeSeriesPlot({
                 })
                 .join(', ')}`
         }
-        className={`touch-pan-y outline-none rounded-lg ${keyboardInspect ? 'ring-2 ring-inset ring-ring' : ''}`}
+        className={`touch-pan-y select-none outline-none rounded-lg ${onTap ? 'cursor-pointer' : 'cursor-crosshair'} ${keyboardInspect ? 'ring-2 ring-inset ring-ring' : ''}`}
         onBlur={() => {
           setActive(null);
           setKeyboardInspect(false);
         }}
-        onPointerDown={(event) => {
-          touchInspect.current = event.pointerType !== 'mouse';
-          setKeyboardInspect(false);
-          if (event.pointerType === 'mouse') event.preventDefault();
-          else event.currentTarget.setPointerCapture(event.pointerId);
-          inspect(event);
-        }}
-        onPointerUp={() => {
-          if (!touchInspect.current) setActive(null);
-        }}
-        onPointerCancel={() => setActive(null)}
-        onLostPointerCapture={() => {
-          if (!touchInspect.current) setActive(null);
-        }}
-        onPointerLeave={() => {
-          if (!touchInspect.current) setActive(null);
-        }}
+        {...interaction}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             event.stopPropagation();
@@ -352,8 +358,10 @@ export function TimeSeriesPlot({
             setKeyboardInspect(false);
             return;
           }
-          if (['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key))
+          if (['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) {
             setKeyboardInspect(true);
+            setInspectionPoint(null);
+          }
           if (times.length === 0) return;
           if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault();
@@ -375,10 +383,6 @@ export function TimeSeriesPlot({
             event.preventDefault();
             setActive(times.length - 1);
           }
-        }}
-        onPointerMove={(event) => {
-          if (event.pointerType === 'mouse' || event.buttons !== 0)
-            inspect(event);
         }}
       >
         <defs>
@@ -633,37 +637,29 @@ export function TimeSeriesPlot({
         )}
       </svg>
       {selectedTime !== null && (
-        <div
-          className={`pointer-events-none absolute inset-x-3 ${showLegend ? 'top-9' : 'top-1'} min-w-0 rounded-lg bg-popover/95 px-2 py-1.5 text-xs text-popover-foreground shadow-sm break-words whitespace-normal`}
-          aria-live="polite"
-        >
-          {selectedTime !== null ? (
-            <>
-              <span className="mr-3">{timeLabel(selectedTime)}</span>
-              {touchInspect.current && (
-                <button
-                  type="button"
-                  aria-label="Close chart reading"
-                  className="pointer-events-auto float-right grid size-8 place-items-center rounded-md border border-border"
-                  onClick={() => setActive(null)}
+        <ChartReading anchor={chartRoot.current} point={inspectionPoint}>
+          <div className="mb-1.5 border-b border-border pb-1.5 font-medium text-muted-foreground">
+            {timeLabel(selectedTime)}
+          </div>
+          <div className="space-y-1.5">
+            {visible.map((s) => {
+              const p = nearest(s);
+              return (
+                <div
+                  className="flex items-start justify-between gap-4"
+                  key={s.name}
                 >
-                  ×
-                </button>
-              )}
-              {visible.map((s) => {
-                const p = nearest(s);
-                return (
-                  <span className="mr-3 text-foreground" key={s.name}>
-                    {s.name}:{' '}
+                  <span className="min-w-0 break-words">{s.name}</span>
+                  <span className="text-right font-medium tabular-nums">
                     {p
                       ? `${format(p.value)} ${unit}${p.high !== undefined ? ` · ${s.bars ? 'possible' : 'range'} ${p.low !== undefined && !s.bars ? `${format(p.low)}–` : ''}${format(p.high)} ${unit}` : ''}${p.end !== undefined && s.bars && unit.includes('period') ? ` over ${(p.end - p.time) / 3600000} h` : ''}`
                       : '—'}
                   </span>
-                );
-              })}
-            </>
-          ) : null}
-        </div>
+                </div>
+              );
+            })}
+          </div>
+        </ChartReading>
       )}
     </div>
   );

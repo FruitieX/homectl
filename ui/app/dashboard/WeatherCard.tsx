@@ -516,6 +516,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
                           showUnit={false}
                           xAxis="day-time"
                           yAxis="range"
+                          onTap={toggleDetailsModal}
                           series={[
                             {
                               name: 'Temperature',

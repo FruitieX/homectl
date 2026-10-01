@@ -17,6 +17,12 @@ and the [mockup versus implementation gallery](implementation-evidence/floorplan
 
 ## Current review
 
+### Chart gestures and readings (implemented)
+
+Dashboard chart taps open widget details; drags inspect values. Compact
+floating reading cards replace persistent strips and clear on release across
+charts and dialogs. See [behavior and verification](CHART-GESTURES.md).
+
 ### Assistant floorplan follow-up (implemented)
 
 Larger desktop dialogs and responsive floorplan previews, clearer phone labels,

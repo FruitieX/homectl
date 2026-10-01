@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
 import { TooltipPosition } from './hooks/useChartTooltip';
+import { useChartInteraction } from './hooks/useChartInteraction';
 
 export interface ChartInteractionOverlayProps<T> {
   width: number;
@@ -29,11 +30,15 @@ export const ChartInteractionOverlay = <T,>({
   findDataPoint,
   getDataPointPosition,
   handleMouseMove,
-  handleTouch,
   hideTooltip,
 }: ChartInteractionOverlayProps<T>): React.ReactElement => {
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
+  const interaction = useChartInteraction<SVGRectElement>({
+    inspect: (event) =>
+      handleMouseMove(event, findDataPoint, getDataPointPosition),
+    clear: hideTooltip,
+  });
 
   return (
     <g>
@@ -44,19 +49,7 @@ export const ChartInteractionOverlay = <T,>({
         width={innerWidth}
         height={innerHeight}
         fill="transparent"
-        onMouseMove={(event) =>
-          handleMouseMove(event, findDataPoint, getDataPointPosition)
-        }
-        onMouseLeave={hideTooltip}
-        onMouseUp={hideTooltip}
-        onTouchStart={(event) =>
-          handleTouch(event, findDataPoint, getDataPointPosition)
-        }
-        onTouchMove={(event) =>
-          handleTouch(event, findDataPoint, getDataPointPosition)
-        }
-        onTouchEnd={hideTooltip}
-        onTouchCancel={hideTooltip}
+        {...interaction}
         style={{ cursor: 'pointer', touchAction: 'pan-y' }}
       />
     </g>

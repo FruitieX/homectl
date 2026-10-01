@@ -67,7 +67,7 @@ export default async function (cdp, { width, url }) {
   await key('Escape');
   if (
     !(await evaluate(
-      `!!document.querySelector('[role="dialog"]') && !document.querySelector('[aria-label="Close chart reading"]')`,
+      `!!document.querySelector('[role="dialog"]') && !document.querySelector('[data-chart-reading]')`,
     ))
   )
     throw Error('Escape should dismiss reading before detail');
@@ -84,29 +84,17 @@ export default async function (cdp, { width, url }) {
     touchPoints: [point],
   });
   await pause();
+  if (!(await evaluate(`!!document.querySelector('[data-chart-reading]')`)))
+    throw Error('Touch should show a reading while held');
+  checks.push('Native touch shows a floating reading while held');
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchEnd',
     touchPoints: [],
   });
   await pause();
-  if (
-    !(await evaluate(
-      `!!document.querySelector('[aria-label="Close chart reading"]')`,
-    ))
-  )
-    throw Error('Touch reading disappeared on release');
-  checks.push('Native touch reading remains after releasing the finger');
-  await evaluate(
-    `document.querySelector('[aria-label="Close chart reading"]').click()`,
-  );
-  await pause();
-  if (
-    await evaluate(
-      `!!document.querySelector('[aria-label="Close chart reading"]')`,
-    )
-  )
-    throw Error('Reading did not dismiss');
-  checks.push('Touch reading has a working explicit close');
+  if (!(await evaluate(`!document.querySelector('[data-chart-reading]')`)))
+    throw Error('Touch reading should disappear on release');
+  checks.push('Native touch clears the reading on release');
   await evaluate(
     `document.querySelector('[role="dialog"] button[aria-label="Close"]').click()`,
   );

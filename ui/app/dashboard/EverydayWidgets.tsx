@@ -314,7 +314,7 @@ export function IndoorClimateCard({ widget }: { widget: DashboardWidget }) {
       </div>
     </div>
   );
-  const plot = (height: number) =>
+  const plot = (height: number, onTap?: () => void) =>
     points.length ? (
       <ResponsiveChart height={height}>
         {({ width, height }) => (
@@ -324,6 +324,7 @@ export function IndoorClimateCard({ widget }: { widget: DashboardWidget }) {
             unit="°C"
             label={`${temperature?.device_name ?? 'Temperature'} history`}
             showLegend={false}
+            onTap={onTap}
             series={[
               {
                 name: temperature?.device_name ?? 'Temperature',
@@ -365,7 +366,7 @@ export function IndoorClimateCard({ widget }: { widget: DashboardWidget }) {
         }
       >
         {metrics}
-        {plot(125)}
+        {plot(125, () => setOpen(true))}
         {status}
       </WidgetFrame>
       <ResponsiveOverlay

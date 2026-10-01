@@ -230,12 +230,12 @@ export default async function (cdp, { width, url }) {
       await new Promise((r) => setTimeout(r, 150));
       if (
         !(await evaluate(
-          `document.querySelector('svg[aria-label="Weather forecast temperature"]').getAttribute('aria-valuetext').includes('Temperature:')&&!document.querySelector('[role="dialog"]')`,
+          `!document.querySelector('[data-chart-reading]')&&!document.querySelector('[role="dialog"]')`,
         ))
       )
         throw Error('Forecast touch inspection');
       checks.push(
-        'Native touch drag keeps weather reading without opening details',
+        'Native touch drag clears weather reading on release without opening details',
       );
     }
 

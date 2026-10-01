@@ -27,7 +27,6 @@ const formatPrice = (value: number | undefined) =>
 
 export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [chartInteracting, setChartInteracting] = useState(false);
   const isIdle = useIdle();
   const priceQuery = useSpotPriceResource(
     getDashboardWidgetOptionString(
@@ -94,10 +93,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <WidgetCard
-        interactive={!chartInteracting}
-        className="dashboard-spot-card group col-span-4"
-      >
+      <WidgetCard className="dashboard-spot-card group col-span-4">
         <div className="relative flex h-full min-h-0 flex-1 w-full rounded-[inherit] text-left">
           <CardContent className="relative flex min-h-0 flex-1 w-full flex-col p-[var(--widget-padding,1rem)]">
             <Button
@@ -134,13 +130,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
                 </div>
               </div>
             </div>
-            <div
-              className="relative z-[2] min-h-0 flex-1"
-              onPointerDown={() => setChartInteracting(true)}
-              onPointerUp={() => setChartInteracting(false)}
-              onPointerCancel={() => setChartInteracting(false)}
-              onPointerLeave={() => setChartInteracting(false)}
-            >
+            <div className="relative z-[2] min-h-0 flex-1">
               <ResponsiveChart
                 fit
                 className="dashboard-spot-chart h-full min-h-0 min-w-0 overflow-hidden"
@@ -154,6 +144,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
                     showCurrentTime
                     showLegend={false}
                     showUnit={false}
+                    onTap={() => setDetailsOpen(true)}
                   />
                 )}
               </ResponsiveChart>

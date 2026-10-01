@@ -6,6 +6,7 @@ export function SpotPriceChart({
   showCurrentTime = true,
   showLegend = true,
   showUnit = true,
+  onTap,
 }: {
   data: { time: number; value: number; fill?: string; end?: number }[];
   width: number;
@@ -14,6 +15,7 @@ export function SpotPriceChart({
   showCurrentTime?: boolean;
   showLegend?: boolean;
   showUnit?: boolean;
+  onTap?: () => void;
 }) {
   return (
     <TimeSeriesPlot
@@ -25,6 +27,7 @@ export function SpotPriceChart({
       showNow={showCurrentTime}
       showLegend={showLegend}
       showUnit={showUnit}
+      onTap={onTap}
       series={[
         {
           name: 'Spot price',
