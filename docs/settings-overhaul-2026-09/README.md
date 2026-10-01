@@ -17,6 +17,12 @@ and the [mockup versus implementation gallery](implementation-evidence/floorplan
 
 ## Current review
 
+### Floorplan pinch handoff (implemented)
+
+Lifting either finger after a pinch now preserves the view and lets the
+remaining finger pan from its current position. See
+[cause and native multi-touch verification](FLOORPLAN-PINCH-HANDOFF.md).
+
 ### Chart gestures and readings (implemented)
 
 Dashboard chart taps open widget details; drags inspect values. Compact

@@ -40,3 +40,6 @@ omit it and restore an empty collection. Bootstrap TOML is unchanged.
 API: `GET /api/v1/config/blocks`, `PUT /api/v1/config/blocks/{id}`, and
 `DELETE /api/v1/config/blocks/{id}`. Saves accept `expected` for optimistic
 concurrency or `create_only: true` for creation, alongside the block document.
+
+For current JavaScript support and proposed scripted blocks/shared functions,
+see [JavaScript reuse](javascript-reuse.md).

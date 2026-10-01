@@ -1,0 +1,44 @@
+{
+  "driven": {
+    "passed": true,
+    "viewport": {
+      "width": 430
+    },
+    "checks": [
+      "Floorplan tab available",
+      "Map renders",
+      "Hold opens the light quick controls",
+      "Tap past the light controls dismisses them",
+      "Dismissing tap did not open the light it landed on",
+      "A later tap still opens that light",
+      "Panel closes again",
+      "Hold opens the light quick controls",
+      "Tap past the light controls dismisses them",
+      "Dismissing tap did not open the room it landed on",
+      "A later tap still opens that room",
+      "Panel closes again",
+      "Hold opens the light quick controls",
+      "Tap past the light controls dismisses them",
+      "Dismissing tap on plain floor opened nothing",
+      "Tap on plain floor still only dismisses",
+      "Hold opens the light quick controls",
+      "Hold opens the second light quick controls",
+      "Switching to the held light closes the first popover",
+      "Escape closes the held light controls",
+      "Hold opens the sensor quick controls",
+      "Tap past the sensor quick controls dismisses them",
+      "Sensor dismissal tap did not open the light it landed on",
+      "A later tap still opens that light",
+      "Panel closes again",
+      "No device command was sent while dismissing the popovers"
+    ]
+  },
+  "browser": {
+    "url": "http://127.0.0.1:3021/map",
+    "viewport": {
+      "width": 430,
+      "height": 932
+    },
+    "problems": []
+  }
+}

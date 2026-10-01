@@ -1,0 +1,229 @@
+{
+  "driven": {
+    "passed": true,
+    "width": 430,
+    "checks": [
+      "Fixture floorplan available",
+      "Pixi world renders",
+      "Pinch zooms before lifting finger 1",
+      "Lifting finger 1 does not shift the canvas",
+      "Stationary surviving finger after 1 does not snap",
+      "Pinch never opens light details or long-press controls",
+      "Surviving finger after 1 pans only its new movement",
+      "Final release does not shift the canvas",
+      "Releasing a pinch does not activate a map target",
+      "Fixture floorplan available",
+      "Pixi world renders",
+      "Pinch zooms before lifting finger 2",
+      "Lifting finger 2 does not shift the canvas",
+      "Stationary surviving finger after 2 does not snap",
+      "Pinch never opens light details or long-press controls",
+      "Surviving finger after 2 pans only its new movement",
+      "Final release does not shift the canvas",
+      "Releasing a pinch does not activate a map target",
+      "Fixture floorplan available",
+      "Pixi world renders",
+      "Three-to-two fingers rebase the pinch without a snap",
+      "Canceled pinch does not shift the canvas",
+      "Canceled pinch does not open controls",
+      "A fresh one-finger pan still works after cancellation"
+    ],
+    "transforms": [
+      {
+        "label": "Lifting finger 1 does not shift the canvas",
+        "before": {
+          "x": -107.94965421066502,
+          "y": 177.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "after": {
+          "x": -107.94965421066502,
+          "y": 177.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "expectedDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "label": "Stationary surviving finger after 1 does not snap",
+        "before": {
+          "x": -107.94965421066502,
+          "y": 177.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "after": {
+          "x": -107.94965421066502,
+          "y": 177.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "expectedDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "label": "Surviving finger after 1 pans only its new movement",
+        "before": {
+          "x": -107.94965421066502,
+          "y": 177.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "after": {
+          "x": -95.94965421066502,
+          "y": 186.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "expectedDelta": {
+          "x": 12,
+          "y": 9
+        }
+      },
+      {
+        "label": "Final release does not shift the canvas",
+        "before": {
+          "x": -95.94965421066502,
+          "y": 186.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "after": {
+          "x": -95.94965421066502,
+          "y": 186.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "expectedDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "label": "Lifting finger 2 does not shift the canvas",
+        "before": {
+          "x": -107.94965421066502,
+          "y": 177.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "after": {
+          "x": -107.94965421066502,
+          "y": 177.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "expectedDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "label": "Stationary surviving finger after 2 does not snap",
+        "before": {
+          "x": -107.94965421066502,
+          "y": 177.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "after": {
+          "x": -107.94965421066502,
+          "y": 177.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "expectedDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "label": "Surviving finger after 2 pans only its new movement",
+        "before": {
+          "x": -107.94965421066502,
+          "y": 177.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "after": {
+          "x": -95.94965421066502,
+          "y": 186.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "expectedDelta": {
+          "x": 12,
+          "y": 9
+        }
+      },
+      {
+        "label": "Final release does not shift the canvas",
+        "before": {
+          "x": -95.94965421066502,
+          "y": 186.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "after": {
+          "x": -95.94965421066502,
+          "y": 186.64029436237865,
+          "scale": 1.3538524871498392
+        },
+        "expectedDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "label": "Three-to-two fingers rebase the pinch without a snap",
+        "before": {
+          "x": 30.099999999999994,
+          "y": 260.32500000000005,
+          "scale": 0.7704166666666666
+        },
+        "after": {
+          "x": 30.099999999999994,
+          "y": 260.32500000000005,
+          "scale": 0.7704166666666666
+        },
+        "expectedDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "label": "Canceled pinch does not shift the canvas",
+        "before": {
+          "x": 30.099999999999994,
+          "y": 260.32500000000005,
+          "scale": 0.7704166666666666
+        },
+        "after": {
+          "x": 30.099999999999994,
+          "y": 260.32500000000005,
+          "scale": 0.7704166666666666
+        },
+        "expectedDelta": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "label": "A fresh one-finger pan still works after cancellation",
+        "before": {
+          "x": 30.099999999999994,
+          "y": 260.32500000000005,
+          "scale": 0.7704166666666666
+        },
+        "after": {
+          "x": 55.099999999999994,
+          "y": 278.32500000000005,
+          "scale": 0.7704166666666666
+        },
+        "expectedDelta": {
+          "x": 25,
+          "y": 18
+        }
+      }
+    ]
+  },
+  "browser": {
+    "url": "http://127.0.0.1:3021/map",
+    "viewport": {
+      "width": 430,
+      "height": 932
+    },
+    "problems": []
+  }
+}

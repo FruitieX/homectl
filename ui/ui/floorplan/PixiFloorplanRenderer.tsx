@@ -1583,12 +1583,20 @@ export function PixiFloorplanRenderer({
       event.preventDefault();
       const point = getPointerPoint(container, event);
       pointers.set(event.pointerId, point);
+      clearActiveLongPress();
+
+      if (pointers.size >= 2) {
+        // A pinch owns all participating fingers. Do not retain a tap/hold
+        // candidate or its pre-pinch pan position for the second finger.
+        activeGestureRef.current = null;
+        pinchRef.current = getPinchState(Array.from(pointers.values()));
+        return;
+      }
 
       const target = findHitTarget(
         latestSceneRef.current,
         screenToScene(point, viewRef.current),
       );
-      clearActiveLongPress();
 
       const activeGesture: ActiveGesture = {
         pointerId: event.pointerId,
@@ -1638,11 +1646,6 @@ export function PixiFloorplanRenderer({
       }
 
       activeGestureRef.current = activeGesture;
-
-      if (pointers.size >= 2) {
-        clearActiveLongPress();
-        pinchRef.current = getPinchState(Array.from(pointers.values()));
-      }
     };
 
     const handlePointerMove = (event: PointerEvent) => {
@@ -1702,10 +1705,6 @@ export function PixiFloorplanRenderer({
         }
 
         pinchRef.current = nextPinch;
-        const activeGesture = activeGestureRef.current;
-        if (activeGesture) {
-          activeGesture.moved = true;
-        }
         return;
       }
 
@@ -1746,16 +1745,35 @@ export function PixiFloorplanRenderer({
     };
 
     const handlePointerUp = (event: PointerEvent) => {
+      if (!pointers.has(event.pointerId)) return;
       // A press that dismissed a quick-control popover only closed it; the
       // map must not also open whatever the tap landed on.
       const dismissedPopover = quickControlDismissGuard.consume(
         event.pointerId,
       );
       const activeGesture = activeGestureRef.current;
+      const wasPinching = pointers.size >= 2;
       pointers.delete(event.pointerId);
 
-      if (pointers.size < 2) {
-        pinchRef.current = null;
+      if (wasPinching) {
+        // Rebase both transitions: a changed pair gets a fresh pinch baseline,
+        // and a surviving finger starts panning from its latest position.
+        // It can never become a tap or a fresh long press after a pinch.
+        pinchRef.current = getPinchState(Array.from(pointers.values()));
+        const remaining =
+          pointers.size === 1 ? pointers.entries().next().value : null;
+        activeGestureRef.current = remaining
+          ? {
+              pointerId: remaining[0],
+              start: remaining[1],
+              last: remaining[1],
+              target: null,
+              moved: true,
+              longPressFired: false,
+              longPressTimer: null,
+            }
+          : null;
+        return;
       }
 
       if (!activeGesture || activeGesture.pointerId !== event.pointerId) {
