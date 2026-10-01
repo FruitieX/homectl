@@ -28,7 +28,9 @@ const SOURCE_CONTEXT_TYPES = `declare const ctx: {
   source: { id: string; name: string };
 };
 
+declare const inputs: Record<string, any>;
 declare const api: {
+  functions: { call<T = any>(id: string, inputs: Record<string, unknown>): T };
   time: {
     /** Strict HH:MM to minutes since midnight. Throws on invalid input. */
     parseHHMM(text: string): number;

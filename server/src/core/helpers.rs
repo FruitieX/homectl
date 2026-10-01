@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::types::automation_definition::HelperId;
 use crate::types::automation_value::{
-    HelperDefinition, HelperPersistence, HelperRuntimeStatus, HelperValueState,
+    HelperComputeStatus, HelperDefinition, HelperPersistence, HelperRuntimeStatus, HelperValueState,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -40,16 +40,41 @@ impl std::error::Error for HelperWriteError {}
 pub struct Helpers {
     definitions: BTreeMap<HelperId, HelperDefinition>,
     values: BTreeMap<HelperId, HelperValueState>,
+    pub(crate) computations: BTreeMap<HelperId, ComputationCursor>,
+    pub(crate) changed: bool,
+    before_frame: Option<Box<Helpers>>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ComputationCursor {
+    pub fingerprint: String,
+    pub dispatched_at_ms: i64,
+    pub request_id: Option<u64>,
+    pub status: Option<HelperComputeStatus>,
 }
 
 impl Helpers {
+    pub fn begin_frame(&mut self) {
+        self.before_frame = None;
+    }
+    pub fn capture_before(&mut self) {
+        if self.before_frame.is_none() {
+            let mut before = self.clone();
+            before.before_frame = None;
+            self.before_frame = Some(Box::new(before));
+        }
+    }
+    pub fn before_frame(&self) -> &Helpers {
+        self.before_frame.as_deref().unwrap_or(self)
+    }
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Replace definitions and durable values from the database projection.
-    /// Existing session values survive a reload; values for removed or
-    /// non-durable helpers are dropped in favor of the initial value.
+    /// Existing session and computed last-good values survive a reload when
+    /// still valid. Removed definitions lose their values; durable manual
+    /// helpers are restored from the database projection.
     pub fn load_rows(
         &mut self,
         definitions: Vec<HelperDefinition>,
@@ -59,10 +84,14 @@ impl Helpers {
             .into_iter()
             .map(|definition| (definition.id.clone(), definition))
             .collect();
-        self.values.retain(|id, _| {
-            self.definitions
-                .get(id)
-                .is_some_and(|definition| definition.persistence == HelperPersistence::Session)
+        self.computations.clear();
+        self.before_frame = None;
+        self.values.retain(|id, state| {
+            self.definitions.get(id).is_some_and(|definition| {
+                (definition.persistence == HelperPersistence::Session
+                    || definition.compute.is_some())
+                    && definition.kind.validate_value(&state.value).is_ok()
+            })
         });
         for (id, value, revision) in durable_values {
             if self
@@ -72,7 +101,13 @@ impl Helpers {
             {
                 continue;
             }
-            self.values.insert(id, HelperValueState { value, revision });
+            if self
+                .values
+                .get(&id)
+                .is_none_or(|current| current.revision <= revision)
+            {
+                self.values.insert(id, HelperValueState { value, revision });
+            }
         }
     }
 
@@ -112,6 +147,25 @@ impl Helpers {
         let Some(definition) = self.definitions.get(id) else {
             return Err(HelperWriteError::UnknownHelper(id.clone()));
         };
+        if definition.compute.is_some() {
+            return Err(HelperWriteError::InvalidValue {
+                helper: id.clone(),
+                message: "Computed helpers are read-only.".into(),
+            });
+        }
+        self.write_value(id, value)
+    }
+
+    pub(crate) fn write_value(
+        &mut self,
+        id: &HelperId,
+        value: Value,
+    ) -> Result<HelperValueState, HelperWriteError> {
+        self.capture_before();
+        let definition = self
+            .definitions
+            .get(id)
+            .ok_or_else(|| HelperWriteError::UnknownHelper(id.clone()))?;
         definition.kind.validate_value(&value).map_err(|message| {
             HelperWriteError::InvalidValue {
                 helper: id.clone(),
@@ -119,6 +173,7 @@ impl Helpers {
             }
         })?;
         let revision = self.revision(id) + 1;
+        self.changed |= self.value(id) != Some(&value);
         let state = HelperValueState { value, revision };
         self.values.insert(id.clone(), state.clone());
         Ok(state)
@@ -136,6 +191,22 @@ impl Helpers {
                 revision: self.revision(&definition.id),
                 persistence: definition.persistence,
                 hidden: definition.hidden,
+                compute: definition.compute.clone(),
+                compute_status: definition.compute.as_ref().map(|compute| {
+                    self.computations
+                        .get(&definition.id)
+                        .and_then(|cursor| cursor.status.clone())
+                        .unwrap_or(HelperComputeStatus {
+                            state: if compute.enabled {
+                                "pending"
+                            } else {
+                                "disabled"
+                            }
+                            .into(),
+                            evaluated_at_ms: None,
+                            error: None,
+                        })
+                }),
             })
             .collect()
     }
@@ -149,6 +220,7 @@ impl Helpers {
                 self.values.remove(&definition.id);
             }
         }
+        self.computations.remove(&definition.id);
         self.definitions.insert(definition.id.clone(), definition);
         Ok(())
     }
@@ -156,7 +228,19 @@ impl Helpers {
     pub fn remove_definition(&mut self, id: &HelperId) -> bool {
         let removed = self.definitions.remove(id).is_some();
         self.values.remove(id);
+        self.computations.remove(id);
         removed
+    }
+
+    pub fn value_is_known(&self, id: &HelperId) -> bool {
+        self.definition(id).is_some_and(|definition| {
+            definition.compute.is_none()
+                || self
+                    .computations
+                    .get(id)
+                    .and_then(|cursor| cursor.status.as_ref())
+                    .is_some_and(|status| matches!(status.state.as_str(), "fresh" | "updating"))
+        })
     }
 }
 

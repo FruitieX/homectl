@@ -52,6 +52,7 @@ import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { SearchablePicker } from '@/ui/SearchablePicker';
 import RoutineScriptEditor from '@/ui/RoutineScriptEditor';
+import { FunctionDependencies } from '@/ui/ScriptConfiguration';
 import { RoutineScriptDeclarations } from '@/ui/RoutineScriptDeclarations';
 
 type StepKind = NativeAction['action'];
@@ -1876,6 +1877,10 @@ function ScriptProgramEditor({
         />
       </ConfigField>
 
+      <FunctionDependencies
+        value={spec.functions ?? []}
+        onChange={(functions) => onChange({ ...spec, functions })}
+      />
       <RoutineScriptDeclarations
         declarations={spec.declarations ?? []}
         onChange={(declarations) => onChange({ ...spec, declarations })}

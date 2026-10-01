@@ -1272,6 +1272,7 @@ async fn helpers_on<C: ConnectionTrait>(db: &C) -> Result<Vec<HelperDefinition>>
                 AutomationValues::InitialValue,
                 AutomationValues::Persistence,
                 AutomationValues::Hidden,
+                AutomationValues::Compute,
             ])
             .from(AutomationValues::Table)
             .order_by(AutomationValues::Id, Order::Asc)
@@ -1299,6 +1300,7 @@ async fn upsert_helper_on<C: ConnectionTrait>(db: &C, helper: &HelperDefinition)
                 AutomationValues::InitialValue,
                 AutomationValues::Persistence,
                 AutomationValues::Hidden,
+                AutomationValues::Compute,
             ])
             .values_panic([
                 Expr::value(helper.id.as_str().to_string()),
@@ -1307,6 +1309,13 @@ async fn upsert_helper_on<C: ConnectionTrait>(db: &C, helper: &HelperDefinition)
                 Expr::value(serde_json::to_string(&helper.initial_value)?),
                 Expr::value(helper_persistence_as_str(helper.persistence).to_string()),
                 Expr::value(helper.hidden),
+                Expr::value(
+                    helper
+                        .compute
+                        .as_ref()
+                        .map(serde_json::to_string)
+                        .transpose()?,
+                ),
             ])
             .on_conflict(
                 OnConflict::column(AutomationValues::Id)
@@ -1316,6 +1325,7 @@ async fn upsert_helper_on<C: ConnectionTrait>(db: &C, helper: &HelperDefinition)
                         AutomationValues::InitialValue,
                         AutomationValues::Persistence,
                         AutomationValues::Hidden,
+                        AutomationValues::Compute,
                     ])
                     .to_owned(),
             )
@@ -3585,6 +3595,10 @@ fn helper_from_row(row: QueryResult) -> Result<HelperDefinition> {
         initial_value,
         persistence: parse_helper_persistence(&persistence),
         hidden: row.try_get::<Option<bool>>("", "hidden")?,
+        compute: row
+            .try_get::<Option<String>>("", "compute")?
+            .map(|text| serde_json::from_str(&text))
+            .transpose()?,
     })
 }
 
@@ -5207,6 +5221,7 @@ mod consistency_tests {
             initial_value: json!("day"),
             persistence: HelperPersistence::Durable,
             hidden: Some(true),
+            compute: None,
         };
         let scratch = HelperDefinition {
             id: HelperId("scratch".to_string()),
@@ -5215,15 +5230,18 @@ mod consistency_tests {
             initial_value: json!(""),
             persistence: HelperPersistence::Session,
             hidden: None,
+            compute: None,
         };
         let flag = HelperDefinition {
             initial_value: json!(false),
             hidden: Some(false),
+            compute: None,
             ..HelperDefinition::new("flag", "Flag", HelperKind::Boolean)
         };
         let number = HelperDefinition {
             initial_value: json!(0),
             hidden: None,
+            compute: Some(serde_json::from_value(json!({"script":{"api_version":1,"source_body":"return api.functions.call('scale',{value:0.5});","functions":["scale"],"inputs":{},"declarations":[],"limits_profile":"default"},"helpers":["mode"],"refresh_ms":60000,"enabled":true,"revision":4})).unwrap()),
             ..HelperDefinition::new(
                 "level",
                 "Level",
@@ -5466,16 +5484,24 @@ mod consistency_tests {
             {"id":"action","name":"Power","revision":4,"kind":"action","inputs":{"room":{"label":"Room","kind":{"kind":"group"}}},"body":[{"action":"dim","id":"power","targets":{"groups":[{"$input":"room"}]},"step":0.1,"future":[false,null,0]}]},
             {"id":"condition","name":"Ready","revision":3,"kind":"condition","inputs":{"enabled":{"label":"Enabled","kind":{"kind":"boolean"},"default":false}},"body":{"kind":"literal","value":{"$input":"enabled"}}}
         ])).unwrap();
+        export.blocks.extend(serde_json::from_value::<Vec<crate::types::automation_block::AutomationBlock>>(json!([
+            {"id":"function","name":"Scale","revision":2,"kind":"function","inputs":{"value":{"label":"Value","kind":{"kind":"number"},"default":0.5}},"body":{"kind":"javascript","spec":{"api_version":1,"source_body":"return inputs.value;","declarations":[],"limits_profile":"default"},"output":{"kind":"number"}}},
+            {"id":"js_action","name":"Scripted action","kind":"action","body":{"kind":"javascript","spec":{"api_version":1,"source_body":"return {actions:[]};","functions":["function"],"declarations":[],"limits_profile":"default"}}},
+            {"id":"js_condition","name":"Scripted condition","kind":"condition","body":{"kind":"javascript","spec":{"api_version":1,"source_body":"return true;","functions":["function"],"declarations":[],"limits_profile":"default"}}}
+        ])).unwrap());
+        export.sources=serde_json::from_value(json!([{"id":"profile","name":"Profile","enabled":true,"revision":2,"timezone":"Europe/Helsinki","refresh_interval_ms":60000,"aliases":[],"compute":{"kind":"script","source_body":"return {value:{brightness:api.functions.call('function',{})}};","functions":["function"],"params":{}}}])).unwrap();
         import_config_on(&db, &export).await.unwrap();
         db.close().await.unwrap();
         let reopened = file.open().await;
         let saved = db_export_config_from_connection(&reopened).await.unwrap();
         assert_eq!(saved.blocks, export.blocks);
+        assert_eq!(saved.sources, export.sources);
         let restored = database().await;
         let restored_export: ConfigExport =
             serde_json::from_str(&serde_json::to_string(&saved).unwrap()).unwrap();
         import_config_on(&restored, &restored_export).await.unwrap();
         assert_eq!(blocks_on(&restored).await.unwrap(), export.blocks);
+        assert_eq!(sources_on(&restored).await.unwrap(), export.sources);
         let mut legacy = serde_json::to_value(saved).unwrap();
         legacy.as_object_mut().unwrap().remove("blocks");
         let legacy: ConfigExport = serde_json::from_value(legacy).unwrap();
@@ -5562,11 +5588,19 @@ pub async fn db_delete_block(id: &str) -> Result<bool> {
 pub async fn db_save_block_change(
     block: &crate::types::automation_block::AutomationBlock,
     routines: &[RoutineRow],
+    helpers: &[HelperDefinition],
+    sources: &[SourceDefinition],
 ) -> Result<()> {
     let txn = get_db_connection()?.begin().await?;
     upsert_block_on(&txn, block).await?;
     for routine in routines {
         upsert_routine_on(&txn, routine).await?;
+    }
+    for helper in helpers {
+        upsert_helper_on(&txn, helper).await?;
+    }
+    for source in sources {
+        upsert_source_on(&txn, source).await?;
     }
     txn.commit().await?;
     Ok(())

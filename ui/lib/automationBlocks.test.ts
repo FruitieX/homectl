@@ -172,3 +172,68 @@ test('usage ignores objects in comparison operands that resemble calls', () => {
   ];
   assert.deepEqual(blockUsers('unused', [], routines).routines, []);
 });
+
+test('shared function usage includes transitive callers without interpreting arguments as code', () => {
+  const blocks = [
+    {
+      id: 'scale',
+      name: 'Scale',
+      description: '',
+      kind: 'function',
+      inputs: {},
+      body: {
+        kind: 'javascript',
+        spec: { api_version: 1, source_body: 'return 1;', functions: [] },
+      },
+      revision: 1n,
+    },
+    {
+      id: 'curve',
+      name: 'Curve',
+      description: '',
+      kind: 'function',
+      inputs: {},
+      body: {
+        kind: 'javascript',
+        spec: {
+          api_version: 1,
+          source_body: 'return 1;',
+          functions: ['scale'],
+        },
+      },
+      revision: 1n,
+    },
+  ] as AutomationBlock[];
+  const routines = [
+    {
+      id: 'caller',
+      name: 'Caller',
+      definition_v2: {
+        program: {
+          kind: 'script',
+          spec: {
+            api_version: 1,
+            source_body: 'return {actions:[]};',
+            functions: ['curve'],
+            inputs: {
+              data: {
+                api_version: 1,
+                source_body: 'literal',
+                functions: ['unused'],
+              },
+            },
+          },
+        },
+      },
+    },
+  ];
+  assert.deepEqual(
+    blockUsers('scale', blocks, routines).blocks.map((block) => block.id),
+    ['curve'],
+  );
+  assert.deepEqual(
+    blockUsers('scale', blocks, routines).routines.map((routine) => routine.id),
+    ['caller'],
+  );
+  assert.deepEqual(blockUsers('unused', blocks, routines).routines, []);
+});

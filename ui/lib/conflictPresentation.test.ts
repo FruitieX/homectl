@@ -34,3 +34,14 @@ test('conflict reviews mask credentials throughout nested objects and arrays', (
     'Not specified',
   );
 });
+
+test('configuration review displays generated bigint cadence and revisions without losing precision', () => {
+  const text = describeConflictValue(
+    { refresh_ms: 60000n, revision: 9007199254740993n, token: 1234n },
+    '/compute',
+  );
+  assert.ok(text.includes('60000'));
+  assert.ok(text.includes('9007199254740993'));
+  assert.ok(!text.includes('1234'));
+  assert.equal(describeConflictValue(60000n, '/compute/refresh_ms'), '60000');
+});

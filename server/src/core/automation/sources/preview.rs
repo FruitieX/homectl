@@ -88,6 +88,7 @@ fn previewable_compute(compute: &SourceCompute) -> Result<Previewable, String> {
     match compute {
         SourceCompute::CircadianCompat { .. } => Ok(Previewable::Compute(compute.clone(), None)),
         SourceCompute::Script {
+            functions: None,
             preset: Some(preset),
             source_body: None,
             params,
@@ -107,6 +108,7 @@ fn previewable_compute(compute: &SourceCompute) -> Result<Previewable, String> {
             ))
         }
         SourceCompute::Script {
+            functions: None,
             preset: Some(preset),
             ..
         } => Err(format!(
@@ -214,6 +216,7 @@ mod tests {
         let preset = preview_source(
             &request(
                 SourceCompute::Script {
+                    functions: None,
                     preset: Some(SourcePresetRef {
                         id: "circadian".to_string(),
                         version: 1,
@@ -236,6 +239,7 @@ mod tests {
         let custom = preview_source(
             &request(
                 SourceCompute::Script {
+                    functions: None,
                     preset: None,
                     source_body: Some("return { color: null };".to_string()),
                     params: serde_json::Value::Null,

@@ -112,6 +112,27 @@ pub struct ScriptExecution {
     pub worker_binary: Option<PathBuf>,
     invocation_counter: u64,
     pending_native_plans: BTreeMap<u64, super::plan::RoutinePlan>,
+    pub(crate) pending_conditions: BTreeMap<u64, super::conditions::PendingConditions>,
+    pending_inputs: BTreeMap<u64, CapturedPlanInputs>,
+}
+
+pub struct CapturedPlanInputs {
+    pub owner: ScriptOwnerId,
+    pub revision: i64,
+    pub devices: crate::types::device::DevicesState,
+    pub groups: crate::core::groups::Groups,
+    pub helpers: crate::core::helpers::Helpers,
+    pub intents: super::plan::IntentTracker,
+}
+impl CapturedPlanInputs {
+    pub fn view(&self) -> super::plan::PlanInputs<'_> {
+        super::plan::PlanInputs {
+            devices: &self.devices,
+            groups: &self.groups,
+            helpers: &self.helpers,
+            intents: &self.intents,
+        }
+    }
 }
 
 impl Default for ScriptExecution {
@@ -123,13 +144,98 @@ impl Default for ScriptExecution {
             worker_binary: None,
             invocation_counter: 0,
             pending_native_plans: BTreeMap::new(),
+            pending_conditions: BTreeMap::new(),
+            pending_inputs: BTreeMap::new(),
         }
     }
 }
 
 impl ScriptExecution {
+    pub fn take_plan_inputs(&mut self, request_id: u64) -> Option<CapturedPlanInputs> {
+        self.pending_inputs.remove(&request_id)
+    }
     pub fn coordinator(&self) -> &ScriptCoordinator {
         &self.coordinator
+    }
+
+    pub fn sync_helper_owners(&mut self, helpers: &crate::core::helpers::Helpers) {
+        let live: BTreeSet<_> = helpers
+            .definitions()
+            .values()
+            .filter_map(|helper| {
+                let compute = helper.compute.as_ref().filter(|compute| compute.enabled)?;
+                let owner = ScriptOwnerId::helper(helper.id.to_string());
+                if self.coordinator.definition_revision(&owner) != Some(compute.revision) {
+                    self.coordinator
+                        .load_owner(&owner, compute.revision, Value::Null);
+                }
+                Some(owner.key())
+            })
+            .collect();
+        for (key, kind) in self.coordinator.owner_keys() {
+            if kind == OwnerKind::Helper && !live.contains(&key) {
+                self.coordinator.remove_owner(&ScriptOwnerId::helper(
+                    key.strip_prefix("helper:").unwrap_or(&key),
+                ));
+            }
+        }
+        self.pool_error = None;
+    }
+
+    pub fn prepare_helper_invocation(
+        &mut self,
+        id: &crate::types::automation_definition::HelperId,
+        revision: i64,
+        source_body: String,
+        context: Value,
+    ) -> Result<PreparedSourceRun, String> {
+        let invocation = ScriptInvocation {
+            owner: ScriptOwnerId::helper(id.to_string()),
+            definition_revision: revision,
+            contract: super::script_contract::ScriptOutputContract::ComputedSource,
+            source_body: source_body.clone(),
+            context: context.clone(),
+            coalesce: CoalescePolicy::LatestWins,
+            run_id: None,
+        };
+        match self.coordinator.submit(&invocation) {
+            Ok(Admission::Accepted(token)) | Ok(Admission::Coalesced { token, .. }) => {
+                Ok(PreparedSourceRun {
+                    source_id: SourceId(id.to_string()),
+                    token,
+                    source_body,
+                    context,
+                })
+            }
+            Err(error) => Err(admission_error_text(&error)),
+        }
+    }
+
+    pub fn spawn_helper_execution(
+        &self,
+        pool: Arc<JsWorkerPool>,
+        event_tx: TxEventChannel,
+        run: PreparedSourceRun,
+    ) {
+        tokio::spawn(async move {
+            let outcome = pool.execute(&run.source_body, run.context).await;
+            let (value, error) = match outcome {
+                Ok(value) => (Some(value), None),
+                Err(error) => (None, Some(bounded_text(&error.to_string()))),
+            };
+            event_tx
+                .try_send(Event::HelperScriptResult {
+                    helper_id: crate::types::automation_definition::HelperId(run.source_id.0),
+                    request_id: run.token.request_id,
+                    owner_key: run.token.owner_key,
+                    owner_generation: run.token.owner_generation,
+                    definition_revision: run.token.definition_revision,
+                    state_revision: run.token.state_revision,
+                    value,
+                    error,
+                })
+                .ok();
+        });
     }
 
     pub fn coordinator_mut(&mut self) -> &mut ScriptCoordinator {
@@ -154,7 +260,9 @@ impl ScriptExecution {
     ) {
         let mut live: BTreeSet<String> = BTreeSet::new();
         for (routine_id, definition) in definitions {
-            if !definition.compiled.normalized.program.has_scripts() {
+            if !definition.compiled.normalized.program.has_scripts()
+                && !super::conditions::has(&definition.compiled.normalized)
+            {
                 continue;
             }
             let owner = ScriptOwnerId::routine(routine_id.0.clone());
@@ -209,6 +317,18 @@ impl ScriptExecution {
         for owner in stale {
             self.coordinator.remove_owner(&owner);
         }
+
+        self.pending_conditions.retain(|_, pending| {
+            definitions
+                .get(&pending.evaluation.routine_id)
+                .is_some_and(|definition| {
+                    definition.revision == pending.evaluation.definition_revision
+                })
+        });
+        self.pending_inputs.retain(|_, inputs| {
+            self.coordinator.definition_revision(&inputs.owner) == Some(inputs.revision)
+                && self.coordinator.is_enabled(&inputs.owner)
+        });
 
         // Configuration reload is the retry point for a missing worker.
         self.pool_error = None;
@@ -338,6 +458,9 @@ impl ScriptExecution {
         let mut helpers = Map::new();
         if let Some(helpers_state) = frame.helpers {
             for status in helpers_state.statuses() {
+                if !helpers_state.value_is_known(&status.id) {
+                    continue;
+                }
                 helpers.insert(
                     status.id.to_string(),
                     serde_json::json!({
@@ -365,6 +488,7 @@ impl ScriptExecution {
 
         Ok(serde_json::json!({
             "now_ms": now_ms,
+            "inputs": spec.inputs,
             "seed": seed,
             "event": {
                 "frame_id": frame_id,
@@ -390,17 +514,21 @@ impl ScriptExecution {
         spec: &ScriptSpec,
         mode: ExecutionMode,
         frame: &FrameContext<'_>,
+        intents: &super::plan::IntentTracker,
         frame_id: EventId,
         origin: EventOrigin,
         causation: EventCausation,
         now_ms: i64,
         triggering_device: Option<DeviceKey>,
     ) -> Result<PreparedScriptRun, String> {
+        if self.pending_inputs.len() >= 64 {
+            return Err("too many pending routine script runs".into());
+        }
         let owner = ScriptOwnerId::routine(routine_id.0.clone());
         let context =
             self.build_handler_context(&owner, spec, frame, frame_id, origin, causation, now_ms)?;
         let invocation = ScriptInvocation {
-            owner,
+            owner: owner.clone(),
             definition_revision,
             contract: super::script_contract::ScriptOutputContract::RoutineHandler,
             source_body: spec.source_body.clone(),
@@ -410,6 +538,17 @@ impl ScriptExecution {
         };
         match self.coordinator.submit(&invocation) {
             Ok(Admission::Accepted(token)) | Ok(Admission::Coalesced { token, .. }) => {
+                self.pending_inputs.insert(
+                    token.request_id,
+                    CapturedPlanInputs {
+                        owner,
+                        revision: definition_revision,
+                        devices: frame.after.clone(),
+                        groups: frame.groups.clone(),
+                        helpers: frame.helpers.cloned().unwrap_or_default(),
+                        intents: intents.clone(),
+                    },
+                );
                 Ok(PreparedScriptRun {
                     routine_id: routine_id.clone(),
                     token,
@@ -803,6 +942,8 @@ mod tests {
         ScriptSpec {
             api_version: 1,
             source_body: "return true;".to_string(),
+            functions: Vec::new(),
+            inputs: BTreeMap::new(),
             declarations,
             limits_profile: "default".to_string(),
         }
@@ -857,6 +998,7 @@ mod tests {
                     plan,
                     ExecutionMode::Single,
                     &frame,
+                    &super::super::plan::IntentTracker::default(),
                     EventId::default(),
                     EventOrigin::Report,
                     EventCausation::default(),
@@ -1423,6 +1565,7 @@ impl ScriptExecution {
         plan: super::plan::RoutinePlan,
         mode: ExecutionMode,
         frame: &FrameContext<'_>,
+        intents: &super::plan::IntentTracker,
         frame_id: EventId,
         origin: EventOrigin,
         causation: EventCausation,
@@ -1463,6 +1606,8 @@ impl ScriptExecution {
         let combined = ScriptSpec {
             api_version: 1,
             source_body: source,
+            functions: Vec::new(),
+            inputs: BTreeMap::new(),
             declarations: Vec::new(),
             limits_profile: "default".into(),
         };
@@ -1472,6 +1617,7 @@ impl ScriptExecution {
             &combined,
             mode,
             frame,
+            intents,
             frame_id,
             origin,
             causation,

@@ -59,6 +59,7 @@ interface HomectlActions {
 }
 
 declare const ctx: {
+  inputs: Record<string, any>;
   /** Injected frame time (epoch milliseconds). */
   now_ms: number;
   seed: number;
@@ -80,7 +81,9 @@ declare const ctx: {
   state: { memory: Record<string, unknown> | null; revision: number };
 };
 
+declare const inputs: Record<string, any>;
 declare const api: {
+  functions: { call<T = any>(id: string, inputs: Record<string, unknown>): T };
   /** Frame time as epoch milliseconds (Date.now() is frozen to this). */
   now: number;
   /** Deterministic seeded randomness; Math.random() is frozen to this. */

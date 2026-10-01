@@ -10,7 +10,8 @@ export type AutomationBlock = {
   revision: bigint;
   inputs: { [key in string]: BlockInput };
   /**
-   * ConditionExpr or an array of NativeAction templates. A whole JSON value
+   * ConditionExpr, NativeAction templates, or a JavaScript body with ScriptSpec
+   * and a typed output for functions. A whole JSON value
    * may be replaced with {"$input":"name"}; source strings are never interpolated.
    */
   body: JsonValue;

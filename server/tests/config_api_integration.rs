@@ -310,7 +310,7 @@ fn source_preview_is_stateless_and_validates_the_draft() {
         "timezone": "Europe/Helsinki",
         "compute": {
             "kind": "script",
-            "source_body": "return { brightness: 0.5 };",
+            "source_body": "return { value: { brightness: 0.5 } };",
             "params": null
         }
     });
@@ -323,8 +323,25 @@ fn source_preview_is_stateless_and_validates_the_draft() {
         .unwrap()
         .json()
         .unwrap();
-    assert!(preview["data"]["unsupported_reason"].is_string());
-    assert_eq!(preview["data"]["samples"], json!([]));
+    assert!(preview["data"]["unsupported_reason"].is_null());
+    let samples = preview["data"]["samples"].as_array().unwrap();
+    assert!(!samples.is_empty());
+    assert!(samples
+        .iter()
+        .all(|sample| sample["profile"]["brightness"] == 0.5));
+    let listed: Value = client.get(&list_url).send().unwrap().json().unwrap();
+    assert_eq!(listed["data"], json!([]), "script previews persist nothing");
+    let mut invalid_contract = script;
+    invalid_contract["compute"]["source_body"] = json!("return { brightness: 0.5 };");
+    assert_eq!(
+        client
+            .post(&url)
+            .json(&invalid_contract)
+            .send()
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
 }
 
 fn find_device(

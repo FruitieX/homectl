@@ -187,7 +187,8 @@ export function ValueControl({
 export function helperDefinition(
   status: HelperRuntimeStatus | HelperDefinition,
 ): HelperDefinition {
-  const { id, name, kind, initial_value, persistence, hidden } = status;
+  const { id, name, kind, initial_value, persistence, hidden, compute } =
+    status;
   return {
     id,
     name,
@@ -195,6 +196,7 @@ export function helperDefinition(
     initial_value,
     persistence,
     ...(hidden === undefined ? {} : { hidden }),
+    ...(compute === undefined ? {} : { compute }),
   };
 }
 export function invalidHelperValue(

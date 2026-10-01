@@ -73,6 +73,16 @@ const quantifierLabels: Record<string, string> = {
 
 export function defaultCondition(kind: ConditionKind): ConditionExpr {
   switch (kind) {
+    case 'script':
+      return {
+        kind: 'script',
+        spec: {
+          api_version: 1,
+          source_body: 'return true;',
+          declarations: [],
+          limits_profile: 'default',
+        },
+      };
     case 'block':
       return { kind: 'block', block_id: '', inputs: {} };
     case 'literal':

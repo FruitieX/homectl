@@ -52,7 +52,7 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
     definitions?.find((status) => status.id === helperId);
 
   const apply = (value: unknown) => {
-    if (!connected || setValue.isPending) return;
+    if (!connected || setValue.isPending || helper?.compute) return;
     setError(null);
     setValue.mutate(
       { id: helperId, value },
@@ -101,6 +101,14 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
               <span className="text-2xl font-semibold leading-tight">
                 {displayValue(helper.value)}
               </span>
+              {helper.compute && (
+                <p className="text-xs text-muted-foreground">
+                  Computed · {helper.compute_status?.state ?? 'pending'}
+                  {helper.compute_status?.error
+                    ? ` · ${helper.compute_status.error}`
+                    : ''}
+                </p>
+              )}
               {advanced && (
                 <span className="text-xs text-muted-foreground">
                   {helper.persistence === 'durable' ? 'durable' : 'session'} ·
@@ -108,7 +116,7 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
                 </span>
               )}
             </div>
-            {helper.kind.kind === 'enum' ? (
+            {!helper.compute && helper.kind.kind === 'enum' ? (
               <div className="flex flex-wrap gap-1 rounded-lg bg-muted/65 p-1">
                 {helperOptions(helper).map((option) => (
                   <Button
@@ -130,7 +138,7 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
                 ))}
               </div>
             ) : null}
-            {helper.kind.kind === 'boolean' ? (
+            {!helper.compute && helper.kind.kind === 'boolean' ? (
               <div className="flex flex-wrap gap-1 rounded-lg bg-muted/65 p-1">
                 <Button
                   type="button"
@@ -164,7 +172,8 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
                 </Button>
               </div>
             ) : null}
-            {helper.kind.kind === 'number' || helper.kind.kind === 'string' ? (
+            {!helper.compute &&
+            (helper.kind.kind === 'number' || helper.kind.kind === 'string') ? (
               <form
                 className="flex items-center gap-2"
                 onSubmit={(event) => {

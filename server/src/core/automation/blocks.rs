@@ -55,6 +55,7 @@ pub fn validate_input(kind: &BlockInputKind, value: &Value) -> Result<(), String
                 })
         }
         BlockInputKind::Boolean => value.is_boolean(),
+        BlockInputKind::Json => true,
         BlockInputKind::Number => value.is_number(),
         BlockInputKind::Duration => value
             .as_u64()
@@ -79,6 +80,7 @@ fn sample(kind: &BlockInputKind) -> Value {
             json!({"style":"spatial","duration_ms":1500,"source":{"kind":"triggering_device"}})
         }
         BlockInputKind::Boolean => json!(true),
+        BlockInputKind::Json => json!({}),
         BlockInputKind::Number => json!(0.1),
         BlockInputKind::Duration => json!(1000),
         BlockInputKind::Device => json!({"integration_id":"block_input", "device_id":"device"}),
@@ -179,6 +181,13 @@ pub fn validate_block(block: &AutomationBlock) -> Result<(), BlockError> {
             input.default.clone().unwrap_or_else(|| sample(&input.kind)),
         );
     }
+    if super::reuse::script_body(block).is_some() {
+        return super::reuse::validate_script(&block.body, block.kind)
+            .map_err(|m| error("/body", m));
+    }
+    if block.kind == BlockKind::Function {
+        return Err(error("/body", "Functions need a JavaScript body."));
+    }
     let mut dynamic = false;
     visit_calls(&block.body, &mut |call| {
         dynamic |= !call["block_id"].is_string();
@@ -204,6 +213,7 @@ fn validate_template(
         return Err(error(path, "Too many nested branches."));
     }
     match kind {
+        BlockKind::Function => return Err(error(path, "Functions need JavaScript.")),
         BlockKind::Condition => {
             serde_json::from_value::<ConditionExpr>(body.clone())
                 .map_err(|e| error(path, e.to_string()))?;
@@ -217,7 +227,7 @@ fn validate_template(
             for (i, step) in steps.iter().enumerate() {
                 let path = format!("{path}/{i}");
                 match step {
-                    NativeAction::ScheduleTimer {..} | NativeAction::ReplaceTimer {..} | NativeAction::CancelTimer {..} | NativeAction::RunScript {..} | NativeAction::InvokeRoutine {..} => return Err(error(&path,"Blocks use native actions and helpers; timers, scripts and routine invocation belong to the calling routine.")),
+                    NativeAction::ScheduleTimer {..} | NativeAction::ReplaceTimer {..} | NativeAction::CancelTimer {..} | NativeAction::InvokeRoutine {..} => return Err(error(&path,"Blocks use native actions and helpers; timers and routine invocation belong to the calling routine.")),
                     NativeAction::Choose { branches, .. } => for branch in branches { validate_template(&serde_json::to_value(&branch.steps).unwrap(), BlockKind::Action, &path, depth+1)?; },
                     _ => {}
                 }
@@ -225,6 +235,63 @@ fn validate_template(
         }
     }
     Ok(())
+}
+
+// Apply arguments after template substitution: JSON arguments remain literal data.
+fn attach_script_inputs(
+    value: &mut Value,
+    block: &AutomationBlock,
+    inputs: &BTreeMap<String, Value>,
+) {
+    if let Some(map) = value.as_object_mut() {
+        if matches!(
+            map.get("kind").and_then(Value::as_str),
+            Some("javascript" | "script")
+        ) || map.get("action").and_then(Value::as_str) == Some("run_script")
+        {
+            if let Some(spec) = map.get_mut("spec") {
+                spec["inputs"] = json!(inputs);
+                let mut declarations = spec["declarations"].as_array().cloned().unwrap_or_default();
+                for (name, input) in &block.inputs {
+                    let value = &inputs[name];
+                    let additions: Vec<Value> = match input.kind {
+                        BlockInputKind::Device => vec![json!({"kind":"device","device":value})],
+                        BlockInputKind::Group => vec![json!({"kind":"group","group_id":value})],
+                        BlockInputKind::Targets => value["devices"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .map(|device| json!({"kind":"device","device":device}))
+                            .chain(
+                                value["groups"]
+                                    .as_array()
+                                    .into_iter()
+                                    .flatten()
+                                    .map(|group| json!({"kind":"group","group_id":group})),
+                            )
+                            .collect(),
+                        _ => vec![],
+                    };
+                    for declaration in additions {
+                        if !declarations.contains(&declaration) {
+                            declarations.push(declaration);
+                        }
+                    }
+                }
+                spec["declarations"] = json!(declarations);
+            }
+            return;
+        }
+        for (key, item) in map {
+            if !matches!(key.as_str(), "inputs" | "value" | "params") {
+                attach_script_inputs(item, block, inputs);
+            }
+        }
+    } else if let Some(items) = value.as_array_mut() {
+        for item in items {
+            attach_script_inputs(item, block, inputs);
+        }
+    }
 }
 
 struct Expander<'a> {
@@ -285,7 +352,12 @@ impl Expander<'_> {
                 .map_err(|m| error(&format!("{path}/inputs/{name}"), m))?;
             inputs.insert(name.clone(), value.clone());
         }
-        let body = substitute(&block.body, &inputs, path, 0, &mut self.nodes)?;
+        let mut body = if super::reuse::script_body(&block).is_some() {
+            block.body.clone()
+        } else {
+            substitute(&block.body, &inputs, path, 0, &mut self.nodes)?
+        };
+        attach_script_inputs(&mut body, &block, &inputs);
         self.stack.push(id.into());
         Ok((block, body))
     }
@@ -301,7 +373,11 @@ impl Expander<'_> {
         match value["kind"].as_str() {
             Some("block") => {
                 let (_, body) = self.body(value, BlockKind::Condition, path)?;
-                result = self.condition(&body, path, depth + 1)?;
+                result = if body["kind"] == "javascript" {
+                    json!({"kind":"script","spec":body["spec"]})
+                } else {
+                    self.condition(&body, path, depth + 1)?
+                };
                 self.stack.pop();
             }
             Some("all" | "any") => {
@@ -356,6 +432,11 @@ impl Expander<'_> {
                 }
                 let (block, body) = self.body(item, BlockKind::Action, &path)?;
                 let qualified = format!("{node_id}/block:{}@{}/", block.id, block.revision);
+                if body["kind"] == "javascript" {
+                    result.push(json!({"action":"run_script","id":format!("{qualified}script"),"spec":body["spec"]}));
+                    self.stack.pop();
+                    continue;
+                }
                 let expanded = self.steps(&body, &path, &qualified, depth + 1)?;
                 self.stack.pop();
                 // A named native branch preserves call provenance in the plan and
@@ -426,6 +507,7 @@ pub fn expand_definition(value: &Value, catalog: &ConfigCatalog) -> Result<Value
         result["program"]["steps"] =
             expander.steps(&value["program"]["steps"], "/program/steps", "", 0)?;
     }
+    super::reuse::resolve_in_value(&mut result, catalog).map_err(|m| error("/", m))?;
     Ok(result)
 }
 
@@ -469,6 +551,28 @@ fn visit_calls(value: &Value, visitor: &mut impl FnMut(&Value)) {
     }
 }
 pub fn references(value: &Value, id: &str) -> bool {
+    if let Value::Object(map) = value {
+        if ((map.contains_key("api_version") && map.contains_key("source_body"))
+            || (map.get("kind").and_then(Value::as_str) == Some("script")
+                && map.contains_key("params")))
+            && map
+                .get("functions")
+                .and_then(Value::as_array)
+                .is_some_and(|v| v.iter().any(|v| v.as_str() == Some(id)))
+        {
+            return true;
+        }
+        if map.iter().any(|(key, v)| {
+            !matches!(key.as_str(), "value" | "inputs" | "params") && references(v, id)
+        }) {
+            return true;
+        }
+    }
+    if let Value::Array(items) = value {
+        if items.iter().any(|v| references(v, id)) {
+            return true;
+        }
+    }
     let mut found = false;
     visit_calls(value, &mut |call| {
         found |= call["block_id"].as_str() == Some(id);
@@ -486,6 +590,22 @@ pub fn validate_catalog(catalog: &ConfigCatalog) -> Result<(), BlockError> {
         ));
     for block in catalog.blocks.values() {
         validate_block(block)?;
+        if super::reuse::script_body(block).is_some() {
+            let spec: crate::types::automation_definition::ScriptSpec =
+                serde_json::from_value(block.body["spec"].clone())
+                    .map_err(|e| error("/body/spec", e.to_string()))?;
+            super::reuse::resolve_spec(&spec, catalog).map_err(|e| error("/body/spec", e))?;
+            if block.kind != BlockKind::Function {
+                let definition = if block.kind == BlockKind::Action {
+                    json!({"triggers":[{"kind":"manual","id":"probe"}],"program":{"kind":"script","spec":spec}})
+                } else {
+                    json!({"triggers":[{"kind":"manual","id":"probe"}],"condition":{"kind":"script","spec":spec},"program":{"kind":"native","steps":[{"action":"dim","id":"probe_action","step":0.1,"targets":{"groups":["block_input"]}}]}})
+                };
+                super::compile::compile_definition_value(&definition, &probe)
+                    .map_err(|report| error("/body/spec", report.summary()))?;
+            }
+            continue;
+        }
         let inputs: BTreeMap<_, _> = block
             .inputs
             .iter()
@@ -514,6 +634,7 @@ pub fn validate_catalog(catalog: &ConfigCatalog) -> Result<(), BlockError> {
         };
         let (_, body) = expander.body(&call, block.kind, "/body")?;
         let definition = match block.kind {
+            BlockKind::Function => unreachable!("functions validated above"),
             BlockKind::Condition => {
                 json!({"triggers":[{"kind":"manual","id":"probe_trigger"}],"condition":expander.condition(&body,"/body",0)?,"program":{"kind":"native","steps":[{"action":"dim","id":"probe_action","step":0.1,"targets":{"groups":["block_input"]}}]}})
             }

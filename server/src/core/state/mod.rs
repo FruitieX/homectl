@@ -1409,6 +1409,7 @@ impl AppState {
             })
             .collect();
         self.helpers.load_rows(definitions, durable);
+        self.scripts.sync_helper_owners(&self.helpers);
         self.refresh_routine_statuses();
         self.schedule_ws_broadcast(SnapshotChanges {
             helper_statuses: true,
@@ -1888,6 +1889,8 @@ mod websocket_timer_tests {
         let (state, _events) = crate::core::event::tests::test_state();
         let mut snapshot = state.snapshot.load().as_ref().clone();
         snapshot.helper_statuses = Arc::new(vec![HelperRuntimeStatus {
+            compute: None,
+            compute_status: None,
             id: HelperId("staircase_mode".to_string()),
             name: "Staircase mode".to_string(),
             kind: HelperKind::Enum {

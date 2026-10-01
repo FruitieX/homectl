@@ -368,11 +368,13 @@ async fn run_actor(
                 });
             }
             StateCommand::Mutate(f) => {
+                app_state.helpers.begin_frame();
                 let mutate_started_at = Instant::now();
                 f(&mut app_state).await;
                 let mutate_elapsed = mutate_started_at.elapsed();
 
                 let publish_started_at = Instant::now();
+                app_state.dispatch_due_helpers().await;
                 app_state.flush_pending_frames().await;
                 app_state.refresh_device_health(true);
                 app_state.publish_snapshot(SnapshotChanges::all());
@@ -474,6 +476,7 @@ fn event_kind(event: &Event) -> &'static str {
         Event::RuleScriptLeafResult { .. } => "RuleScriptLeafResult",
         Event::SceneMaterializedResult { .. } => "SceneMaterializedResult",
         Event::SourceScriptResult { .. } => "SourceScriptResult",
+        Event::HelperScriptResult { .. } => "HelperScriptResult",
         Event::RoutineTimerOperation { .. } => "RoutineTimerOperation",
         Event::TimerWakeup { .. } => "TimerWakeup",
     }

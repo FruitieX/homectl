@@ -82,7 +82,11 @@ export default function HelpersConfigPage() {
               <div className="min-w-0 flex-1">
                 <strong className="block truncate text-sm">{row.name}</strong>
                 <span className="text-xs text-muted-foreground">
-                  {kindLabel(row.kind)} ·{' '}
+                  {kindLabel(row.kind)}
+                  {row.compute
+                    ? ` · Computed · ${row.compute_status?.state ?? 'pending'}`
+                    : ''}{' '}
+                  ·{' '}
                   {row.persistence === 'durable'
                     ? 'Keeps value on restart'
                     : 'Resets on restart'}

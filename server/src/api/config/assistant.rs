@@ -3391,7 +3391,7 @@ async fn apply_create(
         }
         AssistantEntityKind::Helper => {
             let definition: HelperDefinition = parse_validated_body(operation)?;
-            write_helper(handle, definition.clone()).await?;
+            let definition = write_helper(handle, definition).await?;
             config_queries::db_upsert_helper(&definition)
                 .await
                 .map_err(persisted)
@@ -3469,7 +3469,7 @@ async fn apply_update(
         }
         AssistantEntityKind::Helper => {
             let definition: HelperDefinition = parse_validated_body(operation)?;
-            write_helper(handle, definition.clone()).await?;
+            let definition = write_helper(handle, definition).await?;
             config_queries::db_upsert_helper(&definition)
                 .await
                 .map_err(persisted)
@@ -3708,10 +3708,30 @@ async fn write_routine(handle: &StateHandle, routine: RoutineRow) -> Result<(), 
         .map_err(|error| error.to_string())
 }
 
-async fn write_helper(handle: &StateHandle, definition: HelperDefinition) -> Result<(), String> {
+async fn write_helper(
+    handle: &StateHandle,
+    mut definition: HelperDefinition,
+) -> Result<HelperDefinition, String> {
     handle
         .mutate(move |state| {
             Box::pin(async move {
+                if let Some(compute) = &mut definition.compute {
+                    compute.revision = state
+                        .runtime_config
+                        .helpers
+                        .iter()
+                        .find(|helper| helper.id == definition.id)
+                        .and_then(|helper| helper.compute.as_ref())
+                        .map(|compute| compute.revision.saturating_add(1))
+                        .unwrap_or(1);
+                }
+                let mut config = state.runtime_config.clone();
+                config.helpers.retain(|helper| helper.id != definition.id);
+                config.helpers.push(definition.clone());
+                let catalog =
+                    ConfigCatalog::new(state.devices.get_state().0.keys().cloned(), &config);
+                super::validate_routine_catalog(&config, &catalog)
+                    .map_err(|error| error.to_string())?;
                 state.helpers.upsert_definition(definition.clone())?;
                 let id = definition.id.clone();
                 if let Some(existing) = state
@@ -3720,21 +3740,22 @@ async fn write_helper(handle: &StateHandle, definition: HelperDefinition) -> Res
                     .iter_mut()
                     .find(|existing| existing.id == id)
                 {
-                    *existing = definition;
+                    *existing = definition.clone();
                 } else {
-                    state.runtime_config.helpers.push(definition);
+                    state.runtime_config.helpers.push(definition.clone());
                     state
                         .runtime_config
                         .helpers
                         .sort_by(|left, right| left.id.0.cmp(&right.id.0));
                 }
-                state.refresh_routine_statuses();
+                state.scripts.sync_helper_owners(&state.helpers);
+                state.apply_runtime_routines();
                 state.schedule_ws_broadcast(SnapshotChanges {
                     helper_statuses: true,
                     routine_statuses: true,
                     ..SnapshotChanges::none()
                 });
-                Ok::<(), String>(())
+                Ok::<HelperDefinition, String>(definition)
             })
         })
         .await
@@ -3745,15 +3766,26 @@ async fn write_source(handle: &StateHandle, source: SourceDefinition) -> Result<
     handle
         .mutate(move |state| {
             Box::pin(async move {
+                let catalog = ConfigCatalog::new(
+                    state.devices.get_state().0.keys().cloned(),
+                    &state.runtime_config,
+                );
+                if matches!(
+                    source.compute,
+                    crate::types::automation_source::SourceCompute::Script { .. }
+                ) {
+                    automation::reuse::resolve_source(&source.compute, &catalog)?;
+                }
                 state.upsert_source(source);
                 state.schedule_ws_broadcast(SnapshotChanges {
                     runtime_config: true,
                     ..SnapshotChanges::none()
                 });
+                Ok::<(), String>(())
             })
         })
         .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?
 }
 
 async fn write_integration(

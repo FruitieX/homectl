@@ -53,6 +53,7 @@ fn script_definition(params: Value) -> SourceDefinition {
         refresh_interval_ms: 60_000,
         aliases: vec![],
         compute: SourceCompute::Script {
+            functions: None,
             preset: Some(SourcePresetRef {
                 id: "circadian".to_string(),
                 version: 1,
@@ -202,6 +203,7 @@ async fn p11_forked_inline_body_runs_through_the_source_context() {
         refresh_interval_ms: 60_000,
         aliases: vec![],
         compute: SourceCompute::Script {
+            functions: None,
             preset: None,
             source_body: Some(
                 "var p = ctx.params;\n\
@@ -227,6 +229,7 @@ async fn p11_forked_inline_body_runs_through_the_source_context() {
 
     let body = match &definition.compute {
         SourceCompute::Script {
+            functions: None,
             source_body: Some(body),
             ..
         } => body.clone(),

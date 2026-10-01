@@ -88,7 +88,7 @@
   api.unknown = function (reason) {
     var result = { kind: "unknown" };
     if (reason !== undefined && reason !== null) {
-      result.reason = reason;
+      result.reason = typeof reason === 'string' ? { kind: 'unknown_source_value', source: reason } : reason;
     }
     return result;
   };
@@ -432,6 +432,57 @@
     },
   };
 
+  api.withFunctions = function(context, library, allowed) {
+    var scoped = Object.assign({}, api);
+    scoped.values = { get: function(id) { var helpers = context.values && context.values.helpers; return helpers && Object.prototype.hasOwnProperty.call(helpers, id) ? helpers[id] : undefined; } };
+    scoped.values.requireEnum = function(id) {
+      var entry = scoped.values.get(id);
+      if (!entry || entry.kind !== 'enum' || entry.value === undefined) throw new Error("helper '" + id + "' has no known enum value");
+      return entry.value;
+    };
+    var depth = 0;
+    function matches(type, value) {
+      switch (type.kind) {
+        case 'json': return value !== undefined;
+        case 'boolean': return typeof value === 'boolean';
+        case 'number': return typeof value === 'number' && Number.isFinite(value);
+        case 'duration': return Number.isInteger(value) && value >= 0 && value <= 604800000;
+        case 'enum': return type.options.indexOf(value) !== -1;
+        case 'string': case 'group': case 'scene': case 'helper': return typeof value === 'string' && value.trim().length > 0;
+        case 'device': return !!value && !Array.isArray(value) && typeof value.integration_id === 'string' && value.integration_id.length > 0 && typeof value.device_id === 'string' && value.device_id.length > 0;
+        case 'targets': return !!value && typeof value === 'object' && !Array.isArray(value) && (value.devices === undefined || (Array.isArray(value.devices) && value.devices.every(function(device) { return matches({kind:'device'}, device); }))) && (value.groups === undefined || (Array.isArray(value.groups) && value.groups.every(function(group) { return matches({kind:'group'}, group); })));
+        case 'rollout': return value === null || (!!value && !Array.isArray(value) && value.style === 'spatial' && (value.duration_ms === undefined || (Number.isInteger(value.duration_ms) && value.duration_ms >= 0 && value.duration_ms <= 600000)) && (value.source === undefined || (value.source && (value.source.kind === 'triggering_device' || (value.source.kind === 'device' && matches({kind:'device'}, value.source.device))))));
+        default: return false;
+      }
+    }
+    function call(id, supplied, dependencies) {
+      var definition = dependencies.indexOf(id) !== -1 && Object.prototype.hasOwnProperty.call(library, id) ? library[id] : undefined;
+      if (!definition) throw new Error("Function '" + id + "' was not declared by this script");
+      if (++depth > 8) { depth--; throw new Error('Function call depth exceeds 8'); }
+      try {
+        supplied = supplied || {};
+        if (typeof supplied !== 'object' || Array.isArray(supplied)) throw new Error('Function inputs must be an object');
+        var inputs = Object.create(null);
+        Object.keys(supplied).forEach(function(name) { if (!Object.prototype.hasOwnProperty.call(definition.inputs, name)) throw new Error('Unknown function input: ' + name); });
+        Object.keys(definition.inputs).forEach(function(name) {
+          var input = definition.inputs[name];
+          var value = Object.prototype.hasOwnProperty.call(supplied, name) ? supplied[name] : input.default;
+          if (!matches(input.kind, value)) throw new Error('Invalid or missing function input: ' + name);
+          inputs[name] = value;
+        });
+        __homectl_deep_freeze(inputs);
+        var nested = Object.assign({}, scoped);
+        nested.functions = {call: function(dependency, args) {return call(dependency, args, definition.functions);}};
+        var result = new Function('inputs', 'ctx', 'api', definition.source_body)(inputs, context, __homectl_deep_freeze(nested));
+        if (!matches(definition.output, result) || (result && typeof result.then === 'function')) throw new Error("Invalid output for function '" + id + "'");
+        var serialized = JSON.stringify(result, function(key,value) { if(typeof value==='number' && !Number.isFinite(value)) throw new Error('Function returned a non-finite number'); return value; });
+        if (typeof serialized !== 'string' || serialized.length > 65536) throw new Error('Function output must be bounded JSON');
+        return JSON.parse(serialized);
+      } finally { depth--; }
+    }
+    scoped.functions = {call: function(id, supplied) { return call(id, supplied, allowed || []); }};
+    return __homectl_deep_freeze(scoped);
+  };
   __homectl_deep_freeze(api);
   globalThis.api = api;
 })();

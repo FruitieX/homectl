@@ -126,6 +126,7 @@ pub enum AutomationValues {
     InitialValue,
     Persistence,
     Hidden,
+    Compute,
 }
 
 #[derive(Clone, Copy, Iden)]

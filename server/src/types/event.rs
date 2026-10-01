@@ -221,6 +221,18 @@ pub enum Event {
         error: Option<String>,
     },
 
+    /// Read-only helper calculation completed outside the state actor.
+    HelperScriptResult {
+        helper_id: crate::types::automation_definition::HelperId,
+        request_id: u64,
+        owner_key: String,
+        owner_generation: u64,
+        definition_revision: i64,
+        state_revision: u64,
+        value: Option<serde_json::Value>,
+        error: Option<String>,
+    },
+
     /// A v2 routine dispatched a named timer operation (P09). Timer state is
     /// actor-authoritative, so the operation is applied by the handler in plan
     /// order rather than at plan time.

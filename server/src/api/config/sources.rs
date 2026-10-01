@@ -77,6 +77,7 @@ pub(super) fn sources_routes(
         .and(warp::path::end())
         .and(warp::post())
         .and(warp::body::json())
+        .and(with_snapshot(snapshot))
         .and_then(preview_source);
 
     let upsert = warp::path!("sources" / String)
@@ -95,13 +96,19 @@ pub(super) fn sources_routes(
 
 /// Stateless preview of a draft source definition. The request is validated
 /// with the same rules as saving; nothing is persisted.
-async fn preview_source(request: SourcePreviewRequest) -> Result<impl Reply, warp::Rejection> {
+async fn preview_source(
+    request: SourcePreviewRequest,
+    snapshot: SnapshotHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    if matches!(&request.compute, SourceCompute::Script { .. }) {
+        return preview_script_source(request, snapshot).await;
+    }
     match crate::core::automation::sources::preview_source(
         &request,
         chrono::Utc::now().timestamp_millis(),
     ) {
-        Ok(preview) => Ok(ApiResponse::success(preview)),
-        Err(error) => Ok(error_response(&error, StatusCode::BAD_REQUEST)),
+        Ok(preview) => Ok(ApiResponse::success(preview).into_response()),
+        Err(error) => Ok(error_response(&error, StatusCode::BAD_REQUEST).into_response()),
     }
 }
 
@@ -111,6 +118,60 @@ async fn list_source_presets() -> Result<impl Reply, warp::Rejection> {
     Ok(ApiResponse::success(
         crate::core::automation::sources::preset_infos(),
     ))
+}
+
+async fn preview_script_source(
+    request: SourcePreviewRequest,
+    snapshot: SnapshotHandle,
+) -> Result<warp::reply::Response, warp::Rejection> {
+    use crate::types::automation_source::{
+        SourcePreview, SourcePreviewSample, DEFAULT_SOURCE_PREVIEW_SAMPLES,
+    };
+    let result: Result<SourcePreview, String> = async {
+        let now = chrono::Utc::now().timestamp_millis();
+        // The synchronous preview validates sampling/timezone and supplies the local day boundaries.
+        let mut preview = automation::sources::preview_source(&request, now)?;
+        let config = snapshot.load().runtime_config.clone();
+        let catalog = ConfigCatalog::from_export(&config);
+        let body = automation::reuse::resolve_source(&request.compute, &catalog)?;
+        let definition = SourceDefinition {
+            id: crate::types::automation_definition::SourceId("preview".into()),
+            name: "Preview".into(),
+            enabled: true,
+            revision: 1,
+            timezone: request.timezone.clone(),
+            refresh_interval_ms: 60000,
+            aliases: vec![],
+            compute: request.compute.clone(),
+        };
+        let mut samples = Vec::new();
+        for index in 0..request.samples.unwrap_or(DEFAULT_SOURCE_PREVIEW_SAMPLES) {
+            let time_ms = preview.day_start_ms + i64::from(index) * preview.step_ms;
+            let (context, label) = automation::sources::script_context(&definition, time_ms)?;
+            let result = automation::reuse::preview_execute(&body, context).await?;
+            let result = automation::parse_computed_source_outcome(
+                &result,
+                automation::MAX_SCRIPT_STATE_BYTES,
+            )?;
+            let profile: crate::types::automation_source::LightProfile =
+                serde_json::from_value(result.value).map_err(|error| error.to_string())?;
+            profile.validate()?;
+            samples.push(SourcePreviewSample {
+                time_ms,
+                local_time: label[..5].into(),
+                profile,
+            });
+        }
+        preview.samples = samples;
+        preview.unsupported_reason = None;
+        preview.note = None;
+        Ok(preview)
+    }
+    .await;
+    Ok(match result {
+        Ok(preview) => ApiResponse::success(preview).into_response(),
+        Err(error) => error_response(&error, StatusCode::BAD_REQUEST).into_response(),
+    })
 }
 
 async fn list_sources(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
@@ -164,6 +225,10 @@ async fn upsert_source(
                 Some(current) if current != expected => return Err((StatusCode::CONFLICT, serde_json::json!({"success": false, "error": "This source changed elsewhere.", "current": current}))),
                 _ => {}
             }
+        }
+        if matches!(source.compute,SourceCompute::Script { .. }) {
+            let catalog=ConfigCatalog::new(state.devices.get_state().0.keys().cloned(),&state.runtime_config);
+            automation::reuse::resolve_source(&source.compute,&catalog).map_err(|error|(StatusCode::BAD_REQUEST,serde_json::json!({"success":false,"error":error})))?;
         }
         source.revision = current.map(|row| row.revision + 1).unwrap_or(1);
         state.upsert_source(source.clone());

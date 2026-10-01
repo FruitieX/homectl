@@ -8,6 +8,7 @@ import { useBlocks } from '@/hooks/useConfig';
 import { materializeBlock } from '@/lib/automationBlocks';
 import { DraftNumberInput } from '@/ui/settings/DraftNumberInput';
 import { Input } from '@/ui/primitives/input';
+import { JsonValueEditor } from '@/ui/settings/JsonValueEditor';
 import { Button } from '@/ui/primitives/button';
 import { ConfigField } from '@/ui/config-form';
 import {
@@ -47,6 +48,16 @@ export function BlockInputValue({
   const { draftKey } = useRoutineAuthoring();
   const text = typeof value === 'string' ? value : '';
   switch (input.kind.kind) {
+    case 'json':
+      return (
+        <JsonValueEditor
+          label={input.label}
+          value={value ?? null}
+          onChange={(next) => onChange(next as JsonValue)}
+          draftKey={draftKey ?? 'block-preview'}
+          path={path ?? input.label}
+        />
+      );
     case 'group':
       return <GroupSelect groups={groups} value={text} onChange={onChange} />;
     case 'scene':
@@ -343,6 +354,8 @@ function Preview({
         )}
       </div>
     );
+  if (body.kind === 'javascript')
+    return <span>JavaScript block · named inputs · sandboxed execution</span>;
   if (body.kind === 'group')
     return (
       <span>

@@ -19,11 +19,14 @@
 pub mod blocks;
 pub mod calendar;
 pub mod compile;
+pub mod computed_helpers;
+pub mod conditions;
 pub mod convert;
 pub mod evaluate;
 pub mod groups;
 pub mod mixed_scripts;
 pub mod plan;
+pub mod reuse;
 pub mod runtime;
 pub mod schedules;
 pub mod script_contract;

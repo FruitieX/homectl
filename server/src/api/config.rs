@@ -391,6 +391,17 @@ fn validate_routine_catalog(
     catalog: &ConfigCatalog,
 ) -> color_eyre::Result<()> {
     automation::blocks::validate_catalog(catalog)?;
+    for source in &runtime_config.sources {
+        if matches!(
+            source.compute,
+            crate::types::automation_source::SourceCompute::Script { .. }
+        ) {
+            automation::reuse::resolve_source(&source.compute, catalog)
+                .map_err(|error| eyre::eyre!(error))?;
+        }
+    }
+    automation::reuse::validate_helpers(runtime_config, catalog)
+        .map_err(|error| eyre::eyre!(error))?;
     for row in &runtime_config.routines {
         match automation::row_semantics(row) {
             RoutineSemantics::V1 => {}
@@ -1677,6 +1688,7 @@ pub fn config(
                 .or(helpers_routes(snapshot, handle))
                 .or(sources_routes(snapshot, handle))
                 .or(blocks::routes(snapshot, handle))
+                .or(reuse_preview::routes(handle))
                 .or(assistant_routes(snapshot, handle))
                 .or(floorplans_routes(snapshot, handle))
                 .or(floorplan_routes(snapshot, handle))
@@ -2387,7 +2399,7 @@ async fn upsert_helper(
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     let HelperUpdate {
-        definition,
+        mut definition,
         expected,
         create_only,
     } = request;
@@ -2416,7 +2428,13 @@ async fn upsert_helper(
                     }
                 }
                 let invalid = |error: String| (StatusCode::BAD_REQUEST, serde_json::json!({"success": false, "error": error}));
+                if let Some(compute)=&mut definition.compute { compute.revision=current.and_then(|helper|helper.compute.as_ref()).map(|compute|compute.revision.saturating_add(1)).unwrap_or(1); }
                 definition.validate().map_err(invalid)?;
+                let mut config=state.runtime_config.clone();
+                config.helpers.retain(|helper|helper.id!=definition.id);config.helpers.push(definition.clone());
+                let catalog=ConfigCatalog::new(state.devices.get_state().0.keys().cloned(),&config);
+                automation::reuse::validate_helpers(&config,&catalog).map_err(invalid)?;
+                for routine in &config.routines {if routine.enabled && routine.semantics_version==2 {automation::compile_row(routine,&catalog).map_err(|report|invalid(format!("Routine '{}': {}",routine.name,report.summary())))?;}}
                 let id = definition.id.clone();
                 state.helpers.upsert_definition(definition.clone()).map_err(invalid)?;
                 if let Some(existing) = state
@@ -2433,6 +2451,8 @@ async fn upsert_helper(
                         .helpers
                         .sort_by(|left, right| left.id.0.cmp(&right.id.0));
                 }
+                state.scripts.sync_helper_owners(&state.helpers);
+                state.apply_runtime_routines();
                 state.refresh_routine_statuses();
                 state.schedule_ws_broadcast(SnapshotChanges {
                     helper_statuses: true,
@@ -2470,7 +2490,26 @@ async fn delete_helper(id: String, handle: StateHandle) -> Result<impl Reply, wa
     let result = handle
         .mutate(move |state| {
             Box::pin(async move {
+                let users: Vec<_> = state
+                    .runtime_config
+                    .helpers
+                    .iter()
+                    .filter(|helper| {
+                        helper
+                            .compute
+                            .as_ref()
+                            .is_some_and(|compute| compute.helpers.contains(&helper_id))
+                    })
+                    .map(|helper| helper.name.clone())
+                    .collect();
+                if !users.is_empty() {
+                    return Err(format!(
+                        "This helper is used by: {}. Remove those dependencies first.",
+                        users.join(", ")
+                    ));
+                }
                 let removed = state.helpers.remove_definition(&helper_id);
+                state.scripts.sync_helper_owners(&state.helpers);
                 state
                     .runtime_config
                     .helpers
@@ -3393,6 +3432,7 @@ mod routines;
 use routines::routines_routes;
 
 mod blocks;
+mod reuse_preview;
 mod sources;
 use sources::sources_routes;
 

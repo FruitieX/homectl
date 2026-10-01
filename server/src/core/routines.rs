@@ -829,6 +829,23 @@ impl Routines {
         self.v2.plan_runs(evaluations, inputs)
     }
 
+    pub fn accept_script_conditions(&mut self, evaluation: &RoutineFrameEvaluation) {
+        self.v2.accept_script_conditions(evaluation);
+        if !evaluation.will_trigger {
+            self.record_v2_blocked(&evaluation.routine_id);
+        }
+    }
+    pub fn plan_resolved_conditions(
+        &mut self,
+        compiled: &crate::core::automation::CompiledDefinition,
+        evaluation: &RoutineFrameEvaluation,
+        inputs: &PlanInputs<'_>,
+    ) -> RoutinePlan {
+        let mut plan = crate::core::automation::plan_evaluation(evaluation, compiled, inputs);
+        plan.run_id = self.v2.allocate_run_id();
+        plan
+    }
+
     /// The execution policy of a compiled v2 routine.
     pub fn execution_policy(
         &self,

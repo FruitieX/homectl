@@ -29,6 +29,8 @@ export function inputExample(name: string, input: BlockInput): JsonValue {
           source: { kind: 'triggering_device' },
         }
       );
+    case 'json':
+      return {};
     case 'boolean':
       return input.default ?? true;
     case 'number':
@@ -325,6 +327,14 @@ export function blockCalls(value: unknown, id: string): boolean {
   if (Array.isArray(value)) return value.some((v) => blockCalls(v, id));
   if (!value || typeof value !== 'object') return false;
   const row = value as Record<string, unknown>;
+  if (
+    ((row.api_version !== undefined && typeof row.source_body === 'string') ||
+      (row.kind === 'script' && row.params !== undefined)) &&
+    Array.isArray(row.functions) &&
+    row.functions.includes(id)
+  )
+    return true;
+  if (row.spec && blockCalls(row.spec, id)) return true;
   if (row.kind === 'block' || row.action === 'call_block')
     return row.block_id === id;
   if (row.kind === 'all' || row.kind === 'any')
@@ -345,6 +355,7 @@ export function blockCalls(value: unknown, id: string): boolean {
   return (
     blockCalls(row.condition, id) ||
     (program?.kind === 'native' && blockCalls(program.steps, id)) ||
+    (program?.kind === 'script' && blockCalls(program.spec, id)) ||
     (Array.isArray(row.triggers) &&
       row.triggers.some(
         (t) =>

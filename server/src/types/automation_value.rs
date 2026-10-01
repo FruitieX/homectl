@@ -15,7 +15,27 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
 
-use super::automation_definition::HelperId;
+use super::automation_definition::{HelperId, ScriptSpec};
+
+/// A read-only value calculated in the supervised JavaScript worker.
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[ts(export)]
+pub struct HelperComputation {
+    pub script: ScriptSpec,
+    #[serde(default)]
+    pub helpers: Vec<HelperId>,
+    pub refresh_ms: u64,
+    pub enabled: bool,
+    pub revision: i64,
+}
+
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[ts(export)]
+pub struct HelperComputeStatus {
+    pub state: String,
+    pub evaluated_at_ms: Option<i64>,
+    pub error: Option<String>,
+}
 
 /// Declared type and constraints of a helper.
 #[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -152,6 +172,9 @@ pub struct HelperDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub hidden: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub compute: Option<HelperComputation>,
 }
 
 impl HelperDefinition {
@@ -164,6 +187,7 @@ impl HelperDefinition {
             initial_value: default_value_for(&kind_for_initial),
             persistence: HelperPersistence::default(),
             hidden: None,
+            compute: None,
         }
     }
 
@@ -175,6 +199,24 @@ impl HelperDefinition {
             return Err("A helper name must not be empty.".to_string());
         }
         self.kind.validate()?;
+        if let Some(compute) = &self.compute {
+            if serde_json::to_vec(compute)
+                .map_err(|error| error.to_string())?
+                .len()
+                > 64 * 1024
+            {
+                return Err("A helper computation must fit within 64 KiB.".into());
+            }
+            if !(1000..=86_400_000).contains(&compute.refresh_ms) {
+                return Err("Refresh interval must be between one second and one day.".into());
+            }
+            if compute.revision < 1 || compute.helpers.len() > 32 {
+                return Err("Invalid computation revision or too many helper dependencies.".into());
+            }
+            if compute.helpers.contains(&self.id) {
+                return Err("A computed helper cannot depend on itself.".into());
+            }
+        }
         self.kind
             .validate_value(&self.initial_value)
             .map_err(|error| format!("Initial value is invalid: {error}"))
@@ -216,4 +258,10 @@ pub struct HelperRuntimeStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub hidden: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub compute: Option<HelperComputation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub compute_status: Option<HelperComputeStatus>,
 }

@@ -19,6 +19,7 @@ import { entityDraftStore } from '@/lib/entityDraft';
 import { routineReferences } from '@/lib/configUsage';
 import { HelperWidgetUsage } from './widget-usage';
 import { configItemHref } from '@/lib/configItemHref';
+import { ComputedHelperFields } from '@/ui/ComputedHelperFields';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
@@ -65,6 +66,27 @@ function CurrentValue({ status }: { status: HelperRuntimeStatus }) {
       );
     }
   }
+  if (status.compute)
+    return (
+      <SettingsSection
+        id="current"
+        title="Current value"
+        description="Calculated automatically; controls and routines cannot write this value."
+      >
+        <strong className="text-xl">{formatValue(status.value)}</strong>
+        <p role="status" className="mt-2 text-sm text-muted-foreground">
+          {status.compute_status?.state ?? 'pending'}
+          {status.compute_status?.evaluated_at_ms
+            ? ` · Calculated ${new Date(Number(status.compute_status.evaluated_at_ms)).toLocaleString()}`
+            : ' · No successful calculation yet'}
+        </p>
+        {status.compute_status?.error && (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            {status.compute_status.error}
+          </p>
+        )}
+      </SettingsSection>
+    );
   return (
     <SettingsSection
       id="current"
@@ -222,6 +244,9 @@ export default function HelperDetailPage() {
   const related = routines.data.filter((row) =>
     routineReferences(row.definition_v2, blocks.data).helpers.has(id ?? ''),
   );
+  const computedUsers = definitions.data.filter((helper) =>
+    helper.compute?.helpers.includes(id ?? ''),
+  );
   return (
     <DetailPageShell
       crumbs={[]}
@@ -290,6 +315,13 @@ export default function HelperDetailPage() {
               <HelperInitialValueField draft={value} setDraft={draft.change} />
             </div>
           </SettingsSection>
+          <SettingsSection id="computation" title="Value source">
+            <ComputedHelperFields
+              value={value}
+              onChange={draft.change}
+              draftKey={key}
+            />
+          </SettingsSection>
           <SettingsSection id="persistence" title="Restart & visibility">
             <HelperPersistenceFields draft={value} setDraft={draft.change} />
           </SettingsSection>
@@ -331,6 +363,24 @@ export default function HelperDetailPage() {
                 </p>
               )}
               <HelperWidgetUsage helperId={id!} />
+              {computedUsers.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Computed helpers
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    {computedUsers.map((helper) => (
+                      <Link
+                        key={helper.id}
+                        to={configItemHref('helper', helper.id)}
+                        className="text-sm text-primary underline"
+                      >
+                        {helper.name}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
             </SettingsSection>
           )}
           <EntitySaveBar

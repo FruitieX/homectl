@@ -19,7 +19,7 @@ export default function BlocksPage() {
     <div className="mx-auto max-w-[1600px] space-y-4">
       <ConfigPageHeader
         title="Blocks"
-        description="Named conditions and actions you can reuse with different inputs."
+        description="Conditions, actions and JavaScript functions with reusable typed inputs."
         actions={
           <Button asChild>
             <Link to="/config/blocks/new">
@@ -66,8 +66,12 @@ export default function BlocksPage() {
               <div className="min-w-0 flex-1">
                 <strong className="block truncate text-sm">{block.name}</strong>
                 <span className="text-xs text-muted-foreground">
-                  {block.kind === 'action' ? 'Action' : 'Condition'} ·{' '}
-                  {Object.keys(block.inputs).length} inputs
+                  {block.kind === 'action'
+                    ? 'Action'
+                    : block.kind === 'function'
+                      ? 'Function'
+                      : 'Condition'}{' '}
+                  · {Object.keys(block.inputs).length} inputs
                   {block.description ? ` · ${block.description}` : ''}
                 </span>
               </div>

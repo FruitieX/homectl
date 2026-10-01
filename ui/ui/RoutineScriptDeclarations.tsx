@@ -203,12 +203,14 @@ export function RoutineScriptDeclarations({
   devices,
   groups,
   path,
+  purpose = 'routine',
 }: {
   declarations: ScriptDeclaration[];
   onChange: (declarations: ScriptDeclaration[]) => void;
   devices: DevicesState;
   groups: FlattenedGroupsConfig;
   path: string;
+  purpose?: 'routine' | 'helper';
 }) {
   const { draftKey } = useRoutineAuthoring();
   const [newKind, setNewKind] = useState<ScriptDeclaration['kind']>('device');
@@ -219,14 +221,16 @@ export function RoutineScriptDeclarations({
       <div>
         <h5 className="text-sm font-medium">Declarations</h5>
         <p className="text-xs text-muted-foreground">
-          Choose additional state the script can read. Triggers and conditions
-          decide when it runs. Up to 32 declarations.
+          {purpose === 'helper'
+            ? 'Choose device and room inputs. Changes to these inputs refresh the calculation. Up to 32 declarations.'
+            : 'Choose additional state the script can read. Triggers and conditions decide when it runs. Up to 32 declarations.'}
         </p>
       </div>
       {!declarations.length && (
         <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-          No declarations. The script sees its triggering frame and its own
-          memory.
+          {purpose === 'helper'
+            ? 'No device dependencies. The calculation uses its clock and selected helper dependencies.'
+            : 'No declarations. The script sees its triggering frame and its own memory.'}
         </p>
       )}
       {declarations.map((value, index) => (

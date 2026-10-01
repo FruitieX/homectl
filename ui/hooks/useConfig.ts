@@ -189,6 +189,7 @@ export type SourceComputeConfig =
       kind: 'script';
       preset?: { id: string; version: number };
       source_body?: string;
+      functions?: string[];
       params: unknown;
     };
 

@@ -90,7 +90,7 @@ impl FrameContext<'_> {
         EvaluationView {
             devices: self.before,
             groups: self.groups,
-            helpers: self.helpers,
+            helpers: self.helpers.map(|helpers| helpers.before_frame()),
         }
     }
 
@@ -364,7 +364,11 @@ pub fn evaluate_routine_frame(
         }
     }
 
-    let will_trigger = !matched_trigger_ids.is_empty() && condition.authorizes_execution();
+    let will_trigger = !matched_trigger_ids.is_empty()
+        && (condition.authorizes_execution()
+            || (super::conditions::has_condition(&definition.condition)
+                && condition.truth == TruthValue::Unknown
+                && condition.error.is_none()));
 
     RoutineFrameEvaluation {
         routine_id: routine_id.clone(),
@@ -815,6 +819,42 @@ fn evaluate_condition_node(
     }
 
     match condition {
+        ConditionExpr::Script { result, .. } => {
+            use super::script_contract::{parse_condition_outcome, ConditionOutcome};
+            let mut node = ConditionTraceNode {
+                path: path.into(),
+                truth: TruthValue::Unknown,
+                evaluated: true,
+                ..Default::default()
+            };
+            match result {
+                None => {
+                    node.unknown_reason = Some(UnknownReason::UnknownSourceValue {
+                        source: "script condition pending".into(),
+                    })
+                }
+                Some(result) if result.get("error").is_some() => {
+                    node.error = Some(
+                        result["error"]
+                            .as_str()
+                            .unwrap_or("Condition failed")
+                            .into(),
+                    )
+                }
+                Some(result) => match parse_condition_outcome(&result["value"]) {
+                    Ok(ConditionOutcome::Known(value)) => {
+                        node.truth = if value {
+                            TruthValue::True
+                        } else {
+                            TruthValue::False
+                        }
+                    }
+                    Ok(ConditionOutcome::Unknown(reason)) => node.unknown_reason = Some(reason),
+                    Err(message) => node.error = Some(message),
+                },
+            }
+            node
+        }
         ConditionExpr::Block { .. } => ConditionTraceNode {
             path: path.to_string(),
             truth: TruthValue::Unknown,
@@ -1014,7 +1054,7 @@ pub fn resolve_value(source: &ValueSource, view: EvaluationView<'_>) -> Resolved
         }
         ValueSource::Helper { helper } => match view
             .helpers
-            .and_then(|helpers| helpers.definition(helper).map(|_| helpers))
+            .filter(|helpers| helpers.value_is_known(helper))
         {
             Some(helpers) => match helpers.value(helper) {
                 Some(value) => ResolvedValue::known(value.clone()),

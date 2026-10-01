@@ -11,4 +11,5 @@ export type BlockInputKind =
   | { kind: 'number' }
   | { kind: 'duration' }
   | { kind: 'string' }
+  | { kind: 'json' }
   | { kind: 'enum'; options: Array<string> };

@@ -798,6 +798,12 @@ impl Compiler<'_> {
         }
 
         match condition {
+            ConditionExpr::Script { spec, .. } => {
+                if path.starts_with("/triggers") {
+                    self.report.error(path, "script_transition", "Use a computed helper for JavaScript-derived predicate triggers; script conditions belong in Only if or action branches.");
+                }
+                self.compile_script(spec, &format!("{path}/spec"));
+            }
             ConditionExpr::Block { .. } => self.report.error(
                 path,
                 "unexpanded_block",
@@ -1261,6 +1267,14 @@ impl Compiler<'_> {
                 NativeAction::SetHelper { helper, value, .. } => {
                     match self.catalog.helpers.get(helper).cloned() {
                         Some(definition) => {
+                            if definition.compute.is_some() {
+                                self.report.error_at_node(
+                                    format!("{action_path}/helper"),
+                                    action.id(),
+                                    "computed_helper_read_only",
+                                    "Computed helpers cannot be written by actions.",
+                                );
+                            }
                             if let Err(error) = definition.kind.validate_value(value) {
                                 self.report.error_at_node(
                                     format!("{action_path}/value"),
@@ -1848,6 +1862,13 @@ impl ReferenceCollector {
 
     fn condition(&mut self, condition: &ConditionExpr) {
         match condition {
+            ConditionExpr::Script { spec, .. } => {
+                for declaration in &spec.declarations {
+                    if let ScriptDeclaration::Device { device } = declaration {
+                        self.push_device(device);
+                    }
+                }
+            }
             ConditionExpr::All { conditions } | ConditionExpr::Any { conditions } => {
                 for child in conditions {
                     self.condition(child);

@@ -84,6 +84,7 @@ pub fn preset_infos() -> Vec<SourcePresetInfo> {
 /// opaque. Exactly one source of truth is allowed (D10).
 pub fn validate_script_compute(compute: &SourceCompute) -> Result<(), String> {
     let SourceCompute::Script {
+        functions: _,
         preset,
         source_body,
         params,
@@ -157,6 +158,7 @@ pub fn validate_preset_params(preset: &SourcePreset, params: &Value) -> Result<(
 /// preset, the inline body for a fork.
 pub fn resolve_source_body(compute: &SourceCompute) -> Result<String, String> {
     let SourceCompute::Script {
+        functions: _,
         preset,
         source_body,
         ..
@@ -190,6 +192,7 @@ mod tests {
 
     fn script_preset() -> SourceCompute {
         SourceCompute::Script {
+            functions: None,
             preset: Some(SourcePresetRef {
                 id: "circadian".to_string(),
                 version: 1,
@@ -206,6 +209,7 @@ mod tests {
         validate_script_compute(&script_preset()).unwrap();
 
         let unknown = SourceCompute::Script {
+            functions: None,
             preset: Some(SourcePresetRef {
                 id: "circadian".to_string(),
                 version: 99,
@@ -218,6 +222,7 @@ mod tests {
             .contains("unknown preset"));
 
         let both = SourceCompute::Script {
+            functions: None,
             preset: Some(circadian_preset_ref()),
             source_body: Some("return {};".to_string()),
             params: json!({}),
@@ -227,6 +232,7 @@ mod tests {
             .contains("not both"));
 
         let neither = SourceCompute::Script {
+            functions: None,
             preset: None,
             source_body: None,
             params: json!({}),
@@ -236,6 +242,7 @@ mod tests {
             .contains("needs a pinned preset"));
 
         let empty_body = SourceCompute::Script {
+            functions: None,
             preset: None,
             source_body: Some("   ".to_string()),
             params: json!({}),
@@ -266,6 +273,7 @@ mod tests {
             .contains("Kelvin/Kelvin or HS/HS"));
 
         let hs = SourceCompute::Script {
+            functions: None,
             preset: Some(circadian_preset_ref()),
             source_body: None,
             params: json!({
@@ -294,6 +302,7 @@ mod tests {
         assert!(body.contains("api.color.mix"));
 
         let inline = SourceCompute::Script {
+            functions: None,
             preset: None,
             source_body: Some("return { value: { ct: 1 } };".to_string()),
             params: json!({}),

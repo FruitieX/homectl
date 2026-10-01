@@ -234,6 +234,9 @@ impl V2Runtime {
             );
             match self.statuses.get_mut(routine_id) {
                 Some(status) => {
+                    if super::conditions::has_condition(&definition.compiled.normalized.condition) {
+                        continue;
+                    }
                     status.will_trigger =
                         !status.matched_trigger_ids.is_empty() && condition.authorizes_execution();
                     status.condition = condition;
@@ -259,6 +262,17 @@ impl V2Runtime {
                         },
                     );
                 }
+            }
+        }
+    }
+
+    /// Plan every triggered evaluation against acceptance-time state (P05).
+    pub fn accept_script_conditions(&mut self, evaluation: &RoutineFrameEvaluation) {
+        if let Some(status) = self.statuses.get_mut(&evaluation.routine_id) {
+            if status.definition_revision == evaluation.definition_revision {
+                status.condition = evaluation.condition.clone();
+                status.will_trigger = evaluation.will_trigger;
+                status.execution_pending = false;
             }
         }
     }

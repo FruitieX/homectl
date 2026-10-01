@@ -17,4 +17,5 @@ export type SourceCompute =
       preset?: SourcePresetRef;
       source_body?: string;
       params: JsonValue;
+      functions?: Array<string>;
     };

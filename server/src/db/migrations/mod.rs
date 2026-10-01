@@ -40,6 +40,7 @@ impl MigratorTrait for Migrator {
             Box::new(calibration_brightness::DeviceCalibrationBrightness),
             Box::new(config_initialized::ConfigInitialized),
             Box::new(AutomationBlocksMigration),
+            Box::new(ComputedHelpersMigration),
         ]
     }
 }
@@ -1713,6 +1714,36 @@ impl MigrationTrait for AutomationBlocksMigration {
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .drop_table(Table::drop().table(AutomationBlocks::Table).to_owned())
+            .await
+    }
+}
+
+struct ComputedHelpersMigration;
+impl MigrationName for ComputedHelpersMigration {
+    fn name(&self) -> &str {
+        "m20261001000000_computed_helpers"
+    }
+}
+#[async_trait::async_trait]
+impl MigrationTrait for ComputedHelpersMigration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(AutomationValues::Table)
+                    .add_column(ColumnDef::new(AutomationValues::Compute).text().null())
+                    .to_owned(),
+            )
+            .await
+    }
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(AutomationValues::Table)
+                    .drop_column(AutomationValues::Compute)
+                    .to_owned(),
+            )
             .await
     }
 }

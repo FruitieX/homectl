@@ -88,12 +88,31 @@ async fn save_block(
                 changed.push(routine.clone());
             }
         }
+        automation::reuse::validate_helpers(&config,&catalog).map_err(|error|(StatusCode::BAD_REQUEST,serde_json::json!({"success":false,"error":error})))?;
+        let mut changed_helpers=Vec::new();
+        for helper in &mut config.helpers {
+            if let Some(compute)=&mut helper.compute {
+                if affected.iter().any(|id| blocks::references(&serde_json::to_value(&compute.script).unwrap_or_default(),id)) {
+                    compute.revision=compute.revision.saturating_add(1);changed_helpers.push(helper.clone());
+                }
+            }
+        }
+        let mut changed_sources=Vec::new();
+        for source in &mut config.sources {
+            if affected.iter().any(|id|blocks::references(&serde_json::to_value(&source.compute).unwrap_or_default(),id)) {
+                automation::reuse::resolve_source(&source.compute,&catalog).map_err(|error|(StatusCode::BAD_REQUEST,serde_json::json!({"success":false,"error":error})))?;
+                source.revision=source.revision.saturating_add(1);changed_sources.push(source.clone());
+            }
+        }
         state.runtime_config=config;
+        for helper in &changed_helpers {state.helpers.upsert_definition(helper.clone()).map_err(|error|(StatusCode::BAD_REQUEST,serde_json::json!({"success":false,"error":error})))?;}
+        state.scripts.sync_helper_owners(&state.helpers);
+        if !changed_sources.is_empty() {state.apply_runtime_sources();}
         state.apply_runtime_routines();
         state.schedule_ws_broadcast(SnapshotChanges { runtime_config:true,..SnapshotChanges::none() });
-        Ok((block,changed))
+        Ok((block,changed,changed_helpers,changed_sources))
     })).await;
-    let (block, changed) = match result {
+    let (block, changed, changed_helpers, changed_sources) = match result {
         Ok(Ok(v)) => v,
         Ok(Err((status, body))) => {
             return Ok(warp::reply::with_status(warp::reply::json(&body), status))
@@ -101,7 +120,9 @@ async fn save_block(
         Err(_) => return Ok(actor_unavailable()),
     };
     let available = db::is_db_connected();
-    let persistence = config_queries::db_save_block_change(&block, &changed).await;
+    let persistence =
+        config_queries::db_save_block_change(&block, &changed, &changed_helpers, &changed_sources)
+            .await;
     Ok(config_write_response(
         block,
         persistence,
@@ -140,6 +161,35 @@ async fn delete_block(id: String, handle: StateHandle) -> Result<impl Reply, war
                             .map(|b| b.name.clone()),
                     )
                     .collect();
+                let mut users = users;
+                users.extend(
+                    state
+                        .runtime_config
+                        .helpers
+                        .iter()
+                        .filter(|helper| {
+                            helper.compute.as_ref().is_some_and(|compute| {
+                                blocks::references(
+                                    &serde_json::to_value(&compute.script).unwrap_or_default(),
+                                    &id,
+                                )
+                            })
+                        })
+                        .map(|helper| helper.name.clone()),
+                );
+                users.extend(
+                    state
+                        .runtime_config
+                        .sources
+                        .iter()
+                        .filter(|source| {
+                            blocks::references(
+                                &serde_json::to_value(&source.compute).unwrap_or_default(),
+                                &id,
+                            )
+                        })
+                        .map(|source| source.name.clone()),
+                );
                 if !users.is_empty() {
                     return Err((
                         StatusCode::CONFLICT,
@@ -311,6 +361,79 @@ mod tests {
                 .into_response()
                 .status(),
             StatusCode::NOT_FOUND
+        );
+    }
+    #[tokio::test]
+    async fn function_edits_invalidate_transitive_routine_helper_and_source_callers() {
+        let (mut state, _events) = crate::core::event::tests::test_state();
+        let inner:AutomationBlock=serde_json::from_value(json!({"id":"inner","name":"Inner","kind":"function","body":{"kind":"javascript","spec":{"api_version":1,"source_body":"return 1;","declarations":[],"limits_profile":"default"},"output":{"kind":"number"}}})).unwrap();
+        let outer:AutomationBlock=serde_json::from_value(json!({"id":"outer","name":"Outer","kind":"function","body":{"kind":"javascript","spec":{"api_version":1,"source_body":"return api.functions.call('inner',{});","functions":["inner"],"declarations":[],"limits_profile":"default"},"output":{"kind":"number"}}})).unwrap();
+        state.runtime_config.blocks = vec![inner.clone(), outer];
+        state.runtime_config.routines=serde_json::from_value(json!([{"id":"routine","name":"Routine","enabled":true,"semantics_version":2,"revision":3,"rules":[],"actions":[],"definition_v2":{"triggers":[{"kind":"manual","id":"manual"}],"program":{"kind":"script","spec":{"api_version":1,"source_body":"api.functions.call('outer',{});return {actions:[]};","functions":["outer"],"declarations":[],"limits_profile":"default"}}}}])).unwrap();
+        state.runtime_config.helpers=serde_json::from_value(json!([{"id":"helper","name":"Helper","kind":{"kind":"number"},"initial_value":0,"persistence":"durable","compute":{"enabled":false,"revision":2,"refresh_ms":60000,"helpers":[],"script":{"api_version":1,"source_body":"return api.functions.call('outer',{});","functions":["outer"],"declarations":[],"limits_profile":"default"}}}])).unwrap();
+        state.runtime_config.sources=serde_json::from_value(json!([{"id":"source","name":"Source","enabled":false,"revision":4,"timezone":"Europe/Helsinki","refresh_interval_ms":60000,"aliases":[],"compute":{"kind":"script","source_body":"return {value:{brightness:api.functions.call('outer',{})}};","functions":["outer"],"params":{}}}])).unwrap();
+        state.apply_runtime_helpers();
+        state.apply_runtime_routines();
+        let snapshot = state.snapshot.clone();
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = spawn_state_actor(state, snapshot.clone(), tx);
+        let mut edited = inner.clone();
+        edited.body["spec"]["source_body"] = json!("return 0.5;");
+        assert_eq!(
+            request(&handle, edited, Some(inner.clone()), false)
+                .await
+                .status(),
+            StatusCode::OK
+        );
+        let config = &snapshot.load().runtime_config;
+        let saved = config
+            .blocks
+            .iter()
+            .find(|block| block.id == "inner")
+            .unwrap()
+            .clone();
+        assert_eq!(saved.revision, 2);
+        assert_eq!(config.routines[0].revision, 4);
+        assert_eq!(config.helpers[0].compute.as_ref().unwrap().revision, 3);
+        assert_eq!(config.sources[0].revision, 5);
+        assert_eq!(
+            request(&handle, inner.clone(), Some(inner), false)
+                .await
+                .status(),
+            StatusCode::CONFLICT
+        );
+        let mut invalid = saved.clone();
+        invalid.body["spec"]["functions"] = json!(["missing"]);
+        assert_eq!(
+            request(&handle, invalid, Some(saved.clone()), false)
+                .await
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            snapshot
+                .load()
+                .runtime_config
+                .blocks
+                .iter()
+                .find(|block| block.id == "inner"),
+            Some(&saved)
+        );
+        assert_eq!(
+            delete_block("inner".into(), handle.clone())
+                .await
+                .unwrap()
+                .into_response()
+                .status(),
+            StatusCode::CONFLICT
+        );
+        assert_eq!(
+            delete_block("outer".into(), handle)
+                .await
+                .unwrap()
+                .into_response()
+                .status(),
+            StatusCode::CONFLICT
         );
     }
 }

@@ -63,12 +63,17 @@ export function describeConflictValue(
   }
   const safe = scrub(value, parts);
   const text =
-    typeof safe === 'string'
-      ? safe
+    typeof safe === 'string' || typeof safe === 'bigint'
+      ? String(safe)
       : typeof safe === 'boolean'
         ? safe
           ? 'Yes'
           : 'No'
-        : JSON.stringify(safe, null, 2);
+        : JSON.stringify(
+            safe,
+            (_, entry) =>
+              typeof entry === 'bigint' ? entry.toString() : entry,
+            2,
+          );
   return text.length > 2000 ? text.slice(0, 2000) + '\n…' : text;
 }

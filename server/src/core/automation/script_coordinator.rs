@@ -36,6 +36,7 @@ pub enum OwnerKind {
     Routine,
     Scene,
     ComputedSource,
+    Helper,
 }
 
 impl OwnerKind {
@@ -44,6 +45,7 @@ impl OwnerKind {
             Self::Routine => "routine",
             Self::Scene => "scene",
             Self::ComputedSource => "computed_source",
+            Self::Helper => "helper",
         }
     }
 }
@@ -56,6 +58,12 @@ pub struct ScriptOwnerId {
 }
 
 impl ScriptOwnerId {
+    pub fn helper(id: impl Into<String>) -> Self {
+        Self {
+            kind: OwnerKind::Helper,
+            id: id.into(),
+        }
+    }
     pub fn routine(id: impl Into<String>) -> Self {
         Self {
             kind: OwnerKind::Routine,
@@ -438,6 +446,21 @@ impl ScriptCoordinator {
                 state_applied: false,
             },
             Err(message) => CompleteResult::ContractError { message },
+        }
+    }
+
+    /// Validate provenance for a bounded composite result parsed by its owner.
+    pub fn complete_value(
+        &mut self,
+        token: &InvocationToken,
+        value: &Value,
+    ) -> CompleteResult<Value> {
+        match self.begin_completion(token) {
+            Ok(_) => CompleteResult::Applied {
+                value: value.clone(),
+                state_applied: false,
+            },
+            Err(reason) => CompleteResult::Stale(reason),
         }
     }
 

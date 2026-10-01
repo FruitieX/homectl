@@ -15,7 +15,8 @@ pub struct AutomationBlock {
     pub revision: i64,
     #[serde(default)]
     pub inputs: BTreeMap<String, BlockInput>,
-    /// ConditionExpr or an array of NativeAction templates. A whole JSON value
+    /// ConditionExpr, NativeAction templates, or a JavaScript body with ScriptSpec
+    /// and a typed output for functions. A whole JSON value
     /// may be replaced with {"$input":"name"}; source strings are never interpolated.
     pub body: Value,
     pub kind: BlockKind,
@@ -30,6 +31,7 @@ fn initial_revision() -> i64 {
 pub enum BlockKind {
     Condition,
     Action,
+    Function,
 }
 
 #[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -56,5 +58,6 @@ pub enum BlockInputKind {
     Number,
     Duration,
     String,
+    Json,
     Enum { options: Vec<String> },
 }

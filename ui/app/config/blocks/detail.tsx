@@ -1,4 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import type { ScriptSpec } from '@/bindings/ScriptSpec';
+import { ScriptConfiguration, newScript } from '@/ui/ScriptConfiguration';
+import { ReusePreview } from '@/ui/ReusePreview';
 import {
   Link,
   useNavigate,
@@ -16,6 +19,8 @@ import {
   useRoutines,
   useScenes,
   useHelpers,
+  useHelperDefinitions,
+  useSources,
 } from '@/hooks/useConfig';
 import { useAppConfig } from '@/hooks/appConfig';
 import { useDevicesState } from '@/hooks/websocket';
@@ -23,6 +28,7 @@ import { useGroupsState } from '@/hooks/useDevicesApi';
 import { useEntityDraft } from '@/hooks/useEntityDraft';
 import {
   blockUsers,
+  blockCalls,
   bindingFields,
   inputReference,
   inputToken,
@@ -58,6 +64,7 @@ const kinds = [
   'duration',
   'string',
   'enum',
+  'json',
 ] as const;
 const asJson = (value: unknown): JsonValue =>
   JSON.parse(stringifyConfig(value));
@@ -69,7 +76,9 @@ export default function BlockDetailPage() {
   const api = useBlocks(),
     routines = useRoutines(),
     scenes = useScenes(),
-    helpers = useHelpers();
+    helpers = useHelpers(),
+    helperDefinitions = useHelperDefinitions(),
+    sources = useSources();
   const { apiEndpoint } = useAppConfig();
   const devices = useDevicesState() ?? {};
   const groups = useGroupsState() ?? {};
@@ -132,9 +141,34 @@ export default function BlockDetailPage() {
     },
   });
   const value = draft.value;
+  const [previewInputs, setPreviewInputs] = useState<Record<string, JsonValue>>(
+    {},
+  );
+  const scripted =
+    value?.body &&
+    !Array.isArray(value.body) &&
+    typeof value.body === 'object' &&
+    value.body.kind === 'javascript';
+  const scriptBody = scripted
+    ? (value.body as unknown as {
+        kind: 'javascript';
+        spec: ScriptSpec;
+        output?: BlockInputKind;
+      })
+    : undefined;
   const users = value
     ? blockUsers(value.id, api.data, routines.data)
     : { blocks: [], routines: [] };
+  const dependencyIds = [
+    value?.id ?? '',
+    ...users.blocks.map((block) => block.id),
+  ];
+  const helperUsers = helperDefinitions.data.filter((helper) =>
+    dependencyIds.some((id) => blockCalls(helper.compute?.script, id)),
+  );
+  const sourceUsers = sources.data.filter((source) =>
+    dependencyIds.some((id) => blockCalls(source.compute, id)),
+  );
   async function remove() {
     if (
       !saved ||
@@ -264,6 +298,7 @@ export default function BlockDetailPage() {
                 options={[
                   { value: 'action', label: 'Action block' },
                   { value: 'condition', label: 'Condition block' },
+                  { value: 'function', label: 'JavaScript function' },
                 ]}
                 onValueChange={(kind) => {
                   if (kind !== value.kind)
@@ -275,9 +310,15 @@ export default function BlockDetailPage() {
                         value.kind,
                         value.body,
                         kind,
-                        kind === 'action'
-                          ? []
-                          : { kind: 'literal', value: true },
+                        kind === 'function'
+                          ? asJson({
+                              kind: 'javascript',
+                              spec: newScript('function'),
+                              output: { kind: 'number' },
+                            })
+                          : kind === 'action'
+                            ? []
+                            : { kind: 'literal', value: true },
                       ),
                     });
                 }}
@@ -455,10 +496,116 @@ export default function BlockDetailPage() {
           </SettingsSection>
           <SettingsSection
             id="behavior"
-            title={value.kind === 'action' ? 'Actions' : 'Condition'}
-            description="Build the behavior, then bind fields to inputs below."
+            title={
+              value.kind === 'action'
+                ? 'Actions'
+                : value.kind === 'function'
+                  ? 'Function'
+                  : 'Condition'
+            }
+            description={
+              scripted
+                ? 'Use inputs for named arguments. Select any shared functions below.'
+                : 'Build the behavior, then bind fields to inputs below.'
+            }
           >
-            {value.kind === 'action' ? (
+            <ConfigField label="Implementation">
+              <SettingsSelect
+                aria-label="Block implementation"
+                value={scripted ? 'javascript' : 'visual'}
+                options={[
+                  ...(value.kind === 'function'
+                    ? []
+                    : [{ value: 'visual', label: 'Visual blocks' }]),
+                  { value: 'javascript', label: 'JavaScript' },
+                ]}
+                onValueChange={(mode) =>
+                  draft.patch({
+                    body: entityDraftStore.switchVariant(
+                      draft.key,
+                      'block-implementation',
+                      scripted ? 'javascript' : 'visual',
+                      value.body,
+                      mode,
+                      mode === 'javascript'
+                        ? asJson({
+                            kind: 'javascript',
+                            spec: newScript(value.kind),
+                            ...(value.kind === 'function'
+                              ? { output: { kind: 'number' } }
+                              : {}),
+                          })
+                        : value.kind === 'action'
+                          ? []
+                          : { kind: 'literal', value: true },
+                    ),
+                  })
+                }
+              />
+            </ConfigField>
+            {scriptBody ? (
+              <div className="space-y-4">
+                {value.kind === 'function' && (
+                  <ConfigField label="Output type">
+                    <SettingsSelect
+                      aria-label="Function output type"
+                      value={scriptBody.output?.kind ?? 'number'}
+                      options={kinds.map((kind) => ({
+                        value: kind,
+                        label:
+                          kind === 'json'
+                            ? 'JSON / structured value'
+                            : kind[0]!.toUpperCase() + kind.slice(1),
+                      }))}
+                      onValueChange={(kind) =>
+                        draft.patch({
+                          body: asJson({
+                            ...scriptBody,
+                            output:
+                              kind === 'enum'
+                                ? { kind, options: ['value'] }
+                                : { kind },
+                          }),
+                        })
+                      }
+                    />
+                    {scriptBody.output?.kind === 'enum' && (
+                      <Input
+                        aria-label="Function output options"
+                        value={scriptBody.output.options.join(', ')}
+                        onChange={(event) =>
+                          draft.patch({
+                            body: asJson({
+                              ...scriptBody,
+                              output: {
+                                kind: 'enum',
+                                options: event.target.value
+                                  .split(',')
+                                  .map((value) => value.trim()),
+                              },
+                            }),
+                          })
+                        }
+                      />
+                    )}
+                  </ConfigField>
+                )}
+                <ScriptConfiguration
+                  spec={scriptBody.spec}
+                  contract={value.kind}
+                  excludeId={value.id}
+                  devices={devices}
+                  groups={groups}
+                  onChange={(spec) =>
+                    draft.patch({ body: asJson({ ...scriptBody, spec }) })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Read typed arguments from inputs or ctx.inputs. Arguments are
+                  data; source code is never interpolated.
+                </p>
+              </div>
+            ) : value.kind === 'action' ? (
               <ProgramBuilder
                 program={{
                   kind: 'native',
@@ -484,7 +631,7 @@ export default function BlockDetailPage() {
               />
             )}
           </SettingsSection>
-          {!!Object.keys(value.inputs).length && (
+          {!scripted && !!Object.keys(value.inputs).length && (
             <SettingsSection
               id="bindings"
               title="Use inputs in the behavior"
@@ -564,13 +711,75 @@ export default function BlockDetailPage() {
                     {b.name}
                   </Link>
                 ))}
-                {!users.routines.length && !users.blocks.length && (
-                  <p className="text-sm text-muted-foreground">
-                    No callers yet.
-                  </p>
-                )}
+                {helperUsers.map((helper) => (
+                  <Link
+                    key={`helper/${helper.id}`}
+                    className="text-primary underline"
+                    to={`/config/helpers/${encodeURIComponent(helper.id)}`}
+                  >
+                    {helper.name}
+                  </Link>
+                ))}
+                {sourceUsers.map((source) => (
+                  <Link
+                    key={`source/${source.id}`}
+                    className="text-primary underline"
+                    to={`/config/sources/${encodeURIComponent(source.id)}`}
+                  >
+                    {source.name}
+                  </Link>
+                ))}
+                {!users.routines.length &&
+                  !users.blocks.length &&
+                  !helperUsers.length &&
+                  !sourceUsers.length && (
+                    <p className="text-sm text-muted-foreground">
+                      No callers yet.
+                    </p>
+                  )}
               </div>
             )}
+          </SettingsSection>
+          <SettingsSection
+            id="preview"
+            title="Try this block"
+            description="Supply arguments to preview the draft against current values."
+          >
+            <div className="mb-4 grid gap-3 sm:grid-cols-2">
+              {Object.entries(value.inputs).map(([name, input]) => (
+                <ConfigField key={name} label={input.label}>
+                  <BlockInputValue
+                    input={input}
+                    value={
+                      Object.hasOwn(previewInputs, name)
+                        ? previewInputs[name]
+                        : input.default
+                    }
+                    onChange={(next) =>
+                      setPreviewInputs((previous) => ({
+                        ...previous,
+                        [name]: next,
+                      }))
+                    }
+                    devices={devices}
+                    groups={groups}
+                    scenes={scenes.data}
+                    helpers={helpers.data}
+                  />
+                </ConfigField>
+              ))}
+            </div>
+            <ReusePreview
+              request={{
+                kind: 'block',
+                block: value,
+                inputs: Object.fromEntries(
+                  Object.entries(previewInputs).filter(([name]) =>
+                    Object.hasOwn(value.inputs, name),
+                  ),
+                ),
+              }}
+            />
           </SettingsSection>
           <EntitySaveBar
             draft={draft}

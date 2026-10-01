@@ -541,6 +541,7 @@ mod tests {
                 refresh_interval_ms: 60_000,
                 aliases: vec![alias.clone()],
                 compute: SourceCompute::Script {
+                    functions: None,
                     preset: None,
                     source_body: Some("return null;".into()),
                     params: serde_json::Value::Null,

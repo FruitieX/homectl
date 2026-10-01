@@ -41,6 +41,7 @@ pub const KIND_LABELS: &[&str] = &[
     "HandleEvent:TimerWakeup",
     "HandleEvent:SourceRefreshTick",
     "HandleEvent:SourceScriptResult",
+    "HandleEvent:HelperScriptResult",
 ];
 
 pub const KIND_MUTATE: usize = 11;
@@ -211,5 +212,6 @@ fn event_kind_index(event: &crate::types::event::Event) -> usize {
         Event::TimerWakeup { .. } => 19,
         Event::SourceRefreshTick => 20,
         Event::SourceScriptResult { .. } => 21,
+        Event::HelperScriptResult { .. } => 22,
     }
 }

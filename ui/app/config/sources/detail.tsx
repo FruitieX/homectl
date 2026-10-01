@@ -35,6 +35,7 @@ import { SceneColorControl } from '@/ui/settings/SceneColorControl';
 import { JsonValueEditor } from '@/ui/settings/JsonValueEditor';
 import { DraftNumberInput } from '@/ui/settings/DraftNumberInput';
 import { SourcePreviewPanel } from '@/ui/SourcePreviewPanel';
+import { FunctionDependencies } from '@/ui/ScriptConfiguration';
 import SourceScriptEditor, {
   SOURCE_SCRIPT_STARTER,
 } from '@/ui/SourceScriptEditor';
@@ -653,6 +654,12 @@ export default function SourceDetailPage() {
           )}
           {compute.kind === 'script' && !compute.preset && (
             <SettingsSection id="script" title="Script">
+              <FunctionDependencies
+                value={compute.functions ?? []}
+                onChange={(functions) =>
+                  patchCompute({ ...compute, functions })
+                }
+              />
               <SourceScriptEditor
                 value={compute.source_body ?? ''}
                 onChange={(source_body) =>

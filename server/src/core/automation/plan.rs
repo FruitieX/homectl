@@ -411,7 +411,8 @@ fn predicate_device(predicate: &ConditionExpr) -> Option<DeviceKey> {
         ConditionExpr::Comparison { .. }
         | ConditionExpr::Group { .. }
         | ConditionExpr::Literal { .. }
-        | ConditionExpr::Block { .. } => None,
+        | ConditionExpr::Block { .. }
+        | ConditionExpr::Script { .. } => None,
     }
 }
 
@@ -936,6 +937,15 @@ impl Planner<'_> {
                         );
                     }
                     Some(definition) => {
+                        if definition.compute.is_some() {
+                            self.suppress(
+                                action,
+                                kind,
+                                vec![helper.to_string()],
+                                "computed_helper_read_only".into(),
+                            );
+                            return;
+                        }
                         if let Err(error) = definition.kind.validate_value(value) {
                             self.suppress(
                                 action,
@@ -1012,6 +1022,7 @@ impl Planner<'_> {
                     .inputs
                     .helpers
                     .value(helper)
+                    .filter(|_| self.inputs.helpers.value_is_known(helper))
                     .and_then(|value| value.as_str().map(str::to_string));
                 let selected = value
                     .as_deref()
@@ -1205,6 +1216,7 @@ mod tests {
                 initial_value: json!(value),
                 persistence: HelperPersistence::Durable,
                 hidden: None,
+                compute: None,
             })
             .expect("helper definition is valid");
         helpers
@@ -1227,6 +1239,7 @@ mod tests {
                 initial_value: json!("evening"),
                 persistence: HelperPersistence::Durable,
                 hidden: None,
+                compute: None,
             })
     }
 

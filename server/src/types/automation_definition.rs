@@ -285,6 +285,12 @@ pub struct ScheduleSpec {
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(export)]
 pub enum ConditionExpr {
+    Script {
+        spec: ScriptSpec,
+        #[serde(skip)]
+        #[ts(skip)]
+        result: Option<serde_json::Value>,
+    },
     Block {
         block_id: String,
         #[serde(default)]
@@ -710,6 +716,12 @@ pub struct ScriptSpec {
 
     /// Function body source. Never executed during compilation or validation.
     pub source_body: String,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub functions: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub inputs: std::collections::BTreeMap<String, serde_json::Value>,
 
     #[serde(default)]
     pub declarations: Vec<ScriptDeclaration>,

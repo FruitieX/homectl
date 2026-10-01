@@ -3,6 +3,7 @@ import type { GroupId } from './GroupId';
 import type { Quantifier } from './Quantifier';
 import type { RawRuleOperator } from './RawRuleOperator';
 import type { SceneId } from './SceneId';
+import type { ScriptSpec } from './ScriptSpec';
 import type { ValueSource } from './ValueSource';
 import type { JsonValue } from './serde_json/JsonValue';
 
@@ -10,6 +11,7 @@ import type { JsonValue } from './serde_json/JsonValue';
  * Three-valued condition expression. `All`/`Any` require at least one child.
  */
 export type ConditionExpr =
+  | { kind: 'script'; spec: ScriptSpec }
   | { kind: 'block'; block_id: string; inputs: { [key in string]: JsonValue } }
   | { kind: 'literal'; value: boolean }
   | { kind: 'all'; conditions: Array<ConditionExpr> }

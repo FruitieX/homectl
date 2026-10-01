@@ -412,6 +412,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
     // commands carry the causation of the frame that spawned them.
     let causation = event.causation().unwrap_or_default();
     state.devices.begin_command(causation);
+    state.helpers.begin_frame();
 
     // E08: terminate causal chains at a fixed bound. The rejected command is
     // recorded as a limited frame so the loop is visible instead of silent.
@@ -836,7 +837,8 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 triggering_device.clone(),
                 value.clone(),
                 error.clone(),
-            );
+            )
+            .await;
             outcome.mark_snapshot_changes(SnapshotChanges {
                 routine_statuses: true,
                 ..SnapshotChanges::none()
@@ -937,6 +939,49 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
             }
         }
 
+        Event::HelperScriptResult {
+            helper_id,
+            request_id,
+            owner_key,
+            owner_generation,
+            definition_revision,
+            state_revision,
+            value,
+            error,
+        } => {
+            let token = InvocationToken {
+                request_id: *request_id,
+                owner_key: owner_key.clone(),
+                owner_generation: *owner_generation,
+                definition_revision: *definition_revision,
+                state_revision: *state_revision,
+                contract: ScriptOutputContract::ComputedSource,
+            };
+            if let Some(updated) =
+                state.complete_helper(helper_id, &token, value.as_ref(), error.as_ref())
+            {
+                crate::core::value_history::observe_helper(&helper_id.to_string(), &updated.value);
+                if state
+                    .helpers
+                    .definition(helper_id)
+                    .is_some_and(|definition| definition.persistence == HelperPersistence::Durable)
+                {
+                    outcome.push(DeferredEventWork::PersistHelperValue {
+                        helper: helper_id.clone(),
+                        value: updated.value,
+                        revision: updated.revision,
+                    });
+                }
+            }
+            state.refresh_routine_statuses();
+            let changes = SnapshotChanges {
+                helper_statuses: true,
+                routine_statuses: true,
+                ..SnapshotChanges::none()
+            };
+            state.schedule_ws_broadcast(changes);
+            outcome.mark_snapshot_changes(changes);
+        }
         Event::SourceScriptResult {
             source_id,
             request_id,
@@ -1254,6 +1299,9 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
         },
     }
 
+    let helper_changes = state.dispatch_due_helpers().await;
+    state.schedule_ws_broadcast(helper_changes);
+    outcome.mark_snapshot_changes(helper_changes);
     Ok(outcome)
 }
 
@@ -1346,7 +1394,7 @@ fn apply_helper_write(
 /// actions are planned against acceptance-time state and dispatched through
 /// the same path as native programs. Rejections remain visible in
 /// `last_run` and dispatch nothing (S16/X03/X05).
-fn apply_script_result(
+async fn apply_script_result(
     state: &mut AppState,
     routine_id: &RoutineId,
     token: &InvocationToken,
@@ -1355,6 +1403,108 @@ fn apply_script_result(
     value: Option<serde_json::Value>,
     error: Option<String>,
 ) {
+    let captured_inputs = state.scripts.take_plan_inputs(token.request_id);
+    if let Some(mut pending) = state.scripts.take_conditions(token.request_id) {
+        let completed = if let Some(message) = error {
+            match state.scripts.coordinator_mut().abandon(token) {
+                Ok(()) => Err(message),
+                Err(reason) => Err(format!("Stale condition result: {}", reason.as_str())),
+            }
+        } else {
+            match state
+                .scripts
+                .coordinator_mut()
+                .complete_value(token, &value.unwrap_or_default())
+            {
+                CompleteResult::Applied { value, .. } => pending.resolve(&value),
+                CompleteResult::Stale(reason) => {
+                    Err(format!("Stale condition result: {}", reason.as_str()))
+                }
+                CompleteResult::ContractError { message } => Err(message),
+            }
+        };
+        if let Err(message) = completed {
+            state.rules.record_v2_script_failure(routine_id, message);
+            state.refresh_routine_statuses();
+            return;
+        }
+        state.rules.accept_script_conditions(&pending.evaluation);
+        if !pending.evaluation.will_trigger {
+            state.refresh_routine_statuses();
+            return;
+        }
+        let inputs = PlanInputs {
+            devices: &pending.after,
+            groups: &pending.groups,
+            helpers: &pending.helpers,
+            intents: &pending.intents,
+        };
+        let mode = pending.compiled.normalized.execution.mode;
+        let run = match &pending.compiled.normalized.program {
+            crate::types::automation_definition::Program::Script(program) => {
+                Some(state.scripts.prepare_handler_invocation(
+                    routine_id,
+                    pending.evaluation.definition_revision,
+                    &program.spec,
+                    mode,
+                    &pending.frame(),
+                    &pending.intents,
+                    pending.frame_id,
+                    pending.origin,
+                    causation,
+                    pending.now_ms,
+                    triggering_device,
+                ))
+            }
+            crate::types::automation_definition::Program::Native(_) => {
+                let plan = state.rules.plan_resolved_conditions(
+                    &pending.compiled,
+                    &pending.evaluation,
+                    &inputs,
+                );
+                if super::automation::mixed_scripts::contains_scripts(&plan) {
+                    Some(state.scripts.prepare_native_script_blocks(
+                        plan,
+                        mode,
+                        &pending.frame(),
+                        &pending.intents,
+                        pending.frame_id,
+                        pending.origin,
+                        causation,
+                        pending.now_ms,
+                        triggering_device,
+                    ))
+                } else {
+                    let status = state.dispatch_v2_plan(plan, causation);
+                    state.rules.record_v2_run(routine_id, status);
+                    None
+                }
+            }
+        };
+        if let Some(run) = run {
+            match (run, state.scripts.ensure_pool().await) {
+                (Ok(run), Ok(pool)) => state.scripts.spawn_handler_execution(
+                    pool,
+                    state.event_tx.clone(),
+                    run.routine_id,
+                    run.token,
+                    run.source_body,
+                    run.context,
+                    run.causation,
+                    run.triggering_device,
+                ),
+                (Ok(run), Err(message)) => {
+                    state.scripts.take_plan_inputs(run.token.request_id);
+                    state.scripts.take_native_plan(run.token.request_id);
+                    state.scripts.coordinator_mut().abandon(&run.token).ok();
+                    state.rules.record_v2_script_failure(routine_id, message)
+                }
+                (Err(message), _) => state.rules.record_v2_script_failure(routine_id, message),
+            }
+        }
+        state.refresh_routine_statuses();
+        return;
+    }
     let native_plan = state.scripts.take_native_plan(token.request_id);
     if let Some(message) = error {
         let reason = match state.scripts.coordinator_mut().abandon(token) {
@@ -1377,12 +1527,16 @@ fn apply_script_result(
     {
         CompleteResult::Applied { value: outcome, .. } => {
             let plan = {
-                let inputs = PlanInputs {
+                let current_inputs = PlanInputs {
                     devices: state.devices.get_state(),
                     groups: &state.groups,
                     helpers: &state.helpers,
                     intents: &state.intents,
                 };
+                let inputs = captured_inputs
+                    .as_ref()
+                    .map(|captured| captured.view())
+                    .unwrap_or(current_inputs);
                 if let Some(plan) = native_plan {
                     match super::automation::mixed_scripts::expand_plan(
                         plan,
@@ -1971,6 +2125,9 @@ impl AppState {
             Err(message) => {
                 for run in &prepared {
                     self.scripts.take_native_plan(run.token.request_id);
+                    self.scripts.take_conditions(run.token.request_id);
+                    self.scripts.take_plan_inputs(run.token.request_id);
+                    self.scripts.coordinator_mut().abandon(&run.token).ok();
                     self.rules
                         .record_v2_script_failure(&run.routine_id, message.clone());
                 }
@@ -2042,10 +2199,12 @@ impl AppState {
         let fired_timers = std::mem::take(&mut self.pending_timer_fires);
         let predicate_fires = std::mem::take(&mut self.pending_predicate_fires);
         let schedule_fires = std::mem::take(&mut self.pending_schedule_fires);
+        let helpers_changed = std::mem::take(&mut self.helpers.changed);
         if pending.is_empty()
             && fired_timers.is_empty()
             && predicate_fires.is_empty()
             && schedule_fires.is_empty()
+            && !helpers_changed
         {
             // Invalidation-free commands (scene/group edits through mutate
             // closures) may still have queued materializations.
@@ -2191,6 +2350,42 @@ impl AppState {
                                 .record_v2_policy_rejection(&evaluation.routine_id, reason);
                             continue;
                         }
+                        let compiled = self
+                            .rules
+                            .compiled_v2_routines()
+                            .get(&evaluation.routine_id)
+                            .map(|d| d.compiled.clone());
+                        if let Some(compiled) =
+                            compiled.filter(|c| super::automation::conditions::has(&c.normalized))
+                        {
+                            let source = self.rules.v2_script_triggering_device(
+                                &evaluation.routine_id,
+                                &evaluation.matched_trigger_ids,
+                            );
+                            match self.scripts.prepare_conditions(
+                                &compiled,
+                                evaluation,
+                                &frame,
+                                &self.intents,
+                                frame_id,
+                                origin,
+                                frame_causation,
+                                evaluation_time_ms,
+                                source,
+                            ) {
+                                Ok(run) => {
+                                    self.rules.note_v2_invocation(
+                                        &evaluation.routine_id,
+                                        now_monotonic_ms,
+                                    );
+                                    prepared_scripts.push(run);
+                                }
+                                Err(message) => self
+                                    .rules
+                                    .record_v2_script_failure(&evaluation.routine_id, message),
+                            }
+                            continue;
+                        }
                         accepted_evaluations.push(evaluation.clone());
                     }
 
@@ -2226,6 +2421,7 @@ impl AppState {
                             plan,
                             mode,
                             &frame,
+                            &self.intents,
                             frame_id,
                             origin,
                             frame_causation,
@@ -2261,6 +2457,7 @@ impl AppState {
                             spec,
                             mode,
                             &frame,
+                            &self.intents,
                             frame_id,
                             origin,
                             frame_causation,
@@ -2476,7 +2673,12 @@ impl AppState {
         };
 
         for definition in due {
-            let body = match sources::resolve_source_body(&definition.compute) {
+            let catalog = super::automation::ConfigCatalog::new(
+                self.devices.get_state().0.keys().cloned(),
+                &self.runtime_config,
+            );
+            let body = match super::automation::reuse::resolve_source(&definition.compute, &catalog)
+            {
                 Ok(body) => body,
                 Err(message) => {
                     warn!(
@@ -2654,7 +2856,7 @@ pub(crate) mod tests {
         (state, event_rx)
     }
 
-    fn lamp(integration: &str, id: &str, power: bool, brightness: f32) -> Device {
+    pub(crate) fn lamp(integration: &str, id: &str, power: bool, brightness: f32) -> Device {
         Device::new(
             IntegrationId::from(integration.to_string()),
             DeviceId::new(id),
@@ -3435,6 +3637,7 @@ pub(crate) mod tests {
             initial_value: serde_json::json!(false),
             persistence: HelperPersistence::Session,
             hidden: None,
+            compute: None,
         }];
 
         state.seed_startup_state().await;
@@ -3487,6 +3690,7 @@ pub(crate) mod tests {
             initial_value: serde_json::json!("night"),
             persistence: HelperPersistence::Session,
             hidden: None,
+            compute: None,
         }];
         state.apply_runtime_helpers();
         state.apply_runtime_scenes();
@@ -3807,6 +4011,7 @@ pub(crate) mod tests {
             ("return {actions:[{action:'run_script',id:'recursive',spec:{api_version:1,source_body:'return {actions:[]}',declarations:[],limits_profile:'default'}}]};", false, false, false),
             ("return {actions:[]};", false, true, false),
             ("return {actions:[]};", true, false, true),
+            ("return {actions:[api.actions.setPower({device:{integration_id:'mqtt',device_id:'lamp'},power:true})]};", true, false, true),
         ] {
             let (mut state, mut event_rx) = test_state();
             state.scripts.worker_binary = Some(script_worker_binary());
@@ -3851,7 +4056,7 @@ pub(crate) mod tests {
             }
             if newer_manual_intent {
                 assert!(powers.is_empty(), "new manual intent suppresses the frozen native prefix and suffix");
-                assert_eq!(run.steps.len(), 2);
+                assert_eq!(run.steps.len(), if source.contains("setPower") {3} else {2});
                 assert!(run.steps.iter().all(|step| step.disposition == StepDisposition::Suppressed));
             } else if expected_success {
                 assert_eq!(powers, vec![false, true, false]);
@@ -5790,6 +5995,7 @@ pub(crate) mod tests {
             refresh_interval_ms: 60_000,
             aliases: vec![],
             compute: SourceCompute::Script {
+                functions: None,
                 preset: Some(SourcePresetRef {
                     id: "circadian".to_string(),
                     version: 1,
