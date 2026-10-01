@@ -1,7 +1,6 @@
 import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { MapPin } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useMediaQuery } from 'usehooks-ts';
 
 import type { AssistantPlan } from '@/bindings/AssistantPlan';
 import { useImageState } from '@/hooks/useImageState';
@@ -14,6 +13,7 @@ import {
   operationTarget,
 } from '@/lib/assistant-diff';
 import { buildFloorplanScene } from '@/lib/floorplan-scene';
+import { hiddenFloorplanLabels } from '@/lib/floorplan-labels';
 import { PixiFloorplanRenderer } from '@/ui/floorplan';
 import { Badge } from '@/ui/primitives/badge';
 import { excludeUndefined } from 'utils/excludeUndefined';
@@ -67,7 +67,6 @@ function AffectedEntityList({ plan }: { plan: AssistantPlan }) {
  * so layout edits are not visualized.
  */
 export function FloorplanPreview({ plan }: { plan: AssistantPlan }) {
-  const showDeviceLabels = useMediaQuery('(min-width: 768px)');
   const healthQuery = useDeviceHealth();
   const healthByDevice = healthQuery.isError
     ? undefined
@@ -131,22 +130,15 @@ export function FloorplanPreview({ plan }: { plan: AssistantPlan }) {
       }),
     [healthByDevice, selectedFloorplan, image, devices, groups, displayNameMap],
   );
-  // Entity names remain in the list below; reserve the phone map for room
-  // labels and highlighted markers rather than competing text badges.
+  // The embedded preview is too small for label text at any size, so it hides
+  // every label layer regardless of the floorplan's own label settings; the
+  // affected-entity list below names them.
   const scene = useMemo(
-    () =>
-      showDeviceLabels
-        ? fullScene
-        : {
-            ...fullScene,
-            labelVisibility: {
-              ...fullScene.labelVisibility,
-              lights: false,
-              sensors: false,
-              groups: fullScene.labelVisibility?.groups ?? true,
-            },
-          },
-    [fullScene, showDeviceLabels],
+    () => ({
+      ...fullScene,
+      labelVisibility: hiddenFloorplanLabels(),
+    }),
+    [fullScene],
   );
 
   const canRender =

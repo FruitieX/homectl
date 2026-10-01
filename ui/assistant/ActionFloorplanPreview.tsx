@@ -1,6 +1,5 @@
 import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { useMemo, useState } from 'react';
-import { useMediaQuery } from 'usehooks-ts';
 
 import type { AssistantActionChange } from '@/bindings/AssistantActionChange';
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
@@ -10,6 +9,7 @@ import { useDevicesByKeysState, useGroupsState } from '@/hooks/websocket';
 import { hsToRgbBytes } from '@/lib/colorBytes';
 import { cn } from '@/lib/cn';
 import { buildFloorplanScene } from '@/lib/floorplan-scene';
+import { hiddenFloorplanLabels } from '@/lib/floorplan-labels';
 import {
   getFloorplanDevicePositions,
   getFloorplanRenderMetrics,
@@ -33,7 +33,6 @@ export function ActionFloorplanPreview({
   changes: AssistantActionChange[];
   className?: string;
 }) {
-  const showDeviceLabels = useMediaQuery('(min-width: 768px)');
   const healthQuery = useDeviceHealth();
   const healthByDevice = healthQuery.isError
     ? undefined
@@ -112,22 +111,15 @@ export function ActionFloorplanPreview({
       placedKeys,
     ],
   );
-  // The affected-device list supplies names on phones. Keep room labels on
-  // the small map without overlapping them with device-name badges.
+  // The embedded preview is too small for label text at any size, so it hides
+  // every label layer regardless of the floorplan's own label settings; the
+  // affected-device list below names the devices.
   const scene = useMemo(
-    () =>
-      showDeviceLabels
-        ? fullScene
-        : {
-            ...fullScene,
-            labelVisibility: {
-              ...fullScene.labelVisibility,
-              lights: false,
-              sensors: false,
-              groups: fullScene.labelVisibility?.groups ?? true,
-            },
-          },
-    [fullScene, showDeviceLabels],
+    () => ({
+      ...fullScene,
+      labelVisibility: hiddenFloorplanLabels(),
+    }),
+    [fullScene],
   );
   const focusBounds = useMemo(() => {
     if (!selectedFloorplan?.grid || !selection) {

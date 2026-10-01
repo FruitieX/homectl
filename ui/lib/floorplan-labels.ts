@@ -28,3 +28,13 @@ export function validFloorplanLayers(value: unknown): value is FloorplanLayers {
     )
   );
 }
+
+/**
+ * Label layers for an embedded preview: such maps are too small for label
+ * text, so every label is hidden regardless of the floorplan's own settings
+ * (the surrounding list names the entities instead). Returns a fresh object so
+ * a consumer can adjust its own copy without affecting the next scene.
+ */
+export function hiddenFloorplanLabels(): FloorplanLayers {
+  return { lights: false, sensors: false, groups: false };
+}

@@ -220,6 +220,37 @@ export default async function (cdp, { width, url }) {
     );
     reviews.push({ kind, ...sizes });
     if (kind === 'action') {
+      // The affected-devices detail starts collapsed and expands on demand.
+      const accordion = `[...document.querySelectorAll('[role=dialog] button')].find(e=>e.textContent.trim().startsWith('Affected devices'))`;
+      const expanded = await evaluate(
+        `(()=>{const b=${accordion};return b?b.getAttribute('aria-expanded'):null})()`,
+      );
+      if (expanded !== 'false')
+        throw Error('Affected devices must start collapsed: ' + expanded);
+      const collapsedRows = await evaluate(
+        `document.querySelectorAll('[role=dialog] [role=checkbox]').length`,
+      );
+      if (collapsedRows !== 0)
+        throw Error(
+          'Collapsed accordion still rendered device rows: ' + collapsedRows,
+        );
+      await click(accordion);
+      await until(
+        `document.querySelectorAll('[role=dialog] [role=checkbox]').length===2`,
+        'Affected-device rows appear when expanded',
+      );
+      const rowLabels = await evaluate(
+        `[...document.querySelectorAll('[role=dialog] [role=checkbox]')].map(e=>e.getAttribute('aria-label'))`,
+      );
+      if (
+        !rowLabels.some((label) => (label ?? '').includes('Living room lamp'))
+      )
+        throw Error('Expanded rows must name their devices: ' + rowLabels);
+      await click(accordion);
+      await until(
+        `document.querySelectorAll('[role=dialog] [role=checkbox]').length===0`,
+        'Affected-device rows collapse again',
+      );
       await click(
         `document.querySelector('[aria-label="Back to past conversations"]')`,
       );

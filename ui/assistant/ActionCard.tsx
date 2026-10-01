@@ -50,7 +50,9 @@ export function ActionCard({
 }) {
   const applyAction = useApplyAssistantActionPlan();
   const discardAction = useDiscardAssistantAction();
-  const [devicesOpen, setDevicesOpen] = useState(true);
+  // Collapsed by default: the proposal summary, preview and action row carry
+  // the decision; the per-device detail is opt-in.
+  const [devicesOpen, setDevicesOpen] = useState(false);
   const [selected, setSelected] = useState(
     () =>
       new Set((results ?? action.changes).map((change) => change.deviceKey)),
