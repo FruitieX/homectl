@@ -550,6 +550,28 @@ export default async function (cdp, { width, url }) {
       );
     }
     await fits('Dashboard fits');
+    // Include a sensor reading and a room name that wraps at smaller zooms.
+    const floorplan = await api(
+      'floorplans/ground_floor/editor',
+      undefined,
+      'GET',
+    );
+    const labelGrid = JSON.parse(floorplan.grid_data);
+    labelGrid.devices.push({
+      deviceKey: 'zigbee2mqtt/living_room_motion',
+      deviceName: 'Living room motion',
+      x: 7,
+      y: 5,
+    });
+    labelGrid.groups.living_room = Array.from({ length: 3 }, (_, y) =>
+      Array.from({ length: 3 }, (_, x) => ({ x: x + 1, y: y + 1 })),
+    ).flat();
+    await api('floorplans/ground_floor/editor', {
+      ...floorplan,
+      expected: floorplan.revision_token,
+      grid_data: JSON.stringify(labelGrid),
+      image: { kind: 'keep' },
+    });
     await cdp.send('Page.navigate', { url: origin + '/map' });
     await check(
       'Live floorplan renders',
@@ -602,6 +624,63 @@ export default async function (cdp, { width, url }) {
       `Math.abs(${world}.x-(${pinched.x})-15)<.5&&Math.abs(${world}.y-(${pinched.y})-10)<.5&&Math.abs(${world}.scale.x-(${pinched.scale}))<.001`,
     );
     await touches('touchEnd', []);
+    const labelSizes = new Map();
+    for (const deltaY of [-150, -150, -150, 150, 150, 150]) {
+      await cdp.send('Input.dispatchMouseEvent', {
+        type: 'mouseWheel',
+        x: box.x + box.width / 2,
+        y: box.y + box.height / 2,
+        deltaX: 0,
+        deltaY,
+      });
+      await pause(150);
+      // Read back the actual GPU textures: ink touching a texture edge can
+      // be cropped or lost to filtering, regardless of its nominal bounds.
+      const labels = await evaluate(`(()=>{
+        const a=window.__smokePixiApps.find(a=>a.renderer?.canvas===document.querySelector('canvas'));
+        const result=[];
+        function walk(c){
+          if(typeof c.text==='string'&&c.visible){
+            const gpu=c._gpuData[a.renderer.uid];
+            if(gpu?.texture){
+              const {pixels,width,height}=a.renderer.extract.pixels(gpu.texture);
+              let edgeInk=false,hasInk=false;
+              for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+                if(pixels[(y*width+x)*4+3]){
+                  hasInk=true;
+                  if(x===0||y===0||x===width-1||y===height-1)edgeInk=true;
+                }
+              }
+              result.push({text:c.text,hasInk,edgeInk,
+                width:c.width*a.stage.children[0].scale.x,
+                height:c.height*a.stage.children[0].scale.x});
+            }
+          }
+          c.children?.forEach(walk);
+        }
+        walk(a.stage);
+        return result;
+      })()`);
+      if (labels.length < 4)
+        throw Error('Missing device, sensor, room label or sensor reading');
+      for (const label of labels) {
+        if (!label.hasInk || label.edgeInk)
+          throw Error(`Floorplan label texture crops text: ${label.text}`);
+        const previous = labelSizes.get(label.text);
+        if (
+          previous &&
+          (Math.abs(previous.width - label.width) > 0.1 ||
+            Math.abs(previous.height - label.height) > 0.1)
+        )
+          throw Error(
+            `Floorplan label changes screen size with zoom: ${label.text}`,
+          );
+        labelSizes.set(label.text, label);
+      }
+    }
+    checks.push(
+      'Device, sensor and room text remains uncropped and stable through zooms',
+    );
     await shot('map');
     await fits('Map fits');
     await goto('/config/floorplan');

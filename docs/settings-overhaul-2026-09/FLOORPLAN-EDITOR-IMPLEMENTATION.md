@@ -125,6 +125,24 @@ The layout regression test checks stable anchors across six zoom levels with
 marker avoidance and changing line breaks. All browser writes use isolated
 fixtures. [Screenshots and results](implementation-evidence/floorplan-group-labels/).
 
+## Follow-up: label clipping at different zoom levels (2026-10-02)
+
+Map labels now rasterize at their final screen font size, with a fixed 2×
+texture resolution for fractional positions. Zoom changes only the inverse
+world scale; it no longer changes font hinting, text measurements or texture
+rounding. Room labels still wrap to their available area and keep stable anchors.
+
+Device names, sensor readings and room labels have a transparent texture gutter
+to protect glyph edges from cropping and filtering. Device and reading badges
+also have more vertical space, with enough separation between the two badges.
+
+The production browser suite checks actual GPU texture pixels for a clear gutter
+around the text and checks stable screen dimensions through six zoom changes,
+on desktop and phone. It covers device names, sensor readings and room labels,
+alongside the existing wrapping, pinch and editor interaction checks. UI type
+check, lint, all 303 unit tests, the production build and both browser viewports
+pass (existing lint/build warnings only).
+
 ## Main files
 
 | Area | Source |

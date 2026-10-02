@@ -152,7 +152,6 @@ interface SceneRenderState {
   groupEntries: Map<string, GroupRenderEntry>;
   lightEntries: Map<string, LightRenderEntry>;
   lightMarkerEntries: Map<string, Graphics>;
-  labelTextureScale: number;
   labelViewScale: number;
   sensorMarkerEntries: Map<string, Graphics>;
   sensorLabelEntries: Map<string, SensorLabelRenderEntry>;
@@ -163,7 +162,9 @@ const longPressDelayMs = 500;
 const tapMoveTolerancePx = 8;
 const minScale = 0.001;
 const maxScale = 8;
-const labelTextureScaleStep = 0.25;
+// Labels stay at a fixed screen size; supersample their small textures so
+// fractional map positions remain legible without zoom-dependent font metrics.
+const labelResolution = 2;
 const lightGradientTextureCache = new Map<number, Texture>();
 const objectIdentityCache = new WeakMap<object, number>();
 let nextObjectIdentity = 1;
@@ -311,16 +312,6 @@ function getTileColor(tile: FloorplanSceneTile) {
   }
 }
 
-function getLabelTextureScale(viewScale: number) {
-  return Math.min(
-    maxScale,
-    Math.max(
-      1,
-      Math.ceil(viewScale / labelTextureScaleStep) * labelTextureScaleStep,
-    ),
-  );
-}
-
 function destroyDisplayObject(
   displayObject: Container | Graphics | Sprite | Text,
 ) {
@@ -422,7 +413,6 @@ function createSceneRenderState(world: Container): SceneRenderState {
     groupEntries: new Map(),
     lightEntries: new Map(),
     lightMarkerEntries: new Map(),
-    labelTextureScale: 1,
     labelViewScale: 1,
     sensorMarkerEntries: new Map(),
     sensorLabelEntries: new Map(),
@@ -546,18 +536,13 @@ function syncGroupLabel(
   viewScale: number,
   visible: boolean,
 ) {
-  const scale = Math.max(viewScale, 0.0001),
-    textureScale = getLabelTextureScale(scale);
+  const scale = Math.max(viewScale, 0.0001);
   const label = entry.label;
   label.text = group.name;
-  label.style.fontSize = GROUP_LABEL_FONT_SIZE * textureScale;
-  label.style.stroke = { width: 0, alpha: 0 };
-  label.scale.set(1 / (textureScale * scale));
+  label.scale.set(1 / scale);
   label.visible = false;
   entry.labelBackground.visible = false;
   if (!visible) return;
-  label.style.align = 'center';
-  label.style.lineHeight = GROUP_LABEL_LINE_HEIGHT * textureScale;
   const layout = getGroupLabelLayout({
     cells: group.cells,
     text: group.name,
@@ -605,11 +590,15 @@ function syncGroups(
     if (!entry) {
       const label = new Text({
         text: group.name,
+        resolution: labelResolution,
         style: {
           fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
           fontSize: GROUP_LABEL_FONT_SIZE,
           fontWeight: '600',
           fill: 0x20342b,
+          align: 'center',
+          lineHeight: GROUP_LABEL_LINE_HEIGHT,
+          padding: 2,
         },
       });
       label.anchor.set(0.5, 0);
@@ -926,23 +915,21 @@ function syncMarkers(
   }
 }
 
-function createSensorLabel(
-  sensor: FloorplanScene['sensors'][number],
-  textureScale: number,
-) {
+function createSensorLabel(sensor: FloorplanScene['sensors'][number]) {
   const container = new Container();
   const label = new Text({
     text: sensor.label,
+    resolution: labelResolution,
     style: {
       align: 'center',
       fill: 0x20342b,
       fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-      fontSize: 11 * sensor.scale * textureScale,
+      fontSize: 11 * sensor.scale,
       fontWeight: '500',
+      padding: 2,
     },
   });
   label.anchor.set(0.5, 0);
-  label.scale.set(1 / textureScale);
   container.addChild(label);
 
   const statusBackground = new Graphics();
@@ -961,13 +948,14 @@ function createSensorLabel(
 function syncSensorLabel(
   entry: SensorLabelRenderEntry,
   sensor: FloorplanScene['sensors'][number],
-  textureScale: number,
   viewScale: number,
 ) {
-  // Labels describe the map; keep their screen size stable while it zooms.
-  const labelScale = 1 / (textureScale * Math.max(viewScale, 0.0001));
+  // Rasterize at the final screen font size with a fixed texture resolution.
+  // Cancelling only the world scale keeps font metrics and texture rounding
+  // stable across zooms; enlarging the font then shrinking it re-hinted glyphs.
+  const labelScale = 1 / Math.max(viewScale, 0.0001);
   entry.label.text = sensor.label;
-  entry.label.style.fontSize = 11 * sensor.scale * textureScale;
+  entry.label.style.fontSize = 11 * sensor.scale;
   entry.label.scale.set(labelScale);
   entry.label.position.set(
     sensor.x,
@@ -989,12 +977,14 @@ function syncSensorLabel(
   if (!entry.status) {
     entry.status = new Text({
       text: sensor.statusLabel,
+      resolution: labelResolution,
       style: {
         align: 'center',
         fill: 0xffffff,
         fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-        fontSize: 9 * sensor.scale * textureScale,
+        fontSize: 9 * sensor.scale,
         fontWeight: '800',
+        padding: 2,
       },
     });
     entry.status.anchor.set(0.5, 0);
@@ -1002,7 +992,7 @@ function syncSensorLabel(
   }
 
   entry.status.text = sensor.statusLabel;
-  entry.status.style.fontSize = 9 * sensor.scale * textureScale;
+  entry.status.style.fontSize = 9 * sensor.scale;
   entry.status.scale.set(labelScale);
   entry.status.position.set(
     sensor.x,
@@ -1011,12 +1001,12 @@ function syncSensorLabel(
   const width = entry.status.width * viewScale;
   const height = entry.status.height * viewScale;
   entry.statusBackground
-    .roundRect(-width / 2 - 3, -1, width + 6, height + 2, 3)
+    .roundRect(-width / 2 - 4, -3, width + 8, height + 6, 3)
     .fill({ color: 0x172027, alpha: 0.95 });
   entry.statusBackground.position.copyFrom(entry.status.position);
   entry.statusBackground.scale.set(1 / viewScale);
   entry.label.position.y =
-    entry.status.position.y + entry.status.height + 5 / viewScale;
+    entry.status.position.y + entry.status.height + 7 / viewScale;
   drawDeviceLabelBackground(entry, viewScale);
 }
 
@@ -1027,7 +1017,7 @@ function drawDeviceLabelBackground(
   const width = entry.label.width * viewScale;
   const height = entry.label.height * viewScale;
   entry.labelBackground
-    .roundRect(-width / 2 - 3, -1, width + 6, height + 2, 3)
+    .roundRect(-width / 2 - 4, -3, width + 8, height + 6, 3)
     .fill({ color: 0xffffff, alpha: 0.95 });
   entry.labelBackground.position.copyFrom(entry.label.position);
   entry.labelBackground.scale.set(1 / viewScale);
@@ -1064,8 +1054,6 @@ function syncSensorLabels(
     return;
   }
 
-  const textureScale = getLabelTextureScale(viewScale);
-  renderState.labelTextureScale = textureScale;
   renderState.labelViewScale = viewScale;
   const seenDeviceKeys = new Set<string>();
 
@@ -1073,12 +1061,12 @@ function syncSensorLabels(
     seenDeviceKeys.add(sensor.deviceKey);
     let entry = renderState.sensorLabelEntries.get(sensor.deviceKey);
     if (!entry) {
-      entry = createSensorLabel(sensor, textureScale);
+      entry = createSensorLabel(sensor);
       renderState.sensorLabelEntries.set(sensor.deviceKey, entry);
       renderState.labelLayer.addChild(entry.container);
     }
 
-    syncSensorLabel(entry, sensor, textureScale, viewScale);
+    syncSensorLabel(entry, sensor, viewScale);
   }
 
   for (const [deviceKey, entry] of renderState.sensorLabelEntries) {
@@ -1092,7 +1080,7 @@ function syncSensorLabels(
   }
 }
 
-function syncLabelTextureScale(
+function syncLabelViewScale(
   renderState: SceneRenderState | null,
   scene: FloorplanScene,
   renderLabels: boolean,
@@ -1102,20 +1090,15 @@ function syncLabelTextureScale(
     return;
   }
 
-  const textureScale = getLabelTextureScale(viewScale);
-  if (
-    renderState.labelTextureScale === textureScale &&
-    renderState.labelViewScale === viewScale
-  ) {
+  if (renderState.labelViewScale === viewScale) {
     return;
   }
 
-  renderState.labelTextureScale = textureScale;
   renderState.labelViewScale = viewScale;
   for (const sensor of sceneLabels(scene)) {
     const entry = renderState.sensorLabelEntries.get(sensor.deviceKey);
     if (entry) {
-      syncSensorLabel(entry, sensor, textureScale, viewScale);
+      syncSensorLabel(entry, sensor, viewScale);
     }
   }
 }
@@ -1466,7 +1449,7 @@ export function PixiFloorplanRenderer({
         nextView.scale,
         renderLabelsRef.current,
       );
-    syncLabelTextureScale(
+    syncLabelViewScale(
       renderStateRef.current,
       latestSceneRef.current,
       (qualityRef.current ?? getRendererQuality()).renderLabels &&
