@@ -1,11 +1,12 @@
 # Implementation compared with the approved mockups
 
-Status: in progress, 2026-09-29. Functional acceptance does not replace visual
-acceptance. Compare desktop (1440 px) and phone (390 px), using representative
-fixture data. Differences in fixture content are not missing UI features.
+Status: historical visual evidence, reconciled 2026-10-02 in
+[COMPLETION.md](COMPLETION.md). Functional acceptance does not replace visual
+acceptance. Desktop/phone comparisons use representative fixture data;
+differences in fixture content are not missing UI features.
 
-The ordered remaining tasks and completion criteria are in
-[WORK-QUEUE.md](WORK-QUEUE.md).
+The original tasks and evidence remain in [WORK-QUEUE.md](WORK-QUEUE.md).
+Current delivery status is in COMPLETION.md.
 
 ## Confirmed priorities
 

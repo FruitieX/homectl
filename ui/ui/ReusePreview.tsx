@@ -1,4 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { ReusePreviewResponse } from '@/lib/automationPreview';
+import {
+  ConditionPreviewResult,
+  ValuePreviewResult,
+  PreviewStepList,
+  PreviewJson,
+} from '@/ui/AutomationPreviewResult';
 import { useAppConfig } from '@/hooks/appConfig';
 import { stringifyConfig } from '@/lib/routineDraft';
 import { Button } from '@/ui/primitives/button';
@@ -6,12 +13,23 @@ import { Button } from '@/ui/primitives/button';
 /** This endpoint executes a draft against captured data and never dispatches actions. */
 export function ReusePreview({ request }: { request: unknown }) {
   const { apiEndpoint } = useAppConfig();
-  const [result, setResult] = useState<unknown>(),
+  const [result, setResult] = useState<ReusePreviewResponse>(),
     [error, setError] = useState(''),
     [pending, setPending] = useState(false),
-    [reviewed, setReviewed] = useState('');
+    [reviewed, setReviewed] = useState(''),
+    [evaluatedAt, setEvaluatedAt] = useState('');
+  const requestRef = useRef<AbortController | null>(null);
   const serialized = stringifyConfig(request);
+  useEffect(() => {
+    requestRef.current?.abort();
+    setPending(false);
+    setError('');
+    return () => requestRef.current?.abort();
+  }, [serialized]);
   async function preview() {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     setPending(true);
     setError('');
     setResult(undefined);
@@ -20,6 +38,10 @@ export function ReusePreview({ request }: { request: unknown }) {
         `${apiEndpoint}/api/v1/config/reuse-preview`,
         {
           method: 'POST',
+          signal: AbortSignal.any([
+            controller.signal,
+            AbortSignal.timeout(20000),
+          ]),
           headers: { 'Content-Type': 'application/json' },
           body: serialized,
         },
@@ -27,12 +49,16 @@ export function ReusePreview({ request }: { request: unknown }) {
       const body = await response.json();
       if (!response.ok || !body.success)
         throw new Error(body.error ?? 'Preview failed.');
-      setResult(body.data);
-      setReviewed(serialized);
+      if (!controller.signal.aborted) {
+        setResult(body.data);
+        setReviewed(serialized);
+        setEvaluatedAt(new Date().toLocaleTimeString());
+      }
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Preview failed.');
+      if (!controller.signal.aborted)
+        setError(error instanceof Error ? error.message : 'Preview failed.');
     } finally {
-      setPending(false);
+      if (!controller.signal.aborted) setPending(false);
     }
   }
   return (
@@ -55,16 +81,34 @@ export function ReusePreview({ request }: { request: unknown }) {
         </p>
       )}
       {result !== undefined && (
-        <>
-          <p role="status" className="text-xs text-muted-foreground">
+        <div
+          aria-label="Preview result"
+          className="space-y-4 rounded-lg border border-border bg-background p-4"
+        >
+          <p
+            role="status"
+            className={`text-xs ${reviewed === serialized ? 'text-muted-foreground' : 'text-amber-700 dark:text-amber-300'}`}
+          >
             {reviewed === serialized
               ? 'Preview of this draft'
               : 'Draft changed; preview again.'}
           </p>
-          <pre className="max-h-80 overflow-auto rounded-lg bg-muted/40 p-3 text-xs">
-            {JSON.stringify(result, null, 2)}
-          </pre>
-        </>
+          {result.kind === 'condition' ? (
+            <ConditionPreviewResult condition={result.value} />
+          ) : result.kind === 'action' ? (
+            <PreviewStepList
+              steps={result.steps}
+              suppressions={result.suppressions}
+            />
+          ) : (
+            <ValuePreviewResult kind={result.kind} value={result.value} />
+          )}
+          <p className="text-xs text-muted-foreground">
+            Evaluated {evaluatedAt} against the server state at that time. No
+            actions were applied.
+          </p>
+          <PreviewJson value={result} />
+        </div>
       )}
     </div>
   );

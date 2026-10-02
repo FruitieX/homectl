@@ -1,5 +1,10 @@
 # Configuration persistence evidence
 
+Current status: [COMPLETION.md](COMPLETION.md), reconciled 2026-10-02.
+The dated results below retain their original scope. Later restart/restore
+coverage is linked in the completion record; historical “remaining” paragraphs
+are not the current work queue.
+
 Updated 2026-09-30. Complements [FIELD-COVERAGE.md](FIELD-COVERAGE.md): browser
 fixtures establish authoring/serialization behavior; the tests below exercise real
 SQLite queries and migrations. They do not command household devices.

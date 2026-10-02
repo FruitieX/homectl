@@ -20,6 +20,22 @@ define named inputs and defaults, then choose Visual blocks or JavaScript.
 Functions always use JavaScript and declare an output type. Action/condition
 calls remain named blocks in routine flows, so callers need not read code.
 
+## Reading a draft preview
+
+**Try this block → Preview draft** shows generated actions with related-entity
+links, condition met/not met/unknown results with an expandable explanation, or
+the function's calculated value. Computed helpers show their calculated value
+in the same presentation. Skipped actions retain their reasons. Zero, false,
+empty text and null remain distinct; structured function outputs use readable
+field/value rows, with expandable lists and nested values.
+
+These previews execute supervised workers against captured current values but
+never apply actions. Editing afterward marks the previous result as stale;
+changing the draft or leaving the editor cancels an outstanding request.
+**Show advanced details** enables a collapsed **Inspect JSON** section without
+replacing the readable result. Routine **Preview draft** uses the same visual
+components but remains a what-if planner that does not execute scripts.
+
 ## Typed inputs and shared functions
 
 JavaScript blocks receive arguments as `inputs` and `ctx.inputs`. Arguments are

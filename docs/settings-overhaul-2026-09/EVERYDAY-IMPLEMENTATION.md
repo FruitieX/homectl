@@ -1,14 +1,15 @@
 # Everyday UI implementation
 
-Status: active. The user authorized implementation of the approved plan and
-requested an implementation goal on 2026-09-29. Design authority:
+Status: historical delivery ledger, reconciled 2026-10-02. Current status is
+[COMPLETION.md](COMPLETION.md). The user authorized the approved plan on
+2026-09-29. Design authority:
 [EVERYDAY-REVIEW.md](EVERYDAY-REVIEW.md), [UI-INVENTORY.md](UI-INVENTORY.md), and
 the Study 05 Compact mockups. Settings acceptance remains tracked in
 [IMPLEMENTATION.md](IMPLEMENTATION.md).
 
-Remaining work is prioritized in [WORK-QUEUE.md](WORK-QUEUE.md). Use that queue
-alongside the delivery gates below; completed checkpoints do not imply that
-the entire overhaul is finished.
+The original [WORK-QUEUE.md](WORK-QUEUE.md) and the delivery gates below retain
+their dated evidence. Later feature delivery and the finishing pass are
+reconciled in COMPLETION.md; broad audit claims are not inferred from code presence.
 
 ## Confirmed constraints
 

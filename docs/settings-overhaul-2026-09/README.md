@@ -1,5 +1,10 @@
 # Settings overhaul · Study 04
 
+**Current delivery status (2026-10-02):** [completion record](COMPLETION.md)
+and [finishing-pass verification](FINISHING-PASS.md). The Compact direction and
+its later editor/navigation/widget refinements are implemented. This directory
+also retains the original design studies and dated verification evidence.
+
 Start with [the visual gallery](review.html), then [the interactive studies](index.html#study03). Open either directly in a browser; no server or build is needed.
 
 **The HTML studies are design prototypes.** Their entities, reports, logs and catalog entries are synthetic. They make no API calls; saves affect the current tab and reload discards them. Production implementation is now active: see [IMPLEMENTATION.md](IMPLEMENTATION.md) for progress, verification and outstanding acceptance, and `implementation-evidence/` for screenshots of the implemented UI against isolated fixtures.
@@ -71,7 +76,10 @@ The Compact baseline is approved. Study 04 responds to the preference for the ea
 | Creation | [New routine → create scene → return](index.html#new-routine) | [Desktop](previews/03-create-desktop.png) · [Returned phone draft](previews/03-create-return-phone.png) |
 | Recovery | [Change a value and select a save outcome](index.html#save-lab) | [Network failure](previews/03-network-phone.png) · [Conflict](previews/03-conflict-desktop.png) · [Persistence warning](previews/03-persistence-phone.png) |
 
-The user confirmed that **Enable after creating is checked by default**. The revised routine and scene layouts are ready for review; implementation has not started. The earlier `#routine` reference remains available.
+The user confirmed that **Enable after creating is checked by default**.
+The revised routine and scene layouts are implemented; see the completion
+record for current behavior. The earlier `#routine` reference remains available
+as a design study.
 
 ## Try these interactions
 

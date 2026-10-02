@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Automation previews · implementation review</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 28px;
+        font:
+          15px/1.5 system-ui,
+          sans-serif;
+        color: #26352f;
+        background: #f5f4ef;
+      }
+      main {
+        max-width: 1500px;
+        margin: auto;
+      }
+      a {
+        color: #247456;
+      }
+      .pair {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(200px, 390px);
+        gap: 20px;
+        align-items: start;
+      }
+      figure {
+        margin: 0;
+      }
+      img {
+        display: block;
+        width: 100%;
+        border: 1px solid #cdd8d1;
+        border-radius: 8px;
+      }
+      figcaption {
+        padding: 8px 0;
+        color: #5d6c64;
+      }
+      section {
+        margin: 32px 0;
+      }
+      @media (max-width: 800px) {
+        .pair {
+          grid-template-columns: 1fr;
+        }
+        .phone {
+          max-width: 390px;
+        }
+        body {
+          padding: 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Automation previews · implemented</h1>
+      <p>
+        2026-10-02 · Production bundle, native Chromium input at 1440 × 1000 and
+        390 × 844. These are implementation captures with marked local fixture
+        data. Preview response rendering is synthetic; supervised-worker
+        execution and no dispatch have a separate Rust API test.
+      </p>
+      <p>
+        <a href="../../FINISHING-PASS.md">Verification</a> ·
+        <a href="../../COMPLETION.md">Current completion record</a>
+      </p>
+      <section>
+        <h2>Actions and skipped steps</h2>
+        <div class="pair">
+          <figure>
+            <a href="1440-action-preview.png"
+              ><img
+                src="1440-action-preview.png"
+                alt="Desktop planned actions with scene, room and helper links and a skipped-action explanation"
+            /></a>
+            <figcaption>
+              Desktop · readable steps and related entities
+            </figcaption>
+          </figure>
+          <figure class="phone">
+            <a href="390-action-preview.png"
+              ><img
+                src="390-action-preview.png"
+                alt="Phone planned actions, wrapped links and skipped-action explanation"
+            /></a>
+            <figcaption>Phone · compact rows and contained warnings</figcaption>
+          </figure>
+        </div>
+      </section>
+      <section>
+        <h2>Condition result</h2>
+        <div class="pair">
+          <figure>
+            <a href="1440-condition-preview.png"
+              ><img
+                src="1440-condition-preview.png"
+                alt="Desktop condition evaluation error, distinct from a passing condition"
+            /></a>
+            <figcaption>Desktop · errors take precedence over truth</figcaption>
+          </figure>
+          <figure class="phone">
+            <a href="390-condition-preview.png"
+              ><img
+                src="390-condition-preview.png"
+                alt="Phone condition result with error and expandable trace"
+            /></a>
+            <figcaption>Phone · readable result and explanation</figcaption>
+          </figure>
+        </div>
+      </section>
+      <section>
+        <h2>Structured function output</h2>
+        <div class="pair">
+          <figure>
+            <a href="1440-function-preview.png"
+              ><img
+                src="1440-function-preview.png"
+                alt="Desktop function fields retaining false, zero, empty text and literal user content"
+            /></a>
+            <figcaption>Desktop · field/value rows</figcaption>
+          </figure>
+          <figure class="phone">
+            <a href="390-function-preview.png"
+              ><img
+                src="390-function-preview.png"
+                alt="Phone structured function output with wrapping field/value rows"
+            /></a>
+            <figcaption>
+              Phone · structured data without raw JSON noise
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+      <section>
+        <h2>Computed helper value</h2>
+        <div class="pair">
+          <figure>
+            <a href="1440-helper-preview.png"
+              ><img
+                src="1440-helper-preview.png"
+                alt="Desktop computed helper preview showing False as a valid value"
+            /></a>
+            <figcaption>Desktop · calculated value</figcaption>
+          </figure>
+          <figure class="phone">
+            <a href="390-helper-preview.png"
+              ><img
+                src="390-helper-preview.png"
+                alt="Phone computed helper result showing False"
+            /></a>
+            <figcaption>Phone · same result presentation</figcaption>
+          </figure>
+        </div>
+      </section>
+      <h2>Recorded checks</h2>
+      <ul>
+        <li><a href="smoke-1440.log">Desktop: 54 browser checks</a></li>
+        <li><a href="smoke-390.log">Phone: 54 browser checks</a></li>
+        <li>
+          <a href="ui-unit-tests.log">303 UI unit tests</a> ·
+          <a href="ui-types-lint.log">Typecheck/lint</a> ·
+          <a href="production-build.log">Production build</a>
+        </li>
+        <li>
+          <a href="worker-contract.log"
+            >Real-worker preview contract and no-dispatch test</a
+          >
+        </li>
+      </ul>
+    </main>
+  </body>
+</html>

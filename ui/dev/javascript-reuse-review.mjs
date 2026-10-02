@@ -165,7 +165,7 @@ export default async function (cdp, { width, url }) {
     throw Error('Wrong preview request');
   await check(
     'Preview response is rendered',
-    "[...document.querySelectorAll('pre')].some(e=>e.textContent.includes('6'))",
+    "document.querySelector('[aria-label=\"Function result\"]')?.textContent.includes('6') && !document.querySelector('[aria-label=\"Preview result\"] details[open]')",
   );
   await check(
     'Function editor fits the viewport',

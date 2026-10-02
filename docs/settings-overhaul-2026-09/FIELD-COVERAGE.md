@@ -1,5 +1,9 @@
 # Authoring field coverage
 
+Current delivery status: [COMPLETION.md](COMPLETION.md), reconciled 2026-10-02.
+This is the historical per-field evidence inventory, not a current backlog;
+open coverage rows are retained without claiming checks that were never run.
+
 Updated: 2026-09-30. Companion to [PLAN.md](PLAN.md#collection-and-variant-coverage-gate)
 and [ACCEPTANCE-AUDIT.md](ACCEPTANCE-AUDIT.md). This is an evidence inventory;
 rows marked **open** are not acceptance sign-off. Paths below are relative to

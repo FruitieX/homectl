@@ -1,6 +1,10 @@
 # Approved overhaul — implementation tracker
 
-Status: **active**. User approved Study 04 and authorized the entire plan on 2026-09-29. Goal: implement PLAN.md + INTERACTION-SYSTEM.md + FINAL-PASS.md, using Study 04 for routine/scene presentation. This file is the durable progress ledger; unchecked work is still required.
+Status: **historical implementation ledger** (reconciled 2026-10-02).
+User approved Study 04 and authorized the plan on 2026-09-29. This file preserves
+dated changes and verification. Current delivered behavior and limitations are
+in [COMPLETION.md](COMPLETION.md). Unchecked top-level audit gates below are
+historical coverage limits, not the current implementation queue.
 
 ## Scope and working rules
 

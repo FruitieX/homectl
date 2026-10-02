@@ -1,8 +1,11 @@
-# Remaining UI overhaul work queue
+# UI overhaul work queue — historical record
 
-Updated: 2026-09-30. User explicitly requested documenting this queue and
-pursuing it as a goal. This is the ordered completion checklist for the
-existing overhaul goal, not a replacement design proposal.
+Archived 2026-10-02. Current delivery, interaction rules and limitations are in
+[COMPLETION.md](COMPLETION.md); the latest approved batch is
+[FINISHING-PASS.md](FINISHING-PASS.md). The dated checklists below describe their
+original checkpoints, including unperformed broad acceptance audits. They are
+retained as evidence, not instructions to resume an old goal or a current list
+of unimplemented features.
 
 Design authority: [EVERYDAY-REVIEW.md](EVERYDAY-REVIEW.md), Study 05 Compact,
 and the approved **Study 04 complex routine** in
@@ -1008,11 +1011,11 @@ Physical dashboard Chromium launch behavior has not been tested on the user's
 actual device. Browser checks cover persisted layout, denied fullscreen restore,
 kiosk detection, explicit exit and reload guards; do not claim hardware testing.
 
-## Goal tracking
+## Historical goal tracking
 
-The user cleared the previous paused goal. A new goal covering this entire
-queue is now active, with no requested token budget. Continue autonomously and
-mark it complete only when the required work and acceptance gates are finished.
+At this checkpoint, the user cleared the previous paused goal and requested a
+new goal covering the queue. This describes the original session; it does not
+declare a currently active goal. See COMPLETION.md for current status.
 
 ### Restore/restart gate closed — 2026-09-30
 

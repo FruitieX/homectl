@@ -160,6 +160,7 @@ try {
       problems: problems.slice(0, 8),
     }),
   );
+  if (args.get('strict') === '1' && problems.length) process.exitCode = 1;
   socket.close();
   await fetch(`http://127.0.0.1:${port}/json/close/${targetId}`).catch(
     () => {},

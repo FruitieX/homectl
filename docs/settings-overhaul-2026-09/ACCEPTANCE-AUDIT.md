@@ -1,10 +1,11 @@
-# Completion audit
+# Completion audit — historical evidence
 
-Started 2026-09-30. This audits the full approved scope; it does not replace
-PLAN.md, FINAL-PASS.md, INTERACTION-SYSTEM.md or the everyday plan. Historical
-“Remaining…” paragraphs in IMPLEMENTATION.md describe the state at their date.
-A later implementation or passing test closes only the requirement it actually
-covers. The top-level implementation gates stay open until reconciled here.
+Started 2026-09-30; reconciled 2026-10-02 in [COMPLETION.md](COMPLETION.md).
+This preserves the original per-checkpoint audit and its explicit coverage
+limits. “Remaining…” and open gates below describe their dates; they do not
+declare the current feature backlog. A later passing check proves only its
+named scope. In particular, unperformed whole-app/physical audits are not
+silently marked passed by the finishing pass.
 
 ## Evidence reviewed in this pass
 

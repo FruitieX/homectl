@@ -22,7 +22,8 @@ jobs:
       - uses: webiny/action-conventional-commits@7f91b1595ca1951cdb671ddc9f07a49081ec5b69 # v1.4.2
 
   build-ui:
-    name: Typecheck & build UI
+    name: UI checks & browser smoke
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -56,3 +57,17 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Browser smoke (desktop and phone)
+        run: pnpm test:browser
+        env:
+          SMOKE_SKIP_BUILD: '1'
+
+      - name: Browser screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ui-browser-smoke
+          path: ui/test-artifacts/browser/
+          if-no-files-found: ignore
+          retention-days: 7

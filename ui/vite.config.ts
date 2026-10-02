@@ -36,6 +36,11 @@ const wsTarget = apiTarget.replace(/^http/, 'ws');
 // server) the app must make same-origin requests instead, otherwise it keeps
 // talking to — and writing to — the deployed instance behind the proxy's back.
 const proxyMode = Boolean(process.env.HOMECTL_DEV_PROXY_TARGET);
+const apiProxy = {
+  '/api': { target: apiTarget, changeOrigin: true },
+  '/health': { target: apiTarget, changeOrigin: true },
+  '/ws': { target: wsTarget, ws: true, changeOrigin: true },
+};
 
 export default defineConfig({
   plugins: [react()],
@@ -54,25 +59,12 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 3000,
-    proxy: {
-      '/api': {
-        target: apiTarget,
-        changeOrigin: true,
-      },
-      '/health': {
-        target: apiTarget,
-        changeOrigin: true,
-      },
-      '/ws': {
-        target: wsTarget,
-        ws: true,
-        changeOrigin: true,
-      },
-    },
+    proxy: apiProxy,
   },
   preview: {
     host: '0.0.0.0',
     port: 3000,
+    proxy: apiProxy,
   },
   build: {
     outDir: 'dist',

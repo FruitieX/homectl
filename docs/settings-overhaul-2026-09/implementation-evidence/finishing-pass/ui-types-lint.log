@@ -1,0 +1,10 @@
+> @1.0.0 tsc /home/rasse/homectl/ui
+> tsc --noEmit --pretty false
+
+
+> @1.0.0 lint /home/rasse/homectl/ui
+> oxlint
+
+app/config/import-export/page.tsx:69:7: warning react-hooks(exhaustive-deps): The ref's value `.current` is accessed directly in the effect cleanup function. help: The ref value will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by react, copy it to a variable inside the effect and use that variable in the cleanup function.
+
+> @1.0.0 test /home/rasse/homectl/ui

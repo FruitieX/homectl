@@ -6,7 +6,11 @@ import type { RoutinePreviewResponse } from '@/bindings/RoutinePreviewResponse';
 import type { RoutinePreviewOverride } from '@/bindings/RoutinePreviewOverride';
 import { Plus, X } from 'lucide-react';
 import type { RoutinePreviewRequest } from '@/bindings/RoutinePreviewRequest';
-import type { ConditionTraceNode } from '@/bindings/ConditionTraceNode';
+import {
+  ConditionPreviewResult,
+  PreviewStepList,
+  PreviewJson,
+} from '@/ui/AutomationPreviewResult';
 import { stringifyConfig } from '@/lib/routineDraft';
 import { useAppConfig } from '@/hooks/appConfig';
 import { triggerLabel } from '@/ui/routine-runtime';
@@ -16,37 +20,6 @@ import { SearchablePicker } from '@/ui/SearchablePicker';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { useEffect, useRef, useState } from 'react';
-import { formatUnknownReason } from '@/ui/routine-runtime';
-
-function PreviewTrace({
-  node,
-  depth = 0,
-}: {
-  node: ConditionTraceNode;
-  depth?: number;
-}) {
-  return (
-    <div className={depth ? 'ml-3 border-l border-border pl-3' : ''}>
-      <p className="flex flex-wrap items-center gap-2">
-        <span className="font-medium">
-          {depth ? 'Check' : 'Condition'}: {node.truth}
-        </span>
-        <span className="font-mono text-xs text-muted-foreground">
-          {node.path}
-        </span>
-      </p>
-      {node.error && <p className="text-destructive">{node.error}</p>}
-      {node.unknown_reason && (
-        <p className="text-amber-700">
-          {formatUnknownReason(node.unknown_reason)}
-        </p>
-      )}
-      {node.children?.map((child) => (
-        <PreviewTrace key={child.path} node={child} depth={depth + 1} />
-      ))}
-    </div>
-  );
-}
 
 export function RoutineWhatIfPreview({
   definition,
@@ -329,7 +302,10 @@ export function RoutineWhatIfPreview({
       </Button>
       {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
       {preview && (
-        <div className="mt-4 space-y-2 rounded-xl border border-border bg-background p-4 text-sm">
+        <div
+          aria-label="Routine preview result"
+          className="mt-4 space-y-4 rounded-lg border border-border bg-background p-4 text-sm"
+        >
           <p className="text-xs text-muted-foreground">
             Evaluated {evaluatedAt} against the server state at that time.
           </p>
@@ -344,7 +320,7 @@ export function RoutineWhatIfPreview({
           </p>
           <p className="text-muted-foreground">
             Assuming the {assumedTriggerLabel} fires
-            {preview.condition?.error
+            {preview.condition?.error !== undefined
               ? ' — but the condition cannot be evaluated.'
               : preview.would_run
                 ? ': the condition is met and that trigger fires.'
@@ -354,30 +330,13 @@ export function RoutineWhatIfPreview({
                     ? ': the condition is not met right now.'
                     : ': the condition is unknown right now.'}
           </p>
-          {preview.condition?.error ? (
-            <p className="text-destructive">{preview.condition.error}</p>
-          ) : null}
-          {preview.condition?.trace && (
-            <details>
-              <summary className="cursor-pointer text-sm text-primary">
-                Why this result?
-              </summary>
-              <div className="mt-2 space-y-2">
-                <PreviewTrace node={preview.condition.trace} />
-              </div>
-            </details>
+          {preview.condition && (
+            <ConditionPreviewResult condition={preview.condition} />
           )}
-          {preview.steps?.map((step) => (
-            <p key={step.id}>
-              Would {step.kind.replaceAll('_', ' ')}
-              {step.targets.length ? ` → ${step.targets.join(', ')}` : ''}
-            </p>
-          ))}
-          {preview.suppressions?.map((step) => (
-            <p key={step.action_id} className="text-amber-700">
-              Skipped {step.action_id}: {step.reason}
-            </p>
-          ))}
+          <PreviewStepList
+            steps={preview.steps ?? []}
+            suppressions={preview.suppressions ?? []}
+          />
           {preview.script_unsupported && (
             <p className="text-muted-foreground">
               Script steps cannot be predicted here; the script is never
@@ -390,6 +349,7 @@ export function RoutineWhatIfPreview({
             actually occur, does not execute scripts, and does not confirm
             physical delivery.
           </p>
+          <PreviewJson value={preview} />
         </div>
       )}
     </div>

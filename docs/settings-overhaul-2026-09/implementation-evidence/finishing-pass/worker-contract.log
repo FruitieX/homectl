@@ -1,0 +1,17 @@
+error (ignored): SQLite database '/home/rasse/.cache/nix/eval-cache-v6/8d486240f753dc31bc2ab3ae12723ae43754b456fddf61d6bdab5e97bc70ca6d.sqlite' is busy
+Loaded homectl dev shell (Docker client + psql available for Postgres workflows)
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded cached v4.0.1
+   Compiling cached v4.0.1
+   Compiling homectl-server v0.9.5 (/home/rasse/homectl/server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 29s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/homectl_server-7364303dc74a7ce6)
+
+running 1 test
+test api::config::reuse_preview::tests::previews_check_typed_contracts_select_branches_and_dispatch_nothing ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 843 filtered out; finished in 0.16s
+

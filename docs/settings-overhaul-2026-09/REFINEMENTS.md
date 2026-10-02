@@ -1,8 +1,10 @@
 # UI overhaul refinements
 
-Status: active. User requests recorded 2026-09-29. This supplements
-[EVERYDAY-IMPLEMENTATION.md](EVERYDAY-IMPLEMENTATION.md); it does not replace
-the remaining implementation and acceptance work there.
+Status: historical requests and evidence, reconciled 2026-10-02.
+User requests were recorded 2026-09-29. This supplements
+[EVERYDAY-IMPLEMENTATION.md](EVERYDAY-IMPLEMENTATION.md). Current delivered
+behavior and coverage limitations are in [COMPLETION.md](COMPLETION.md);
+unchecked checkpoint rows below are not a current work queue.
 
 ## Screenshot audit and widget creation (additional feedback)
 
