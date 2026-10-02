@@ -90,7 +90,7 @@ console-subscriber = { version = "=0.5.0", optional = true }
 chrono-tz = "=0.10.4"
 
 [target.'cfg(unix)'.dependencies]
-libc = "=0.2.189"
+libc = "=0.2.190"
 
 [features]
 default = []
