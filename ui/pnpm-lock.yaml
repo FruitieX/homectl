@@ -186,8 +186,8 @@ importers:
         specifier: 13.5.0
         version: 13.5.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       pixi.js:
-        specifier: 8.21.0
-        version: 8.21.0
+        specifier: 8.22.0
+        version: 8.22.0
       react:
         specifier: 19.3.0
         version: 19.3.0
@@ -2605,8 +2605,8 @@ packages:
     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
     engines: {node: '>=12'}
 
-  pixi.js@8.21.0:
-    resolution: {integrity: sha512-GJ/KqBtUuWDBPMQu2D0ZHsRCYOcWRjjKrpyC+3jPQI5JTqHMC5dH8l9sSyvoUT4qJidvRzs1fwFWRWceno2Ltw==}
+  pixi.js@8.22.0:
+    resolution: {integrity: sha512-QbTANHMZ751MIjLiLSUSM8a7LNMWwMIf0KbRCqlW+SPS9hNLfSVS+cl1O2SEp9g1K/wyLzj/OJHv+1TUfiPr/w==}
 
   possible-typed-array-names@1.1.0:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
@@ -5309,7 +5309,7 @@ snapshots:
 
   picomatch@4.0.7: {}
 
-  pixi.js@8.21.0:
+  pixi.js@8.22.0:
     dependencies:
       '@pixi/colord': 2.9.6
       '@types/earcut': 3.0.0
