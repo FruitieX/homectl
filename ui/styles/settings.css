@@ -109,10 +109,20 @@
   display: grid;
   grid-template-columns:
     minmax(150px, 1.4fr) minmax(112px, 0.9fr) minmax(96px, 0.7fr)
-    minmax(160px, 1.2fr) minmax(150px, 1.1fr) 82px 2.75rem;
+    minmax(160px, 1.2fr) minmax(150px, 1.1fr) 82px var(
+      --scene-menu-col,
+      2.75rem
+    );
   align-items: center;
   column-gap: 14px;
   padding: 14px 0;
+}
+.scene-has-clipboard {
+  --scene-menu-col: 5rem;
+}
+.scene-row-menu {
+  display: flex;
+  justify-content: flex-end;
 }
 .scene-target-row + .scene-target-row {
   border-top: 1px solid hsl(var(--border));
@@ -184,6 +194,9 @@
     position: absolute;
     right: 8px;
     top: 8px;
+  }
+  .scene-has-clipboard .scene-target-name {
+    padding-right: 76px;
   }
 }
 @media (min-width: 768px) {

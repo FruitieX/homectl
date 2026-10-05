@@ -344,3 +344,108 @@ export const COLOR_MODE_LABELS: Record<DeviceColorMode, string> = {
   xy: 'Colour point (x, y)',
   ct: 'Colour temperature',
 };
+
+const D65 = { x: 0.3127, y: 0.329 };
+
+function srgbToXy(r: number, g: number, b: number): { x: number; y: number } {
+  const linear = (channel: number) => {
+    const value = Math.min(1, Math.max(0, channel / 255));
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  const [lr, lg, lb] = [linear(r), linear(g), linear(b)];
+  const X = 0.4124564 * lr + 0.3575761 * lg + 0.1804375 * lb;
+  const Y = 0.2126729 * lr + 0.7151522 * lg + 0.072175 * lb;
+  const Z = 0.0193339 * lr + 0.119192 * lg + 0.9503041 * lb;
+  const sum = X + Y + Z;
+  return sum > 1e-6 ? { x: X / sum, y: Y / sum } : D65;
+}
+
+/** Chromaticity of a colour, matching `DeviceColor::to_xy` on the server. */
+function colorToXy(color: DeviceColor): { x: number; y: number } {
+  const numbers = color as Record<string, number>;
+  switch (getColorMode(color)) {
+    case 'xy':
+      return { x: numbers.x, y: numbers.y };
+    case 'ct': {
+      // Planckian locus approximation, as the server uses.
+      const t = Math.min(25000, Math.max(1667, numbers.ct));
+      const x =
+        t <= 7000
+          ? -4.607e9 / t ** 3 + 2.9678e6 / t ** 2 + 99.11 / t + 0.244063
+          : -2.0064e9 / t ** 3 + 1.9018e6 / t ** 2 + 247.48 / t + 0.23704;
+      return { x, y: -3 * x ** 2 + 2.87 * x - 0.275 };
+    }
+    default: {
+      const { r, g, b } = colorToRgb(color);
+      return srgbToXy(r, g, b);
+    }
+  }
+}
+
+/** Full-value sRGB bytes for a colour, normalised so the brightest channel is 255. */
+function fullValueRgb(color: DeviceColor): { r: number; g: number; b: number } {
+  const mode = getColorMode(color);
+  if (mode === 'hs' || mode === 'rgb') return colorToRgb(color);
+  const { x, y } = colorToXy(color);
+  if (y <= 0) return { r: 255, g: 255, b: 255 };
+  const X = x / y;
+  const Z = (1 - x - y) / y;
+  const linear = [
+    3.2404542 * X - 1.5371385 - 0.4985314 * Z,
+    -0.969266 * X + 1.8760108 + 0.041556 * Z,
+    0.0556434 * X - 0.2040259 + 1.0572252 * Z,
+  ].map((value) => Math.max(0, value));
+  const max = Math.max(...linear);
+  const gamma = (value: number) =>
+    value <= 0.0031308 ? 12.92 * value : 1.055 * value ** (1 / 2.4) - 0.055;
+  const [r, g, b] = linear.map((value) =>
+    Math.round(Math.min(1, gamma(max > 0 ? value / max : 1)) * 255),
+  );
+  return { r, g, b };
+}
+
+/**
+ * Re-express a colour in another mode, keeping its chromaticity. This mirrors
+ * the conversion the server applies when a light lacks the stored mode, so a
+ * mode switch in the editor keeps the colour the user already picked.
+ */
+export function convertColor(
+  color: DeviceColor,
+  mode: DeviceColorMode,
+  ctRange?: { start: number; end: number },
+): DeviceColor {
+  if (getColorMode(color) === mode) return color;
+  switch (mode) {
+    case 'rgb':
+      return fullValueRgb(color);
+    case 'hs': {
+      const { r, g, b } = fullValueRgb(color);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      return {
+        h: Math.round(rgbToHue(r, g, b)) % 360,
+        s: max > 0 ? Math.round(((max - min) / max) * 1000) / 1000 : 0,
+      };
+    }
+    case 'xy': {
+      const { x, y } = colorToXy(color);
+      return {
+        x: Math.round(x * 10000) / 10000,
+        y: Math.round(y * 10000) / 10000,
+      };
+    }
+    case 'ct': {
+      // McCamy's approximation, clamped like the server does for CT-only lights.
+      const { x, y } = colorToXy(color);
+      const n = (x - 0.332) / (0.1858 - y);
+      const cct = 437 * n ** 3 + 3601 * n ** 2 + 6861 * n + 5517;
+      const min = ctRange?.start ?? 1000;
+      const max = ctRange?.end ?? 10000;
+      return {
+        ct: Math.round(
+          Math.min(max, Math.max(min, Number.isFinite(cct) ? cct : 4000)),
+        ),
+      };
+    }
+  }
+}

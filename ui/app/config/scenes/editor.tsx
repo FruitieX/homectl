@@ -1,7 +1,16 @@
 import { IdentityFields } from '@/ui/settings/IdentityFields';
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Camera, Eye, LoaderCircle, Plus, Search } from 'lucide-react';
+import {
+  Camera,
+  ClipboardPaste,
+  Eye,
+  LoaderCircle,
+  Plus,
+  Search,
+  X,
+} from 'lucide-react';
+import { useAtom } from 'jotai';
 import { toast } from 'sonner';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { useAppConfig } from '@/hooks/appConfig';
@@ -40,6 +49,13 @@ import { Input } from '@/ui/primitives/input';
 import { confirmDialog } from '@/ui/primitives/confirm-dialog';
 import { useDeviceLookups } from '../groups/shared';
 import { SceneTargetRow } from './target-row';
+import { ScenePasteDialog } from './paste-dialog';
+import { sceneClipboardAtom } from '@/hooks/sceneClipboard';
+import {
+  describeClipboard,
+  pasteSceneTarget,
+  type PasteField,
+} from '@/lib/sceneClipboard';
 
 const ScriptEditor = lazy(() => import('@/ui/SceneScriptEditor'));
 const EMPTY: Scene = {
@@ -88,6 +104,8 @@ export function SceneEditor({ id }: { id?: string }) {
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [activating, setActivating] = useState(false);
+  const [clipboard, setClipboard] = useAtom(sceneClipboardAtom);
+  const [pasteOpen, setPasteOpen] = useState(false);
   const saved = api.data.find((scene) => scene.id === id);
   const captureId = creating ? params.get('capture') : null;
   const key = `${apiEndpoint}/scenes/${id ?? '$new'}${captureId ? '/' + captureId : ''}`;
@@ -359,6 +377,40 @@ export function SceneEditor({ id }: { id?: string }) {
       ),
     });
   }
+  function pasteInto(ids: string[], fields?: PasteField[]) {
+    if (!scene || !clipboard) return;
+    const device_states = { ...scene.device_states };
+    const group_states = { ...scene.group_states };
+    const addedGroups: string[] = [];
+    for (const id of ids) {
+      const colon = id.indexOf(':');
+      const kind = id.slice(0, colon);
+      const target = id.slice(colon + 1);
+      const map = kind === 'group' ? group_states : device_states;
+      if (kind === 'group' && !Object.hasOwn(map, target))
+        addedGroups.push(target);
+      map[target] = pasteSceneTarget(map[target] ?? {}, clipboard, fields);
+    }
+    const order = scene.group_state_order ?? [];
+    draft.patch({
+      device_states,
+      group_states,
+      ...(addedGroups.length
+        ? {
+            group_state_order: [
+              ...order.filter((id) => Object.hasOwn(group_states, id)),
+              ...Object.keys(group_states).filter(
+                (id) => !order.includes(id) && !addedGroups.includes(id),
+              ),
+              ...addedGroups,
+            ],
+          }
+        : {}),
+    });
+    toast.success(
+      `Pasted to ${ids.length} target${ids.length === 1 ? '' : 's'}`,
+    );
+  }
   function targetSection(kind: 'group' | 'device') {
     if (!scene) return null;
     const field = kind === 'group' ? 'group_states' : 'device_states';
@@ -425,6 +477,7 @@ export function SceneEditor({ id }: { id?: string }) {
         ) : (
           <div
             role="table"
+            className={clipboard ? 'scene-has-clipboard' : undefined}
             aria-label={
               kind === 'group' ? 'Group target states' : 'Device target states'
             }
@@ -447,6 +500,7 @@ export function SceneEditor({ id }: { id?: string }) {
             {filtered.slice(0, limit).map(([target, value]) => (
               <SceneTargetRow
                 key={target}
+                sceneId={id}
                 kind={kind}
                 targetKey={target}
                 name={label(target)}
@@ -652,6 +706,96 @@ export function SceneEditor({ id }: { id?: string }) {
               Device catalog unavailable. Saved targets are kept; previews may
               be incomplete.
             </p>
+          )}
+          {clipboard && (
+            <div
+              role="status"
+              className="sticky top-2 z-10 flex flex-wrap items-center gap-3 rounded-md border border-primary/30 bg-background/95 p-2 pl-3 shadow-sm backdrop-blur"
+            >
+              <StatePreview
+                {...(clipboard.config as Record<string, never>)}
+                brightness={
+                  'scene_id' in clipboard.config ||
+                  'integration_id' in clipboard.config
+                    ? null
+                    : ((clipboard.config as { brightness?: number })
+                        .brightness ?? 1)
+                }
+                size={26}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">
+                  Copied from {clipboard.sourceName}
+                  {clipboard.sceneId !== id && clipboard.sceneId && (
+                    <span className="font-normal text-muted-foreground">
+                      {' '}
+                      · scene {clipboard.sceneId}
+                    </span>
+                  )}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {describeClipboard(clipboard)} · use{' '}
+                  <ClipboardPaste
+                    aria-label="paste"
+                    className="inline size-3 align-[-2px]"
+                  />{' '}
+                  on a row to paste it
+                </p>
+              </div>
+              <Button size="sm" onClick={() => setPasteOpen(true)}>
+                <ClipboardPaste className="size-4" />
+                Paste to…
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Clear copied state"
+                title="Clear copied state"
+                onClick={() => setClipboard(null)}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+          )}
+          {clipboard && pasteOpen && (
+            <ScenePasteDialog
+              open
+              onOpenChange={setPasteOpen}
+              clipboard={clipboard}
+              options={[
+                ...groups.data.map((group) => ({
+                  id: `group:${group.id}`,
+                  name: group.name,
+                  kind: 'group' as const,
+                  inScene: Object.hasOwn(scene.group_states, group.id),
+                })),
+                ...Object.keys(scene.group_states)
+                  .filter((key) => !groups.data.some((row) => row.id === key))
+                  .map((key) => ({
+                    id: `group:${key}`,
+                    name: key,
+                    kind: 'group' as const,
+                    inScene: true,
+                  })),
+                ...deviceOptions.map((option) => ({
+                  id: `device:${option.id}`,
+                  name: option.name,
+                  kind: 'device' as const,
+                  inScene: Object.hasOwn(scene.device_states, option.id),
+                })),
+                ...Object.keys(scene.device_states)
+                  .filter(
+                    (key) => !deviceOptions.some((option) => option.id === key),
+                  )
+                  .map((key) => ({
+                    id: `device:${key}`,
+                    name: lookups.labelFor(key),
+                    kind: 'device' as const,
+                    inScene: true,
+                  })),
+              ].sort((a, b) => Number(b.inScene) - Number(a.inScene))}
+              onPaste={pasteInto}
+            />
           )}
           {targetSection('group')}
           {targetSection('device')}

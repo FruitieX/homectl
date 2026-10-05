@@ -3,10 +3,21 @@ import { Link } from 'react-router-dom';
 import {
   ArrowDown,
   ArrowUp,
+  ClipboardPaste,
+  Copy,
   ExternalLink,
   MoreHorizontal,
+  Palette,
   Trash2,
 } from 'lucide-react';
+import { useAtom } from 'jotai';
+import { toast } from 'sonner';
+import { sceneClipboardAtom } from '@/hooks/sceneClipboard';
+import {
+  clipboardFields,
+  describeClipboard,
+  pasteSceneTarget,
+} from '@/lib/sceneClipboard';
 import type { SceneDeviceConfig, SceneDeviceState } from '@/hooks/useConfig';
 import type { Capabilities } from '@/bindings/Capabilities';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
@@ -28,6 +39,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/ui/primitives/dropdown-menu';
 import { StatePreview } from '@/ui/settings/StatePreview';
@@ -51,7 +63,9 @@ export function SceneTargetRow({
   canMoveUp,
   canMoveDown,
   onReplace,
+  sceneId,
 }: {
+  sceneId?: string;
   kind: 'group' | 'device';
   targetKey: string;
   name: string;
@@ -69,6 +83,7 @@ export function SceneTargetRow({
 }) {
   const { advanced } = useSettingsPreferences();
   const [showDescriptor, setShowDescriptor] = useState(false);
+  const [clipboard, setClipboard] = useAtom(sceneClipboardAtom);
   const mode = sceneTargetMode(config);
   if (mode === 'unsupported')
     return (
@@ -83,6 +98,23 @@ export function SceneTargetRow({
       />
     );
   const prefix = `${kind === 'group' ? 'group_states' : 'device_states'}/${targetKey}`;
+  const sourceKey = `${kind}:${targetKey}`;
+  const isClipboardSource =
+    clipboard?.sourceKey === sourceKey && clipboard.sceneId === sceneId;
+  const copyTarget = () => {
+    const clip = {
+      config: structuredClone(config),
+      sourceName: name,
+      sourceKey,
+      sceneId,
+    };
+    setClipboard(clip);
+    toast.success(`Copied ${name}`, { description: describeClipboard(clip) });
+  };
+  const pasteTarget = (fields?: ['color']) => {
+    if (!clipboard) return;
+    onChange(pasteSceneTarget(config, clipboard, fields));
+  };
   const patch = (value: Record<string, unknown>) =>
     onChange(patchSceneTarget(config, value));
   const keys = targetDeviceKeys(kind, targetKey, context);
@@ -405,6 +437,22 @@ export function SceneTargetRow({
         )}
       </div>
       <div role="cell" className="scene-row-menu">
+        {clipboard && (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`Paste ${clipboard.sourceName} onto ${name}`}
+            title={
+              isClipboardSource
+                ? 'Copied from this row'
+                : `Paste ${clipboard.sourceName}: ${describeClipboard(clipboard)}`
+            }
+            disabled={isClipboardSource}
+            onClick={() => pasteTarget()}
+          >
+            <ClipboardPaste className="size-4" />
+          </Button>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -416,6 +464,29 @@ export function SceneTargetRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={copyTarget}>
+              <Copy className="size-4" />
+              Copy target state
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!clipboard || isClipboardSource}
+              onSelect={() => pasteTarget()}
+            >
+              <ClipboardPaste className="size-4" />
+              {clipboard
+                ? `Paste from ${clipboard.sourceName}`
+                : 'Paste target state'}
+            </DropdownMenuItem>
+            {clipboard && clipboardFields(clipboard).includes('color') && (
+              <DropdownMenuItem
+                disabled={isClipboardSource}
+                onSelect={() => pasteTarget(['color'])}
+              >
+                <Palette className="size-4" />
+                Paste color only
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
             {onMove && (
               <>
                 <DropdownMenuItem

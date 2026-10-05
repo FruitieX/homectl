@@ -4,6 +4,7 @@ import type { Capabilities } from '@/bindings/Capabilities';
 import {
   COLOR_MODE_LABELS,
   colorParts,
+  convertColor,
   defaultColorFor,
   describeColorName,
   formatColorExact,
@@ -41,6 +42,14 @@ export function SceneColorControl({
   const mode = getColorMode(pending);
   const supported = (mode: DeviceColorMode) =>
     !capabilities?.length || capabilities.some((cap) => Boolean(cap[mode]));
+  // The server converts a stored colour to whichever mode each light supports
+  // when it sends the command, so any colour-capable target accepts any mode.
+  const convertible =
+    !capabilities?.length ||
+    capabilities.some((cap) => cap.hs || cap.rgb || cap.xy || cap.ct);
+  const ctOnly =
+    Boolean(capabilities?.length) &&
+    capabilities!.every((cap) => !cap.hs && !cap.rgb && !cap.xy);
   const ctRanges =
     capabilities?.flatMap((cap) => (cap.ct ? [cap.ct] : [])) ?? [];
   const ctMin = ctRanges.length
@@ -94,25 +103,35 @@ export function SceneColorControl({
               value={mode ?? 'unspecified'}
               onValueChange={(value) =>
                 setPending(
-                  value !== 'unspecified'
-                    ? defaultColorFor(value as DeviceColorMode)
-                    : undefined,
+                  value === 'unspecified'
+                    ? undefined
+                    : pending
+                      ? convertColor(
+                          pending,
+                          value as DeviceColorMode,
+                          ctRanges.length
+                            ? { start: ctMin, end: ctMax }
+                            : undefined,
+                        )
+                      : defaultColorFor(value as DeviceColorMode),
                 )
               }
               options={[
                 { value: 'unspecified', label: 'Not specified' },
                 ...MODES.filter(
                   (candidate) =>
-                    supported(candidate) ||
+                    convertible ||
                     candidate === mode ||
                     candidate === getColorMode(color),
                 ).map((candidate) => ({
                   value: candidate,
                   label:
                     COLOR_MODE_LABELS[candidate] +
-                    (!supported(candidate)
-                      ? ' · not supported by these targets'
-                      : ''),
+                    (supported(candidate)
+                      ? ''
+                      : convertible
+                        ? ' · converted'
+                        : ' · not supported by these targets'),
                 })),
               ]}
             />
@@ -192,9 +211,14 @@ export function SceneColorControl({
             </p>
           )}
           {mode && !supported(mode) && (
-            <p className="text-xs text-amber-700">
-              This stored color mode is preserved. These target devices do not
-              advertise support for it.
+            <p
+              className={`text-xs ${convertible ? 'text-muted-foreground' : 'text-amber-700'}`}
+            >
+              {!convertible
+                ? 'This stored color mode is preserved. These target devices do not advertise color support.'
+                : ctOnly && mode !== 'ct'
+                  ? 'These lights only support color temperature. The server sends the nearest white temperature.'
+                  : 'Stored as entered. The server converts it to a mode each light supports when the scene is applied.'}
             </p>
           )}
           <div className="flex justify-end gap-2">

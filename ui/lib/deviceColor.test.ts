@@ -5,6 +5,7 @@ import {
   colorParts,
   colorToCss,
   colorToRgb,
+  convertColor,
   defaultColorFor,
   describeColorName,
   formatColorExact,
@@ -106,5 +107,44 @@ describe('device colour wire format', () => {
     assert.deepEqual(colorToRgb({ h: 0, s: 0 }), { r: 255, g: 255, b: 255 });
     assert.deepEqual(colorToRgb({ h: 0, s: 1 }), { r: 255, g: 0, b: 0 });
     assert.deepEqual(colorToRgb({ h: 120, s: 1 }), { r: 0, g: 255, b: 0 });
+  });
+});
+
+describe('convertColor', () => {
+  it('converts between hs and rgb without drifting the hue', () => {
+    assert.deepEqual(convertColor({ h: 0, s: 1 }, 'rgb'), {
+      r: 255,
+      g: 0,
+      b: 0,
+    });
+    assert.deepEqual(convertColor({ r: 0, g: 0, b: 255 }, 'hs'), {
+      h: 240,
+      s: 1,
+    });
+    const round = convertColor(convertColor({ h: 200, s: 0.6 }, 'rgb'), 'hs');
+    assert.ok(Math.abs((round as { h: number }).h - 200) <= 1);
+    assert.ok(Math.abs((round as { s: number }).s - 0.6) < 0.01);
+  });
+
+  it('keeps the value when the mode is unchanged', () => {
+    const color = { h: 12, s: 0.3 };
+    assert.equal(convertColor(color, 'hs'), color);
+  });
+
+  it('maps colour temperature through the Planckian locus and back', () => {
+    const xy = convertColor({ ct: 2700 }, 'xy') as { x: number; y: number };
+    assert.ok(Math.abs(xy.x - 0.46) < 0.01 && Math.abs(xy.y - 0.41) < 0.01);
+    const ct = convertColor(xy, 'ct') as { ct: number };
+    assert.ok(Math.abs(ct.ct - 2700) < 100);
+    const warm = convertColor({ ct: 2700 }, 'rgb') as { r: number; b: number };
+    assert.equal(warm.r, 255);
+    assert.ok(warm.b < 200);
+  });
+
+  it('clamps converted temperatures to the target range', () => {
+    const daylight = { x: 0.3127, y: 0.329 };
+    assert.deepEqual(convertColor(daylight, 'ct', { start: 2200, end: 4000 }), {
+      ct: 4000,
+    });
   });
 });
