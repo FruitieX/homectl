@@ -36,9 +36,8 @@ fn editor_view(config: &config_queries::ConfigExport) -> EditorView {
 #[derive(Deserialize)]
 struct EditorWrite {
     expected: String,
-    profile: Option<ColorCalibrationProfile>,
-    device_keys: Vec<String>,
-    profile_id: Option<String>,
+    #[serde(flatten)]
+    edit: crate::core::color_calibration::CalibrationEdit,
 }
 
 #[derive(Serialize)]
@@ -61,7 +60,7 @@ async fn save_editor(
         if request.expected != current.revision_token {
             return Err((StatusCode::CONFLICT, "Calibration changed elsewhere. Review the saved profiles and assignments before saving.".to_string(), Some(current)));
         }
-        state.save_calibration_edit(request.profile, request.device_keys, request.profile_id)
+        state.save_calibration_edit(request.edit)
             .await.map_err(|error| (StatusCode::BAD_REQUEST, error, None))?;
         Ok(editor_view(&state.runtime_config))
     })).await;

@@ -958,6 +958,15 @@ const server = http.createServer(async (req, res) => {
           success: false,
           error: 'Stop the preview before saving calibration.',
         });
+      const deviceKeys = body.device_keys ?? [];
+      if (body.delete_profile_id) {
+        db.config['calibration-profiles'] = view().profiles.filter(
+          (row) => row.id !== body.delete_profile_id,
+        );
+        db.config['calibration-assignments'] = view().assignments.filter(
+          (row) => row.profile_id !== body.delete_profile_id,
+        );
+      }
       if (body.profile)
         db.config['calibration-profiles'] = [
           ...view().profiles.filter((row) => row.id !== body.profile.id),
@@ -965,17 +974,17 @@ const server = http.createServer(async (req, res) => {
         ];
       db.config['calibration-assignments'] = [
         ...view().assignments.filter(
-          (row) => !body.device_keys.includes(row.device_key),
+          (row) => !deviceKeys.includes(row.device_key),
         ),
         ...(body.profile_id
-          ? body.device_keys.map((device_key) => ({
+          ? deviceKeys.map((device_key) => ({
               device_key,
               profile_id: body.profile_id,
             }))
           : []),
       ];
       db.config['device-color-calibrations'] = view().legacy.filter(
-        (row) => !body.device_keys.includes(row.device_key),
+        (row) => !deviceKeys.includes(row.device_key),
       );
       return send(res, 200, { success: true, data: view(), write: writeOk });
     }

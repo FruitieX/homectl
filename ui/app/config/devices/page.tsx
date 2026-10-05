@@ -3,11 +3,8 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useGroupsState } from '@/hooks/useDevicesApi';
-import { BulkCalibrationAssignment } from '@/ui/settings/CalibrationAssignment';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { getDeviceKey } from '@/lib/device';
-import { canCalibrateDevice } from '@/lib/colorCalibration';
-import { isDimmableDevice } from '@/lib/brightnessCalibration';
 import { configItemHref } from '@/lib/configItemHref';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { Button } from '@/ui/primitives/button';
@@ -36,8 +33,6 @@ function DeviceList() {
   const { advanced } = useSettingsPreferences();
   const [query, setQuery] = useSearchParams();
   const [limit, setLimit] = useState(50);
-  const selectionMode = query.get('calibration') === 'bulk';
-  const [selected, setSelected] = useState<string[]>([]);
   useAssistantPageContext({ kind: 'device' });
   const search = query.get('q') ?? '',
     type = query.get('type') ?? 'all',
@@ -69,21 +64,14 @@ function DeviceList() {
     setQuery(next, { replace: true });
     setLimit(50);
   };
-  const eligible = (device: (typeof catalog.devices)[number]) =>
-    canCalibrateDevice(device) || isDimmableDevice(device);
   return (
     <div className="mx-auto max-w-[1600px] space-y-4">
       <ConfigPageHeader
         title="Devices"
         description="Current state, connections and device settings."
         actions={
-          <Button
-            variant="outline"
-            onClick={() =>
-              patchQuery('calibration', selectionMode ? '' : 'bulk')
-            }
-          >
-            {selectionMode ? 'Close selection' : 'Select devices'}
+          <Button variant="outline" asChild>
+            <Link to="/config/calibration">Light calibration</Link>
           </Button>
         }
       />
@@ -209,22 +197,6 @@ function DeviceList() {
                 key={key}
                 className="flex min-w-0 items-center gap-3 px-3 py-3 sm:px-4"
               >
-                {selectionMode && (
-                  <input
-                    type="checkbox"
-                    className="size-4"
-                    aria-label={`Select ${catalog.label(device)}`}
-                    disabled={!eligible(device)}
-                    checked={selected.includes(key)}
-                    onChange={(event) =>
-                      setSelected((values) =>
-                        event.target.checked
-                          ? [...values, key]
-                          : values.filter((value) => value !== key),
-                      )
-                    }
-                  />
-                )}
                 <DeviceStatePreview device={device} />
                 <Link
                   className="min-w-0 flex-1"
@@ -268,39 +240,6 @@ function DeviceList() {
         >
           Show more ({visible.length - limit} remaining)
         </Button>
-      )}
-      {selectionMode && (
-        <section
-          className="sticky bottom-0 z-20 flex flex-wrap items-center gap-2 rounded-md border border-border bg-background p-3 shadow-sm"
-          aria-label="Bulk calibration"
-        >
-          <span className="text-xs font-medium">
-            {selected.length} selected
-            {selected.some(
-              (key) => !visible.some((device) => getDeviceKey(device) === key),
-            )
-              ? ' · Includes hidden devices'
-              : ''}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() =>
-              setSelected((values) => [
-                ...new Set([
-                  ...values,
-                  ...visible.filter(eligible).map(getDeviceKey),
-                ]),
-              ])
-            }
-          >
-            Select matching lights
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
-            Clear
-          </Button>
-          <BulkCalibrationAssignment selected={selected} />
-        </section>
       )}
     </div>
   );

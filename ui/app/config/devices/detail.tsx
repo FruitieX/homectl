@@ -1,4 +1,4 @@
-import { CalibrationAssignment } from '@/ui/settings/CalibrationAssignment';
+import { LightCalibrationSummary } from '@/ui/settings/CalibrationSummary';
 import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -500,7 +500,7 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
             <SettingsSection
               id="calibration"
               title="Calibration"
-              description="Adjust color and brightness response using saved calibration profiles."
+              description="Make this light match others: correct the colors and brightness levels it receives."
               actions={
                 wizard ? (
                   <Button
@@ -557,33 +557,14 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
                   onSaved={() => void catalog.refetch()}
                 />
               ) : (
-                <>
-                  <p className="text-sm">
-                    {assignedProfile?.name ??
-                      (resolvedCalibration
-                        ? 'Existing device calibration'
-                        : 'No calibration profile assigned')}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {canCalibrateDevice(device) && (
-                      <Button
-                        variant="outline"
-                        onClick={() => setWizard('color')}
-                      >
-                        Calibrate color
-                      </Button>
-                    )}
-                    {isDimmableDevice(device) && (
-                      <Button
-                        variant="outline"
-                        onClick={() => setWizard('brightness')}
-                      >
-                        Calibrate brightness
-                      </Button>
-                    )}
-                  </div>
-                  <CalibrationAssignment deviceKey={deviceKey} />
-                </>
+                <LightCalibrationSummary
+                  device={device}
+                  devices={catalog.devices}
+                  labelFor={(key) =>
+                    catalog.byKey[key] ? catalog.label(catalog.byKey[key]) : key
+                  }
+                  onCalibrate={setWizard}
+                />
               )}
             </SettingsSection>
           )}

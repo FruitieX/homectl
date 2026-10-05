@@ -6,7 +6,6 @@ import type { Device } from '@/bindings/Device';
 import type { Hs } from '@/bindings/Hs';
 import {
   useCalibrationEditor,
-  deviceCalibration,
   type CalibrationEditorView,
 } from '@/hooks/useCalibrationEditor';
 import { useCalibrationDraft } from '@/hooks/useCalibrationDraft';
@@ -19,6 +18,15 @@ import { useAppConfig } from '@/hooks/appConfig';
 import { getDeviceKey } from '@/lib/device';
 import { compareDeviceNames } from '@/lib/deviceLabel';
 import { createUuid } from '@/lib/uuid';
+import {
+  defaultProfileName,
+  lightCalibration,
+  planCalibrationSave,
+} from '@/lib/calibrationProfiles';
+import { CalibrationSaveScope } from '@/ui/settings/CalibrationSaveScope';
+import { Link } from 'react-router-dom';
+import { Check, Plus } from 'lucide-react';
+import { cn } from '@/lib/cn';
 import {
   calibrationPointToUv,
   calibratedHsv,
@@ -81,6 +89,7 @@ type ColorDraft = {
   numberEdits: Record<string, string>;
   points: ReturnType<typeof suggestedMatchingPoints>;
   index: number;
+  scope: 'shared' | 'copy';
 };
 export function ColorCalibrationWizard(props: {
   device: Device;
@@ -117,17 +126,26 @@ function ColorCalibrationForm({
     deviceKey: targetKey,
     label: device.name,
     initial,
-    form: () => ({
-      id: createUuid(),
-      editingProfileId: null,
-      phase: 'setup',
-      referenceKey: '',
-      name: device.name + ' color match',
-      brightness: 50,
-      numberEdits: {},
-      points: suggestedMatchingPoints(),
-      index: 0,
-    }),
+    form: () => {
+      // Recalibrating starts from the saved points: adjust what still differs.
+      const saved = lightCalibration(initial, targetKey);
+      return {
+        id: createUuid(),
+        editingProfileId: saved.points.length
+          ? (saved.profile?.id ?? 'legacy')
+          : null,
+        phase: 'setup',
+        referenceKey: saved.profile?.reference_device_key ?? '',
+        name: '',
+        brightness: Math.round((saved.profile?.brightness ?? 0.5) * 100),
+        numberEdits: {},
+        points: saved.points.length
+          ? matchingPointsFromProfile({ points: saved.points })
+          : suggestedMatchingPoints(),
+        index: 0,
+        scope: 'shared',
+      };
+    },
     beforeSave: (): Promise<void> => stop(),
     validate: (form) => [
       ...(Object.keys(form.numberEdits ?? {}).length
@@ -151,9 +169,6 @@ function ColorCalibrationForm({
             },
           ]
         : []),
-      ...(!form.name.trim()
-        ? [{ field: 'calibration_name', message: 'Give the profile a name.' }]
-        : []),
       ...(form.points.some((p) => !p.matched)
         ? [
             {
@@ -163,27 +178,25 @@ function ColorCalibrationForm({
           ]
         : []),
     ],
-    prepare: (form, basis) => ({
-      device_keys: [targetKey],
-      profile_id: form.editingProfileId ?? form.id,
-      profile: {
-        id: form.editingProfileId ?? form.id,
-        name: form.name.trim(),
-        reference_device_key: form.referenceKey || null,
-        brightness: form.brightness / 100,
-        points: form.points.map(({ reference, output }) =>
-          calibrationPointToUv({ reference, output }),
-        ),
-        brightness_points:
-          deviceCalibration(basis, targetKey).resolved?.brightness_points ?? [],
-      },
-    }),
+    prepare: (form, basis) =>
+      planCalibrationSave({
+        view: basis,
+        deviceKey: targetKey,
+        scope: form.scope,
+        newId: form.id,
+        defaultName: defaultProfileName(device),
+        change: {
+          name: form.name,
+          reference_device_key: form.referenceKey || null,
+          brightness: form.brightness / 100,
+          points: form.points.map(({ reference, output }) =>
+            calibrationPointToUv({ reference, output }),
+          ),
+        },
+      }),
     onSaved: () => setSavedNotice(true),
   });
-  const currentProfile = deviceCalibration(
-    draft.value.basis,
-    targetKey,
-  ).profile;
+  const currentProfile = lightCalibration(draft.value.basis, targetKey).profile;
   const [storedPhase, changePhase] = draft.field('phase');
   const phase = savedNotice ? 'saved' : storedPhase;
   const setPhase = (value: Phase) => {
@@ -194,6 +207,7 @@ function ColorCalibrationForm({
   const [editingProfileId, setEditingProfileId] =
     draft.field('editingProfileId');
   const [name, setName] = draft.field('name');
+  const [scope, setScope] = draft.field('scope');
   const [brightness, setBrightnessValue] = draft.field('brightness');
   const [numberEditsValue, setNumberEdits] = draft.field('numberEdits');
   const numberEdits = numberEditsValue ?? {};
@@ -334,23 +348,14 @@ function ColorCalibrationForm({
     });
   };
 
-  const editCurrentProfile = () => {
-    if (!currentProfile) return;
+  const startFresh = () => {
     setNumberEdits({});
-    setEditingProfileId(currentProfile.id);
-    setName(currentProfile.name);
-    setReferenceKey(currentProfile.reference_device_key ?? '');
-    setBrightness(Math.round(currentProfile.brightness * 100));
-    setPoints(
-      currentProfile.points.length
-        ? matchingPointsFromProfile(currentProfile)
-        : suggestedMatchingPoints(),
-    );
+    setEditingProfileId(null);
+    setPoints(suggestedMatchingPoints());
     setIndex(0);
     setCheckIndex(null);
     setPreviewed(false);
     setError('');
-    setPhase('setup');
   };
 
   // Requests run in order: dragging cannot make an older response overwrite a
@@ -524,11 +529,47 @@ function ColorCalibrationForm({
       title="Color calibration"
       description={
         currentProfile
-          ? `Using ${currentProfile.name}`
-          : 'Match this lamp to a reference light and save a reusable profile.'
+          ? `Saved in ${currentProfile.name}`
+          : 'Match this light’s colors to a reference light you like.'
       }
     >
       <div className="space-y-5">
+        <ol
+          className="flex flex-wrap gap-x-2 gap-y-1 text-sm"
+          aria-label="Steps"
+        >
+          {(
+            [
+              ['setup', 'Choose reference'],
+              ['match', 'Match colors'],
+              ['review', 'Check & save'],
+            ] as const
+          ).map(([step, label], position) => {
+            const current =
+              step === phase || (step === 'review' && phase === 'saved');
+            return (
+              <li
+                key={step}
+                className={cn(
+                  'flex items-center gap-2',
+                  current ? 'font-medium' : 'text-muted-foreground',
+                )}
+                aria-current={current ? 'step' : undefined}
+              >
+                {position > 0 && <span aria-hidden>›</span>}
+                <span
+                  className={cn(
+                    'flex size-5 items-center justify-center rounded-full text-xs',
+                    current ? 'bg-primary text-primary-foreground' : 'bg-muted',
+                  )}
+                >
+                  {position + 1}
+                </span>
+                {label}
+              </li>
+            );
+          })}
+        </ol>
         {previewIssue && (referenceKey || !canCalibrateDevice(device)) && (
           <div
             role="status"
@@ -567,20 +608,23 @@ function ColorCalibrationForm({
               whites, vivid colors and softer colors, then check a few colors
               between them. Compare the light on the same neutral surface.
             </p>
-            {currentProfile && !editingProfileId && (
-              <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
-                <p className="text-sm">
-                  This light uses <strong>{currentProfile.name}</strong>.
-                  Editing or adding points updates every light that uses this
-                  profile.
+            {editingProfileId && (
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                <p className="min-w-52 flex-1 text-sm">
+                  {points.length === 1
+                    ? 'The saved color point is loaded.'
+                    : `The ${points.length} saved color points are loaded.`}{' '}
+                  You’ll step through them; only change the ones where the
+                  lights still look different.
                 </p>
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   disabled={busy}
-                  onClick={editCurrentProfile}
+                  onClick={startFresh}
                 >
-                  Edit profile / add points
+                  Start over with fresh points
                 </Button>
               </div>
             )}
@@ -621,17 +665,6 @@ function ColorCalibrationForm({
                     label: candidate.name,
                     detail: getDeviceKey(candidate),
                   }))}
-              />
-            </label>
-            <label className="block space-y-2 text-sm">
-              Profile name
-              <Input
-                aria-label="Profile name"
-                data-field="calibration_name"
-                value={name}
-                maxLength={200}
-                onChange={(event) => setName(event.target.value)}
-                disabled={busy}
               />
             </label>
             <div className="space-y-2">
@@ -686,7 +719,6 @@ function ColorCalibrationForm({
                 'brightness' in numberEdits ||
                 !referenceDevice ||
                 !canCalibrateDevice(referenceDevice) ||
-                !name.trim() ||
                 !Number.isFinite(brightness) ||
                 brightness < 1 ||
                 brightness > 100
@@ -694,66 +726,106 @@ function ColorCalibrationForm({
               onClick={() => startMatching(point)}
             >
               {editingProfileId
-                ? `Start editing · ${points.length} points`
+                ? `Review ${points.length} saved points`
                 : `Start matching · ${points.length} points`}
             </Button>
             <p className="text-sm text-muted-foreground">
-              To reuse a saved profile, select lights in the devices list and
-              choose Apply calibration profile. Profiles work best on lamps of
-              the same model.
+              Calibrated another light of the same model already? Apply its
+              profile from{' '}
+              <Link
+                className="underline underline-offset-2"
+                to="/config/calibration"
+              >
+                Light calibration
+              </Link>{' '}
+              instead.
             </p>
           </>
         )}
 
         {phase === 'match' && (
           <>
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="font-semibold">{point.label}</h3>
-              <span className="text-sm text-muted-foreground">
-                Point {index + 1} of {points.length}
-              </span>
-            </div>
-            <progress
-              className="h-2 w-full"
-              max={points.length}
-              value={points.filter((item) => item.matched).length}
-              aria-label="Matching progress"
-            />
-            <p className="text-sm">
-              Keep <strong>{referenceDevice?.name ?? referenceKey}</strong> as
-              your reference. Adjust <strong>{device.name}</strong> until its
-              light looks the same. Changes preview automatically.
-            </p>
-            {editingProfileId && (
-              <p className="text-sm text-muted-foreground">
-                Saved calibration values are loaded for each point as you move
-                through the list. Only make changes where the physical lights
-                still differ.
-              </p>
-            )}
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={addPoint}
-                >
-                  Add point
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy || points.length <= 1}
-                  onClick={deleteCurrentPoint}
-                >
-                  Delete current point
-                </Button>
+            <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border p-3">
+              <div className="flex items-center gap-2">
+                <StatePreview
+                  power
+                  color={point.reference}
+                  brightness={brightness / 100}
+                  size={48}
+                />
+                <div className="text-xs">
+                  <p className="text-muted-foreground">Reference</p>
+                  <p className="font-medium">
+                    {referenceDevice?.name ?? referenceKey}
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Add creates a new unique reference anchor. Delete removes the
-                selected point; at least one point is required to save.
+              <span aria-hidden className="text-muted-foreground">
+                ≈
+              </span>
+              <div className="flex items-center gap-2">
+                <StatePreview
+                  power
+                  color={point.output}
+                  brightness={brightness / 100}
+                  size={48}
+                />
+                <div className="text-xs">
+                  <p className="text-muted-foreground">Adjusting</p>
+                  <p className="font-medium">{device.name}</p>
+                </div>
+              </div>
+              <p className="min-w-52 flex-1 text-sm">
+                <strong>{point.label}.</strong> Adjust {device.name} until its
+                light looks the same as the reference. Judge the lights, not the
+                screen.
               </p>
+            </div>
+            <div
+              className="flex flex-wrap items-center gap-1.5"
+              role="group"
+              aria-label={`Matching points, ${points.filter((item) => item.matched).length} of ${points.length} matched`}
+            >
+              {points.map((item, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  disabled={busy}
+                  aria-current={i === index ? 'step' : undefined}
+                  aria-label={`${item.label}${item.matched ? ', matched' : ''}`}
+                  title={item.label}
+                  onClick={() => {
+                    setPreviewed(false);
+                    setIndex(i);
+                  }}
+                  className={cn(
+                    'relative flex size-9 items-center justify-center rounded-full border-2',
+                    i === index
+                      ? 'border-primary'
+                      : 'border-transparent hover:border-border',
+                  )}
+                >
+                  <StatePreview power color={item.reference} size={26} />
+                  {item.matched && (
+                    <Check className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full bg-primary p-0.5 text-primary-foreground" />
+                  )}
+                </button>
+              ))}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                disabled={busy}
+                aria-label="Add a matching point"
+                title="Add a matching point"
+                onClick={addPoint}
+              >
+                <Plus className="size-4" />
+              </Button>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {points.filter((item) => item.matched).length} of{' '}
+                {points.length} matched
+              </span>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -931,6 +1003,14 @@ function ColorCalibrationForm({
               >
                 Reset this point
               </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={busy || points.length <= 1}
+                onClick={deleteCurrentPoint}
+              >
+                Delete this point
+              </Button>
             </div>
           </>
         )}
@@ -947,22 +1027,6 @@ function ColorCalibrationForm({
             >
               Resume live preview
             </Button>
-          </div>
-        )}
-        {phase !== 'setup' && (
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <StatePreview
-              power
-              color={point.reference}
-              brightness={brightness / 100}
-            />
-            <span>Reference</span>
-            <StatePreview
-              power
-              color={point.output}
-              brightness={brightness / 100}
-            />
-            <span>Matched output</span>
           </div>
         )}
         {phase === 'review' && (
@@ -1036,29 +1100,22 @@ function ColorCalibrationForm({
                 Improve this color
               </Button>
             )}
-            <label className="block space-y-2 text-sm">
-              Profile name
-              <Input
-                aria-label="Profile name"
-                data-field="calibration_name"
-                value={name}
-                maxLength={200}
-                onChange={(event) => setName(event.target.value)}
-                disabled={busy}
-              />
-            </label>
             <p className="text-sm">
-              {points.filter((item) => item.matched).length} matched points ·{' '}
-              {brightness}% brightness. Save applies this profile to{' '}
-              {device.name}
-              {editingProfileId
-                ? ' and every light assigned to this profile'
-                : ' using a new profile'}
-              . Existing brightness calibration is preserved. Saving ends the
-              temporary preview and reapplies the current normal-scene state
-              through the profile; it does not pin the lights to the last test
-              point.
+              {points.filter((item) => item.matched).length} matched points at{' '}
+              {brightness}% brightness. Saving ends the test and sends the
+              normal state through the new calibration.
             </p>
+            <CalibrationSaveScope
+              view={draft.value.basis}
+              deviceKey={targetKey}
+              deviceName={device.name}
+              channel="color"
+              scope={scope}
+              onScope={setScope}
+              name={name}
+              onName={setName}
+              defaultName={defaultProfileName(device)}
+            />
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
@@ -1078,13 +1135,18 @@ function ColorCalibrationForm({
         {phase === 'saved' && (
           <>
             <p role="status">
-              Saved “{name}” and applied it to {device.name}. The temporary
-              preview has ended; normal scene state is active again and is now
-              routed through this profile.
+              Color calibration saved for {device.name}. The test has ended and
+              the light is back to its normal state, now corrected.
             </p>
             <p className="text-sm text-muted-foreground">
-              Select other lights in the devices list to apply this profile to
-              them.
+              Use it on more lights of the same model from{' '}
+              <Link
+                className="underline underline-offset-2"
+                to="/config/calibration"
+              >
+                Light calibration
+              </Link>
+              .
             </p>
             <Button
               type="button"
@@ -1099,7 +1161,7 @@ function ColorCalibrationForm({
                 setPhase('setup');
               }}
             >
-              Create another profile
+              Calibrate again
             </Button>
           </>
         )}

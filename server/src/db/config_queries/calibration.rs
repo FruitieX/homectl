@@ -100,8 +100,26 @@ pub async fn save_and_assign<C: ConnectionTrait + TransactionTrait>(
     profile: Option<&ColorCalibrationProfile>,
     keys: &[String],
     profile_id: Option<&str>,
+    delete_profile_id: Option<&str>,
 ) -> Result<()> {
     let txn = db.begin().await?;
+    if let Some(id) = delete_profile_id {
+        // Assignments go with the profile; their lights become uncalibrated.
+        delete_by_string_key(
+            &txn,
+            CalibrationAssignments::Table,
+            CalibrationAssignments::ProfileId,
+            id,
+        )
+        .await?;
+        delete_by_string_key(
+            &txn,
+            CalibrationProfiles::Table,
+            CalibrationProfiles::Id,
+            id,
+        )
+        .await?;
+    }
     if let Some(profile) = profile {
         save_profile(&txn, profile).await?;
     }
@@ -248,7 +266,7 @@ mod tests {
         }))
         .unwrap();
         let keys = vec!["dummy/a".to_string(), "dummy/b".to_string()];
-        save_and_assign(&db, Some(&profile), &keys, Some(&profile.id))
+        save_and_assign(&db, Some(&profile), &keys, Some(&profile.id), None)
             .await
             .unwrap();
         let before =
@@ -273,7 +291,7 @@ mod tests {
         db.execute_unprepared("CREATE TRIGGER reject_second_assignment BEFORE INSERT ON calibration_assignments WHEN NEW.device_key = 'dummy/b' BEGIN SELECT RAISE(ABORT, 'injected assignment failure'); END").await.unwrap();
         profile.name = "Must not stick".into();
         assert!(
-            save_and_assign(&db, Some(&profile), &keys, Some(&profile.id))
+            save_and_assign(&db, Some(&profile), &keys, Some(&profile.id), None)
                 .await
                 .is_err()
         );
@@ -283,7 +301,7 @@ mod tests {
         );
         profile.id = "new-profile".into();
         assert!(
-            save_and_assign(&db, Some(&profile), &keys, Some(&profile.id))
+            save_and_assign(&db, Some(&profile), &keys, Some(&profile.id), None)
                 .await
                 .is_err()
         );
@@ -295,11 +313,18 @@ mod tests {
         db.execute_unprepared("DROP TRIGGER reject_second_assignment")
             .await
             .unwrap();
-        save_and_assign(&db, None, &keys[..1], None).await.unwrap();
+        save_and_assign(&db, None, &keys[..1], None, None)
+            .await
+            .unwrap();
         assert_eq!(profiles(&db).await.unwrap().len(), 1);
         let remaining = assignments(&db).await.unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].device_key, "dummy/b");
+        save_and_assign(&db, None, &[], None, Some("combined"))
+            .await
+            .unwrap();
+        assert!(profiles(&db).await.unwrap().is_empty());
+        assert!(assignments(&db).await.unwrap().is_empty());
     }
 
     #[tokio::test]

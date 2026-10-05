@@ -112,7 +112,7 @@ export function calibrationPointToUv(
 }
 
 export function matchingPointsFromProfile(
-  profile: ColorCalibrationProfile,
+  profile: Pick<ColorCalibrationProfile, 'points'>,
 ): MatchingPoint[] {
   return profile.points.map((point, index) => ({
     label: `Point ${index + 1}`,
@@ -143,12 +143,12 @@ export function canAmendReferencePoint(
 ): boolean {
   return Boolean(
     current &&
-      points.every(
-        (point, pointIndex) =>
-          pointIndex === index ||
-          point.reference.h !== current.h ||
-          point.reference.s !== current.s,
-      ),
+    points.every(
+      (point, pointIndex) =>
+        pointIndex === index ||
+        point.reference.h !== current.h ||
+        point.reference.s !== current.s,
+    ),
   );
 }
 
@@ -309,8 +309,8 @@ export function canCalibrateDevice(device: Device): boolean {
     'Controllable' in device.data &&
     Boolean(
       device.data.Controllable.capabilities.hs ||
-        device.data.Controllable.capabilities.rgb ||
-        device.data.Controllable.capabilities.xy,
+      device.data.Controllable.capabilities.rgb ||
+      device.data.Controllable.capabilities.xy,
     ) &&
     !isDeviceReadOnly(device)
   );

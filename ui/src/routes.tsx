@@ -15,6 +15,9 @@ import { Navigate } from 'react-router-dom';
 const DashboardPage = lazy(() => import('../app/dashboard/page'));
 const ConfigTimersPage = lazy(() => import('../app/config/timers/page'));
 const ConfigDevicesPage = lazy(() => import('../app/config/devices/page'));
+const ConfigCalibrationPage = lazy(
+  () => import('../app/config/calibration/page'),
+);
 const ConfigFloorplanPage = lazy(() => import('../app/config/floorplan/page'));
 const ConfigGroupsPage = lazy(() => import('../app/config/groups/page'));
 const ConfigGroupDetailPage = lazy(() => import('../app/config/groups/detail'));
@@ -156,6 +159,10 @@ export const router = createBrowserRouter([
           {
             path: 'devices',
             element: withSuspense(<ConfigDevicesPage />),
+          },
+          {
+            path: 'calibration',
+            element: withSuspense(<ConfigCalibrationPage />),
           },
           {
             path: 'sensor-history',

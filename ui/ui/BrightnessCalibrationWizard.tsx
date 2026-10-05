@@ -10,6 +10,12 @@ import {
 import { useCalibrationDraft } from '@/hooks/useCalibrationDraft';
 import { useCalibrationPreview } from '@/hooks/useCalibrationPreview';
 import { createUuid } from '@/lib/uuid';
+import {
+  defaultProfileName,
+  lightCalibration,
+  planCalibrationSave,
+} from '@/lib/calibrationProfiles';
+import { CalibrationSaveScope } from '@/ui/settings/CalibrationSaveScope';
 import { configItemHref } from '@/lib/configItemHref';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { CalibrationConflict } from '@/ui/settings/CalibrationConflict';
@@ -92,6 +98,7 @@ type BrightnessDraft = {
   referenceKey: string;
   pointInputs: Array<{ logical: string; output: string }>;
   remove: boolean;
+  scope: 'shared' | 'copy';
 };
 
 const numericPoints = (form: BrightnessDraft): BrightnessPoint[] =>
@@ -119,7 +126,8 @@ function BrightnessCalibrationForm({
         deviceCalibration(initial, deviceKey).resolved?.brightness_points ?? [];
       return {
         id: createUuid(),
-        name: `${device.name || 'Light'} brightness`.slice(0, 200),
+        name: '',
+        scope: 'shared',
         step: 'mode',
         mode: 'reference',
         referenceKey: '',
@@ -137,39 +145,30 @@ function BrightnessCalibrationForm({
     validate: (form) => {
       if (form.remove) return [];
       const error = brightnessCurveError(numericPoints(form));
-      return [
-        ...(!form.name.trim()
-          ? [{ field: 'calibration_name', message: 'Give the profile a name.' }]
-          : []),
-        ...(error ? [{ field: 'calibration_points', message: error }] : []),
-      ];
+      return error ? [{ field: 'calibration_points', message: error }] : [];
     },
     prepare: (form, basis) => {
-      const { profile, resolved } = deviceCalibration(basis, deviceKey);
-      const points = resolved?.points ?? [];
-      if (form.remove && !points.length)
-        return { device_keys: [deviceKey], profile_id: null };
-      return {
-        device_keys: [deviceKey],
-        profile_id: form.id,
-        profile: {
-          id: form.id,
-          name: form.remove
-            ? `${device.name || 'Light'} color only`
-            : form.name.trim(),
-          points,
-          // Matching brightness must not overwrite the color reference metadata.
-          reference_device_key: points.length
-            ? (profile?.reference_device_key ?? null)
-            : form.mode === 'reference'
-              ? form.referenceKey || null
-              : null,
-          brightness: profile?.brightness ?? 1,
+      const current = lightCalibration(basis, deviceKey);
+      return planCalibrationSave({
+        view: basis,
+        deviceKey,
+        scope: form.scope,
+        newId: form.id,
+        defaultName: defaultProfileName(device),
+        change: {
+          name: form.name,
           brightness_points: form.remove
             ? []
             : sortBrightnessPoints(numericPoints(form)),
+          // The reference describes color matching once that exists.
+          ...(!current.points.length && !form.remove
+            ? {
+                reference_device_key:
+                  form.mode === 'reference' ? form.referenceKey || null : null,
+              }
+            : {}),
         },
-      };
+      });
     },
     onSaved: () => {
       setSaved(draft.value.form.remove ? 'removed' : draft.value.form.id);
@@ -206,11 +205,9 @@ function BrightnessCalibrationForm({
       };
     });
   const [name, setName] = draft.field('name');
+  const [scope, setScope] = draft.field('scope');
   const { profile, resolved } = deviceCalibration(draft.value.basis, deviceKey);
   const existingPoints = resolved?.points ?? [];
-  const profileUsage = draft.value.basis.assignments.filter(
-    (row) => row.profile_id === profile?.id,
-  ).length;
   const [previewLogical, setPreviewLogical] = useState<number | null>(null);
   const saving = draft.saving;
   const preview = {
@@ -250,11 +247,12 @@ function BrightnessCalibrationForm({
       referenceOptions.find((option) => option.key === referenceKey) ?? null,
     [referenceKey, referenceOptions],
   );
-  const previewIssue = !dimmable || isDeviceReadOnly(device)
-    ? 'This light must support dimming and be enabled and writable to preview. Your calibration draft is kept.'
-    : mode === 'reference' && !reference
-      ? 'Choose an available, writable reference light that supports dimming, or enter a curve manually.'
-      : null;
+  const previewIssue =
+    !dimmable || isDeviceReadOnly(device)
+      ? 'This light must support dimming and be enabled and writable to preview. Your calibration draft is kept.'
+      : mode === 'reference' && !reference
+        ? 'Choose an available, writable reference light that supports dimming, or enter a curve manually.'
+        : null;
   const { active: previewActive, stop: stopSession } = session;
   useEffect(() => {
     if (previewIssue && previewActive)
@@ -348,7 +346,7 @@ function BrightnessCalibrationForm({
           {saved === 'removed'
             ? 'Brightness calibration removed'
             : 'Brightness calibration saved'}
-          {saved !== 'removed' ? ' and assigned to this light' : ''}.
+          .
         </p>
         {saved !== 'removed' ? (
           <dl className="space-y-1 text-sm">
@@ -389,8 +387,14 @@ function BrightnessCalibrationForm({
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Apply this curve to more lights from the lights list, where you can
-          see what the profile contains before choosing.
+          To use this calibration on more lights of the same model, open{' '}
+          <Link
+            className="underline underline-offset-2"
+            to="/config/calibration"
+          >
+            Light calibration
+          </Link>{' '}
+          and apply its profile to them.
         </p>
       </div>
     );
@@ -470,24 +474,13 @@ function BrightnessCalibrationForm({
               Compare under the same conditions — brightness also depends on the
               room, the shade, and the ambient light.
             </p>
-            {profile?.brightness_points?.length ||
-            (profile?.points?.length ?? 0) > 0 ? (
+            {existingPoints.length > 0 && (
               <p className="text-sm">
-                This light is calibrated for{' '}
-                {[
-                  (profile?.points?.length ?? 0) > 0 ? 'Color' : null,
-                  (profile?.brightness_points?.length ?? 0) > 0
-                    ? 'Brightness'
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(' and ')}
-                . Saving a new profile keeps the other part.
-                {profileUsage > 1
-                  ? ` ${profileUsage} lights share this profile; they keep it.`
-                  : null}
+                The curve is saved in this light’s calibration profile
+                {profile ? ` (${profile.name})` : ''}, next to its color
+                matching, which stays as it is.
               </p>
-            ) : null}
+            )}
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">
                 How do you want to work?
@@ -934,32 +927,18 @@ function BrightnessCalibrationForm({
                   ? `Compared against ${reference.name}; matched points are your visual match.`
                   : 'Entered by hand; no reference light was used.'}
               </li>
-              <li>
-                {(profile?.points?.length ?? 0) > 0 || existingPoints.length > 0
-                  ? 'Color calibration is preserved in the new profile.'
-                  : 'No color calibration to preserve on this light.'}
-              </li>
-              <li>Saving assigns the new profile to this light only.</li>
             </ul>
-            <label className="block space-y-1.5 text-sm font-medium">
-              Profile name
-              <input
-                data-field="calibration_name"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                value={name}
-                maxLength={200}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </label>
-            <details className="text-sm">
-              <summary className="cursor-pointer text-muted-foreground">
-                Details
-              </summary>
-              <p className="mt-2 text-xs text-muted-foreground">
-                A new profile is created for this light. Other lights keep their
-                current assignments.
-              </p>
-            </details>
+            <CalibrationSaveScope
+              view={draft.value.basis}
+              deviceKey={deviceKey}
+              deviceName={device.name}
+              channel="brightness"
+              scope={scope}
+              onScope={setScope}
+              name={name}
+              onName={setName}
+              defaultName={defaultProfileName(device)}
+            />
             {error ? (
               <p
                 className="text-sm text-amber-700 dark:text-amber-300"

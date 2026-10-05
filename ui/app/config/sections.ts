@@ -5,6 +5,7 @@ import {
   Plug,
   House,
   Lightbulb,
+  SlidersHorizontal,
   Palette,
   Workflow,
   Variable,
@@ -92,6 +93,14 @@ export const configSections = [
     description: 'Name, inspect, and organize your devices and sensors.',
     group: 'Your home',
     keywords: ['labels', 'sensors', 'replace', 'delete', 'device config'],
+  },
+  {
+    href: '/config/calibration',
+    icon: SlidersHorizontal,
+    label: 'Light calibration',
+    description: 'Make lights match: color and brightness profiles.',
+    group: 'Your home',
+    keywords: ['calibration', 'profile', 'color match', 'brightness curve'],
   },
   {
     href: '/config/scenes',

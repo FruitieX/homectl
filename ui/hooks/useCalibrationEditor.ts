@@ -12,10 +12,15 @@ export type CalibrationEditorView = {
   legacy: DeviceColorCalibration[];
   revision_token: string;
 };
+/**
+ * One atomic write: save `profile`, point `device_keys` at `profile_id` (or at
+ * nothing), and/or delete a profile together with its assignments.
+ */
 export type CalibrationEdit = {
   profile?: ColorCalibrationProfile | null;
   profile_id: string | null;
   device_keys: string[];
+  delete_profile_id?: string | null;
 };
 
 export function useCalibrationEditor() {

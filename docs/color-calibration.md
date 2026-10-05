@@ -1,14 +1,34 @@
-# Color matching wizard and reusable profiles
+# Light calibration
 
-Open **Configuration → Devices**, open a writable light, and use **Light
-calibration**. A light can be calibrated on two channels: **color** (HSV hue and
-saturation) and **brightness** (which level means which command). Each channel is
-calibrated separately and a profile may carry either or both.
+A light has at most one **calibration profile**, and a profile covers two
+channels: **color** (HSV hue and saturation matching points) and **brightness**
+(which level means which command). Either channel may be empty. Lights of the
+same model can share one profile.
+
+**Configuration → Light calibration** lists every profile with what it contains,
+which lights use it, and every calibratable light with its profile. Changing a
+light's profile there (or on the light's own page) applies immediately and offers
+Undo. A profile can be renamed, applied to more lights (**Change lights**), or
+deleted; deleting returns its lights to uncalibrated.
+
+Each light's page has a **Calibration** section showing its profile, who shares
+it, and the state of each channel, with **Calibrate/Adjust color** and
+**Calibrate/Adjust brightness**. Both wizards save into the light's profile:
+
+- A light without a profile gets a new one (older per-light calibration is
+  carried over).
+- A profile used only by this light is updated in place.
+- A profile shared with other lights asks where to save: **Update** it for all
+  of them, or **Save a separate profile** for this light only, starting from a
+  copy.
+
+Saving one channel never touches the other.
 
 - **Calibrate color** needs HSV support. The wizard suggests 15 distinct points:
   neutral white, warm white, cool white, six saturated hues around the color
   wheel, and six softer hues. Select a reference light whose colors you want to
-  match, name the profile, and choose the brightness you normally use.
+  match and choose the brightness you normally use. Recalibrating starts from
+  the saved points; **Start over with fresh points** discards them.
 - **Calibrate brightness** needs dimming support, and no color match at all.
   See [Brightness calibration](#brightness-calibration) below.
 
@@ -18,6 +38,8 @@ The wizard suggests 15 distinct points: neutral white, warm white, cool white,
 six saturated hues around the color wheel, and six softer hues. For each point,
 adjust the target lamp's hue and saturation until the illumination matches the
 reference. Changes preview automatically; **Looks matched** confirms the point.
+The row of point swatches shows which points are matched and jumps between
+them; **+** adds a point.
 Compare light on the same neutral surface, not the colors shown on a screen.
 
 Review then offers four colors between the initial matches. Test them and use
@@ -27,29 +49,22 @@ of a perfect match: lamp gamut, brightness, placement and visual judgment matter
 This calibration adjusts HSV hue and saturation; brightness, native color
 temperature, RGB and XY commands are not calibrated.
 
-Saving a brightness calibration keeps any color match the light already has:
-the new profile carries both channels, and the old profile is left untouched. Existing target
-calibration is bypassed; the reference light retains its normal calibration.
+During a preview the target's existing calibration is bypassed; the reference
+light retains its normal calibration.
 Scene state continues advancing normally and is not replaced by preview values.
 **Cancel** or **Finish** returns both lights to their current normal state.
 Closing the view requests cancellation; a disconnected session expires after
 two minutes without a heartbeat (checked every 30 seconds). Previews are not
 saved to device state or configuration.
 
-## Save once, reuse from the devices list
+## Reuse a profile
 
-**Save profile & finish** saves the named profile and assigns it to the target
-lamp. Checkboxes in the devices list select other writable HSV lights. Choose a
-saved profile in the selection toolbar and apply it to the whole selection, or
-remove calibration from the selection. Filtering preserves selected lights and
-the toolbar explicitly indicates selections hidden by filters.
-
-A batch validates every selected device before applying anything, then persists
-the assignments in one transaction. Reuse works best for lamps of the same model;
-check a representative lamp before assigning a profile to many lights. Profile
-changes are saved as a new profile so other assigned lamps are not changed
-unexpectedly. Deleting/replacing a lamp removes its assignment but keeps the
-reusable profile.
+Apply a profile to more lights from **Light calibration** (**Change lights** on
+the profile, or the per-light selector). Each change validates every affected
+light before applying anything and persists in one transaction. Reuse works
+best for lamps of the same model; check a representative lamp before assigning
+a profile to many lights. Deleting/replacing a lamp removes its assignment but
+keeps the profile.
 
 Profiles and assignments are stored in the database and round-trip through JSON
 exports. Older backups and existing per-device matching points remain supported.
@@ -79,9 +94,10 @@ The wizard has three steps:
 3. **Review and save** — a table of desired levels and what the light will be
    sent, whether the top of the curve is capped (so 100% no longer means full
    output), whether a floor is in play, what the reference was, and whether the
-   color channel is preserved. Saving creates a **new profile** assigned to this
-   light only; existing profiles are never modified. **Remove brightness
-   calibration** drops the brightness channel and keeps the color match.
+   color channel is kept. Saving follows the profile rules above (update in
+   place, or choose between updating a shared profile and a separate copy).
+   **Remove brightness calibration** drops the brightness channel and keeps the
+   color match; a profile left with neither channel is removed.
 
 The mapping is piecewise linear between points, clamped to the endpoints, and is
 applied wherever brightness is commanded — direct control, scenes, device links
@@ -92,8 +108,8 @@ level it could have come from.
 
 Profile validation: two to sixteen points, desired brightness strictly
 increasing, target output never decreasing, all values in (0, 100]. A profile is
-valid with color points, a brightness curve, or both. The devices list applies a
-profile to a selection and rejects the whole batch with a per-device reason when
+valid with color points, a brightness curve, or both. Applying a profile to
+several lights rejects the whole batch with a per-device reason when
 any selected light cannot do what the profile needs — a brightness-only curve
 applies to dimmers that have no color support, while a color profile still needs
 HSV.

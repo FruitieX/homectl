@@ -164,6 +164,20 @@ impl ColorCalibrationProfile {
     }
 }
 
+/// One atomic calibration editor write: optionally save a profile, assign it
+/// (or nothing, with `profile_id: None`) to lights, and delete a profile.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct CalibrationEdit {
+    #[serde(default)]
+    pub profile: Option<ColorCalibrationProfile>,
+    #[serde(default)]
+    pub device_keys: Vec<String>,
+    #[serde(default)]
+    pub profile_id: Option<String>,
+    #[serde(default)]
+    pub delete_profile_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct ColorCalibrationAssignment {
@@ -221,23 +235,69 @@ impl crate::db::config_queries::ConfigExport {
 impl crate::core::state::AppState {
     /// Prepare the complete calibration change before either persistence or
     /// runtime mutation. Shared profile edits validate every affected light.
+    ///
+    /// One edit may save a profile, (re)assign lights, and delete a profile.
+    /// Saving or deleting a profile alone needs no light keys; `profile_id`
+    /// is only read when keys are given.
     pub(crate) fn prepare_calibration_edit(
         &self,
-        profile: Option<&ColorCalibrationProfile>,
-        keys: &[String],
-        profile_id: Option<&str>,
+        edit: &CalibrationEdit,
     ) -> Result<(crate::db::config_queries::ConfigExport, Vec<Device>), String> {
-        if keys.is_empty() || keys.len() > 500 {
+        let CalibrationEdit {
+            profile,
+            device_keys: keys,
+            profile_id,
+            delete_profile_id,
+        } = edit;
+        if keys.len() > 500 {
+            return Err("Select at most 500 lights".into());
+        }
+        if keys.is_empty() && profile.is_none() && delete_profile_id.is_none() {
             return Err("Select between 1 and 500 lights".into());
         }
-        if profile.is_some_and(|profile| Some(profile.id.as_str()) != profile_id) {
+        if !keys.is_empty()
+            && profile
+                .as_ref()
+                .is_some_and(|profile| Some(&profile.id) != profile_id.as_ref())
+        {
             return Err("The saved profile must match the assignment".into());
+        }
+        if delete_profile_id.is_some()
+            && (profile.as_ref().map(|row| &row.id) == delete_profile_id.as_ref()
+                || (!keys.is_empty() && profile_id == delete_profile_id))
+        {
+            return Err("A deleted profile cannot be saved or assigned in the same change".into());
         }
         let mut candidate = self.runtime_config.clone();
         let mut affected = keys
             .iter()
             .cloned()
             .collect::<std::collections::BTreeSet<_>>();
+        // Lights that only lose calibration through a deleted profile need no
+        // capability: refresh them when possible, never block on them.
+        let mut released = std::collections::BTreeSet::new();
+        if let Some(id) = delete_profile_id {
+            if !candidate
+                .color_calibration_profiles
+                .iter()
+                .any(|row| &row.id == id)
+            {
+                return Err("Calibration profile does not exist".into());
+            }
+            released.extend(
+                candidate
+                    .color_calibration_assignments
+                    .iter()
+                    .filter(|row| &row.profile_id == id && !keys.contains(&row.device_key))
+                    .map(|row| row.device_key.clone()),
+            );
+            candidate
+                .color_calibration_assignments
+                .retain(|row| &row.profile_id != id);
+            candidate
+                .color_calibration_profiles
+                .retain(|row| &row.id != id);
+        }
         if let Some(profile) = profile {
             profile.validate()?;
             affected.extend(
@@ -258,56 +318,74 @@ impl crate::core::state::AppState {
         candidate
             .device_color_calibrations
             .retain(|row| !keys.contains(&row.device_key));
-        if let Some(id) = profile_id {
+        if let Some(id) = profile_id.as_ref().filter(|_| !keys.is_empty()) {
             for key in keys.iter().collect::<std::collections::BTreeSet<_>>() {
                 candidate
                     .color_calibration_assignments
                     .push(ColorCalibrationAssignment {
                         device_key: key.clone(),
-                        profile_id: id.into(),
+                        profile_id: id.clone(),
                     });
             }
         }
         candidate.validate_calibration_profiles()?;
         let mut devices = Vec::new();
-        for key in affected {
+        for key in &affected {
             if self.calibration_sessions.values().any(|session| {
                 std::iter::once(&session.target)
                     .chain(session.reference.iter())
-                    .any(|device| device.get_device_key().to_string() == key)
+                    .any(|device| device.get_device_key().to_string() == *key)
             }) {
                 return Err("Stop the preview using this light before saving calibration".into());
             }
-            let resolved = candidate.calibration_for_device(&key);
+            let resolved = candidate.calibration_for_device(key);
             let channels = CalibrationChannels {
                 color: resolved.as_ref().is_some_and(|row| !row.points.is_empty()),
                 brightness: resolved
                     .as_ref()
                     .is_some_and(|row| !row.brightness_points.is_empty()),
             };
-            devices.push(self.calibration_device_for(&key, channels)?);
+            devices.push(self.calibration_device_for(key, channels)?);
+        }
+        for key in released.difference(&affected) {
+            if self.calibration_sessions.values().any(|session| {
+                std::iter::once(&session.target)
+                    .chain(session.reference.iter())
+                    .any(|device| device.get_device_key().to_string() == *key)
+            }) {
+                return Err("Stop the preview using this light before saving calibration".into());
+            }
+            let none = CalibrationChannels {
+                color: false,
+                brightness: false,
+            };
+            if let Ok(device) = self.calibration_device_for(key, none) {
+                devices.push(device);
+            }
         }
         Ok((candidate, devices))
     }
 
     pub(crate) async fn save_calibration_edit(
         &mut self,
-        profile: Option<ColorCalibrationProfile>,
-        keys: Vec<String>,
-        profile_id: Option<String>,
+        edit: CalibrationEdit,
     ) -> Result<(), String> {
-        let (candidate, devices) =
-            self.prepare_calibration_edit(profile.as_ref(), &keys, profile_id.as_deref())?;
+        let (candidate, devices) = self.prepare_calibration_edit(&edit)?;
         // Calibration retains its existing database-first policy. Failed or
         // unavailable persistence leaves both the profile and assignment intact.
         let db = crate::db::get_db_connection().map_err(|_| {
             "Calibration was not saved because the database is unavailable".to_string()
         })?;
+        let profile_id = edit
+            .profile_id
+            .as_deref()
+            .filter(|_| !edit.device_keys.is_empty());
         crate::db::config_queries::calibration::save_and_assign(
             db,
-            profile.as_ref(),
-            &keys,
-            profile_id.as_deref(),
+            edit.profile.as_ref(),
+            &edit.device_keys,
+            profile_id,
+            edit.delete_profile_id.as_deref(),
         )
         .await
         .map_err(|_| {
@@ -1255,5 +1333,83 @@ mod tests {
             .unwrap_err();
         assert!(refused.contains("Dimmer"), "{refused}");
         assert!(refused.contains("color"), "{refused}");
+    }
+
+    #[test]
+    fn editor_edits_profiles_alone_and_deletes_them_without_blocking_on_lights() {
+        use crate::core::event::tests::test_state;
+
+        let (mut state, _rx) = test_state();
+        let device = lamp(
+            Capabilities {
+                hs: true,
+                brightness: Some(true),
+                ..Default::default()
+            },
+            DeviceColor::new_from_hs(30, 0.3),
+        );
+        state.devices.set_state(&device, true, true);
+        let key = device.get_device_key().to_string();
+        let shared = ColorCalibrationProfile {
+            id: "shared".into(),
+            name: "Shared".into(),
+            points: Vec::new(),
+            reference_device_key: None,
+            brightness: 1.0,
+            brightness_points: curve(),
+        };
+        state
+            .runtime_config
+            .color_calibration_profiles
+            .push(shared.clone());
+        for device_key in [key.clone(), "mqtt/removed".to_string()] {
+            state
+                .runtime_config
+                .color_calibration_assignments
+                .push(ColorCalibrationAssignment {
+                    device_key,
+                    profile_id: "shared".into(),
+                });
+        }
+
+        assert!(state
+            .prepare_calibration_edit(&CalibrationEdit::default())
+            .is_err());
+
+        // Deleting releases every assigned light; a light that no longer
+        // exists is skipped instead of blocking the delete.
+        let delete = CalibrationEdit {
+            delete_profile_id: Some("shared".into()),
+            ..Default::default()
+        };
+        let (candidate, devices) = state.prepare_calibration_edit(&delete).unwrap();
+        assert!(candidate.color_calibration_profiles.is_empty());
+        assert!(candidate.color_calibration_assignments.is_empty());
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].get_device_key().to_string(), key);
+
+        let mut renamed = shared.clone();
+        renamed.name = "Renamed".into();
+        let rename = CalibrationEdit {
+            profile: Some(renamed),
+            ..Default::default()
+        };
+        assert!(state.prepare_calibration_edit(&rename).is_err());
+        state
+            .runtime_config
+            .color_calibration_assignments
+            .retain(|row| row.device_key == key);
+        let (candidate, devices) = state.prepare_calibration_edit(&rename).unwrap();
+        assert_eq!(candidate.color_calibration_profiles[0].name, "Renamed");
+        assert_eq!(candidate.color_calibration_assignments.len(), 1);
+        assert_eq!(devices.len(), 1, "lights using the edited profile refresh");
+
+        let contradictory = CalibrationEdit {
+            device_keys: vec![key.clone()],
+            profile_id: Some("shared".into()),
+            delete_profile_id: Some("shared".into()),
+            ..Default::default()
+        };
+        assert!(state.prepare_calibration_edit(&contradictory).is_err());
     }
 }
