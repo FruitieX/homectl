@@ -168,8 +168,8 @@ importers:
         specifier: 2.2.1
         version: 2.2.1
       immer:
-        specifier: 11.1.18
-        version: 11.1.18
+        specifier: 11.1.21
+        version: 11.1.21
       jotai:
         specifier: 3.0.1
         version: 3.0.1(@types/react@19.3.0)(react@19.3.0)
@@ -2065,8 +2065,8 @@ packages:
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
 
-  immer@11.1.18:
-    resolution: {integrity: sha512-EQyQtLiYW029lyoczMl/Hh4Xu7cDecSc58JRYpHyL4tIAu3eqd1yJzQX04d2BZHDkzFFvm6qJEJWOtfDSWAXbQ==}
+  immer@11.1.21:
+    resolution: {integrity: sha512-bZSadeCPGdaY5/qRLgr6mDSH1ra21rD3rqpiWk7+QTr4ayYPTE9qZYdLh/NdPhMe0wSrTvHD/Lk8q5EwhUs0aw==}
 
   inherits@2.0.4:
     resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
@@ -4627,7 +4627,7 @@ snapshots:
 
   ieee754@1.2.1: {}
 
-  immer@11.1.18: {}
+  immer@11.1.21: {}
 
   inherits@2.0.4: {}
 
