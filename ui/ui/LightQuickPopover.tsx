@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
   Palette,
   Power,
@@ -24,8 +23,8 @@ import {
 } from '@/lib/lightQuickAdjust';
 import { getColor } from '@/lib/colors';
 import { exceedsLongPressTolerance } from '@/lib/longPress';
-import { quickControlDismissGuard } from '@/lib/quickControlDismiss';
 import { Button } from './primitives/button';
+import { QuickControlShell } from './QuickControlShell';
 
 const SURFACE_SIZE = 268;
 const COLOR_SIZE = 208;
@@ -34,8 +33,10 @@ const COLOR_MIN_RADIUS = 42;
 const COLOR_MAX_RADIUS = COLOR_CENTER - 8;
 const BRIGHTNESS_WIDTH = 24;
 const BRIGHTNESS_RADIUS = 119;
-// Fit six 44 px touch targets plus gaps, without moving when Restore disappears.
-const POPOVER_EDGE_PADDING = 154;
+// Fit six 44 px touch targets plus gaps, without moving when Restore
+// disappears, and the label/toolbar above and status below the ring.
+const SURFACE_ORIGIN = { x: SURFACE_SIZE / 2, y: SURFACE_SIZE / 2 };
+const SURFACE_REACH = { x: 154, top: 228, bottom: 146 };
 /** One radial surface for map and row indicators, with coalesced live updates. */
 export function LightQuickPopover({
   device: anchorDevice,
@@ -89,8 +90,6 @@ export function LightQuickPopover({
     [pending, setPending] = useState(false),
     [dragging, setDragging] = useState(false);
   const enabled = connected && selection.writable.length > 0 && !restoring;
-  const root = useRef<HTMLDivElement>(null),
-    returnFocus = useRef(document.activeElement);
   const surface = useRef<HTMLDivElement>(null);
   const draftRef = useRef<LightAdjustment | null>(null);
   const queue = useRef<ReturnType<typeof createLightAdjustmentQueue> | null>(
@@ -129,11 +128,6 @@ export function LightQuickPopover({
     powerPress.current.timer = undefined;
   };
   useEffect(() => () => clearTimeout(powerPress.current.timer), []);
-  const cx = Math.max(
-    POPOVER_EDGE_PADDING,
-    Math.min(innerWidth - POPOVER_EDGE_PADDING, anchor.x),
-  );
-  const cy = Math.min(innerHeight - 146, Math.max(228, anchor.y));
   const label = devices
     ? `${selection.writable.length} selected ${selection.writable.length === 1 ? 'light' : 'lights'}`
     : getDeviceDisplayLabel(device, displayNames);
@@ -251,37 +245,6 @@ export function LightQuickPopover({
     }
     if (immediate) queue.current?.flush();
   };
-  useEffect(() => {
-    const previousFocus = returnFocus.current;
-    const outside = (e: PointerEvent) => {
-      if (root.current?.contains(e.target as Node)) return;
-      // The dismissing tap only closes the popover: the pointer's press is
-      // consumed so the map cannot also act on the light, sensor or room it
-      // landed on.
-      quickControlDismissGuard.dismiss(e.pointerId);
-      latest.current.onClose();
-    };
-    const escape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        latest.current.onClose();
-      }
-    };
-    window.addEventListener('pointerdown', outside);
-    window.addEventListener('keydown', escape, true);
-    if (!hold)
-      root.current
-        ?.querySelector<HTMLButtonElement>(
-          '[aria-label="Close quick controls"]',
-        )
-        ?.focus();
-    return () => {
-      window.removeEventListener('pointerdown', outside);
-      window.removeEventListener('keydown', escape, true);
-      if (!hold && previousFocus instanceof HTMLElement) previousFocus.focus();
-    };
-  }, [hold]);
   const start = (
     pointerId: number,
     region: 'brightness' | 'color',
@@ -422,15 +385,17 @@ export function LightQuickPopover({
       : selection.skipped
         ? `${selection.skipped} read-only or sensor ${selection.skipped === 1 ? 'device' : 'devices'} skipped`
         : null;
-  return createPortal(
-    <div
-      ref={root}
-      role="dialog"
+  return (
+    <QuickControlShell
+      anchor={anchor}
+      origin={SURFACE_ORIGIN}
+      reach={SURFACE_REACH}
+      autoFocus={!hold}
+      onClose={onClose}
       aria-label={`${label} quick controls`}
       aria-describedby={status ? helpId : undefined}
       aria-busy={pending || restoring}
-      className="radial-light-control fixed z-[60] w-[268px] touch-none text-center text-foreground"
-      style={{ left: cx - 134, top: cy - 134 }}
+      className="radial-light-control w-[268px] touch-none text-center text-foreground"
     >
       <div className="absolute -top-[80px] left-0 w-full">
         <p className="mb-2 inline-block max-w-full truncate rounded-full border border-border bg-card/95 px-3 py-1 text-xs font-medium shadow-sm backdrop-blur-md">
@@ -526,6 +491,7 @@ export function LightQuickPopover({
             className="size-9 rounded-full bg-card shadow-md"
             variant="ghost"
             aria-label="Close quick controls"
+            data-autofocus
             onClick={onClose}
           >
             <X />
@@ -757,7 +723,6 @@ export function LightQuickPopover({
           {status}
         </p>
       )}
-    </div>,
-    document.body,
+    </QuickControlShell>
   );
 }
