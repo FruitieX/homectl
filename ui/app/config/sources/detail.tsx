@@ -29,6 +29,7 @@ import {
 import { configItemHref } from '@/lib/configItemHref';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
+import { UsedByList } from '@/ui/settings/UsedByList';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { StatePreview } from '@/ui/settings/StatePreview';
 import { SceneColorControl } from '@/ui/settings/SceneColorControl';
@@ -770,17 +771,10 @@ export default function SourceDetailPage() {
                   ) : query.loading ? (
                     <p>Loading references…</p>
                   ) : rows.length ? (
-                    <div className="flex flex-wrap gap-3">
-                      {rows.map((row) => (
-                        <Link
-                          key={row.id}
-                          className="text-sm text-primary underline"
-                          to={configItemHref(kind, row.id)}
-                        >
-                          {row.name}
-                        </Link>
-                      ))}
-                    </div>
+                    <UsedByList
+                      showKind={false}
+                      items={rows.map((row) => ({ ...row, kind }))}
+                    />
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       No direct references in {label.toLowerCase()}.

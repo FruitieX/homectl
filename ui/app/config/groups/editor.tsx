@@ -3,7 +3,6 @@ import { configItemHref } from '@/lib/configItemHref';
 import { EntityPicker } from '@/ui/settings/EntityPicker';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { useAppConfig } from '@/hooks/appConfig';
@@ -27,6 +26,7 @@ import { Button } from '@/ui/primitives/button';
 import { confirmDialog } from '@/ui/primitives/confirm-dialog';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
+import { UsedByList } from '@/ui/settings/UsedByList';
 import {
   DeviceAdder,
   SelectedDeviceRows,
@@ -365,47 +365,14 @@ export function GroupEditor({ id }: { id?: string }) {
               title="Used by"
               description="Open related configuration. Your unsaved changes stay here."
             >
-              <div className="flex flex-wrap gap-2">
-                {[
-                  ...parents.map((row) => ({
-                    ...row,
-                    kind: 'groups',
-                    label: 'Room or group',
-                  })),
-                  ...usage.scenes.map((row) => ({
-                    ...row,
-                    kind: 'scenes',
-                    label: 'Scene',
-                  })),
-                  ...usage.routines.map((row) => ({
-                    ...row,
-                    kind: 'routines',
-                    label: 'Routine',
-                  })),
-                ].map((row) => (
-                  <Button
-                    key={`${row.kind}/${row.id}`}
-                    asChild
-                    variant="outline"
-                    size="sm"
-                  >
-                    <Link
-                      to={`/config/${row.kind}/${encodeURIComponent(row.id)}`}
-                    >
-                      <span className="text-muted-foreground">{row.label}</span>
-                      {row.name}
-                      <ExternalLink className="size-3" />
-                    </Link>
-                  </Button>
-                ))}
-                {!parents.length &&
-                  !usage.scenes.length &&
-                  !usage.routines.length && (
-                    <p className="text-sm text-muted-foreground">
-                      No related configuration yet.
-                    </p>
-                  )}
-              </div>
+              <UsedByList
+                items={[
+                  ...parents.map((row) => ({ ...row, kind: 'group' })),
+                  ...usage.scenes.map((row) => ({ ...row, kind: 'scene' })),
+                  ...usage.routines.map((row) => ({ ...row, kind: 'routine' })),
+                ]}
+                empty="No related configuration yet."
+              />
             </SettingsSection>
           )}
           <EntitySaveBar

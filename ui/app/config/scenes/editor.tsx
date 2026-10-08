@@ -41,6 +41,7 @@ import type { ControllableState } from '@/bindings/ControllableState';
 import type { DeviceStateSource } from '@/bindings/DeviceStateSource';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
+import { UsedByList } from '@/ui/settings/UsedByList';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { EntityPicker } from '@/ui/settings/EntityPicker';
 import { StatePreview } from '@/ui/settings/StatePreview';
@@ -917,25 +918,10 @@ export function SceneEditor({ id }: { id?: string }) {
           )}
           {!creating && (
             <SettingsSection id="usage" title="Used by">
-              <div className="flex flex-wrap gap-2">
-                {usedBy.map((row) => (
-                  <Button
-                    asChild
-                    key={`${row.kind}/${row.id}`}
-                    variant="outline"
-                    size="sm"
-                  >
-                    <Link to={configItemHref(row.kind, row.id)}>
-                      {row.name}
-                    </Link>
-                  </Button>
-                ))}
-                {!usedBy.length && (
-                  <p className="text-xs text-muted-foreground">
-                    No other configuration references this scene.
-                  </p>
-                )}
-              </div>
+              <UsedByList
+                items={usedBy}
+                empty="No other configuration references this scene."
+              />
             </SettingsSection>
           )}
           <EntitySaveBar

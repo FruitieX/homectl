@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import type { HelperDefinition } from '@/bindings/HelperDefinition';
 import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
@@ -22,6 +22,7 @@ import { configItemHref } from '@/lib/configItemHref';
 import { ComputedHelperFields } from '@/ui/ComputedHelperFields';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
+import { UsedByList } from '@/ui/settings/UsedByList';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { Button } from '@/ui/primitives/button';
 import { confirmDialog } from '@/ui/primitives/confirm-dialog';
@@ -346,17 +347,10 @@ export default function HelperDetailPage() {
               ) : routines.loading ? (
                 <p className="text-xs">Loading references…</p>
               ) : related.length ? (
-                <div className="flex flex-wrap gap-3">
-                  {related.map((row) => (
-                    <Link
-                      className="text-sm text-primary underline"
-                      key={row.id}
-                      to={configItemHref('routine', row.id)}
-                    >
-                      {row.name}
-                    </Link>
-                  ))}
-                </div>
+                <UsedByList
+                  showKind={false}
+                  items={related.map((row) => ({ ...row, kind: 'routine' }))}
+                />
               ) : (
                 <p className="text-sm text-muted-foreground">
                   No native routine references.
@@ -368,17 +362,13 @@ export default function HelperDetailPage() {
                   <p className="text-xs text-muted-foreground">
                     Computed helpers
                   </p>
-                  <div className="flex flex-wrap gap-3">
-                    {computedUsers.map((helper) => (
-                      <Link
-                        key={helper.id}
-                        to={configItemHref('helper', helper.id)}
-                        className="text-sm text-primary underline"
-                      >
-                        {helper.name}
-                      </Link>
-                    ))}
-                  </div>
+                  <UsedByList
+                    showKind={false}
+                    items={computedUsers.map((row) => ({
+                      ...row,
+                      kind: 'helper',
+                    }))}
+                  />
                 </div>
               )}
             </SettingsSection>

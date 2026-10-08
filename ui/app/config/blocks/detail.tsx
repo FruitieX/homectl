@@ -3,12 +3,7 @@ import { useMemo, useState } from 'react';
 import type { ScriptSpec } from '@/bindings/ScriptSpec';
 import { ScriptConfiguration, newScript } from '@/ui/ScriptConfiguration';
 import { ReusePreview } from '@/ui/ReusePreview';
-import {
-  Link,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import type { AutomationBlock } from '@/bindings/AutomationBlock';
 import type { BlockInputKind } from '@/bindings/BlockInputKind';
@@ -43,6 +38,7 @@ import { stringifyConfig } from '@/lib/routineDraft';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
 import { IdentityFields } from '@/ui/settings/IdentityFields';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
+import { UsedByList } from '@/ui/settings/UsedByList';
 import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { RoutineAuthoringContext } from '@/ui/settings/FlowBlock';
@@ -698,52 +694,15 @@ export default function BlockDetailPage() {
             ) : routines.loading ? (
               <p>Loading callers…</p>
             ) : (
-              <div className="flex flex-wrap gap-3">
-                {users.routines.map((r) => (
-                  <Link
-                    className="text-primary underline"
-                    key={r.id}
-                    to={`/config/routines/${encodeURIComponent(r.id)}`}
-                  >
-                    {r.name}
-                  </Link>
-                ))}
-                {users.blocks.map((b) => (
-                  <Link
-                    className="text-primary underline"
-                    key={b.id}
-                    to={`/config/blocks/${encodeURIComponent(b.id)}`}
-                  >
-                    {b.name}
-                  </Link>
-                ))}
-                {helperUsers.map((helper) => (
-                  <Link
-                    key={`helper/${helper.id}`}
-                    className="text-primary underline"
-                    to={`/config/helpers/${encodeURIComponent(helper.id)}`}
-                  >
-                    {helper.name}
-                  </Link>
-                ))}
-                {sourceUsers.map((source) => (
-                  <Link
-                    key={`source/${source.id}`}
-                    className="text-primary underline"
-                    to={`/config/sources/${encodeURIComponent(source.id)}`}
-                  >
-                    {source.name}
-                  </Link>
-                ))}
-                {!users.routines.length &&
-                  !users.blocks.length &&
-                  !helperUsers.length &&
-                  !sourceUsers.length && (
-                    <p className="text-sm text-muted-foreground">
-                      No callers yet.
-                    </p>
-                  )}
-              </div>
+              <UsedByList
+                items={[
+                  ...users.routines.map((row) => ({ ...row, kind: 'routine' })),
+                  ...users.blocks.map((row) => ({ ...row, kind: 'block' })),
+                  ...helperUsers.map((row) => ({ ...row, kind: 'helper' })),
+                  ...sourceUsers.map((row) => ({ ...row, kind: 'source' })),
+                ]}
+                empty="No callers yet."
+              />
             )}
           </SettingsSection>
           <SettingsSection
