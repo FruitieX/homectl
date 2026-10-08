@@ -1,4 +1,9 @@
+import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
+import { useGroups, useScenes } from '@/hooks/useConfig';
+import { diagnosticFix, type DiagnosticFix } from '@/lib/diagnosticFixes';
+import { offerUndo } from '@/lib/undo';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Info, RefreshCw } from 'lucide-react';
@@ -20,14 +25,62 @@ const labels = {
   source: 'source',
 };
 
+/** Applies a one-click repair through the normal group/scene write path. */
+function useDiagnosticRepair(onDone: () => void) {
+  const groups = useGroups();
+  const scenes = useScenes();
+  const [busy, setBusy] = useState<string | null>(null);
+  async function repair(issue: ConfigDiagnostic, fix: DiagnosticFix) {
+    setBusy(issue.id);
+    try {
+      if (fix.entity === 'group') {
+        const row = groups.data.find((group) => group.id === issue.entity_id);
+        if (!row) throw Error('This room or group no longer exists.');
+        const { device_keys: _derived, ...before } = row;
+        const saved = await groups.update(row.id, fix.apply(before), before);
+        offerUndo(
+          `Removed ${issue.reference} from ${row.name}`,
+          async () => {
+            const current = saved
+              ? (({ device_keys: _ignored, ...rest }) => rest)(saved)
+              : fix.apply(before);
+            await groups.update(row.id, before, current);
+          },
+          `Restored ${row.name}`,
+        );
+      } else {
+        const row = scenes.data.find((scene) => scene.id === issue.entity_id);
+        if (!row) throw Error('This scene no longer exists.');
+        const saved = await scenes.update(row.id, fix.apply(row), row);
+        offerUndo(
+          `Removed ${issue.reference} from ${row.name}`,
+          () => scenes.update(row.id, row, saved ?? fix.apply(row)),
+          `Restored ${row.name}`,
+        );
+      }
+      onDone();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not repair.');
+    } finally {
+      setBusy(null);
+    }
+  }
+  return { repair, busy };
+}
+
 function Issue({
   issue,
   advanced,
+  repair,
+  busy,
 }: {
   issue: ConfigDiagnostic;
   advanced: boolean;
+  repair: (issue: ConfigDiagnostic, fix: DiagnosticFix) => Promise<void>;
+  busy: boolean;
 }) {
   const Icon = issue.severity === 'warning' ? AlertTriangle : Info;
+  const fix = diagnosticFix(issue);
   return (
     <article className="flex items-start gap-3 border-b border-border px-3 py-3 last:border-b-0">
       <Icon
@@ -46,6 +99,16 @@ function Issue({
           {issue.suggestion}
         </p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          {fix && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => void repair(issue, fix)}
+            >
+              {busy ? 'Fixing…' : fix.label}
+            </Button>
+          )}
           <Link
             className="settings-link"
             to={configItemHref(issue.entity, issue.entity_id)}
@@ -113,6 +176,7 @@ export default function DiagnosticsPage() {
     refetchInterval: 5000,
     retry: false,
   });
+  const { repair, busy } = useDiagnosticRepair(() => void query.refetch());
   const issues = query.data?.issues ?? [];
   const visible = issues.filter(
     (issue) =>
@@ -237,7 +301,13 @@ export default function DiagnosticsPage() {
           ) : (
             <div className="overflow-hidden rounded-lg border border-border bg-card">
               {visible.map((issue) => (
-                <Issue key={issue.id} issue={issue} advanced={advanced} />
+                <Issue
+                  key={issue.id}
+                  issue={issue}
+                  advanced={advanced}
+                  repair={repair}
+                  busy={busy === issue.id}
+                />
               ))}
             </div>
           )}

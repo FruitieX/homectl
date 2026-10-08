@@ -64,6 +64,7 @@ impl Inspector<'_> {
             } else {
                 Vec::new()
             },
+            reference: target.into(),
         });
     }
     fn attach_device(&mut self, key: &str) {
@@ -414,8 +415,11 @@ mod tests {
         assert_eq!(report.issues.len(), 2);
         assert_eq!(report.issues[0].code, "missing_group_link");
         assert_eq!(report.issues[0].severity, DiagnosticSeverity::Warning);
+        // The missing link is named explicitly so the UI can remove it.
+        assert_eq!(report.issues[0].reference, "gone");
         assert_eq!(report.issues[1].code, "empty_group");
         assert_eq!(report.issues[1].severity, DiagnosticSeverity::Info);
+        assert_eq!(report.issues[1].reference, "");
     }
 
     #[test]

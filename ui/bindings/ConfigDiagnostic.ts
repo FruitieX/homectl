@@ -15,4 +15,10 @@ export type ConfigDiagnostic = {
    * Explicit device references; consumers never parse keys from messages.
    */
   device_keys: Array<string>;
+  /**
+   * The reference the issue is about inside the entity (a device key,
+   * group ID or scene ID); empty when it concerns the entity as a whole.
+   * Lets the UI offer a targeted repair without parsing the message.
+   */
+  reference: string;
 };

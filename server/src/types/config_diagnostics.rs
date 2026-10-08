@@ -32,6 +32,10 @@ pub struct ConfigDiagnostic {
     pub suggestion: String,
     /// Explicit device references; consumers never parse keys from messages.
     pub device_keys: Vec<String>,
+    /// The reference the issue is about inside the entity (a device key,
+    /// group ID or scene ID); empty when it concerns the entity as a whole.
+    /// Lets the UI offer a targeted repair without parsing the message.
+    pub reference: String,
 }
 
 /// Read-only inspection of one immutable runtime snapshot. Scripts are not executed.

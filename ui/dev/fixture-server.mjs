@@ -141,6 +141,7 @@ function buildDiagnostics() {
           entity_id: scene.id,
           name: scene.name,
           code: 'missing_scene_link',
+          reference: key,
           severity: 'warning',
           message: `Target ${key} follows scene ${linkedScene}, which does not exist.`,
           suggestion:
@@ -153,6 +154,7 @@ function buildDiagnostics() {
         entity_id: scene.id,
         name: scene.name,
         code: 'missing_scene_device',
+        reference: key,
         device_keys: [key],
         severity: 'warning',
         message: `Target device ${key} is not available.`,
@@ -167,6 +169,7 @@ function buildDiagnostics() {
         entity_id: scene.id,
         name: scene.name,
         code: 'missing_scene_group',
+        reference: id,
         severity: 'warning',
         message: `Target room ${id} does not exist.`,
         suggestion: 'Choose an existing room for that target, or remove it.',
@@ -187,6 +190,7 @@ function buildDiagnostics() {
         entity_id: group.id,
         name: group.name,
         code: 'missing_group_device',
+        reference: key,
         device_keys: [key],
         severity: 'warning',
         message: `Device ${key} is not available in the current runtime.`,
@@ -212,6 +216,7 @@ function buildDiagnostics() {
     warming_up: false,
     issues: issues.map((issue, index) => ({
       device_keys: [],
+      reference: '',
       id: `${issue.entity}/${issue.entity_id}/${issue.code}/${index}`,
       ...issue,
     })),
@@ -2381,6 +2386,12 @@ const server = http.createServer(async (req, res) => {
         ...body,
         id: id ?? body?.id,
       };
+      // Like the server, membership keys are derived from `devices`, never
+      // carried over from the previous row.
+      if (endpoint === 'groups' && Array.isArray(body?.devices))
+        item.device_keys = body.devices.map(
+          (member) => `${member.integration_id}/${member.device_id}`,
+        );
       if (idx >= 0) list[idx] = item;
       else list.push(item);
       return send(res, 200, { success: true, data: item, write: writeOk });
