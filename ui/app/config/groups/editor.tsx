@@ -14,6 +14,7 @@ import {
   useRoutines,
 } from '@/hooks/useConfig';
 import { useEntityDraft } from '@/hooks/useEntityDraft';
+import { suggestId } from '@/lib/groupGraph';
 import { entityDraftStore } from '@/lib/entityDraft';
 import {
   describeGroupUsage,
@@ -62,14 +63,31 @@ export function GroupEditor({ id }: { id?: string }) {
   );
   const [deleting, setDeleting] = useState(false);
   const saved = api.data.find((row) => row.id === id);
+  const copyFrom = creating
+    ? api.data.find((row) => row.id === params.get('copyFrom'))
+    : undefined;
   const item = useMemo(
-    () => (creating ? EMPTY_GROUP : saved ? authored(saved) : undefined),
-    [creating, saved],
+    () =>
+      creating
+        ? copyFrom
+          ? {
+              ...authored(copyFrom),
+              id: suggestId(
+                `Copy of ${copyFrom.name}`,
+                api.data.map((row) => row.id),
+              ),
+              name: `Copy of ${copyFrom.name}`,
+            }
+          : EMPTY_GROUP
+        : saved
+          ? authored(saved)
+          : undefined,
+    [creating, saved, copyFrom, api.data],
   );
   const href = creating
-    ? '/config/groups/new'
+    ? `/config/groups/new${copyFrom ? '?copyFrom=' + encodeURIComponent(copyFrom.id) : ''}`
     : `/config/groups/${encodeURIComponent(id!)}`;
-  const key = `${apiEndpoint}/groups/${id ?? '$new'}`;
+  const key = `${apiEndpoint}/groups/${id ?? '$new'}${copyFrom ? '/copy/' + copyFrom.id : ''}`;
   const draft = useEntityDraft({
     key,
     item,
@@ -182,6 +200,13 @@ export function GroupEditor({ id }: { id?: string }) {
         creating
           ? undefined
           : [
+              {
+                label: 'Duplicate',
+                onSelect: () =>
+                  navigate(
+                    `/config/groups/new?copyFrom=${encodeURIComponent(id!)}`,
+                  ),
+              },
               {
                 label: 'Delete room or group',
                 onSelect: () => void deleteGroup(),

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { asNewItem, offerUndo } from '@/lib/undo';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { suggestId } from '@/lib/groupGraph';
 import { toast } from 'sonner';
 import type { HelperDefinition } from '@/bindings/HelperDefinition';
 import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
@@ -147,6 +148,7 @@ function CurrentValue({ status }: { status: HelperRuntimeStatus }) {
 
 export default function HelperDetailPage() {
   const { id } = useParams(),
+    [params] = useSearchParams(),
     creating = id === 'new',
     navigate = useNavigate();
   const api = useHelpers(),
@@ -160,13 +162,31 @@ export default function HelperDetailPage() {
     () => (status ? helperDefinition(status) : undefined),
     [status],
   );
-  const empty = useMemo(() => newHelperDraft(), []);
-  const key = `${apiEndpoint}/helpers/${creating ? '$new' : id}`;
+  const copyFrom = creating
+    ? api.data.find((row) => row.id === params.get('copyFrom'))
+    : undefined;
+  const empty = useMemo(
+    () =>
+      copyFrom
+        ? {
+            ...helperDefinition(copyFrom),
+            id: suggestId(
+              `Copy of ${copyFrom.name}`,
+              api.data.map((row) => row.id),
+            ),
+            name: `Copy of ${copyFrom.name}`,
+          }
+        : newHelperDraft(),
+    [copyFrom, api.data],
+  );
+  const key = `${apiEndpoint}/helpers/${creating ? '$new' : id}${copyFrom ? '/copy/' + copyFrom.id : ''}`;
   const draft = useEntityDraft({
     key,
     item: creating ? empty : saved,
     label: saved?.name ?? 'New helper',
-    href: creating ? '/config/helpers/new' : configItemHref('helper', id!),
+    href: creating
+      ? `/config/helpers/new${copyFrom ? '?copyFrom=' + encodeURIComponent(copyFrom.id) : ''}`
+      : configItemHref('helper', id!),
     validate(value) {
       const message = validateDraft(value),
         errors = message
@@ -279,6 +299,13 @@ export default function HelperDetailPage() {
       menu={
         !creating
           ? [
+              {
+                label: 'Duplicate helper',
+                onSelect: () =>
+                  navigate(
+                    `/config/helpers/new?copyFrom=${encodeURIComponent(id!)}`,
+                  ),
+              },
               {
                 label: 'Delete helper',
                 onSelect: () => void remove(),

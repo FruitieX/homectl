@@ -110,7 +110,8 @@ export function SceneEditor({ id }: { id?: string }) {
   const [pasteOpen, setPasteOpen] = useState(false);
   const saved = api.data.find((scene) => scene.id === id);
   const captureId = creating ? params.get('capture') : null;
-  const key = `${apiEndpoint}/scenes/${id ?? '$new'}${captureId ? '/' + captureId : ''}`;
+  const copyId = creating ? params.get('copyFrom') : null;
+  const key = `${apiEndpoint}/scenes/${id ?? '$new'}${captureId ? '/' + captureId : ''}${copyId ? '/copy/' + copyId : ''}`;
   const returnTo = params.get('returnTo');
   const routineReturn = returnTo?.startsWith('/config/routines/')
     ? returnTo
@@ -647,6 +648,13 @@ export function SceneEditor({ id }: { id?: string }) {
                 label: activating ? 'Activating…' : 'Activate saved scene',
                 onSelect: () => void activateSaved(),
                 disabled: activating,
+              },
+              {
+                label: 'Duplicate scene',
+                onSelect: () =>
+                  navigate(
+                    `/config/scenes/new?copyFrom=${encodeURIComponent(id!)}`,
+                  ),
               },
               {
                 label: 'Delete scene',

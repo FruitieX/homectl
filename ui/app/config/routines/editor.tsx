@@ -136,9 +136,9 @@ export function RoutineEditor({ id }: { id?: string }) {
     [copyFrom, api.data],
   );
   const href = creating
-    ? '/config/routines/new'
+    ? `/config/routines/new${copyFrom ? '?copyFrom=' + encodeURIComponent(copyFrom.id) : ''}`
     : configItemHref('routine', id!);
-  const key = `${apiEndpoint}/routines/${id ?? '$new'}`;
+  const key = `${apiEndpoint}/routines/${id ?? '$new'}${copyFrom ? '/copy/' + copyFrom.id : ''}`;
   const draft = useEntityDraft({
     key,
     item: creating ? initial : saved,
@@ -342,6 +342,17 @@ export function RoutineEditor({ id }: { id?: string }) {
       }
       menu={[
         { label: 'Download definition', onSelect: download },
+        ...(!creating && saved?.semantics_version === 2
+          ? [
+              {
+                label: 'Duplicate routine',
+                onSelect: () =>
+                  navigate(
+                    `/config/routines/new?copyFrom=${encodeURIComponent(id!)}`,
+                  ),
+              },
+            ]
+          : []),
         ...(!creating
           ? [
               {
