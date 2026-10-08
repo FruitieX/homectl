@@ -3,7 +3,7 @@ import {
   isDeviceReadOnly,
   supportsDeviceBrightness,
 } from '@/lib/deviceCapabilities';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { useSceneRestore } from '@/hooks/useSceneRestore';
 import { LoaderCircle, Power, SlidersHorizontal } from 'lucide-react';
@@ -28,12 +28,15 @@ export function DeviceRow({
   presentation = 'sidepanel',
   inlineBrightness = false,
   plain = false,
+  actions,
 }: {
   device: Device;
   displayNames?: Record<string, string>;
   presentation?: 'dialog' | 'sidepanel' | 'floorplan';
   inlineBrightness?: boolean;
   plain?: boolean;
+  /** Extra controls after the power button, such as an edit menu. */
+  actions?: ReactNode;
 }) {
   const modal = useDeviceModalState();
   const connected = useConnectionStatus() === 'connected';
@@ -129,6 +132,7 @@ export function DeviceRow({
       >
         {pending ? <LoaderCircle className="animate-spin" /> : <Power />}
       </Button>
+      {actions}
     </div>
   );
 }

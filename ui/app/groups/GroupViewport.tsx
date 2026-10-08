@@ -17,6 +17,8 @@ import {
   selectGroupFloorplan,
 } from '@/lib/group-floorplan-preview';
 import { DeviceRow, DevicePowerToggle } from '@/ui/DeviceControls';
+import { DeviceQuickEdit } from '@/ui/DeviceQuickEdit';
+import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { LiveAttention } from '@/ui/LiveAttention';
 import { RoomConditions } from '@/ui/RoomConditions';
 import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
@@ -197,6 +199,12 @@ export default function GroupViewport() {
                     displayNames={names}
                     inlineBrightness
                     plain
+                    actions={
+                      <DeviceQuickEdit
+                        deviceKey={getDeviceKey(device)}
+                        label={getDeviceDisplayLabel(device, names)}
+                      />
+                    }
                   />
                 ))}
                 {missing.map((key) => (
