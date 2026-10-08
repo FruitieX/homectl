@@ -1,3 +1,4 @@
+import { AnimatePresence } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import type { Device } from '@/bindings/Device';
 import type { LightHold } from '@/lib/lightQuickAdjust';
@@ -88,16 +89,18 @@ export function LightQuickIndicator({
       >
         <LiveStatePreview states={[devicePreviewState(device)]} />
       </button>
-      {quick && (
-        <LightQuickPopover
-          device={device}
-          displayNames={displayNames}
-          anchor={quick.anchor}
-          hold={quick.hold}
-          onClose={() => setQuick(null)}
-          onDetails={onDetails}
-        />
-      )}
+      <AnimatePresence>
+        {quick && (
+          <LightQuickPopover
+            device={device}
+            displayNames={displayNames}
+            anchor={quick.anchor}
+            hold={quick.hold}
+            onClose={() => setQuick(null)}
+            onDetails={onDetails}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }

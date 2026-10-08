@@ -1,3 +1,4 @@
+import { AnimatePresence } from 'motion/react';
 import { useState } from 'react';
 import { Activity, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import type { Device } from '@/bindings/Device';
@@ -99,17 +100,19 @@ export function LiveSensorRow({
           <SlidersHorizontal className="size-4" />
         </Button>
       </div>
-      {quick && (
-        <SensorQuickPopover
-          device={device}
-          anchor={quick}
-          sensorConfig={configs.find(
-            (c) => c.device_ref === getDeviceKey(device),
-          )}
-          onClose={() => setQuick(null)}
-          onDetails={() => setOpen(true)}
-        />
-      )}
+      <AnimatePresence>
+        {quick && (
+          <SensorQuickPopover
+            device={device}
+            anchor={quick}
+            sensorConfig={configs.find(
+              (c) => c.device_ref === getDeviceKey(device),
+            )}
+            onClose={() => setQuick(null)}
+            onDetails={() => setOpen(true)}
+          />
+        )}
+      </AnimatePresence>
       {open && (
         <SensorDetails
           device={device}

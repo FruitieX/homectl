@@ -1,3 +1,4 @@
+import { AnimatePresence } from 'motion/react';
 import { SensorQuickPopover } from '@/ui/SensorQuickPopover';
 import { LightQuickPopover } from '@/ui/LightQuickPopover';
 import type { LightHold } from '@/lib/lightQuickAdjust';
@@ -484,40 +485,44 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
           toolbar,
         )}
 
-      {quickLight && devicesState?.[quickLight.key] && (
-        <LightQuickPopover
-          key={
-            quickLight.hold.pointerId +
-            ':' +
-            quickLight.hold.x +
-            ':' +
-            quickLight.hold.y
-          }
-          device={devicesState[quickLight.key]!}
-          devices={quickLight.keys?.flatMap((key) =>
-            devicesState[key] ? [devicesState[key]!] : [],
-          )}
-          anchor={quickLight.hold}
-          hold={quickLight.hold}
-          displayNames={deviceDisplayNameMap}
-          onClose={() => setQuickLight(null)}
-          onDetails={() => openDevice(quickLight.keys ?? [quickLight.key])}
-          onSelect={selecting ? undefined : () => selectLight(quickLight.key)}
-        />
-      )}
-      {quickSensor && devicesState?.[quickSensor.key] && (
-        <SensorQuickPopover
-          device={devicesState[quickSensor.key]!}
-          anchor={quickSensor.hold}
-          hold={quickSensor.hold}
-          sensorConfig={deviceSensorConfigMap[quickSensor.key]}
-          onClose={() => setQuickSensor(null)}
-          onDetails={() => {
-            setDeviceModalOpen(false);
-            setActiveSensorKey(quickSensor.key);
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {quickLight && devicesState?.[quickLight.key] && (
+          <LightQuickPopover
+            key={
+              quickLight.hold.pointerId +
+              ':' +
+              quickLight.hold.x +
+              ':' +
+              quickLight.hold.y
+            }
+            device={devicesState[quickLight.key]!}
+            devices={quickLight.keys?.flatMap((key) =>
+              devicesState[key] ? [devicesState[key]!] : [],
+            )}
+            anchor={quickLight.hold}
+            hold={quickLight.hold}
+            displayNames={deviceDisplayNameMap}
+            onClose={() => setQuickLight(null)}
+            onDetails={() => openDevice(quickLight.keys ?? [quickLight.key])}
+            onSelect={selecting ? undefined : () => selectLight(quickLight.key)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {quickSensor && devicesState?.[quickSensor.key] && (
+          <SensorQuickPopover
+            device={devicesState[quickSensor.key]!}
+            anchor={quickSensor.hold}
+            hold={quickSensor.hold}
+            sensorConfig={deviceSensorConfigMap[quickSensor.key]}
+            onClose={() => setQuickSensor(null)}
+            onDetails={() => {
+              setDeviceModalOpen(false);
+              setActiveSensorKey(quickSensor.key);
+            }}
+          />
+        )}
+      </AnimatePresence>
       <div className="relative min-h-0 min-w-0 flex-1">
         {pixiFallbackReason === null &&
         floorplanScene.width > 0 &&

@@ -1,5 +1,4 @@
 import {
-  type ComponentProps,
   type CSSProperties,
   useEffect,
   useLayoutEffect,
@@ -7,10 +6,18 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import {
+  type HTMLMotionProps,
+  motion,
+  useIsPresent,
+  useReducedMotion,
+} from 'motion/react';
 import { cn } from '@/lib/cn';
 import { quickControlDismissGuard } from '@/lib/quickControlDismiss';
 
 const EDGE = 12;
+// Every quick control grows from and shrinks back to its center point.
+const HIDDEN_SCALE = 0.72;
 
 type Point = { x: number; y: number };
 
@@ -23,6 +30,9 @@ type Point = { x: number; y: number };
  * whose visual center differs from their box (the radial light control) pass
  * `origin`, the center within the box, and `reach`, how far content extends
  * from that center, including room to the viewport edge.
+ *
+ * Render it inside `AnimatePresence` so closing fades out; while exiting it
+ * ignores input and no longer dismisses on outside taps.
  */
 export function QuickControlShell({
   anchor,
@@ -34,7 +44,10 @@ export function QuickControlShell({
   style,
   children,
   ...props
-}: Omit<ComponentProps<'div'>, 'ref'> & {
+}: Omit<
+  HTMLMotionProps<'div'>,
+  'ref' | 'initial' | 'animate' | 'exit' | 'transition'
+> & {
   anchor: Point;
   origin?: Point;
   reach?: { x: number; top: number; bottom: number };
@@ -43,6 +56,8 @@ export function QuickControlShell({
   onClose: () => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const present = useIsPresent();
+  const reduceMotion = useReducedMotion();
   const latest = useRef({ onClose });
   latest.current = { onClose };
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
@@ -58,6 +73,7 @@ export function QuickControlShell({
     return () => observer.disconnect();
   }, [measured]);
   useEffect(() => {
+    if (!present) return;
     const previousFocus = document.activeElement;
     const outside = (e: PointerEvent) => {
       if (root.current?.contains(e.target as Node)) return;
@@ -81,7 +97,7 @@ export function QuickControlShell({
       if (autoFocus && previousFocus instanceof HTMLElement)
         previousFocus.focus();
     };
-  }, [autoFocus]);
+  }, [autoFocus, present]);
   const center = origin ?? { x: (size?.w ?? 0) / 2, y: (size?.h ?? 0) / 2 };
   const extent = reach ?? {
     x: center.x + EDGE,
@@ -97,17 +113,27 @@ export function QuickControlShell({
     left: x - center.x,
     top: y - center.y,
     visibility: measured && !size ? 'hidden' : undefined,
+    transformOrigin: `${center.x}px ${center.y}px`,
+    pointerEvents: present ? undefined : 'none',
   };
+  const hidden = { opacity: 0, scale: reduceMotion ? 1 : HIDDEN_SCALE };
   return createPortal(
-    <div
+    <motion.div
       ref={root}
       role="dialog"
       className={cn('fixed z-[60]', className)}
       style={{ ...style, ...position }}
+      initial={hidden}
+      animate={{
+        opacity: 1,
+        scale: 1,
+        transition: { duration: 0.18, ease: [0.2, 0.8, 0.2, 1] },
+      }}
+      exit={{ ...hidden, transition: { duration: 0.12, ease: 'easeIn' } }}
       {...props}
     >
       {children}
-    </div>,
+    </motion.div>,
     document.body,
   );
 }
