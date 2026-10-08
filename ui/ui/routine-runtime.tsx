@@ -218,7 +218,7 @@ function PanelSection({
 }: {
   title: string;
   description: string;
-  count: number;
+  count?: number;
   children: React.ReactNode;
 }) {
   return (
@@ -231,7 +231,7 @@ function PanelSection({
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           </div>
-          <Badge variant="outline">{count}</Badge>
+          {count !== undefined && <Badge variant="outline">{count}</Badge>}
         </div>
         <div className="mt-4 space-y-3">{children}</div>
       </CardContent>
@@ -239,7 +239,33 @@ function PanelSection({
   );
 }
 
+/** One sentence: whether the condition holds now and what the last run did. */
+export function routineStatusSummary(
+  v2: NonNullable<RoutineRuntimeStatus['v2']>,
+) {
+  const condition = v2.condition.error
+    ? v2.condition.error
+    : v2.condition.truth === 'true'
+      ? 'met'
+      : v2.condition.truth === 'false'
+        ? 'not met'
+        : 'unknown';
+  const lastRun = v2.last_run
+    ? ` · Last run: ${
+        v2.last_run.accepted
+          ? `applied ${v2.last_run.steps.length} step${v2.last_run.steps.length === 1 ? '' : 's'}`
+          : 'suppressed'
+      }${v2.last_run.dropped > 0 ? `, ${v2.last_run.dropped} dropped` : ''}`
+    : '';
+  return `Condition: ${condition}${lastRun}`;
+}
+
 interface RoutineRuntimePanelProps {
+  /**
+   * Inside the routine editor, whose trigger cards already show each
+   * trigger's status and which has its own definition view.
+   */
+  embedded?: boolean;
   routine: Routine;
   status?: RoutineRuntimeStatus;
   timers: TimerRuntimeStatus[];
@@ -253,6 +279,7 @@ interface RoutineRuntimePanelProps {
  * pending deadline; both tick with a 15s clock while visible.
  */
 export function RoutineRuntimePanel({
+  embedded = false,
   routine,
   status,
   timers,
@@ -280,11 +307,15 @@ export function RoutineRuntimePanel({
     <div className="space-y-4">
       {v2 ? (
         <PanelSection
-          title="Trigger status"
-          description="What the saved routine is waiting for. Scheduled triggers show their next run."
-          count={v2.triggers.length}
+          title={embedded ? 'Condition' : 'Trigger status'}
+          description={
+            embedded
+              ? 'How the saved condition evaluated most recently.'
+              : 'What the saved routine is waiting for. Scheduled triggers show their next run.'
+          }
+          count={embedded ? undefined : v2.triggers.length}
         >
-          {v2.triggers.length === 0 ? (
+          {embedded ? null : v2.triggers.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border bg-background/70 px-4 py-6 text-center text-sm text-muted-foreground">
               This definition declares no triggers.
             </div>
@@ -340,23 +371,11 @@ export function RoutineRuntimePanel({
             })
           )}
 
-          <p className="text-sm text-muted-foreground">
-            Condition:{' '}
-            {v2.condition.error
-              ? v2.condition.error
-              : v2.condition.truth === 'true'
-                ? 'met'
-                : v2.condition.truth === 'false'
-                  ? 'not met'
-                  : 'unknown'}
-            {v2.last_run
-              ? ` · Last run: ${
-                  v2.last_run.accepted
-                    ? `applied ${v2.last_run.steps.length} step${v2.last_run.steps.length === 1 ? '' : 's'}`
-                    : 'suppressed'
-                }${v2.last_run.dropped > 0 ? `, ${v2.last_run.dropped} dropped` : ''}`
-              : ''}
-          </p>
+          {!embedded && (
+            <p className="text-sm text-muted-foreground">
+              {routineStatusSummary(v2)}
+            </p>
+          )}
 
           <details className="rounded-2xl border border-border bg-background/70">
             <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
@@ -367,7 +386,7 @@ export function RoutineRuntimePanel({
             </div>
           </details>
 
-          {routine.definition_v2 ? (
+          {routine.definition_v2 && !embedded ? (
             <details className="rounded-2xl border border-border bg-background/70">
               <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
                 Native definition

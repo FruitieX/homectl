@@ -1,7 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ChevronRight } from 'lucide-react';
 import {
   useIntegrations,
   useIntegrationConfigSchemas,
@@ -21,6 +20,7 @@ import {
 } from '@/lib/integrationDraft';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
+import { Disclosure } from '@/ui/settings/Disclosure';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { JsonValueEditor } from '@/ui/settings/JsonValueEditor';
 import { Input } from '@/ui/primitives/input';
@@ -362,8 +362,10 @@ export default function IntegrationDetailPage() {
                   </div>
                 </SettingsSection>
               ))}
-              <AdvancedOptions
-                customized={
+              <Disclosure
+                label="Advanced options"
+                hint="Management, reporting defaults and extra fields"
+                defaultOpen={
                   advancedGroups.some(([, fields]) =>
                     fields.some(
                       (field) =>
@@ -450,7 +452,7 @@ export default function IntegrationDetailPage() {
                     />
                   </SettingsSection>
                 )}
-              </AdvancedOptions>
+              </Disclosure>
             </>
           ) : (
             <SettingsSection title="Stored configuration">
@@ -509,40 +511,5 @@ export default function IntegrationDetailPage() {
         </>
       )}
     </DetailPageShell>
-  );
-}
-
-function AdvancedOptions({
-  forceOpen,
-  customized,
-  children,
-}: {
-  forceOpen: boolean;
-  /** Start open when something inside differs from the defaults. */
-  customized: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(customized);
-  const expanded = open || forceOpen;
-  return (
-    <div className="space-y-4">
-      <Button
-        type="button"
-        variant="ghost"
-        className="w-fit gap-2 px-2"
-        aria-expanded={expanded}
-        onClick={() => setOpen(!expanded)}
-      >
-        <ChevronRight
-          aria-hidden
-          className={`size-4 transition-transform ${expanded ? 'rotate-90' : ''}`}
-        />
-        Advanced options
-        <span className="text-xs font-normal text-muted-foreground">
-          Management, reporting defaults and extra fields
-        </span>
-      </Button>
-      {expanded && children}
-    </div>
   );
 }

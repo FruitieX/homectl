@@ -54,7 +54,11 @@ import { ConditionEditor } from '@/ui/ConditionBuilder';
 import { ProgramBuilder } from '@/ui/ProgramBuilder';
 import { RoutineExecutionPolicyEditor } from '@/ui/RoutineExecutionPolicyEditor';
 import { RoutineWhatIfPreview } from '@/ui/RoutineWhatIfPreview';
-import { RoutineRuntimePanel } from '@/ui/routine-runtime';
+import {
+  RoutineRuntimePanel,
+  routineStatusSummary,
+} from '@/ui/routine-runtime';
+import { Disclosure } from '@/ui/settings/Disclosure';
 import { Button } from '@/ui/primitives/button';
 import { confirmDialog } from '@/ui/primitives/confirm-dialog';
 
@@ -538,12 +542,15 @@ export function RoutineEditor({ id }: { id?: string }) {
                   </section>
                 </div>
               ) : null}
-              {version === 2 &&
-                (advanced ||
-                  definition.execution != null ||
-                  draft.errors.some((error) =>
+              {version === 2 && (
+                <Disclosure
+                  label="Execution limits"
+                  hint="Overlapping runs, action cap and minimum spacing"
+                  defaultOpen={definition.execution != null}
+                  forceOpen={draft.errors.some((error) =>
                     error.field.startsWith('execution/'),
-                  )) && (
+                  )}
+                >
                   <SettingsSection
                     id="execution"
                     title="Execution"
@@ -559,7 +566,8 @@ export function RoutineEditor({ id }: { id?: string }) {
                       />
                     </div>
                   </SettingsSection>
-                )}
+                </Disclosure>
+              )}
             </div>
           )}
           {version === 1 && (
@@ -663,13 +671,18 @@ export function RoutineEditor({ id }: { id?: string }) {
                 </Button>
               }
             >
+              {status?.v2 && (
+                <p className="text-sm">{routineStatusSummary(status.v2)}</p>
+              )}
               {history.error ? (
                 <p className="text-xs text-destructive">{history.error}</p>
               ) : !recent.length ? (
                 <p className="text-xs text-muted-foreground">
                   {history.loading
                     ? 'Loading activity…'
-                    : 'No recorded activity yet.'}
+                    : status?.v2?.last_run
+                      ? 'Earlier runs are no longer in the activity log.'
+                      : 'No recorded activity yet.'}
                 </p>
               ) : (
                 <div className="divide-y divide-border">
@@ -693,6 +706,7 @@ export function RoutineEditor({ id }: { id?: string }) {
               )}
               {advanced && saved && (
                 <RoutineRuntimePanel
+                  embedded
                   routine={saved}
                   status={status}
                   timers={timers ?? []}
