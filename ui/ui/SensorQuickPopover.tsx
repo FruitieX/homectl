@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Power,
   Plus,
@@ -40,7 +40,24 @@ export function SensorQuickPopover({
 }) {
   const { apiEndpoint } = useAppConfig();
   const connected = useConnectionStatus() === 'connected';
-  const root = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement | null>(null);
+  // Radix places content beside its anchor, so offset it back by half its
+  // measured height to center the popover on the tapped sensor.
+  const [height, setHeight] = useState(0);
+  const observer = useRef<ResizeObserver | null>(null);
+  const contentRef = useCallback((node: HTMLDivElement | null) => {
+    root.current = node;
+    observer.current?.disconnect();
+    if (!node) return;
+    observer.current = new ResizeObserver(() => setHeight(node.offsetHeight));
+    observer.current.observe(node);
+  }, []);
+  useEffect(() => () => observer.current?.disconnect(), []);
+  const edge = 12;
+  const centerY = Math.min(
+    Math.max(anchor.y, height / 2 + edge),
+    window.innerHeight - height / 2 - edge,
+  );
   const latest = useRef({ onClose });
   latest.current = { onClose };
   useEffect(() => {
@@ -94,12 +111,15 @@ export function SensorQuickPopover({
       <PopoverAnchor asChild>
         <span
           className="pointer-events-none fixed"
-          style={{ left: anchor.x, top: anchor.y, width: 1, height: 1 }}
+          style={{ left: anchor.x, top: centerY, width: 1, height: 1 }}
         />
       </PopoverAnchor>
       <PopoverContent
-        ref={root}
-        collisionPadding={12}
+        ref={contentRef}
+        side="bottom"
+        sideOffset={-height / 2}
+        collisionPadding={edge}
+        style={{ visibility: height ? undefined : 'hidden' }}
         aria-label={`${device.name} sensor quick controls`}
         aria-busy={pending}
         className="w-52 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto rounded-none border-0 bg-transparent p-0 shadow-none"
