@@ -9,8 +9,10 @@ export function ReferenceSelect({
   label,
   href,
   allowEmpty = true,
+  placeholder,
   ...props
 }: {
+  placeholder?: string;
   value: string;
   options: { id: string; name: string }[];
   onChange: (value: string) => void;
@@ -27,6 +29,7 @@ export function ReferenceSelect({
           value={value}
           onChange={onChange}
           clearable={allowEmpty}
+          placeholder={placeholder}
           options={options.map((option) => ({
             value: option.id,
             label: option.name,

@@ -448,14 +448,14 @@ export function SceneEditor({ id }: { id?: string }) {
           <>
             {kind === 'device' && entries.length > 0 && (
               <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Capture requested device states"
-                title="Capture requested device states"
+                variant="outline"
+                size="sm"
+                title="Replace each device target's settings with what it is currently set to"
                 disabled={lookups.loading || Boolean(lookups.error)}
                 onClick={() => void captureTargets()}
               >
                 <Camera className="size-4" />
+                Use current states
               </Button>
             )}
             <EntityPicker

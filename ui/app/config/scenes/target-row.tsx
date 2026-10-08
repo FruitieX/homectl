@@ -356,7 +356,7 @@ export function SceneTargetRow({
                 />
               </label>
               <label className="grid w-28 gap-1 text-[10px] text-muted-foreground">
-                Brightness ×
+                Brightness scale
                 <Input
                   data-field={`${prefix}/brightness`}
                   aria-label={`${name} brightness multiplier`}
@@ -520,13 +520,31 @@ export function SceneTargetRow({
         </DropdownMenu>
       </div>
       {missing && (
-        <div className="scene-row-extra">
-          <ReferenceSelect
-            value=""
-            options={targetOptions}
-            label={`Replace ${name}`}
-            onChange={onReplace}
-          />
+        <div
+          role="group"
+          aria-label={`Repair ${name}`}
+          className="scene-row-extra flex flex-col gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-950 sm:flex-row sm:items-center dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-100"
+        >
+          <p className="text-xs sm:flex-1">
+            {kind === 'group'
+              ? 'This room or group no longer exists.'
+              : 'This device is not available.'}{' '}
+            Pick a replacement to keep these settings, or remove the target.
+          </p>
+          <div className="min-w-0 sm:w-72">
+            <ReferenceSelect
+              value=""
+              options={targetOptions}
+              label={`Replace ${name}`}
+              placeholder={
+                kind === 'group' ? 'Replace with room…' : 'Replace with device…'
+              }
+              onChange={onReplace}
+            />
+          </div>
+          <Button variant="outline" size="sm" onClick={onRemove}>
+            Remove
+          </Button>
         </div>
       )}
       {'scene_id' in config && (showDescriptor || hasDescriptor) && (
