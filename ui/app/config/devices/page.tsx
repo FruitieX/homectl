@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ChevronRight } from 'lucide-react';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useGroupsState } from '@/hooks/useDevicesApi';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { getDeviceKey } from '@/lib/device';
+import { catchAllGroupIds } from '@/lib/catchAllGroups';
 import { configItemHref } from '@/lib/configItemHref';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { Button } from '@/ui/primitives/button';
@@ -42,6 +43,17 @@ function DeviceList() {
     attentionOnly = query.get('attention') === '1';
   // Only devices that are listed here count; missing references are repaired
   // from diagnostics, which the notice below links to.
+  // "All"-style groups would otherwise be listed on every device row.
+  const catchAll = useMemo(
+    () =>
+      catchAllGroupIds(groups, (key) =>
+        catalog.devices.some(
+          (device) =>
+            getDeviceKey(device) === key && 'Controllable' in device.data,
+        ),
+      ),
+    [groups, catalog.devices],
+  );
   const attentionCount = catalog.devices.filter((device) =>
     health.data?.attention_device_keys.includes(getDeviceKey(device)),
   ).length;
@@ -188,8 +200,9 @@ function DeviceList() {
         <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
           {visible.slice(0, limit).map((device) => {
             const key = getDeviceKey(device),
-              memberships = Object.entries(groups).filter(([, row]) =>
-                row.device_keys.includes(key),
+              memberships = Object.entries(groups).filter(
+                ([id, row]) =>
+                  !catchAll.has(id) && row.device_keys.includes(key),
               );
             return (
               <div

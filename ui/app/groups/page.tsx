@@ -24,6 +24,7 @@ import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
 import { LiveAttention } from '@/ui/LiveAttention';
 import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { resolveGroupDeviceKeys } from '@/lib/group-floorplan-preview';
+import { catchAllGroupIds } from '@/lib/catchAllGroups';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import type { Device } from '@/bindings/Device';
 
@@ -72,7 +73,39 @@ export default function Page() {
       (showHidden || !group.hidden) &&
       group.name.toLocaleLowerCase().includes(query),
   );
+  const catchAll = useMemo(
+    () =>
+      catchAllGroupIds(groups ?? {}, (key) => {
+        const device = state?.[key];
+        return Boolean(device && 'Controllable' in device.data);
+      }),
+    [groups, state],
+  );
   const activeFilterCount = Number(onOnly) + Number(showHidden);
+  const summarize = (id: string) => {
+    const roomKeys = resolveGroupDeviceKeys(id, groups ?? {});
+    const roomDevices = roomKeys.flatMap((key) =>
+      state?.[key] ? [state[key]!] : [],
+    );
+    const lights = roomDevices.filter((d) => 'Controllable' in d.data);
+    const enabled = lights.filter(
+      (d) => 'Controllable' in d.data && !d.data.Controllable.disabled,
+    );
+    const on = enabled.filter((d) => getPower(d.data)).length;
+    const attention = health.isError
+      ? 0
+      : roomKeys.filter((key) =>
+          health.data?.attention_device_keys.includes(key),
+        ).length;
+    const status =
+      (lights.length
+        ? `${on} of ${enabled.length} on${lights.length > enabled.length ? ` · ${lights.length - enabled.length} disabled` : ''}`
+        : `${roomDevices.length} sensors`) +
+      (roomDevices.length !== roomKeys.length
+        ? ` · ${roomKeys.length - roomDevices.length} unavailable`
+        : '');
+    return { roomKeys, roomDevices, lights, attention, status };
+  };
   const matchingDevices = devices.filter(
     (device) =>
       getDeviceDisplayLabel(device, names)
@@ -188,6 +221,42 @@ export default function Page() {
         ) : view === 'rooms' ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {visibleGroups
+              .filter(([id]) => catchAll.has(id))
+              .map(([id, group]) => {
+                if (!group) return null;
+                const summary = summarize(id);
+                return (
+                  <section
+                    key={id}
+                    aria-label={`${group.name}, whole home`}
+                    className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2 md:col-span-2 xl:col-span-3"
+                  >
+                    <Link
+                      to={roomPath(id)}
+                      className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <LiveStatePreview
+                        states={summary.lights.map(devicePreviewState)}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold">
+                          {group.name}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          Whole home · {summary.status}
+                        </span>
+                      </span>
+                      <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+                    </Link>
+                    <DevicePowerToggle
+                      devices={summary.roomDevices}
+                      label={group.name}
+                    />
+                  </section>
+                );
+              })}
+            {visibleGroups
+              .filter(([id]) => !catchAll.has(id))
               .filter(
                 ([id]) =>
                   !onOnly ||
@@ -197,23 +266,8 @@ export default function Page() {
               )
               .map(([id, group]) => {
                 if (!group) return null;
-                const roomKeys = resolveGroupDeviceKeys(id, groups);
-                const roomDevices = roomKeys.flatMap((key) =>
-                  state[key] ? [state[key]!] : [],
-                );
-                const lights = roomDevices.filter(
-                  (d) => 'Controllable' in d.data,
-                );
-                const enabled = lights.filter(
-                  (d) =>
-                    'Controllable' in d.data && !d.data.Controllable.disabled,
-                );
-                const on = enabled.filter((d) => getPower(d.data)).length;
-                const attention = health.isError
-                  ? 0
-                  : roomKeys.filter((key) =>
-                      health.data?.attention_device_keys.includes(key),
-                    ).length;
+                const { roomKeys, roomDevices, lights, attention, status } =
+                  summarize(id);
                 return (
                   <section
                     key={id}
@@ -242,12 +296,7 @@ export default function Page() {
                         <span className="min-w-0 flex-1">
                           <span className="block truncate">{group.name}</span>
                           <span className="block text-xs font-normal text-muted-foreground">
-                            {lights.length
-                              ? `${on} of ${enabled.length} on${lights.length > enabled.length ? ` · ${lights.length - enabled.length} disabled` : ''}`
-                              : `${roomDevices.length} sensors`}
-                            {roomDevices.length !== roomKeys.length
-                              ? ` · ${roomKeys.length - roomDevices.length} unavailable`
-                              : ''}
+                            {status}
                           </span>
                           {attention > 0 && (
                             <span className="block text-xs font-normal text-amber-700 dark:text-amber-400">
