@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { asNewItem, offerUndo } from '@/lib/undo';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import type { HelperDefinition } from '@/bindings/HelperDefinition';
@@ -235,9 +236,19 @@ export default function HelperDetailPage() {
     )
       return;
     try {
-      await api.remove(saved.id);
+      const removed = saved;
+      await api.remove(removed.id);
       draft.forget();
       navigate('/config/helpers');
+      offerUndo(
+        `Deleted ${removed.name}`,
+        () =>
+          definitions.update(removed.id, {
+            ...asNewItem(removed),
+            create_only: true,
+          }),
+        `Restored ${removed.name}`,
+      );
     } catch (error) {
       toast.error((error as Error).message);
     }

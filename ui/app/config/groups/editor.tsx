@@ -1,4 +1,5 @@
 import { IdentityFields } from '@/ui/settings/IdentityFields';
+import { asNewItem, offerUndo } from '@/lib/undo';
 import { configItemHref } from '@/lib/configItemHref';
 import { EntityPicker } from '@/ui/settings/EntityPicker';
 import { useEffect, useMemo, useState } from 'react';
@@ -145,9 +146,15 @@ export function GroupEditor({ id }: { id?: string }) {
       return;
     setDeleting(true);
     try {
-      await api.remove(saved.id);
+      const removed = saved;
+      await api.remove(removed.id);
       draft.forget();
       navigate('/config/groups');
+      offerUndo(
+        `Deleted ${removed.name}`,
+        () => api.create(asNewItem(removed)),
+        `Restored ${removed.name}`,
+      );
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : 'Could not delete this group',

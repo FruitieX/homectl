@@ -1,4 +1,5 @@
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
+import { asNewItem, offerUndo } from '@/lib/undo';
 import { useMemo, useState } from 'react';
 import type { ScriptSpec } from '@/bindings/ScriptSpec';
 import { ScriptConfiguration, newScript } from '@/ui/ScriptConfiguration';
@@ -184,9 +185,19 @@ export default function BlockDetailPage() {
     )
       return;
     try {
-      await api.remove(saved.id);
+      const removed = saved;
+      await api.remove(removed.id);
       draft.forget();
       navigate('/config/blocks');
+      offerUndo(
+        `Deleted ${removed.name}`,
+        () =>
+          api.update(removed.id, {
+            ...asNewItem(removed),
+            create_only: true,
+          } as AutomationBlock),
+        `Restored ${removed.name}`,
+      );
     } catch (e) {
       toast.error((e as Error).message);
     }

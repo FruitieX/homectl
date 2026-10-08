@@ -1,4 +1,5 @@
 import { IdentityFields } from '@/ui/settings/IdentityFields';
+import { asNewItem, offerUndo } from '@/lib/undo';
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -311,9 +312,15 @@ export function SceneEditor({ id }: { id?: string }) {
     )
       return;
     try {
-      await api.remove(saved.id);
+      const removed = saved;
+      await api.remove(removed.id);
       draft.forget();
       navigate('/config/scenes');
+      offerUndo(
+        `Deleted ${removed.name}`,
+        () => api.create(asNewItem(removed)),
+        `Restored ${removed.name}`,
+      );
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : 'Could not delete scene',

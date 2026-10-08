@@ -1,4 +1,5 @@
 import { applyCreatedScene } from '@/lib/routineSceneReturn';
+import { asNewItem, offerUndo } from '@/lib/undo';
 import { Input } from '@/ui/primitives/input';
 import {
   outcome as activityOutcome,
@@ -262,9 +263,15 @@ export function RoutineEditor({ id }: { id?: string }) {
     )
       return;
     try {
-      await api.remove(saved.id);
+      const removed = saved;
+      await api.remove(removed.id);
       draft.forget();
       navigate('/config/routines');
+      offerUndo(
+        `Deleted ${removed.name}`,
+        () => api.create(asNewItem(removed)),
+        `Restored ${removed.name}`,
+      );
     } catch (error) {
       toast.error((error as Error).message);
     }

@@ -1,4 +1,5 @@
 import { Trash2 } from 'lucide-react';
+import { asNewItem, offerUndo } from '@/lib/undo';
 import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -197,9 +198,19 @@ export default function SourceDetailPage() {
     )
       return;
     try {
-      await api.remove(saved.id);
+      const removed = saved;
+      await api.remove(removed.id);
       draft.forget();
       navigate('/config/sources');
+      offerUndo(
+        `Deleted ${removed.name}`,
+        () =>
+          api.update(removed.id, {
+            ...asNewItem(removed),
+            create_only: true,
+          } as SourceConfig),
+        `Restored ${removed.name}`,
+      );
     } catch (error) {
       toast.error((error as Error).message);
     }
