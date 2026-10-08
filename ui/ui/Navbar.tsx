@@ -8,7 +8,7 @@ import useIdle from '@/hooks/useIdle';
 import { AssistantButton } from '@/assistant/AssistantButton';
 import { assistantPageContextAtom } from '@/assistant/state';
 import { Button } from '@/ui/primitives/button';
-import { configSectionAliases, configSections } from '../app/config/sections';
+import { resolveConfigSection } from '../app/config/sections';
 
 export const Navbar = () => {
   const location = useLocation();
@@ -41,10 +41,7 @@ export const Navbar = () => {
   } else if (pathname?.startsWith('/config')) {
     // Name the section you are in, so the app bar answers "where am I?" even on
     // a detail page opened from a link.
-    const resolved = configSectionAliases[pathname] ?? pathname;
-    const section =
-      configSections.find((entry) => entry.href === resolved) ??
-      configSections.find((entry) => resolved.startsWith(`${entry.href}/`));
+    const section = resolveConfigSection(pathname);
     // Phones get one location signal: the list page's own title, and Back plus
     // the item title on a detail page. Naming the section in the app bar as
     // well is repetition on a narrow screen, so it only appears from sm up.

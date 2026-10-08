@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { ConfigPageHeader } from '../page-header';
+import { ConfigSectionTabs } from '@/ui/ConfigTabs';
 import { Button } from '@/ui/primitives/button';
 import { sourceDefinitions, useWidgetSources } from './shared';
 
@@ -9,9 +10,10 @@ export default function WidgetSourcesPage() {
   return (
     <div className="settings-page">
       <ConfigPageHeader
-        title="Widget sources"
+        title="Data sources"
         description="Shared data services for your dashboards. Choose what each widget displays in its own settings."
       />
+      <ConfigSectionTabs />
       {query.isError ? (
         <div role="alert">
           Could not load widget sources.{' '}
@@ -55,14 +57,6 @@ export default function WidgetSourcesPage() {
           })}
         </div>
       )}
-      <div className="flex flex-wrap gap-4 text-sm">
-        <Link className="settings-link" to="/config/sensors">
-          Sensor names & groups
-        </Link>
-        <Link className="settings-link" to="/dashboard">
-          Open dashboard
-        </Link>
-      </div>
     </div>
   );
 }

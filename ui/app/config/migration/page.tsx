@@ -9,7 +9,7 @@ import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { readApiResponse, type BackupReview } from '@/hooks/useConfig';
 import { configItemHref } from '@/lib/configItemHref';
-import { ConfigTabs } from '@/ui/ConfigTabs';
+import { ConfigSectionTabs } from '@/ui/ConfigTabs';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
@@ -288,12 +288,7 @@ export default function MigrationPage() {
         title="Import an older setup"
         description="Review selected entries from a legacy TOML file before adding them to your saved setup."
       />
-      <ConfigTabs
-        tabs={[
-          { label: 'Backups', to: '/config/import-export' },
-          { label: 'Legacy import', to: '/config/migration', active: true },
-        ]}
-      />
+      <ConfigSectionTabs />
       <SettingsSection
         title="Choose what to import"
         description="For a new setup, import connections first, wait for device discovery, then review rooms, scenes and routines from the same file. Other saved entries are kept."

@@ -7,7 +7,7 @@ import {
 import { useAppConfig } from '@/hooks/appConfig';
 import { useEntityDraft } from '@/hooks/useEntityDraft';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
-import { ConfigTabs } from '@/ui/ConfigTabs';
+import { ConfigSectionTabs } from '@/ui/ConfigTabs';
 import { ConfigPageHeader } from '../page-header';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
 import { Button } from '@/ui/primitives/button';
@@ -232,12 +232,7 @@ export default function ImportExportPage() {
         title="Backups & restore"
         description="Download your saved setup or review a backup before restoring it."
       />
-      <ConfigTabs
-        tabs={[
-          { label: 'Backups', to: '/config/import-export', active: true },
-          { label: 'Legacy import', to: '/config/migration' },
-        ]}
-      />
+      <ConfigSectionTabs />
       <SettingsSection
         title="Download a backup"
         description="Includes saved configuration, dashboards, floorplans, calibration and durable helper values. Live device readings, history and this browser’s appearance preferences are not included."

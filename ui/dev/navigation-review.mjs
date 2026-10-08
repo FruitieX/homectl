@@ -176,18 +176,16 @@ export default async function (cdp, { width, url }) {
         'Every phone category has a 44 px touch target',
       );
       await shot('settings-top');
-      await click(
-        `${drawer}.querySelector('[aria-label="Jump to System"]')`,
-      );
+      await click(`${drawer}.querySelector('[aria-label="Jump to System"]')`);
       await pause(500);
-      await until(
-        `${categories}.scrollTop>0`,
-        'Phone shortcut reaches System',
-      );
+      await until(`${categories}.scrollTop>0`, 'Phone shortcut reaches System');
     }
     await shot('settings');
-    await click(`${categories}.querySelector('a[href="/config/logs"]')`);
-    await until("location.pathname==='/config/logs'", 'Category opens Logs');
+    await click(`${categories}.querySelector('a[href="/config/diagnostics"]')`);
+    await until(
+      "location.pathname==='/config/diagnostics'",
+      'Category opens Activity & problems',
+    );
     if (!desktop) {
       await until(`!${drawer}`, 'Category selection dismisses the drawer');
       await menu();

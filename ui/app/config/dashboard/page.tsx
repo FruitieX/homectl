@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Plus, ChevronRight } from 'lucide-react';
 import { ConfigPageHeader } from '../page-header';
+import { ConfigSectionTabs } from '@/ui/ConfigTabs';
 import { Button } from '@/ui/primitives/button';
 import { useDashboardConfig } from './shared';
 export default function DashboardSettingsPage() {
@@ -19,6 +20,7 @@ export default function DashboardSettingsPage() {
           </Button>
         }
       />
+      <ConfigSectionTabs />
       {layouts.isError ? (
         <p role="alert">
           Could not load dashboards.{' '}
@@ -52,9 +54,6 @@ export default function DashboardSettingsPage() {
           ))}
         </div>
       )}
-      <Link className="settings-link text-sm" to="/config/widget-sources">
-        Shared widget data sources
-      </Link>
     </div>
   );
 }

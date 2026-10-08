@@ -53,6 +53,7 @@ import {
 } from '@/ui/settings/CalibrationSummary';
 import { NO_PROFILE } from '@/lib/calibrationProfiles';
 import { ConfigPageHeader } from '../page-header';
+import { ConfigSectionTabs } from '@/ui/ConfigTabs';
 import { useSettingsDevices } from '../devices/shared';
 
 type Light = { key: string; name: string; color: boolean; dimmable: boolean };
@@ -106,6 +107,7 @@ export default function CalibrationPage() {
           </Button>
         }
       />
+      <ConfigSectionTabs />
       <CalibrationCatalogStatus query={actions.editor} />
       {view && (
         <>

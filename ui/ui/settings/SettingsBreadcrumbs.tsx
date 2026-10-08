@@ -1,13 +1,12 @@
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
-import { configSections, configSectionAliases } from 'app/config/sections';
+import { configCatalogEntry, resolveConfigSection } from 'app/config/sections';
 
 export function SettingsBreadcrumbs() {
   const { pathname } = useLocation();
-  const resolved = configSectionAliases[pathname] ?? pathname;
-  const section =
-    configSections.find((entry) => entry.href === resolved) ??
-    configSections.find((entry) => resolved.startsWith(`${entry.href}/`));
+  const section = resolveConfigSection(pathname);
+  const entry = configCatalogEntry(pathname);
+  const tab = entry?.parent ? entry : undefined;
   return (
     <nav
       aria-label="Breadcrumb"
@@ -28,6 +27,14 @@ export function SettingsBreadcrumbs() {
               {section.label}
             </Link>
           )}
+        </>
+      )}
+      {tab && (
+        <>
+          <ChevronRight aria-hidden className="size-3 shrink-0" />
+          <Link className="truncate" to={tab.href}>
+            {tab.tabLabel ?? tab.label}
+          </Link>
         </>
       )}
     </nav>

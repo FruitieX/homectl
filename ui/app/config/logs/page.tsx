@@ -16,6 +16,7 @@ import {
   DialogDescription,
 } from '@/ui/primitives/dialog';
 import { ConfigPageHeader } from '../page-header';
+import { ConfigSectionTabs } from '@/ui/ConfigTabs';
 const levels: LogLevel[] = ['ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE'];
 const shortTime = (timestamp: string) => {
   const time = new Date(timestamp);
@@ -99,6 +100,7 @@ export default function LogsPage() {
           </div>
         }
       />
+      <ConfigSectionTabs />
       {params.get('device') && (
         <div className="flex items-center gap-2 text-xs">
           Logs linked to {params.get('device')}

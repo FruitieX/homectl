@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { openAssistantPanelAtom } from '@/assistant/state';
-import { configSections } from '../app/config/sections';
+import { configCatalog } from '../app/config/sections';
 import {
   densityAtom,
   useFavoriteKeys,
@@ -95,7 +95,7 @@ const staticNavItems = [
     keywords: 'rooms groups scenes',
     href: '/groups',
   },
-  ...configSections.map((section) => ({
+  ...configCatalog.map((section) => ({
     key: `nav:${section.href}`,
     label: section.label,
     description: section.description,

@@ -20,9 +20,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import {
-  configSectionAliases,
   configSectionGroups,
   configSections,
+  resolveConfigSection,
 } from 'app/config/sections';
 import { useDeveloperMode } from '@/hooks/developerMode';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
@@ -97,14 +97,10 @@ function SettingsCategories({
   close?: () => void;
 }) {
   const { pathname } = useLocation();
-  const path =
-    pathname === '/settings'
-      ? '/config'
-      : (configSectionAliases[pathname] ?? pathname);
+  const path = pathname === '/settings' ? '/config' : pathname;
   const scroller = useRef<HTMLElement>(null);
-  const currentGroup = configSections.find(
-    (section) => path === section.href || path.startsWith(section.href + '/'),
-  )?.group;
+  const current = resolveConfigSection(path);
+  const currentGroup = current?.group;
   useLayoutEffect(() => {
     const container = scroller.current;
     const active = container?.querySelector<HTMLElement>(
@@ -179,9 +175,7 @@ function SettingsCategories({
                   to={section.href}
                   label={section.label}
                   Icon={section.icon}
-                  active={
-                    path === section.href || path.startsWith(section.href + '/')
-                  }
+                  active={current?.href === section.href}
                   close={close}
                 />
               ))}

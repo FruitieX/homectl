@@ -25,6 +25,7 @@ import { Input } from '@/ui/primitives/input';
 import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { SearchablePicker } from '@/ui/SearchablePicker';
 import { ConfigPageHeader } from '../page-header';
+import { ConfigSectionTabs } from '@/ui/ConfigTabs';
 import {
   ActivityReferenceProvider,
   ActivityReferenceStatus,
@@ -451,6 +452,7 @@ export default function RoutineHistoryPage() {
             </div>
           }
         />
+        <ConfigSectionTabs />
         <div className="flex flex-wrap gap-2">
           <Input
             type="search"

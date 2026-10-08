@@ -11,6 +11,7 @@ import { Button } from '@/ui/primitives/button';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
 import { ConfigPageHeader } from '../page-header';
+import { ConfigSectionTabs } from '@/ui/ConfigTabs';
 
 const labels = {
   group: 'room',
@@ -139,6 +140,7 @@ export default function DiagnosticsPage() {
           </Button>
         }
       />
+      <ConfigSectionTabs />
       {query.isPending ? (
         <p role="status">Checking configuration…</p>
       ) : query.isError ? (

@@ -2,16 +2,14 @@ import type { ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import { configSections } from '../../app/config/sections';
+import { resolveConfigSection } from '../../app/config/sections';
 import { cn } from '@/lib/cn';
 
 export type Crumb = { label: ReactNode; to?: string };
 
 /** The list page a config sub-route belongs to, if any. */
 export function configParentCrumb(pathname: string): Crumb | null {
-  const section =
-    configSections.find((entry) => entry.href === pathname) ??
-    configSections.find((entry) => pathname.startsWith(`${entry.href}/`));
+  const section = resolveConfigSection(pathname);
   if (!section) return null;
   return { label: section.label, to: section.href };
 }

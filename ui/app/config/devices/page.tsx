@@ -11,6 +11,7 @@ import { Button } from '@/ui/primitives/button';
 import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { SearchablePicker } from '@/ui/SearchablePicker';
 import { ConfigPageHeader } from '../page-header';
+import { ConfigSectionTabs } from '@/ui/ConfigTabs';
 import {
   DeviceStatePreview,
   deviceSummary,
@@ -74,12 +75,8 @@ function DeviceList() {
       <ConfigPageHeader
         title="Devices"
         description="Current state, connections and device settings."
-        actions={
-          <Button variant="outline" asChild>
-            <Link to="/config/calibration">Light calibration</Link>
-          </Button>
-        }
       />
+      <ConfigSectionTabs />
       <ConfigListSearchBar
         value={search}
         onChange={(value) => patchQuery('q', value)}

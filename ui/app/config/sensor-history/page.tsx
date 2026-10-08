@@ -12,6 +12,7 @@ import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { SensorHistoryPanel } from '@/ui/SensorHistoryPanel';
 import { ConfigPageHeader } from '../page-header';
+import { ConfigSectionTabs } from '@/ui/ConfigTabs';
 
 export default function SensorHistoryPage() {
   const { apiEndpoint } = useAppConfig();
@@ -76,6 +77,7 @@ export default function SensorHistoryPage() {
           </Button>
         }
       />
+      <ConfigSectionTabs />
       <div className="grid gap-3 sm:grid-cols-2 lg:max-w-3xl">
         <SearchablePicker
           value={sensor}

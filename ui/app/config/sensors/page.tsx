@@ -20,6 +20,7 @@ import { SettingsSection } from '@/ui/settings/SettingsSection';
 import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { ConfigPageHeader } from '../page-header';
+import { ConfigSectionTabs } from '@/ui/ConfigTabs';
 
 function validate(catalog: SensorCatalog): FieldError[] {
   const errors: FieldError[] = [],
@@ -117,14 +118,10 @@ export default function SensorCatalogPage() {
   return (
     <div className="settings-page">
       <ConfigPageHeader
-        title="Sensor catalog"
-        actions={
-          <Button variant="outline" asChild>
-            <Link to="/config/sensor-history">Sensor activity</Link>
-          </Button>
-        }
+        title="Sensor names"
         description="Names and groups for dashboard temperature and humidity readings. Choose which sensors a widget displays in that widget's settings."
       />
+      <ConfigSectionTabs />
       {query.isError && (
         <div role="alert" className="text-sm text-destructive">
           {query.error.message}{' '}
@@ -433,14 +430,6 @@ export default function SensorCatalogPage() {
               </div>
             ))}
           </SettingsSection>
-          <div className="flex flex-wrap gap-4 text-sm">
-            <Link className="settings-link" to="/dashboard">
-              Open dashboard
-            </Link>
-            <Link className="settings-link" to="/config/devices">
-              Device sensors
-            </Link>
-          </div>
           <EntitySaveBar draft={draft} />
         </>
       )}

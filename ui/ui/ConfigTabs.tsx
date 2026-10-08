@@ -1,4 +1,6 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+
+import { configSectionTabs } from 'app/config/sections';
 
 import { cn } from '@/lib/cn';
 
@@ -23,7 +25,7 @@ export function ConfigTabs({
     <nav
       aria-label="Related settings"
       className={cn(
-        'inline-flex w-full max-w-md gap-1 rounded-2xl bg-muted p-1',
+        'inline-flex w-full max-w-2xl gap-1 overflow-x-auto rounded-2xl bg-muted p-1 sm:w-fit',
         className,
       )}
     >
@@ -33,7 +35,7 @@ export function ConfigTabs({
           to={tab.to}
           aria-current={tab.active ? 'page' : undefined}
           className={cn(
-            'flex-1 rounded-xl px-3 py-2 text-center text-sm font-medium transition',
+            'flex-1 shrink-0 whitespace-nowrap rounded-xl px-3 py-2 text-center text-sm font-medium transition',
             tab.active
               ? 'bg-background text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground',
@@ -43,5 +45,22 @@ export function ConfigTabs({
         </Link>
       ))}
     </nav>
+  );
+}
+
+/** Tabs for a settings section that merges several pages, from the catalog. */
+export function ConfigSectionTabs({ className }: { className?: string }) {
+  const { pathname } = useLocation();
+  const tabs = configSectionTabs(pathname);
+  if (!tabs.length) return null;
+  return (
+    <ConfigTabs
+      className={className}
+      tabs={tabs.map((tab) => ({
+        label: tab.label,
+        to: tab.href,
+        active: tab.active,
+      }))}
+    />
   );
 }

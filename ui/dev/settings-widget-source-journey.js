@@ -50,7 +50,7 @@
   await pause();
   document.querySelector('a[href="/config/sensors"]').click();
   await until(
-    () => document.querySelector('h1')?.textContent === 'Sensor catalog',
+    () => document.querySelector('h1')?.textContent === 'Sensor names',
     'Related catalog opened',
   );
   history.back();
