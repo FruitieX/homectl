@@ -362,6 +362,22 @@ re-validates and applies through the normal device command path. Nothing is
 written before the user applies. The AppBar has no search field: search lives
 in the navigation rail / bottom navigation and the Ctrl+K command palette.
 
+Settings navigation comes from one ordered catalog
+(`ui/app/config/sections.ts`), grouped as Your home, Automations, Displays and
+System. Pages that belong to one task are tabs of a section rather than menu
+entries: set `parent` (and optionally `tabLabel`) on the catalog entry and
+render `<ConfigSectionTabs />` under the page header. Tabs keep their own URLs
+and stay searchable in the command palette.
+
+Saving an existing item through `useEntityDraft` shows a "Saved" toast with
+Undo, which saves the previous version through the same path; deletes in the
+main editors offer Undo by re-creating the item (`offerUndo` in
+`ui/lib/undo.ts`). Configuration diagnostics carry an explicit `reference`, so
+the Problems page can offer one-click removals (`ui/lib/diagnosticFixes.ts`)
+without parsing messages. Groups whose lights cover every other room
+(`ui/lib/catchAllGroups.ts`) are shown as a "Whole home" bar rather than as a
+room card or a membership of every device.
+
 Room previews (`GroupFloorplanPreview` in `ui/ui/floorplan/`) render on the
 rooms list, room details and dashboard room widgets. The floorplan is picked by the group's
 placement mask (`grid.groups[groupId]`) when one exists, otherwise by which
