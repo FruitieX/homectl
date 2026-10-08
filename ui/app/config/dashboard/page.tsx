@@ -9,30 +9,30 @@ export default function DashboardSettingsPage() {
     <div className="settings-page">
       <ConfigPageHeader
         title="Dashboards"
-        description="Layouts and widgets for each display."
+        description="Each display shows one dashboard; the default opens on Home."
         actions={
           <Button asChild>
             <Link to="/config/dashboard/new">
               <Plus className="size-4" />
-              Add layout
+              Add dashboard
             </Link>
           </Button>
         }
       />
       {layouts.isError ? (
         <p role="alert">
-          Could not load layouts.{' '}
+          Could not load dashboards.{' '}
           <Button variant="outline" onClick={() => void layouts.refetch()}>
             Retry
           </Button>
         </p>
       ) : layouts.isPending ? (
-        <p>Loading layouts…</p>
+        <p>Loading dashboards…</p>
       ) : (
         <div className="divide-y rounded-lg border border-border">
           {!layouts.data.length && (
             <p className="p-4 text-sm text-muted-foreground">
-              No layouts yet. Add one to start arranging widgets.
+              No dashboards yet. Add one to start arranging widgets.
             </p>
           )}
           {layouts.data.map((layout) => (

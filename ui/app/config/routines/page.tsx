@@ -71,16 +71,13 @@ export default function RoutinesPage() {
           </Button>
         }
       />
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <ConfigListSearchBar
-            value={search}
-            filteredCount={visible.length}
-            totalCount={api.data.length}
-            onChange={(value) => changeParam('q', value)}
-            placeholder="Search routines"
-          />
-        </div>
+      <ConfigListSearchBar
+        value={search}
+        filteredCount={visible.length}
+        totalCount={api.data.length}
+        onChange={(value) => changeParam('q', value)}
+        placeholder="Search routines"
+      >
         <SettingsSelect
           aria-label="Filter routines"
           className="w-full sm:w-44"
@@ -93,10 +90,7 @@ export default function RoutinesPage() {
             { value: 'legacy', label: 'Legacy' },
           ]}
         />
-        <span className="text-xs text-muted-foreground">
-          {visible.length} routines
-        </span>
-      </div>
+      </ConfigListSearchBar>
       {api.error ? (
         <div role="alert" className="text-sm text-destructive">
           {api.error}

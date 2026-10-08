@@ -201,20 +201,6 @@
   border-radius: 2px;
   background: hsl(var(--primary));
 }
-.app-settings-panel-footer {
-  min-height: 38px;
-  flex-shrink: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  border-top: 1px solid hsl(var(--border));
-  margin-top: 4px;
-  padding: 8px 10px;
-  font-size: max(10px, 0.7rem);
-  color: hsl(var(--muted-foreground));
-}
 .app-navigation-drawer {
   background: hsl(var(--background));
   padding-top: env(safe-area-inset-top);

@@ -19,7 +19,11 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { configSections, configSectionAliases } from 'app/config/sections';
+import {
+  configSectionAliases,
+  configSectionGroups,
+  configSections,
+} from 'app/config/sections';
 import { useDeveloperMode } from '@/hooks/developerMode';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import { useConnectionStatus } from '@/hooks/websocket';
@@ -56,41 +60,7 @@ export function primaryNavigationActive(to: string, pathname: string) {
 }
 
 const settingsPanelOpenAtom = atom(true);
-const navigationGroups = [
-  'Your home',
-  'Automations',
-  'Appearance',
-  'Maintenance',
-] as const;
-// Order by task rather than when each category was added to the catalog.
-const sectionOrder = [
-  '/config/groups',
-  '/config/devices',
-  '/config/integrations',
-  '/config/sensors',
-  '/config/widget-sources',
-  '/config/scenes',
-  '/config/routines',
-  '/config/timers',
-  '/config/blocks',
-  '/config/helpers',
-  '/config/sources',
-  '/config/routine-history',
-  '/config/floorplan',
-  '/config/dashboard',
-  '/config/settings',
-  '/config/diagnostics',
-  '/config/sensor-history',
-  '/config/logs',
-  '/config/import-export',
-];
-const orderedSections = [...configSections].sort((a, b) => {
-  const rank = (href: string) => {
-    const index = sectionOrder.indexOf(href);
-    return index < 0 ? Infinity : index;
-  };
-  return rank(a.href) - rank(b.href);
-});
+const navigationGroups = configSectionGroups;
 
 function NavigationLink({
   to,
@@ -132,7 +102,7 @@ function SettingsCategories({
       ? '/config'
       : (configSectionAliases[pathname] ?? pathname);
   const scroller = useRef<HTMLElement>(null);
-  const currentGroup = orderedSections.find(
+  const currentGroup = configSections.find(
     (section) => path === section.href || path.startsWith(section.href + '/'),
   )?.group;
   useLayoutEffect(() => {
@@ -201,7 +171,7 @@ function SettingsCategories({
         {navigationGroups.map((group) => (
           <section key={group} data-navigation-group={group}>
             <h3>{group}</h3>
-            {orderedSections
+            {configSections
               .filter((section) => section.group === group)
               .map((section) => (
                 <NavigationLink
@@ -373,10 +343,6 @@ export function AppSidebar() {
             </Button>
           </header>
           <SettingsCategories />
-          <footer className="app-settings-panel-footer">
-            <span>Configuration</span>
-            <span>{configSections.length} sections</span>
-          </footer>
         </section>
       )}
     </aside>

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { DeviceHealth } from '@/bindings/DeviceHealth';
+import type { DeviceHealthSnapshot } from '@/bindings/DeviceHealthSnapshot';
 import { useDeviceHealth } from '@/hooks/useDeviceHealth';
 import { configItemHref } from '@/lib/configItemHref';
 import { Button } from '@/ui/primitives/button';
@@ -120,11 +121,25 @@ export function HealthEvidence({ deviceKey }: { deviceKey: string }) {
     </div>
   );
 }
-export function AttentionDevices({ integration }: { integration?: string }) {
-  const query = useDeviceHealth();
-  const keys = (query.data?.attention_device_keys ?? []).filter(
-    (key) => !integration || key.startsWith(integration + '/'),
+export function reportingAttentionKeys(data?: DeviceHealthSnapshot) {
+  return (data?.attention_device_keys ?? []).filter(
+    (key) => !!data?.devices?.[key]?.issues.length,
   );
+}
+export function AttentionDevices({
+  integration,
+  reportingOnly = false,
+}: {
+  integration?: string;
+  /** Leave out unresolved references, for pages that list them separately. */
+  reportingOnly?: boolean;
+}) {
+  const query = useDeviceHealth();
+  const keys = (
+    reportingOnly
+      ? reportingAttentionKeys(query.data)
+      : (query.data?.attention_device_keys ?? [])
+  ).filter((key) => !integration || key.startsWith(integration + '/'));
   const includesSources = keys.some((key) => key.startsWith('computed/'));
   const itemKind = includesSources
     ? keys.every((key) => key.startsWith('computed/'))

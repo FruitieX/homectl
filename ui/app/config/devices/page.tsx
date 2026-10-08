@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
+import { AlertTriangle, ChevronRight } from 'lucide-react';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useGroupsState } from '@/hooks/useDevicesApi';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
@@ -37,14 +37,19 @@ function DeviceList() {
   const search = query.get('q') ?? '',
     type = query.get('type') ?? 'all',
     integration = query.get('integration') ?? '',
-    group = query.get('group') ?? '';
+    group = query.get('group') ?? '',
+    attentionOnly = query.get('attention') === '1';
+  // Only devices that are listed here count; missing references are repaired
+  // from diagnostics, which the notice below links to.
+  const attentionCount = catalog.devices.filter((device) =>
+    health.data?.attention_device_keys.includes(getDeviceKey(device)),
+  ).length;
   const visible = catalog.devices
     .filter((device) => {
       const key = getDeviceKey(device);
       return (
         (type === 'all' || deviceType(device) === type) &&
-        (query.get('attention') !== '1' ||
-          health.data?.attention_device_keys.includes(key)) &&
+        (!attentionOnly || health.data?.attention_device_keys.includes(key)) &&
         (!integration || device.integration_id === integration) &&
         (!group || groups[group]?.device_keys.includes(key)) &&
         `${catalog.label(device)} ${key}`
@@ -81,41 +86,7 @@ function DeviceList() {
         totalCount={catalog.devices.length}
         filteredCount={visible.length}
         placeholder="Search devices by name or ID"
-      />
-      <label className="flex items-center gap-2 text-xs">
-        <input
-          type="checkbox"
-          checked={query.get('attention') === '1'}
-          onChange={(event) =>
-            patchQuery('attention', event.target.checked ? '1' : '')
-          }
-        />
-        Needs attention only
-      </label>
-      {health.isError && (
-        <p role="alert" className="text-xs">
-          Device health is unavailable.{' '}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => void health.refetch()}
-          >
-            Retry
-          </Button>
-        </p>
-      )}
-      {query.get('attention') === '1' &&
-        health.data?.attention_device_keys.some(
-          (key) => !catalog.byKey[key],
-        ) && (
-          <p className="text-xs text-muted-foreground">
-            Some referenced devices are unavailable.{' '}
-            <Link className="text-primary underline" to="/config/diagnostics">
-              Repair references in diagnostics
-            </Link>
-          </p>
-        )}
-      <div className="flex flex-wrap items-center gap-2">
+      >
         <SettingsSelect
           className="w-full sm:w-48"
           aria-label="Device type"
@@ -156,10 +127,41 @@ function DeviceList() {
             }))}
           />
         </div>
-        <span className="text-xs text-muted-foreground">
-          {visible.length} devices
-        </span>
-      </div>
+        <Button
+          type="button"
+          variant={attentionOnly ? 'secondary' : 'outline'}
+          className="w-full sm:w-auto"
+          aria-pressed={attentionOnly}
+          onClick={() => patchQuery('attention', attentionOnly ? '' : '1')}
+        >
+          <AlertTriangle className="size-4" aria-hidden />
+          Needs attention
+          {attentionCount > 0 && ` (${attentionCount})`}
+        </Button>
+      </ConfigListSearchBar>
+      {health.isError && (
+        <p role="alert" className="text-xs">
+          Device health is unavailable.{' '}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void health.refetch()}
+          >
+            Retry
+          </Button>
+        </p>
+      )}
+      {attentionOnly &&
+        health.data?.attention_device_keys.some(
+          (key) => !catalog.byKey[key],
+        ) && (
+          <p className="text-xs text-muted-foreground">
+            Some referenced devices are unavailable.{' '}
+            <Link className="text-primary underline" to="/config/diagnostics">
+              Repair references in diagnostics
+            </Link>
+          </p>
+        )}
       {catalog.error ? (
         <div
           role="alert"
@@ -215,7 +217,8 @@ function DeviceList() {
                       {key}
                     </p>
                   )}
-                  {health.data?.devices?.[key] && (
+                  {/* Healthy rows stay quiet so the ones with issues stand out. */}
+                  {!!health.data?.devices?.[key]?.issues.length && (
                     <HealthBadge health={health.data.devices[key]} />
                   )}
                 </Link>

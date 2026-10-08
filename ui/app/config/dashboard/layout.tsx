@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Plus, Trash2 } from 'lucide-react';
+import { ChevronRight, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { useEntityDraft, entityFieldProps } from '@/hooks/useEntityDraft';
 import { entityDraftStore } from '@/lib/entityDraft';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
@@ -8,6 +8,12 @@ import { SettingsSection } from '@/ui/settings/SettingsSection';
 import { Input } from '@/ui/primitives/input';
 import { Button } from '@/ui/primitives/button';
 import { confirmDialog } from '@/ui/primitives/confirm-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/ui/primitives/dropdown-menu';
 import { ConfigPageHeader } from '../page-header';
 import { EditorPreferences } from './EditorPreferences';
 import {
@@ -38,7 +44,7 @@ export default function DashboardLayoutEditor() {
     validate: (value) =>
       value.name.trim()
         ? []
-        : [{ field: 'name', message: 'Enter a layout name.' }],
+        : [{ field: 'name', message: 'Enter a dashboard name.' }],
     save: async (value, expected) => {
       const saved = await api.write<DashboardLayoutRow>('/layouts', {
         ...value,
@@ -52,17 +58,63 @@ export default function DashboardLayoutEditor() {
     },
   });
   const value = draft.value;
+  const removeLayout = async () => {
+    if (
+      !value ||
+      !(await confirmDialog({
+        title: `Delete ${value.name}?`,
+        description:
+          'This deletes the dashboard and all of its widgets. Pending edits to this dashboard will also be discarded.',
+        confirmLabel: 'Delete dashboard',
+        destructive: true,
+      }))
+    )
+      return;
+    try {
+      await api.write(`/layouts/${layoutId}`, undefined, 'DELETE');
+      draft.forget();
+      navigate('/config/dashboard');
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : 'Could not delete dashboard.',
+      );
+    }
+  };
   return (
     <div className="settings-page">
       <ConfigPageHeader
-        title={creating ? 'New layout' : value?.name || 'Dashboard layout'}
+        title={creating ? 'New dashboard' : value?.name || 'Dashboard'}
         actions={
           !creating && (
-            <Button variant="outline" asChild>
-              <Link to={`/?edit=1&layout=${layoutId}`}>
-                Arrange on dashboard
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" asChild>
+                <Link to={`/?edit=1&layout=${layoutId}`}>
+                  Arrange on dashboard
+                </Link>
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="More dashboard actions"
+                    title="More dashboard actions"
+                  >
+                    <MoreHorizontal aria-hidden />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    disabled={!value}
+                    onSelect={() => void removeLayout()}
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                    Delete dashboard
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           )
         }
       />
@@ -83,11 +135,11 @@ export default function DashboardLayoutEditor() {
         <p>
           {api.layouts.isPending
             ? 'Loading layout…'
-            : 'This layout is unavailable.'}
+            : 'This dashboard is unavailable.'}
         </p>
       ) : (
         <>
-          <SettingsSection title="Layout">
+          <SettingsSection title="Details">
             <label className="block space-y-2 text-sm">
               Name
               <Input
@@ -108,7 +160,7 @@ export default function DashboardLayoutEditor() {
             </label>
             <p className="text-xs text-muted-foreground">
               Setting a default replaces the previous default. Displays can
-              still open a specific layout.
+              still open a specific dashboard.
             </p>
           </SettingsSection>
           {!creating && (
@@ -139,7 +191,7 @@ export default function DashboardLayoutEditor() {
                 <div className="divide-y">
                   {!api.widgets.data.length && (
                     <p className="text-sm text-muted-foreground">
-                      This layout has no widgets.
+                      This dashboard has no widgets yet.
                     </p>
                   )}
                   {api.widgets.data.map((widget) => (
@@ -151,8 +203,9 @@ export default function DashboardLayoutEditor() {
                       <span className="min-w-0 break-words font-medium">
                         {widgetTitle(widget)}
                       </span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="flex items-center gap-2 text-xs text-muted-foreground">
                         {widget.grid_w} × {widget.grid_h}
+                        <ChevronRight className="size-4" aria-hidden />
                       </span>
                     </Link>
                   ))}
@@ -161,51 +214,11 @@ export default function DashboardLayoutEditor() {
             </SettingsSection>
           )}
           {!creating && (
-            <SettingsSection
-              title="Remove layout"
-              description="Removing a layout also removes all of its configured widgets."
-            >
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  if (
-                    !(await confirmDialog({
-                      title: `Remove ${value.name}?`,
-                      description:
-                        'This deletes the layout and all of its widgets. Pending edits to this layout will also be discarded.',
-                      confirmLabel: 'Remove layout',
-                      destructive: true,
-                    }))
-                  )
-                    return;
-                  try {
-                    await api.write(
-                      `/layouts/${layoutId}`,
-                      undefined,
-                      'DELETE',
-                    );
-                    draft.forget();
-                    navigate('/config/dashboard');
-                  } catch (error) {
-                    setError(
-                      error instanceof Error
-                        ? error.message
-                        : 'Could not remove layout.',
-                    );
-                  }
-                }}
-              >
-                <Trash2 className="size-4" />
-                Remove layout
-              </Button>
-            </SettingsSection>
-          )}
-          {!creating && (
             <EditorPreferences href={`/config/dashboard/${layoutId}`} />
           )}
           <EntitySaveBar
             draft={draft}
-            createLabel={creating ? 'Create layout' : undefined}
+            createLabel={creating ? 'Create dashboard' : undefined}
           />
         </>
       )}

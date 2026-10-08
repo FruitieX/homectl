@@ -177,12 +177,12 @@ export default async function (cdp, { width, url }) {
       );
       await shot('settings-top');
       await click(
-        `${drawer}.querySelector('[aria-label="Jump to Maintenance"]')`,
+        `${drawer}.querySelector('[aria-label="Jump to System"]')`,
       );
       await pause(500);
       await until(
         `${categories}.scrollTop>0`,
-        'Phone shortcut reaches Maintenance',
+        'Phone shortcut reaches System',
       );
     }
     await shot('settings');

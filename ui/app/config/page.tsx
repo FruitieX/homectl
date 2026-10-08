@@ -20,8 +20,16 @@ import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { Input } from '@/ui/primitives/input';
 import { Button } from '@/ui/primitives/button';
 import { SettingsSection } from '@/ui/settings/SettingsSection';
-import { AttentionDevices } from '@/ui/settings/HealthStatus';
-import { configSections, matchesConfigSectionSearch } from './sections';
+import {
+  AttentionDevices,
+  reportingAttentionKeys,
+} from '@/ui/settings/HealthStatus';
+import { useDeviceHealth } from '@/hooks/useDeviceHealth';
+import {
+  configSectionGroups,
+  configSections,
+  matchesConfigSectionSearch,
+} from './sections';
 import { ConfigPageHeader } from './page-header';
 
 export default function ConfigHomePage() {
@@ -35,6 +43,7 @@ export default function ConfigHomePage() {
   const helpers = useHelpers();
   const blocks = useBlocks();
   const integrations = useIntegrations();
+  const deviceHealth = useDeviceHealth();
   const { recents } = useRecents();
   const recordRecent = useRecordRecent();
   const diagnostics = useQuery({
@@ -127,12 +136,6 @@ export default function ConfigHomePage() {
     (issue) =>
       !['missing_report', 'offline', 'source_error'].includes(issue.code),
   );
-  const sectionGroups = [
-    'Your home',
-    'Automations',
-    'Appearance',
-    'Maintenance',
-  ] as const;
   return (
     <div className="mx-auto grid max-w-[1600px] gap-5">
       <ConfigPageHeader
@@ -154,9 +157,14 @@ export default function ConfigHomePage() {
       </label>
       {!normalized && (
         <>
-          <SettingsSection title="Device health">
-            <AttentionDevices />
-          </SettingsSection>
+          {/* Unresolved references are listed with the configuration checks
+              below, so this only shows devices that are not reporting. */}
+          {(deviceHealth.isError ||
+            reportingAttentionKeys(deviceHealth.data).length > 0) && (
+            <SettingsSection title="Device health">
+              <AttentionDevices reportingOnly />
+            </SettingsSection>
+          )}
           {diagnostics.isError ? (
             <div className="flex items-center gap-3 rounded-md border border-border p-3 text-sm">
               <span className="flex-1">
@@ -229,7 +237,7 @@ export default function ConfigHomePage() {
         </>
       )}
       <div className="grid items-start gap-5 xl:grid-cols-2">
-        {sectionGroups.map((group) => {
+        {configSectionGroups.map((group) => {
           const sections = configSections.filter(
             (section) =>
               section.group === group &&

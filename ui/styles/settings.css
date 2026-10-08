@@ -108,8 +108,8 @@
 .scene-table-heading {
   display: grid;
   grid-template-columns:
-    minmax(150px, 1.4fr) minmax(112px, 0.9fr) minmax(96px, 0.7fr)
-    minmax(160px, 1.2fr) minmax(150px, 1.1fr) 82px var(
+    minmax(150px, 1.3fr) minmax(150px, 0.9fr) minmax(88px, 0.6fr)
+    minmax(160px, 1.2fr) minmax(150px, 1.1fr) 96px var(
       --scene-menu-col,
       2.75rem
     );
@@ -201,7 +201,9 @@
 }
 @media (min-width: 768px) {
   .settings-workspace
-    input:not([type='range']):not([type='checkbox']):not([type='radio']) {
+    input:not([type='range']):not([type='checkbox']):not([type='radio']):not(
+      [type='file']
+    ) {
     height: 36px;
   }
   .scene-target-row {

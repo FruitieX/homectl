@@ -8,6 +8,7 @@ import {
   SlidersHorizontal,
   Palette,
   Workflow,
+  Blocks,
   Variable,
   History,
   Calculator,
@@ -21,10 +22,20 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
+// Settings are grouped by the task a person is doing, and the catalog below is
+// listed in the order it appears in navigation and on the overview.
+export const configSectionGroups = [
+  'Your home',
+  'Automations',
+  'Displays',
+  'System',
+] as const;
+export type ConfigSectionGroup = (typeof configSectionGroups)[number];
+
 export type ConfigSection = {
   icon: LucideIcon;
   description: string;
-  group: 'Your home' | 'Automations' | 'Appearance' | 'Maintenance';
+  group: ConfigSectionGroup;
   href: string;
   label: string;
   keywords: string[];
@@ -32,35 +43,20 @@ export type ConfigSection = {
 
 export const configSections = [
   {
-    href: '/config/sensor-history',
-    icon: Activity,
-    label: 'Sensor activity',
-    description: 'Inspect recorded value changes across your sensors.',
-    group: 'Maintenance',
-    keywords: ['sensor', 'history', 'changes', 'events'],
+    href: '/config/groups',
+    icon: House,
+    label: 'Rooms & groups',
+    description: 'Organize devices and control them together.',
+    group: 'Your home',
+    keywords: ['rooms', 'memberships', 'devices', 'linked groups'],
   },
   {
-    href: '/config/timers',
-    icon: Timer,
-    label: 'Timers',
-    description: 'Countdowns, scheduled actions and ready-by times.',
-    group: 'Automations',
-    keywords: ['timer', 'countdown', 'car heater', 'ready by', 'schedule'],
-  },
-  {
-    href: '/config/diagnostics',
-    icon: ShieldAlert,
-    label: 'Check for problems',
-    description: 'Find broken links and get a next step for each issue.',
-    group: 'Maintenance',
-    keywords: [
-      'diagnostics',
-      'issues',
-      'broken',
-      'references',
-      'checks',
-      'warnings',
-    ],
+    href: '/config/devices',
+    icon: Lightbulb,
+    label: 'Devices',
+    description: 'Name, inspect, and organize your devices and sensors.',
+    group: 'Your home',
+    keywords: ['labels', 'sensors', 'replace', 'delete', 'device config'],
   },
   {
     href: '/config/integrations',
@@ -77,22 +73,6 @@ export const configSections = [
       'dummy',
       'circadian',
     ],
-  },
-  {
-    href: '/config/groups',
-    icon: House,
-    label: 'Rooms & groups',
-    description: 'Organize devices and control them together.',
-    group: 'Your home',
-    keywords: ['rooms', 'memberships', 'devices', 'linked groups'],
-  },
-  {
-    href: '/config/devices',
-    icon: Lightbulb,
-    label: 'Devices',
-    description: 'Name, inspect, and organize your devices and sensors.',
-    group: 'Your home',
-    keywords: ['labels', 'sensors', 'replace', 'delete', 'device config'],
   },
   {
     href: '/config/calibration',
@@ -126,19 +106,12 @@ export const configSections = [
     ],
   },
   {
-    href: '/config/blocks',
-    icon: Workflow,
-    label: 'Blocks',
-    description: 'Reuse conditions and actions across automations.',
+    href: '/config/timers',
+    icon: Timer,
+    label: 'Timers',
+    description: 'Countdowns, scheduled actions and ready-by times.',
     group: 'Automations',
-    keywords: [
-      'block',
-      'reusable',
-      'logic',
-      'parameters',
-      'actions',
-      'conditions',
-    ],
+    keywords: ['timer', 'countdown', 'car heater', 'ready by', 'schedule'],
   },
   {
     href: '/config/helpers',
@@ -158,12 +131,19 @@ export const configSections = [
     ],
   },
   {
-    href: '/config/routine-history',
-    icon: History,
-    label: 'Routine activity',
-    description: 'See what ran, what was blocked and the recorded reasons.',
+    href: '/config/blocks',
+    icon: Blocks,
+    label: 'Blocks',
+    description: 'Reuse conditions and actions across automations.',
     group: 'Automations',
-    keywords: ['history', 'audit', 'why', 'trace', 'trigger', 'diagnostics'],
+    keywords: [
+      'block',
+      'reusable',
+      'logic',
+      'parameters',
+      'actions',
+      'conditions',
+    ],
   },
   {
     href: '/config/sources',
@@ -182,19 +162,20 @@ export const configSections = [
     ],
   },
   {
-    href: '/config/sensors',
-    icon: Radio,
-    label: 'Sensor catalog',
-    description: 'Name dashboard sensors and organize their groups.',
-    group: 'Your home',
-    keywords: [
-      'sensors',
-      'catalog',
-      'temperature',
-      'humidity',
-      'influxdb',
-      'widgets',
-    ],
+    href: '/config/dashboard',
+    icon: LayoutDashboard,
+    label: 'Dashboards',
+    description: 'Manage layouts and the widgets shown on each display.',
+    group: 'Displays',
+    keywords: ['widgets', 'layouts', 'cards', 'selections', 'dashboard'],
+  },
+  {
+    href: '/config/floorplan',
+    icon: Map,
+    label: 'Floorplan',
+    description: 'Place devices and rooms on a map of your home.',
+    group: 'Displays',
+    keywords: ['map', 'grid', 'walls', 'image', 'positions'],
   },
   {
     href: '/config/widget-sources',
@@ -202,7 +183,7 @@ export const configSections = [
     label: 'Widget sources',
     description:
       'Connect weather, calendar, transport and historical sensor data.',
-    group: 'Your home',
+    group: 'Displays',
     keywords: [
       'widgets',
       'influxdb',
@@ -214,27 +195,26 @@ export const configSections = [
     ],
   },
   {
-    href: '/config/floorplan',
-    icon: Map,
-    label: 'Floorplan',
-    description: 'Place devices and rooms on a map of your home.',
-    group: 'Appearance',
-    keywords: ['map', 'grid', 'walls', 'image', 'positions'],
-  },
-  {
-    href: '/config/dashboard',
-    icon: LayoutDashboard,
-    label: 'Dashboards',
-    description: 'Manage layouts and the widgets shown on each display.',
-    group: 'Appearance',
-    keywords: ['widgets', 'layouts', 'cards', 'selections', 'dashboard'],
+    href: '/config/sensors',
+    icon: Radio,
+    label: 'Sensor catalog',
+    description: 'Name dashboard sensors and organize their groups.',
+    group: 'Displays',
+    keywords: [
+      'sensors',
+      'catalog',
+      'temperature',
+      'humidity',
+      'influxdb',
+      'widgets',
+    ],
   },
   {
     href: '/config/settings',
     icon: Settings,
     label: 'App & system',
     description: 'Adjust appearance, startup behavior, and assistant settings.',
-    group: 'Appearance',
+    group: 'System',
     keywords: [
       'appearance',
       'theme',
@@ -254,11 +234,42 @@ export const configSections = [
     ],
   },
   {
+    href: '/config/diagnostics',
+    icon: ShieldAlert,
+    label: 'Check for problems',
+    description: 'Find broken links and get a next step for each issue.',
+    group: 'System',
+    keywords: [
+      'diagnostics',
+      'issues',
+      'broken',
+      'references',
+      'checks',
+      'warnings',
+    ],
+  },
+  {
+    href: '/config/routine-history',
+    icon: History,
+    label: 'Routine activity',
+    description: 'See what ran, what was blocked and the recorded reasons.',
+    group: 'System',
+    keywords: ['history', 'audit', 'why', 'trace', 'trigger', 'diagnostics'],
+  },
+  {
+    href: '/config/sensor-history',
+    icon: Activity,
+    label: 'Sensor activity',
+    description: 'Inspect recorded value changes across your sensors.',
+    group: 'System',
+    keywords: ['sensor', 'history', 'changes', 'events'],
+  },
+  {
     href: '/config/logs',
     icon: ScrollText,
     label: 'Logs',
     description: 'Inspect technical events when troubleshooting.',
-    group: 'Maintenance',
+    group: 'System',
     keywords: ['events', 'diagnostics', 'debug', 'errors'],
   },
   {
@@ -266,7 +277,7 @@ export const configSections = [
     icon: ArchiveRestore,
     label: 'Backups & restore',
     description: 'Save, restore, or import your configuration.',
-    group: 'Maintenance',
+    group: 'System',
     keywords: [
       'backup',
       'restore',
