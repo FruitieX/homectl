@@ -4,12 +4,13 @@ import { Link } from 'react-router-dom';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { configItemHref } from '@/lib/configItemHref';
 import { getSensorDetails } from '@/lib/sensorInteraction';
+import { useSensorInteraction } from '@/hooks/useSensorInteraction';
 import { HealthEvidence } from '@/ui/settings/HealthStatus';
 import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
 import { getDeviceKey } from '@/lib/device';
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
-import { SensorActionPanel } from '@/ui/SensorActionPanel';
+import { SensorActionPanel, hasSensorControls } from '@/ui/SensorActionPanel';
 
 type Props = {
   device: Device | null;
@@ -28,10 +29,34 @@ export const SensorActionModal = ({
   onClose,
   presentation = 'default',
 }: Props) => {
-  const { advanced } = useSettingsPreferences();
   if (!open || !device) {
     return null;
   }
+  return (
+    <SensorActionModalContent
+      device={device}
+      sensorConfig={sensorConfig}
+      label={label}
+      onClose={onClose}
+      presentation={presentation}
+    />
+  );
+};
+
+const SensorActionModalContent = ({
+  device,
+  sensorConfig,
+  label,
+  onClose,
+  presentation,
+}: Omit<Props, 'device' | 'open'> & { device: Device }) => {
+  const { advanced } = useSettingsPreferences();
+  const { interaction, eventButtons } = useSensorInteraction(
+    device,
+    sensorConfig,
+  );
+  const showControls =
+    advanced || hasSensorControls(interaction.kind, eventButtons.length);
 
   const title = label ?? (device.name.trim() || device.id);
   const deviceKey = getDeviceKey(device);
@@ -57,7 +82,7 @@ export const SensorActionModal = ({
       desktopPresentation={
         presentation === 'floorplan' ? 'floorplan' : 'dialog'
       }
-      open={open}
+      open
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
           onClose();
@@ -86,6 +111,19 @@ export const SensorActionModal = ({
             <p className="break-words text-2xl font-medium">{value}</p>
           </div>
         </div>
+        {showControls && (
+          <section aria-labelledby="sensor-send-event" className="space-y-2">
+            <div>
+              <h3 id="sensor-send-event" className="text-sm font-medium">
+                Send event
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Acts like using the physical sensor: matching routines run.
+              </p>
+            </div>
+            <SensorActionPanel device={device} sensorConfig={sensorConfig} />
+          </section>
+        )}
         <HealthEvidence deviceKey={deviceKey} />
         <SensorHistoryPanel deviceKey={deviceKey} />
         <Link
@@ -95,18 +133,6 @@ export const SensorActionModal = ({
         >
           Sensor settings
         </Link>
-        {advanced && (
-          <details className="border-t border-border pt-3">
-            <summary className="cursor-pointer py-2 text-sm font-medium">
-              Send a test sensor event
-            </summary>
-            <p className="mb-4 text-xs text-amber-700 dark:text-amber-400">
-              Test events can trigger routines. They do not change the physical
-              sensor.
-            </p>
-            <SensorActionPanel device={device} sensorConfig={sensorConfig} />
-          </details>
-        )}
       </div>
     </ResponsiveOverlay>
   );

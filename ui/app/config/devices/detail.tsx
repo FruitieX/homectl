@@ -396,6 +396,21 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
                   )}
                 </pre>
               )}
+              {'Sensor' in device.data && (
+                <div className="space-y-3 border-t border-border pt-3">
+                  <div>
+                    <h3 className="text-xs font-medium">Send event</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Acts like using the physical sensor, with the saved sensor
+                      controls. Matching routines run.
+                    </p>
+                  </div>
+                  <SensorActionPanel
+                    device={device}
+                    sensorConfig={metadata.data?.sensor ?? null}
+                  />
+                </div>
+              )}
             </SettingsSection>
           </div>
           <SettingsSection id="connections" title="Connections">
@@ -589,19 +604,6 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
                   {JSON.stringify(device.raw, null, 2)}
                 </pre>
               </details>
-              {'Sensor' in device.data && (
-                <div className="space-y-3 border-t border-border pt-3">
-                  <h3 className="text-xs font-medium">Simulate sensor input</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Sends a test event immediately using the saved sensor
-                    controls. Matching routines can run.
-                  </p>
-                  <SensorActionPanel
-                    device={device}
-                    sensorConfig={metadata.data?.sensor ?? null}
-                  />
-                </div>
-              )}
               <details className="text-xs">
                 <summary className="cursor-pointer">Replace references</summary>
                 <div className="mt-3 flex flex-wrap gap-2">

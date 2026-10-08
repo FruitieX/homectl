@@ -1,5 +1,6 @@
 import { Device } from '@/bindings/Device';
 import { useAppConfig } from '@/hooks/appConfig';
+import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useSensorInteraction } from '@/hooks/useSensorInteraction';
 import {
   type DeviceSensorConfig,
@@ -55,10 +56,23 @@ export const sendSensorPayload = async (
   }
 };
 
+/** Whether a sensor has friendly controls beyond the raw JSON trigger. */
+export const hasSensorControls = (kind: string, eventButtonCount: number) =>
+  eventButtonCount > 0 ||
+  [
+    'on_off_buttons',
+    'hue_dimmer',
+    'boolean',
+    'number',
+    'text',
+    'state',
+  ].includes(kind);
+
 const controlButtonClass = 'h-11 min-h-11 rounded-md text-sm font-medium';
 
 export function SensorActionPanel({ device, sensorConfig }: Props) {
   const { apiEndpoint } = useAppConfig();
+  const { advanced } = useSettingsPreferences();
   const [customPayload, setCustomPayload] = useState('{}');
   const [numberValue, setNumberValue] = useState('0');
   const [textValue, setTextValue] = useState('');
@@ -156,16 +170,18 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-        <Badge variant="outline">
-          {getSensorInteractionLabel(resolvedInteraction.kind)}
-        </Badge>
-        <Badge variant="outline">
-          {resolvedInteraction.source === 'saved'
-            ? 'Saved mapping'
-            : 'Auto detected'}
-        </Badge>
-      </div>
+      {advanced && (
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <Badge variant="outline">
+            {getSensorInteractionLabel(resolvedInteraction.kind)}
+          </Badge>
+          <Badge variant="outline">
+            {resolvedInteraction.source === 'saved'
+              ? 'Saved mapping'
+              : 'Auto detected'}
+          </Badge>
+        </div>
+      )}
 
       {error && (
         <Alert variant="destructive" className="py-2">
@@ -173,14 +189,16 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
         </Alert>
       )}
 
-      <details className="rounded-md border border-border p-3 text-sm">
-        <summary className="cursor-pointer font-medium">
-          Current sensor payload
-        </summary>
-        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-muted-foreground">
-          {sensorPayloadJson}
-        </pre>
-      </details>
+      {advanced && (
+        <details className="rounded-md border border-border p-3 text-sm">
+          <summary className="cursor-pointer font-medium">
+            Current sensor payload
+          </summary>
+          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-muted-foreground">
+            {sensorPayloadJson}
+          </pre>
+        </details>
+      )}
 
       {resolvedInteraction.kind === 'on_off_buttons' && (
         <div className="space-y-2">
@@ -409,36 +427,38 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
         </div>
       )}
 
-      <details className="rounded-2xl border border-border bg-muted/40">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
-          Advanced JSON trigger
-        </summary>
-        <div className="space-y-3 border-t border-border px-4 py-4">
-          <Textarea
-            className="h-40 font-mono text-xs"
-            value={customPayload}
-            onChange={(e) => setCustomPayload(e.target.value)}
-          />
-          <div className="flex justify-end">
-            <Button
-              disabled={submitting}
-              onClick={() => {
-                let payload: unknown;
-                try {
-                  payload = JSON.parse(customPayload);
-                } catch {
-                  setError('Invalid JSON payload');
-                  return;
-                }
+      {advanced && (
+        <details className="rounded-2xl border border-border bg-muted/40">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+            Advanced JSON trigger
+          </summary>
+          <div className="space-y-3 border-t border-border px-4 py-4">
+            <Textarea
+              className="h-40 font-mono text-xs"
+              value={customPayload}
+              onChange={(e) => setCustomPayload(e.target.value)}
+            />
+            <div className="flex justify-end">
+              <Button
+                disabled={submitting}
+                onClick={() => {
+                  let payload: unknown;
+                  try {
+                    payload = JSON.parse(customPayload);
+                  } catch {
+                    setError('Invalid JSON payload');
+                    return;
+                  }
 
-                void runAction(payload);
-              }}
-            >
-              {submitting ? 'Sending…' : 'Send JSON'}
-            </Button>
+                  void runAction(payload);
+                }}
+              >
+                {submitting ? 'Sending…' : 'Send JSON'}
+              </Button>
+            </div>
           </div>
-        </div>
-      </details>
+        </details>
+      )}
     </div>
   );
 }
