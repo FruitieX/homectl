@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import { ChevronRight } from 'lucide-react';
 import {
   useIntegrations,
   useIntegrationConfigSchemas,
@@ -23,6 +24,7 @@ import { SettingsSection } from '@/ui/settings/SettingsSection';
 import { EntitySaveBar } from '@/ui/settings/EntitySaveBar';
 import { JsonValueEditor } from '@/ui/settings/JsonValueEditor';
 import { Input } from '@/ui/primitives/input';
+import { Switch } from '@/ui/primitives/switch';
 import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { Button } from '@/ui/primitives/button';
 import { confirmDialog } from '@/ui/primitives/confirm-dialog';
@@ -116,6 +118,16 @@ export default function IntegrationDetailPage() {
     const section = field.section ?? 'Configuration';
     groups.set(section, [...(groups.get(section) ?? []), field]);
   }
+  // Connection details come first; tuning a working connection is rarer.
+  const basicGroups = [...groups].filter(
+    ([title]) => title !== 'Advanced settings',
+  );
+  const advancedGroups = [...groups].filter(
+    ([title]) => title === 'Advanced settings',
+  );
+  const basicFieldKeys = basicGroups.flatMap(([, fields]) =>
+    fields.map((field) => field.key.replaceAll('.', '/')),
+  );
   const unknownConfig = Object.fromEntries(
     Object.entries(value?.config ?? {}).filter(
       ([name]) =>
@@ -177,7 +189,25 @@ export default function IntegrationDetailPage() {
           ? 'Legacy integration · Read-only'
           : creating
             ? 'Configure the connection, then create it when ready.'
-            : 'Saving applies the configuration and reloads this integration.'
+            : `${schema?.name ?? value?.plugin ?? 'Connection'} · Saving applies the configuration and reloads it.`
+      }
+      primaryAction={
+        value &&
+        !creating &&
+        (editable ? (
+          <label className="flex items-center gap-2 text-sm">
+            <Switch
+              checked={value.enabled}
+              aria-label="Enabled"
+              onCheckedChange={(enabled) => draft.patch({ enabled })}
+            />
+            {value.enabled ? 'Enabled' : 'Disabled'}
+          </label>
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            {value.enabled ? 'Enabled' : 'Disabled'}
+          </span>
+        ))
       }
       loading={api.loading || schemas.loading}
       error={api.error ?? schemas.error}
@@ -204,8 +234,12 @@ export default function IntegrationDetailPage() {
     >
       {value && (
         <>
-          <SettingsSection id="details" title="Details">
-            {creating ? (
+          {creating && (
+            <SettingsSection
+              id="details"
+              title="Details"
+              description={schema?.description}
+            >
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="grid gap-2 text-xs">
                   Integration ID
@@ -250,10 +284,6 @@ export default function IntegrationDetailPage() {
                   />
                 </label>
               </div>
-            ) : (
-              <p className="text-sm">{schema?.name ?? value.plugin}</p>
-            )}
-            {editable ? (
               <label className="flex items-center gap-2 text-xs">
                 <input
                   type="checkbox"
@@ -262,18 +292,16 @@ export default function IntegrationDetailPage() {
                     draft.patch({ enabled: event.target.checked })
                   }
                 />
-                {creating ? 'Enable after creating' : 'Enabled'}
+                Enable after creating
               </label>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {value.enabled ? 'Enabled' : 'Disabled'}
-              </p>
-            )}
+            </SettingsSection>
+          )}
+          {!creating && !editable && !legacy && (
             <p className="text-xs text-muted-foreground">
-              {schema?.description ??
-                'This plugin is not supported by this editor; its configuration is preserved.'}
+              This plugin is not supported by this editor; its configuration is
+              preserved.
             </p>
-          </SettingsSection>
+          )}
           {legacy ? (
             <SettingsSection id="upgrade" title="Use the current format">
               <p className="text-sm">
@@ -311,21 +339,7 @@ export default function IntegrationDetailPage() {
             </SettingsSection>
           ) : editable ? (
             <>
-              <SettingsSection
-                id="reporting"
-                title="Reporting defaults"
-                description="Missing-report policy for devices using this integration. Individual devices can override it."
-              >
-                <ReportingPolicyField
-                  value={value.reporting_policy ?? { mode: 'inherit' }}
-                  onChange={(reporting_policy) =>
-                    draft.patch({ reporting_policy })
-                  }
-                  scope="integration"
-                  draftKey={key}
-                />
-              </SettingsSection>
-              {[...groups].map(([title, fields]) => (
+              {basicGroups.map(([title, fields]) => (
                 <SettingsSection
                   key={title}
                   id={`section-${title.toLowerCase().replaceAll(' ', '-')}`}
@@ -348,39 +362,95 @@ export default function IntegrationDetailPage() {
                   </div>
                 </SettingsSection>
               ))}
-              {(advanced || Object.keys(unknownConfig).length > 0) && (
+              <AdvancedOptions
+                customized={
+                  advancedGroups.some(([, fields]) =>
+                    fields.some(
+                      (field) =>
+                        readConfigPath(value.config, field.key) !== undefined,
+                    ),
+                  ) ||
+                  (value.reporting_policy?.mode ?? 'inherit') !== 'inherit' ||
+                  Object.keys(unknownConfig).length > 0
+                }
+                forceOpen={draft.errors.some(
+                  (error) =>
+                    !basicFieldKeys.some((field) =>
+                      error.field.endsWith(field),
+                    ),
+                )}
+              >
+                {advancedGroups.map(([title, fields]) => (
+                  <SettingsSection
+                    key={title}
+                    id={`section-${title.toLowerCase().replaceAll(' ', '-')}`}
+                    title={title}
+                  >
+                    <div className="grid items-start gap-4 sm:grid-cols-2">
+                      {fields.map((field) => (
+                        <IntegrationField
+                          key={field.key}
+                          field={field}
+                          config={value.config}
+                          onChange={(config) => draft.patch({ config })}
+                          plugin={value.plugin}
+                          draftKey={key}
+                          storedSecret={
+                            value.secret_fields?.includes(field.key) ?? false
+                          }
+                        />
+                      ))}
+                    </div>
+                  </SettingsSection>
+                ))}
                 <SettingsSection
-                  id="additional"
-                  title="Additional fields"
-                  description="Extension fields remain intact when editing ordinary settings."
+                  id="reporting"
+                  title="Reporting defaults"
+                  description="Missing-report policy for devices using this integration. Individual devices can override it."
                 >
-                  <JsonValueEditor
-                    value={unknownConfig}
-                    fixedType="object"
-                    label="Additional configuration"
+                  <ReportingPolicyField
+                    value={value.reporting_policy ?? { mode: 'inherit' }}
+                    onChange={(reporting_policy) =>
+                      draft.patch({ reporting_policy })
+                    }
+                    scope="integration"
                     draftKey={key}
-                    path="config/extensions"
-                    onChange={(next) => {
-                      if (
-                        !next ||
-                        typeof next !== 'object' ||
-                        Array.isArray(next)
-                      )
-                        return;
-                      draft.patch({
-                        config: {
-                          ...Object.fromEntries(
-                            Object.entries(value.config).filter(
-                              ([name]) => !Object.hasOwn(unknownConfig, name),
-                            ),
-                          ),
-                          ...next,
-                        },
-                      });
-                    }}
                   />
                 </SettingsSection>
-              )}
+                {(advanced || Object.keys(unknownConfig).length > 0) && (
+                  <SettingsSection
+                    id="additional"
+                    title="Additional fields"
+                    description="Extension fields remain intact when editing ordinary settings."
+                  >
+                    <JsonValueEditor
+                      value={unknownConfig}
+                      fixedType="object"
+                      label="Additional configuration"
+                      draftKey={key}
+                      path="config/extensions"
+                      onChange={(next) => {
+                        if (
+                          !next ||
+                          typeof next !== 'object' ||
+                          Array.isArray(next)
+                        )
+                          return;
+                        draft.patch({
+                          config: {
+                            ...Object.fromEntries(
+                              Object.entries(value.config).filter(
+                                ([name]) => !Object.hasOwn(unknownConfig, name),
+                              ),
+                            ),
+                            ...next,
+                          },
+                        });
+                      }}
+                    />
+                  </SettingsSection>
+                )}
+              </AdvancedOptions>
             </>
           ) : (
             <SettingsSection title="Stored configuration">
@@ -404,6 +474,7 @@ export default function IntegrationDetailPage() {
                 </Button>
               }
             >
+              <AttentionDevices integration={id} compact />
               {catalog.error ? (
                 <p role="alert" className="text-xs text-destructive">
                   {catalog.error.message}
@@ -426,11 +497,6 @@ export default function IntegrationDetailPage() {
               )}
             </SettingsSection>
           )}
-          {!creating && (
-            <SettingsSection title="Device attention">
-              <AttentionDevices integration={id} />
-            </SettingsSection>
-          )}
           {editable && (
             <EntitySaveBar
               draft={draft}
@@ -443,5 +509,40 @@ export default function IntegrationDetailPage() {
         </>
       )}
     </DetailPageShell>
+  );
+}
+
+function AdvancedOptions({
+  forceOpen,
+  customized,
+  children,
+}: {
+  forceOpen: boolean;
+  /** Start open when something inside differs from the defaults. */
+  customized: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(customized);
+  const expanded = open || forceOpen;
+  return (
+    <div className="space-y-4">
+      <Button
+        type="button"
+        variant="ghost"
+        className="w-fit gap-2 px-2"
+        aria-expanded={expanded}
+        onClick={() => setOpen(!expanded)}
+      >
+        <ChevronRight
+          aria-hidden
+          className={`size-4 transition-transform ${expanded ? 'rotate-90' : ''}`}
+        />
+        Advanced options
+        <span className="text-xs font-normal text-muted-foreground">
+          Management, reporting defaults and extra fields
+        </span>
+      </Button>
+      {expanded && children}
+    </div>
   );
 }

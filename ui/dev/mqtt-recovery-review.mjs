@@ -188,6 +188,10 @@ export default async function (cdp, { width, url }) {
     await cdp.send('Page.navigate', { url: origin + path });
     await cdp.send('Page.bringToFront');
     await until(`!!${labeled('Host', 'input')}`, 'Integration ready');
+    // Advanced options start open only when something in them is customized.
+    await evaluate(
+      `[...document.querySelectorAll('button[aria-expanded="false"]')].find((b) => b.textContent.includes('Advanced options'))?.click()`,
+    );
     await pick('Missing-report warnings', 'Expect regular reports');
     await type('Expected reporting interval (seconds)', '3600');
     await pick('Missing-report warnings', 'Ignore missing reports');

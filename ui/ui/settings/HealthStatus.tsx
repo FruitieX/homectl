@@ -129,8 +129,11 @@ export function reportingAttentionKeys(data?: DeviceHealthSnapshot) {
 export function AttentionDevices({
   integration,
   reportingOnly = false,
+  compact = false,
 }: {
   integration?: string;
+  /** Render nothing while there is nothing to report. */
+  compact?: boolean;
   /** Leave out unresolved references, for pages that list them separately. */
   reportingOnly?: boolean;
 }) {
@@ -160,9 +163,10 @@ export function AttentionDevices({
       </p>
     );
   if (query.isLoading)
-    return (
+    return compact ? null : (
       <p className="text-sm text-muted-foreground">Checking device reports…</p>
     );
+  if (compact && !keys.length) return null;
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
