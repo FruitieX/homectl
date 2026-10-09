@@ -61,7 +61,7 @@ sea-orm-migration = { version = "=2.0.4", features = [
 ] }
 once_cell = "=1.21.4"
 rumqttc = { version = "=0.25.1", default-features = false }
-toml = "=1.1.7"
+toml = "=1.1.8"
 ts-rs = { version = "=12.0.1", features = [
   "ordered-float-impl",
   "no-serde-warnings",
