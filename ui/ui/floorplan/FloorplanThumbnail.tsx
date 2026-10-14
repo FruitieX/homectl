@@ -1,4 +1,11 @@
+import { useId } from 'react';
+
 import type { FloorplanScene } from '@/lib/floorplan-scene';
+import {
+  getLightAlpha,
+  lightGradientStops,
+  toneMapLightRgb,
+} from '@/lib/floorplan-light';
 import { reachabilityLabels } from '@/lib/deviceReachability';
 import { sensorMarkerPaths } from '@/lib/sensorMarker';
 
@@ -18,7 +25,11 @@ export function FloorplanThumbnail({
     width: scene.width,
     height: scene.height,
   };
+  const idPrefix = `fpt${useId().replace(/[^\w-]/g, '')}`;
   const radius = Math.max(view.width, view.height) * 0.028;
+  const glowingLights = scene.lights.filter(
+    (light) => light.power && light.intensity > 0 && light.radius > 0,
+  );
   const colors = {
     empty: 'transparent',
     floor: 'hsl(var(--muted))',
@@ -59,6 +70,53 @@ export function FloorplanThumbnail({
             }
           />
         ))}
+      {glowingLights.length > 0 && (
+        <g aria-hidden="true">
+          {glowingLights.map((light, index) => {
+            const id = `${idPrefix}-glow-${index}`;
+            const polygon =
+              light.visibilityPolygon && light.visibilityPolygon.length >= 3
+                ? light.visibilityPolygon
+                : null;
+            return (
+              <g key={light.deviceKey}>
+                <defs>
+                  <radialGradient id={`${id}-fill`}>
+                    {lightGradientStops.map(([offset, opacity]) => (
+                      <stop
+                        key={offset}
+                        offset={offset}
+                        stopColor={`rgb(${toneMapLightRgb(
+                          light.color,
+                          light.intensity,
+                        ).join(',')})`}
+                        stopOpacity={opacity}
+                      />
+                    ))}
+                  </radialGradient>
+                  {polygon && (
+                    <clipPath id={`${id}-clip`}>
+                      <polygon
+                        points={polygon
+                          .map((point) => `${point.x},${point.y}`)
+                          .join(' ')}
+                      />
+                    </clipPath>
+                  )}
+                </defs>
+                <circle
+                  cx={light.x}
+                  cy={light.y}
+                  r={light.radius}
+                  fill={`url(#${id}-fill)`}
+                  opacity={getLightAlpha(light.intensity)}
+                  clipPath={polygon ? `url(#${id}-clip)` : undefined}
+                />
+              </g>
+            );
+          })}
+        </g>
+      )}
       {scene.lights.map((light) => {
         const disabled = light.health === 'disabled';
         const attention =

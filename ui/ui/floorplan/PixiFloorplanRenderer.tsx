@@ -12,6 +12,11 @@ import { useEffect, useRef } from 'react';
 
 import { cn } from '@/lib/cn';
 import { floorplanLabels } from '@/lib/floorplan-labels';
+import {
+  getLightAlpha,
+  lightGradientStops,
+  toneMapLightRgb,
+} from '@/lib/floorplan-light';
 import { quickControlDismissGuard } from '@/lib/quickControlDismiss';
 import { sensorMarkerSvg, type SensorMarkerKind } from '@/lib/sensorMarker';
 import {
@@ -221,35 +226,11 @@ function rgbToHex(rgb: readonly [number, number, number]) {
   return (red << 16) + (green << 8) + blue;
 }
 
-function srgbToLinear(component: number) {
-  const normalized = Math.max(0, Math.min(255, component)) / 255;
-  return normalized <= 0.04045
-    ? normalized / 12.92
-    : ((normalized + 0.055) / 1.055) ** 2.4;
-}
-
-function linearToSrgb(component: number) {
-  const clamped = Math.max(0, component);
-  const encoded =
-    clamped <= 0.0031308
-      ? clamped * 12.92
-      : 1.055 * clamped ** (1 / 2.4) - 0.055;
-  return Math.max(0, Math.min(255, encoded * 255));
-}
-
 function toneMapLightColor(
   rgb: readonly [number, number, number],
   intensity: number,
 ) {
-  const exposure = 0.65 + intensity * 0.55;
-  const linear = rgb.map((component) => srgbToLinear(component) * exposure);
-  const toneMapped = linear.map((component) => component / (1 + component));
-
-  return rgbToHex([
-    linearToSrgb(toneMapped[0] ?? 0),
-    linearToSrgb(toneMapped[1] ?? 0),
-    linearToSrgb(toneMapped[2] ?? 0),
-  ]);
+  return rgbToHex(toneMapLightRgb(rgb, intensity));
 }
 
 function hslToHex(hue: number, saturation: number, lightness: number) {
@@ -342,11 +323,9 @@ function getLightGradientTexture(size: number) {
     center,
     center,
   );
-  gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-  gradient.addColorStop(0.18, 'rgba(255, 255, 255, 0.72)');
-  gradient.addColorStop(0.48, 'rgba(255, 255, 255, 0.28)');
-  gradient.addColorStop(0.78, 'rgba(255, 255, 255, 0.07)');
-  gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  for (const [offset, opacity] of lightGradientStops) {
+    gradient.addColorStop(offset, `rgba(255, 255, 255, ${opacity})`);
+  }
 
   context.fillStyle = gradient;
   context.fillRect(0, 0, size, size);
@@ -354,10 +333,6 @@ function getLightGradientTexture(size: number) {
   const texture = Texture.from(canvas);
   lightGradientTextureCache.set(size, texture);
   return texture;
-}
-
-function getLightAlpha(intensity: number) {
-  return Math.min(0.58, 0.14 + intensity * 0.36);
 }
 
 function createVisibilityMask(light: FloorplanScene['lights'][number]) {
