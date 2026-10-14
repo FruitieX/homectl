@@ -2,64 +2,91 @@ import { getGroupOutline } from './floorplan-group-outline.ts';
 
 export const GROUP_LABEL_FONT_SIZE = 13;
 export const GROUP_LABEL_LINE_HEIGHT = GROUP_LABEL_FONT_SIZE + 3;
+/** Screen-space padding around the text, matching the drawn chip. */
+export const GROUP_LABEL_PADDING_X = 4;
+export const GROUP_LABEL_PADDING_Y = 3;
 
 type Point = { x: number; y: number };
-type Label = {
-  lines: string[];
+type Rect = { x: number; y: number; width: number; height: number };
+
+export type GroupLabelInput = {
+  id: string;
+  cells: readonly Point[];
+  text: string;
+  /** Higher wins a collision; ties go to the larger mask. */
+  priority?: number;
+};
+
+/** x/y is the chip's center in scene units; width/height are screen pixels. */
+export type GroupLabel = {
+  id: string;
+  text: string;
   x: number;
   y: number;
   width: number;
   height: number;
 };
 
-function wrap(
-  text: string,
-  width: number,
-  measure: (text: string) => number,
-): string[] {
-  const lines: string[] = [];
-  let line = '';
-  for (const word of text.trim().split(/\s+/)) {
-    if (line && measure(line + ' ' + word) <= width) {
-      line += ' ' + word;
-      continue;
+// A room must be at least this big on screen before its name is shown.
+const MIN_ROOM_WIDTH = 24;
+const MIN_ROOM_HEIGHT = GROUP_LABEL_LINE_HEIGHT;
+// Labels may spill out of their room, but never grow past this.
+const MAX_LABEL_WIDTH = 200;
+const LABEL_GAP = 4;
+const MARKER_RADIUS = 12;
+const MAX_CANDIDATES = 400;
+
+type Candidates = { room: Rect; points: Point[] };
+const candidateCache = new WeakMap<
+  readonly Point[],
+  Map<string, Candidates | null>
+>();
+
+/**
+ * The mask's roomiest open rectangle, plus every cell center and the
+ * midpoints between neighboring cells, nearest to that rectangle first. All
+ * in scene units and independent of zoom, so a label only moves when a closer
+ * spot gets blocked.
+ */
+function getCandidates(
+  cells: readonly Point[],
+  tileWidth: number,
+  tileHeight: number,
+): Candidates | null {
+  const key = `${tileWidth}:${tileHeight}`;
+  const cachedResult = candidateCache.get(cells)?.get(key);
+  if (cachedResult !== undefined) return cachedResult;
+  const room = getRoomiestRect(cells, tileWidth, tileHeight);
+  let result: Candidates | null = null;
+  if (room) {
+    const occupied = new Set(cells.map((p) => `${p.x},${p.y}`));
+    const points: Point[] = [];
+    for (const cell of cells) {
+      const cx = (cell.x + 0.5) * tileWidth,
+        cy = (cell.y + 0.5) * tileHeight;
+      points.push({ x: cx, y: cy });
+      if (occupied.has(`${cell.x + 1},${cell.y}`))
+        points.push({ x: cx + tileWidth / 2, y: cy });
+      if (occupied.has(`${cell.x},${cell.y + 1}`))
+        points.push({ x: cx, y: cy + tileHeight / 2 });
     }
-    if (line) lines.push(line);
-    line = '';
-    // Long names without spaces can wrap too.
-    for (const character of word) {
-      if (line && measure(line + character) > width) {
-        lines.push(line);
-        line = '';
-      }
-      line += character;
-    }
+    const distance = (p: Point) => Math.hypot(p.x - room.x, p.y - room.y);
+    points.sort((a, b) => distance(a) - distance(b) || a.y - b.y || a.x - b.x);
+    result = { room, points: [room, ...points.slice(0, MAX_CANDIDATES)] };
   }
-  if (line) lines.push(line);
-  return lines;
+  const byTile =
+    candidateCache.get(cells) ?? new Map<string, Candidates | null>();
+  byTile.set(key, result);
+  candidateCache.set(cells, byTile);
+  return result;
 }
 
-/** Wrap in a stable mask rectangle. x is its center; y is the text's top edge. */
-export function getGroupLabelLayout({
-  cells,
-  text,
-  tileWidth,
-  tileHeight,
-  scale,
-  measure,
-  fontSize = GROUP_LABEL_FONT_SIZE,
-  avoid = [],
-}: {
-  cells: readonly Point[];
-  text: string;
-  tileWidth: number;
-  tileHeight: number;
-  scale: number;
-  measure: (text: string) => number;
-  fontSize?: number;
-  avoid?: readonly Point[];
-}): Label | null {
-  if (!text.trim() || scale <= 0) return null;
+/** The mask's largest roughly label-shaped open rectangle, in scene units. */
+function getRoomiestRect(
+  cells: readonly Point[],
+  tileWidth: number,
+  tileHeight: number,
+): Rect | null {
   const rows = getGroupOutline(cells).labelRows;
   const byY = new Map<number, typeof rows>();
   for (const row of rows) {
@@ -67,15 +94,11 @@ export function getGroupLabelLayout({
     spans.push(row);
     byY.set(row.y, spans);
   }
-  // Choose the anchor in scene units, independent of zoom or wrapping.
-  const padding = 6;
-  // Prefer wide spans near the top. Bound the search for very large masks.
+  // Grow each span downwards; bound the search for very large masks.
   const starts = [...rows]
     .sort((a, b) => b.width - a.width || a.y - b.y)
     .slice(0, 64);
-  let best: { x: number; y: number; width: number; height: number } | null =
-      null,
-    bestScore = -Infinity;
+  const found: (Rect & { area: number; top: number })[] = [];
   for (const start of starts) {
     let left = start.x,
       right = start.x + start.width;
@@ -93,41 +116,164 @@ export function getGroupLabelLayout({
         left = Math.max(left, next.x);
         right = Math.min(right, next.x + next.width);
       }
-      const width = (right - left) * tileWidth - 2 * padding;
-      const height = (y - start.y + 1) * tileHeight - 2 * padding;
-      if (width <= 0) break;
-      if (height > 0) {
-        const x = ((left + right) * tileWidth) / 2;
-        const top = (start.y - 0.5) * tileHeight + padding;
-        const reservedHeight = Math.min(height, 4 * (fontSize + 3));
-        const collision = avoid.some(
-          (p) =>
-            Math.abs(p.x - x) < width / 2 + 20 &&
-            Math.abs(p.y - (top + reservedHeight / 2)) <
-              reservedHeight / 2 + 24,
-        );
-        const score = width * reservedHeight - (collision ? 1e9 : 0) - start.y;
-        if (
-          score > bestScore ||
-          (score === bestScore && height > best!.height)
-        ) {
-          bestScore = score;
-          best = { x, y: top, width, height };
-        }
-      }
+      const width = (right - left) * tileWidth;
+      const height = (y - start.y + 1) * tileHeight;
+      found.push({
+        x: ((left + right) * tileWidth) / 2,
+        y: (start.y - 0.5) * tileHeight + height / 2,
+        width,
+        height,
+        // Prefer roomy, roughly label-shaped areas over long thin strips.
+        area: Math.min(width, 4 * height) * Math.min(height, width),
+        top: start.y,
+      });
     }
   }
-  if (!best || best.width * scale < 24) return null;
-  const lineHeight = (fontSize + 3) / scale;
-  const count = Math.min(4, Math.floor(best.height / lineHeight));
-  if (!count) return null;
-  const all = wrap(text, best.width * scale, measure),
-    lines = all.slice(0, count);
-  if (all.length > count) {
-    let last = Array.from(lines.at(-1)!);
-    while (last.length && measure(last.join('') + '…') > best.width * scale)
-      last.pop();
-    lines[lines.length - 1] = last.join('') + '…';
+  found.sort((a, b) => b.area - a.area || a.top - b.top || a.x - b.x);
+  const best = found[0];
+  return best
+    ? { x: best.x, y: best.y, width: best.width, height: best.height }
+    : null;
+}
+
+/**
+ * Fit text on one line: drop whole words first and only cut inside a word
+ * when even the first word is too long. Either way an ellipsis marks it.
+ */
+function fitText(
+  text: string,
+  maxWidth: number,
+  measure: (text: string) => number,
+): string | null {
+  const full = text.trim().replace(/\s+/g, ' ');
+  if (!full) return null;
+  if (measure(full) <= maxWidth) return full;
+  const words = full.split(' ');
+  for (let count = words.length - 1; count > 0; count--) {
+    const candidate = words.slice(0, count).join(' ') + '…';
+    if (measure(candidate) <= maxWidth) return candidate;
   }
-  return { ...best, lines, height: lines.length * lineHeight };
+  const characters = Array.from(words[0]);
+  while (characters.length > 1) {
+    characters.pop();
+    if (measure(characters.join('') + '…') <= maxWidth)
+      return characters.join('') + '…';
+  }
+  return null;
+}
+
+function overlaps(a: Rect, b: Rect, gap: number) {
+  return (
+    Math.abs(a.x - b.x) * 2 < a.width + b.width + 2 * gap &&
+    Math.abs(a.y - b.y) * 2 < a.height + b.height + 2 * gap
+  );
+}
+
+type Marker = Point & { radius?: number };
+
+function hitsMarker(box: Rect, marker: Point, radius: number) {
+  const dx = Math.max(Math.abs(marker.x - box.x) - box.width / 2, 0);
+  const dy = Math.max(Math.abs(marker.y - box.y) - box.height / 2, 0);
+  return dx * dx + dy * dy < radius * radius;
+}
+
+/**
+ * Place every group's name as a single-line chip. Labels may overflow their
+ * room, never overlap each other, and move off device markers to the nearest
+ * clear spot in their room. Rooms too small to read at this zoom, or with no
+ * spot left by larger rooms, get no label rather than a broken one.
+ */
+export function layoutGroupLabels({
+  groups,
+  tileWidth,
+  tileHeight,
+  scale,
+  measure,
+  avoid = [],
+  markerRadius = MARKER_RADIUS,
+  bounds,
+}: {
+  groups: readonly GroupLabelInput[];
+  tileWidth: number;
+  tileHeight: number;
+  scale: number;
+  /** Text width in screen pixels. */
+  measure: (text: string) => number;
+  /** Marker centers, and optionally radii, in scene units. */
+  avoid?: readonly Marker[];
+  /** Screen-pixel radius for markers without their own. */
+  markerRadius?: number;
+  /** Scene size; chips are kept inside it. */
+  bounds?: { width: number; height: number };
+}): GroupLabel[] {
+  if (scale <= 0) return [];
+  const markers = avoid.map((p) => ({
+    x: p.x * scale,
+    y: p.y * scale,
+    radius: p.radius === undefined ? markerRadius : p.radius * scale,
+  }));
+  const ordered = groups
+    .filter((group) => group.cells.length && group.text.trim())
+    .flatMap((group) => {
+      const candidates = getCandidates(group.cells, tileWidth, tileHeight);
+      return candidates &&
+        candidates.room.width * scale >= MIN_ROOM_WIDTH &&
+        candidates.room.height * scale >= MIN_ROOM_HEIGHT
+        ? [{ group, points: candidates.points }]
+        : [];
+    })
+    .sort(
+      (a, b) =>
+        (b.group.priority ?? 0) - (a.group.priority ?? 0) ||
+        b.group.cells.length - a.group.cells.length ||
+        a.group.id.localeCompare(b.group.id),
+    );
+
+  const placed: (Rect & { label: GroupLabel })[] = [];
+  for (const { group, points } of ordered) {
+    const text = fitText(
+      group.text,
+      MAX_LABEL_WIDTH - 2 * GROUP_LABEL_PADDING_X,
+      measure,
+    );
+    if (!text) continue;
+    const width = measure(text) + 2 * GROUP_LABEL_PADDING_X;
+    const height = GROUP_LABEL_LINE_HEIGHT + 2 * GROUP_LABEL_PADDING_Y;
+    // Prefer the nearest spot clear of markers, else the one covering fewest.
+    let best: Rect | null = null,
+      bestHits = Infinity;
+    for (const point of points) {
+      let x = point.x * scale;
+      let y = point.y * scale;
+      if (bounds) {
+        const maxX = bounds.width * scale - width / 2;
+        const maxY = bounds.height * scale - height / 2;
+        if (maxX >= width / 2) x = Math.min(Math.max(x, width / 2), maxX);
+        if (maxY >= height / 2) y = Math.min(Math.max(y, height / 2), maxY);
+      }
+      const box = { x, y, width, height };
+      if (placed.some((other) => overlaps(box, other, LABEL_GAP))) continue;
+      let hits = 0;
+      for (const marker of markers)
+        if (hitsMarker(box, marker, marker.radius) && ++hits >= bestHits) break;
+      if (hits < bestHits) {
+        best = box;
+        bestHits = hits;
+        if (!hits) break;
+      }
+    }
+    if (!best) continue;
+    placed.push({
+      ...best,
+      label: {
+        id: group.id,
+        text,
+        x: best.x / scale,
+        y: best.y / scale,
+        width,
+        height,
+      },
+    });
+  }
+  return placed.map(({ label }) => label);
 }

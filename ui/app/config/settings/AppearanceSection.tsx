@@ -1,7 +1,11 @@
 import { useMemo } from 'react';
 import { Switch } from '@/ui/primitives/switch';
 import { useAtom } from 'jotai';
-import { accentAtom, densityAtom } from '@/hooks/preferences';
+import {
+  accentAtom,
+  densityAtom,
+  previewLabelsAtom,
+} from '@/hooks/preferences';
 import { useTheme } from '@/hooks/theme';
 import { useBackdropBlurEffects } from '@/hooks/visualEffects';
 import { useDeveloperMode } from '@/hooks/developerMode';
@@ -15,11 +19,12 @@ export function AppearanceSection() {
   const [theme, setTheme] = useTheme();
   const [accent, setAccent] = useAtom(accentAtom);
   const [density, setDensity] = useAtom(densityAtom);
+  const [previewLabels, setPreviewLabels] = useAtom(previewLabelsAtom);
   const [blur, setBlur] = useBackdropBlurEffects();
   const [developerMode, setDeveloperMode] = useDeveloperMode();
   const saved = useMemo(
-    () => ({ theme, accent, density, blur, developerMode }),
-    [theme, accent, density, blur, developerMode],
+    () => ({ theme, accent, density, blur, previewLabels, developerMode }),
+    [theme, accent, density, blur, previewLabels, developerMode],
   );
   const draft = useEntityDraft({
     key: 'browser/appearance',
@@ -37,6 +42,7 @@ export function AppearanceSection() {
       setAccent(value.accent);
       setDensity(value.density);
       setBlur(value.blur);
+      setPreviewLabels(value.previewLabels);
       setDeveloperMode(value.developerMode);
       return value;
     },
@@ -131,6 +137,23 @@ export function AppearanceSection() {
               <strong className="font-medium">Blur effects</strong>
               <span className="mt-1 block text-xs text-muted-foreground">
                 Turn off if scrolling stutters on this device.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 text-sm">
+            <Switch
+              aria-label="Labels on room previews"
+              className="mt-0.5"
+              checked={value.previewLabels}
+              onCheckedChange={(checked) =>
+                draft.patch({ previewLabels: checked })
+              }
+            />
+            <span>
+              <strong className="font-medium">Labels on room previews</strong>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Show the floorplan&apos;s labels on room cards and dashboard
+                room widgets. The full floorplan always shows them.
               </span>
             </span>
           </label>

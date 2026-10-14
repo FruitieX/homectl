@@ -18,6 +18,9 @@ import { useAllFloorplans } from '@/hooks/useStoredFloorplan';
 import { useDevicesByKeysState, useGroupsState } from '@/hooks/websocket';
 import { cn } from '@/lib/cn';
 import { buildFloorplanScene } from '@/lib/floorplan-scene';
+import { hiddenFloorplanLabels } from '@/lib/floorplan-labels';
+import { previewLabelsAtom } from '@/hooks/preferences';
+import { useAtomValue } from 'jotai';
 import {
   getFloorplanDevicePositions,
   getFloorplanRenderMetrics,
@@ -140,29 +143,32 @@ export function GroupFloorplanPreview({
       ),
     [displayNames],
   );
-  const scene = useMemo(
-    () =>
-      buildFloorplanScene({
-        healthByDevice,
-        grid: selectedFloorplan?.grid ?? null,
-        image,
-        devices,
-        groups: groups ?? {},
-        displayNames: displayNameMap,
-        sensorConfigs: sensorConfigMap,
-        deviceKeys: placedKeys,
-      }),
-    [
+  const showLabels = useAtomValue(previewLabelsAtom);
+  const scene = useMemo(() => {
+    const built = buildFloorplanScene({
       healthByDevice,
-      selectedFloorplan,
+      grid: selectedFloorplan?.grid ?? null,
       image,
       devices,
-      groups,
-      displayNameMap,
-      sensorConfigMap,
-      placedKeys,
-    ],
-  );
+      groups: groups ?? {},
+      displayNames: displayNameMap,
+      sensorConfigs: sensorConfigMap,
+      deviceKeys: placedKeys,
+    });
+    return showLabels
+      ? built
+      : { ...built, labelVisibility: hiddenFloorplanLabels() };
+  }, [
+    showLabels,
+    healthByDevice,
+    selectedFloorplan,
+    image,
+    devices,
+    groups,
+    displayNameMap,
+    sensorConfigMap,
+    placedKeys,
+  ]);
   const focusBounds = useMemo(() => {
     if (!selectedFloorplan?.grid || !selection) {
       return null;

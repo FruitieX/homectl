@@ -20,7 +20,7 @@ import {
 import { quickControlDismissGuard } from '@/lib/quickControlDismiss';
 import { sensorMarkerSvg, type SensorMarkerKind } from '@/lib/sensorMarker';
 import {
-  getGroupLabelLayout,
+  layoutGroupLabels,
   GROUP_LABEL_FONT_SIZE,
   GROUP_LABEL_LINE_HEIGHT,
 } from '@/lib/floorplan-group-label';
@@ -170,6 +170,7 @@ const maxScale = 8;
 // Labels stay at a fixed screen size; supersample their small textures so
 // fractional map positions remain legible without zoom-dependent font metrics.
 const labelResolution = 2;
+const groupLabelFontFamily = 'Inter, ui-sans-serif, system-ui, sans-serif';
 const lightGradientTextureCache = new Map<number, Texture>();
 const objectIdentityCache = new WeakMap<object, number>();
 let nextObjectIdentity = 1;
@@ -504,50 +505,77 @@ function getGroupDrawKey(
   return `${scene.layoutKey}:${getObjectIdentity(group.cells)}:${scene.tileWidth}:${scene.tileHeight}:${selected}:${viewScale}`;
 }
 
-function syncGroupLabel(
-  entry: GroupRenderEntry,
-  group: FloorplanScene['groups'][number],
+let labelMeasureContext: CanvasRenderingContext2D | null | undefined;
+const labelWidths = new Map<string, number>();
+
+function measureGroupLabel(text: string) {
+  const cached = labelWidths.get(text);
+  if (cached !== undefined) return cached;
+  if (labelMeasureContext === undefined) {
+    labelMeasureContext = document.createElement('canvas').getContext('2d');
+    if (labelMeasureContext)
+      labelMeasureContext.font = `600 ${GROUP_LABEL_FONT_SIZE}px ${groupLabelFontFamily}`;
+  }
+  const width =
+    labelMeasureContext?.measureText(text).width ??
+    text.length * GROUP_LABEL_FONT_SIZE * 0.6;
+  labelWidths.set(text, width);
+  return width;
+}
+
+function syncGroupLabels(
+  renderState: SceneRenderState,
   scene: FloorplanScene,
+  selectedSet: ReadonlySet<string>,
   viewScale: number,
   visible: boolean,
 ) {
   const scale = Math.max(viewScale, 0.0001);
-  const label = entry.label;
-  label.text = group.name;
-  label.scale.set(1 / scale);
-  label.visible = false;
-  entry.labelBackground.visible = false;
+  for (const entry of renderState.groupEntries.values()) {
+    entry.label.visible = false;
+    entry.labelBackground.visible = false;
+  }
   if (!visible) return;
-  const layout = getGroupLabelLayout({
-    cells: group.cells,
-    text: group.name,
+  const layouts = layoutGroupLabels({
+    groups: scene.groups.map((group) => ({
+      id: group.groupId,
+      cells: group.cells,
+      text: group.name,
+      priority: group.deviceKeys.some((key) => selectedSet.has(key)) ? 1 : 0,
+    })),
     tileWidth: scene.tileWidth,
     tileHeight: scene.tileHeight,
     scale,
-    measure: (text) => {
-      label.text = text;
-      return label.width * scale;
-    },
-    avoid: [...scene.lights, ...scene.sensors],
+    measure: measureGroupLabel,
+    // Marker sizes match syncMarkers, in scene units.
+    avoid: [
+      ...scene.lights.map(({ x, y }) => ({ x, y, radius: 19 })),
+      ...scene.sensors.map(({ x, y, scale }) => ({ x, y, radius: 16 * scale })),
+    ],
+    bounds: scene,
   });
-  if (!layout) return;
-  label.text = layout.lines.join('\n');
-  label.position.set(layout.x, layout.y);
-  entry.labelBackground
-    .clear()
-    .roundRect(
-      (-label.width * scale) / 2 - 4,
-      -3,
-      label.width * scale + 8,
-      label.height * scale + 6,
-      4,
-    )
-    .fill({ color: 0xffffff, alpha: 0.95 })
-    .stroke({ color: 0x829187, alpha: 0.3, width: 1 });
-  entry.labelBackground.position.set(layout.x, layout.y);
-  entry.labelBackground.scale.set(1 / scale);
-  entry.labelBackground.visible = true;
-  label.visible = true;
+  for (const layout of layouts) {
+    const entry = renderState.groupEntries.get(layout.id);
+    if (!entry) continue;
+    entry.label.text = layout.text;
+    entry.label.scale.set(1 / scale);
+    entry.label.position.set(layout.x, layout.y);
+    entry.labelBackground
+      .clear()
+      .roundRect(
+        -layout.width / 2,
+        -layout.height / 2,
+        layout.width,
+        layout.height,
+        4,
+      )
+      .fill({ color: 0xffffff, alpha: 0.95 })
+      .stroke({ color: 0x829187, alpha: 0.3, width: 1 });
+    entry.labelBackground.position.set(layout.x, layout.y);
+    entry.labelBackground.scale.set(1 / scale);
+    entry.labelBackground.visible = true;
+    entry.label.visible = true;
+  }
 }
 
 function syncGroups(
@@ -567,7 +595,7 @@ function syncGroups(
         text: group.name,
         resolution: labelResolution,
         style: {
-          fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+          fontFamily: groupLabelFontFamily,
           fontSize: GROUP_LABEL_FONT_SIZE,
           fontWeight: '600',
           fill: 0x20342b,
@@ -576,7 +604,7 @@ function syncGroups(
           padding: 2,
         },
       });
-      label.anchor.set(0.5, 0);
+      label.anchor.set(0.5, 0.5);
       label.alpha = 1;
       entry = {
         drawKey: '',
@@ -605,13 +633,6 @@ function syncGroups(
         viewScale,
       );
     }
-    syncGroupLabel(
-      entry,
-      group,
-      scene,
-      viewScale,
-      renderLabels && floorplanLabels(scene).groups,
-    );
   }
 
   for (const [groupId, entry] of renderState.groupEntries) {
@@ -631,6 +652,14 @@ function syncGroups(
     destroyDisplayObject(entry.label);
     renderState.groupEntries.delete(groupId);
   }
+
+  syncGroupLabels(
+    renderState,
+    scene,
+    selectedSet,
+    viewScale,
+    renderLabels && floorplanLabels(scene).groups,
+  );
 }
 
 function syncLightMask(
@@ -898,13 +927,13 @@ function createSensorLabel(sensor: FloorplanScene['sensors'][number]) {
     style: {
       align: 'center',
       fill: 0x20342b,
-      fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+      fontFamily: groupLabelFontFamily,
       fontSize: 11 * sensor.scale,
       fontWeight: '500',
       padding: 2,
     },
   });
-  label.anchor.set(0.5, 0);
+  label.anchor.set(0.5, 0.5);
   container.addChild(label);
 
   const statusBackground = new Graphics();
@@ -956,7 +985,7 @@ function syncSensorLabel(
       style: {
         align: 'center',
         fill: 0xffffff,
-        fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+        fontFamily: groupLabelFontFamily,
         fontSize: 9 * sensor.scale,
         fontWeight: '800',
         padding: 2,

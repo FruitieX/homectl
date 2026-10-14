@@ -24,9 +24,8 @@ import {
 import { floorplanLabels } from '@/lib/floorplan-labels';
 import { sensorMarkerPaths, type SensorMarkerKind } from '@/lib/sensorMarker';
 import {
-  getGroupLabelLayout,
+  layoutGroupLabels,
   GROUP_LABEL_FONT_SIZE,
-  GROUP_LABEL_LINE_HEIGHT,
 } from '@/lib/floorplan-group-label';
 import { getFloorplanRenderMetrics } from '@/lib/floorplan-metrics';
 import {
@@ -420,8 +419,6 @@ export function FloorplanEditorCanvas({
         }
       ctx.globalAlpha = 1;
     }
-    const groupLabels: NonNullable<ReturnType<typeof getGroupLabelLayout>>[] =
-      [];
     if (layers.rooms)
       for (const [id, points] of Object.entries(grid.groups)) {
         ctx.fillStyle = getFloorplanGroupFill(
@@ -434,27 +431,30 @@ export function FloorplanEditorCanvas({
           ctx.lineWidth = 1 / view.scale;
           for (const p of points) ctx.strokeRect(p.x * tw, p.y * th, tw, th);
         }
-        if (floorplanLabels(grid).groups && points.length) {
-          ctx.save();
-          const fontSize = GROUP_LABEL_FONT_SIZE;
-          ctx.font = '600 ' + fontSize + 'px system-ui';
-          const label = getGroupLabelLayout({
-            cells: points,
-            text: groups.find((g) => g.id === id)?.name ?? id,
+      }
+    ctx.save();
+    ctx.font = `600 ${GROUP_LABEL_FONT_SIZE}px system-ui`;
+    const groupLabels =
+      layers.rooms && floorplanLabels(grid).groups
+        ? layoutGroupLabels({
+            groups: Object.entries(grid.groups).map(([id, cells]) => ({
+              id,
+              cells,
+              text: groups.find((g) => g.id === id)?.name ?? id,
+              priority: roomSelected && id === room ? 1 : 0,
+            })),
             tileWidth: tw,
             tileHeight: th,
             scale: view.scale,
-            fontSize,
             measure: (text) => ctx.measureText(text).width,
             avoid: grid.devices.map((device) => ({
               x: (device.x + 0.5) * tw,
               y: (device.y + 0.5) * th,
             })),
-          });
-          if (label) groupLabels.push(label);
-          ctx.restore();
-        }
-      }
+            bounds: { width: metrics.width, height: metrics.height },
+          })
+        : [];
+    ctx.restore();
     if (layers.grid && tw * view.scale > 3) {
       ctx.strokeStyle = '#91a69b66';
       ctx.lineWidth = 0.5 / view.scale;
@@ -478,15 +478,12 @@ export function FloorplanEditorCanvas({
       ctx.translate(label.x, label.y);
       ctx.scale(1 / view.scale, 1 / view.scale);
       ctx.font = `600 ${GROUP_LABEL_FONT_SIZE}px system-ui`;
-      const width = Math.max(
-        ...label.lines.map((line) => ctx.measureText(line).width),
-      );
       ctx.beginPath();
       ctx.roundRect(
-        -width / 2 - 4,
-        -3,
-        width + 8,
-        label.lines.length * GROUP_LABEL_LINE_HEIGHT + 6,
+        -label.width / 2,
+        -label.height / 2,
+        label.width,
+        label.height,
         4,
       );
       ctx.fillStyle = 'rgba(255,255,255,.95)';
@@ -495,11 +492,9 @@ export function FloorplanEditorCanvas({
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
+      ctx.textBaseline = 'middle';
       ctx.fillStyle = '#20342b';
-      label.lines.forEach((line, i) =>
-        ctx.fillText(line, 0, i * GROUP_LABEL_LINE_HEIGHT),
-      );
+      ctx.fillText(label.text, 0, 0);
       ctx.restore();
     }
     const marker = (x: number, y: number, key: string) => {

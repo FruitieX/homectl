@@ -384,7 +384,11 @@ placement mask (`grid.groups[groupId]`) when one exists, otherwise by which
 floorplan holds the most of the group's nested-resolved member devices, with
 deterministic tie-breaks. Static previews use SVG and frame placed member devices
 plus padding, falling back to a placement mask's bounds when it has no devices.
-Groups with neither placements nor a mask render no preview. Shared queries read
+Groups with neither placements nor a mask render no preview. Previews hide
+floorplan labels unless this browser's "Labels on room previews" appearance
+setting is on. Room-name chips on the full floorplan and editor come from
+`layoutGroupLabels` (`ui/lib/floorplan-group-label.ts`): one line, whole words
+only, may overflow the room, never overlap each other, and move off markers. Shared queries read
 the floorplan editor API's grid and image metadata; only stored images are fetched,
 using their revision. Failed catalog/grid reads retry in the background so wall
 dashboards recover without a focus event or reload.

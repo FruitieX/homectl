@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { getGroupLabelLayout } from './floorplan-group-label.ts';
+import { layoutGroupLabels } from './floorplan-group-label.ts';
 import { floorplanLabels } from './floorplan-labels.ts';
 import { readFloorplanDraft } from './floorplanDraft.ts';
 import { deserializeGrid } from './floorplan-editor.ts';
@@ -9,90 +9,127 @@ const rectangle = (w: number, h: number, x = 0, y = 0) =>
   Array.from({ length: h }, (_, dy) =>
     Array.from({ length: w }, (_, dx) => ({ x: x + dx, y: y + dy })),
   ).flat();
-const layout = (cells: { x: number; y: number }[], text: string, scale = 1) =>
-  getGroupLabelLayout({
-    cells,
-    text,
+const measure = (text: string) => text.length * 6;
+const layout = (
+  groups: { id: string; cells: { x: number; y: number }[]; text: string }[],
+  scale = 1,
+  avoid: { x: number; y: number }[] = [],
+) =>
+  layoutGroupLabels({
+    groups,
     tileWidth: 32,
     tileHeight: 32,
     scale,
-    measure: (text) => text.length * 6,
+    measure,
+    avoid,
   });
+const box = (label: ReturnType<typeof layout>[number], scale = 1) => ({
+  left: label.x * scale - label.width / 2,
+  right: label.x * scale + label.width / 2,
+  top: label.y * scale - label.height / 2,
+  bottom: label.y * scale + label.height / 2,
+});
 
-test('room labels wrap inside a narrow area at different zoom levels', () => {
+test('narrow rooms keep whole words on one line and may overflow', () => {
   for (const scale of [0.5, 1, 2]) {
-    const result = layout(
-      rectangle(4, 6),
-      'Living room and reading corner',
+    const [label] = layout(
+      [{ id: 'entry', cells: rectangle(2, 3), text: 'Entryway' }],
       scale,
-    )!;
-    assert(result);
-    assert(result.lines.length > 1 || scale === 2);
-    assert.equal(result.lines.join(' '), 'Living room and reading corner');
-    assert(
-      result.x - result.width / 2 >= 0 && result.x + result.width / 2 <= 128,
     );
-    assert(result.y >= 0 && result.y + result.height <= 192);
-    assert(
-      result.lines.every((line) => line.length * 6 <= result.width * scale),
-    );
+    assert(label, `label at ${scale}`);
+    assert.equal(label.text, 'Entryway');
+    assert.equal(label.width, measure('Entryway') + 8);
   }
+  const [label] = layout([
+    { id: 'out', cells: rectangle(1, 6), text: 'Outdoor lights' },
+  ]);
+  assert.equal(label.text, 'Outdoor lights');
+  assert(label.width > 32);
 });
-test('multiline labels stay inside concave and disconnected group masks', () => {
-  const cells = [
-    ...rectangle(1, 2),
-    ...rectangle(5, 3, 0, 2),
-    ...rectangle(1, 1, 9, 0),
-  ];
-  const result = layout(cells, 'Kitchen and dining area')!;
-  assert(result);
-  assert.equal(result.lines.join(' '), 'Kitchen and dining area');
-  for (let y = result.y; y < result.y + result.height; y += 2)
-    for (
-      let x = result.x - result.width / 2;
-      x < result.x + result.width / 2;
-      x += 2
-    )
-      assert(
-        cells.some(
-          (p) => p.x === Math.floor(x / 32) && p.y === Math.floor(y / 32),
-        ),
-      );
-});
-test('label anchors stay fixed through zoom and text reflow, including marker avoidance', () => {
-  const cells = [
-    ...rectangle(2, 2),
-    ...rectangle(7, 6, 0, 2),
-    ...rectangle(5, 4, 10, 0),
-  ];
-  const labels = [0.5, 0.75, 1, 1.5, 2, 4].map((scale) =>
-    getGroupLabelLayout({
-      cells,
-      text: 'Living room and reading corner by the window',
-      tileWidth: 32,
-      tileHeight: 32,
-      scale,
-      measure: (text) => text.length * 6,
-      avoid: [{ x: 112, y: 84 }],
-    })!,
+
+test('long names drop whole words before cutting into one', () => {
+  const [label] = layout([
+    {
+      id: 'living',
+      cells: rectangle(6, 4),
+      text: 'Living room and reading corner by the big window overlooking the yard',
+    },
+  ]);
+  assert(label.text.endsWith('…'));
+  assert(
+    'Living room and reading corner by the big window overlooking the yard'.startsWith(
+      label.text.slice(0, -1) + ' ',
+    ),
   );
-  assert(labels.every(Boolean));
-  assert(new Set(labels.map((label) => label.lines.join('\n'))).size > 1);
+  assert(label.width <= 200);
+  const [word] = layout([
+    { id: 'word', cells: rectangle(6, 4), text: 'x'.repeat(60) },
+  ]);
+  assert.equal(word.text, 'x'.repeat(31) + '…');
+});
+
+test('labels never overlap and larger rooms win collisions', () => {
+  const labels = layout(
+    [
+      { id: 'small', cells: rectangle(2, 2, 6, 2), text: 'Bathroom upstairs' },
+      { id: 'large', cells: rectangle(6, 6), text: 'Living room' },
+    ],
+    0.5,
+  );
   assert.deepEqual(
-    labels.map(({ x, y }) => ({ x, y })),
-    labels.map(() => ({ x: labels[0].x, y: labels[0].y })),
+    labels.map((label) => label.id),
+    ['large'],
+  );
+  const spread = layout(
+    [
+      { id: 'a', cells: rectangle(4, 4), text: 'Kitchen' },
+      { id: 'b', cells: rectangle(4, 4, 6, 0), text: 'Hall' },
+      { id: 'c', cells: rectangle(4, 4, 0, 6), text: 'Bedroom' },
+    ],
+    1,
+  );
+  assert.equal(spread.length, 3);
+  for (const a of spread)
+    for (const b of spread) {
+      if (a === b) continue;
+      const p = box(a),
+        q = box(b);
+      assert(
+        p.right <= q.left ||
+          q.right <= p.left ||
+          p.bottom <= q.top ||
+          q.bottom <= p.top,
+      );
+    }
+});
+
+test('labels step aside for markers when the room has room', () => {
+  const cells = [...rectangle(4, 2), ...rectangle(4, 4, 0, 2)];
+  const free = layout([{ id: 'room', cells, text: 'Kitchen' }]);
+  const marker = { x: free[0].x, y: free[0].y };
+  const [moved] = layout([{ id: 'room', cells, text: 'Kitchen' }], 1, [marker]);
+  assert(moved);
+  assert.notDeepEqual({ x: moved.x, y: moved.y }, marker);
+});
+
+test('anchors stay put while zooming and tiny rooms are hidden', () => {
+  const cells = [...rectangle(2, 2), ...rectangle(7, 6, 0, 2)];
+  const anchors = [0.75, 1, 1.5, 2, 4].map(
+    (scale) => layout([{ id: 'room', cells, text: 'Living room' }], scale)[0],
+  );
+  assert(anchors.every(Boolean));
+  assert.equal(new Set(anchors.map(({ x, y }) => `${x},${y}`)).size, 1);
+  assert.deepEqual(
+    layout([{ id: 'r', cells: rectangle(1, 1), text: 'Room' }], 0.1),
+    [],
+  );
+  assert.deepEqual(layout([{ id: 'r', cells: [], text: 'Room' }]), []);
+  assert.deepEqual(
+    layout([{ id: 'r', cells: rectangle(2, 2), text: ' ' }]),
+    [],
   );
 });
-test('small group labels truncate safely; tiny or empty masks omit the label', () => {
-  const result = layout(
-    rectangle(2, 1),
-    'Extremely long name without enough space',
-  )!;
-  assert(result.lines.at(-1)!.endsWith('…'));
-  assert(result.lines.every((line) => line.length * 6 <= result.width));
-  assert.equal(layout([], 'Room'), null);
-  assert.equal(layout(rectangle(1, 1), 'Room', 0.1), null);
-});
+
 test('label toggles retain old defaults and survive both floorplan readers', () => {
   assert.deepEqual(floorplanLabels({ labelMode: 'sensors' }), {
     lights: false,

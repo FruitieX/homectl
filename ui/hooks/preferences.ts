@@ -24,6 +24,14 @@ export const accentAtom = atomWithStorage<Accent>(
   { getOnInit: true },
 );
 
+/** Room previews are small, so their floorplan labels are opt-in per browser. */
+export const previewLabelsAtom = atomWithStorage<boolean>(
+  'homectl-preview-labels',
+  false,
+  undefined,
+  { getOnInit: true },
+);
+
 export const favoritesAtom = atomWithStorage<string[]>('homectl-favorites', []);
 
 export const recentsAtom = atomWithStorage<string[]>('homectl-recents', []);
