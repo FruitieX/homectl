@@ -20,6 +20,7 @@ import {
 import { quickControlDismissGuard } from '@/lib/quickControlDismiss';
 import { sensorMarkerSvg, type SensorMarkerKind } from '@/lib/sensorMarker';
 import {
+  groupLabelZoomStyle,
   layoutGroupLabels,
   GROUP_LABEL_FONT_SIZE,
   GROUP_LABEL_LINE_HEIGHT,
@@ -535,7 +536,9 @@ function syncGroupLabels(
     entry.label.visible = false;
     entry.labelBackground.visible = false;
   }
-  if (!visible) return;
+  const zoomStyle = groupLabelZoomStyle(scale);
+  if (!visible || !zoomStyle) return;
+  const { textScale, alpha } = zoomStyle;
   const layouts = layoutGroupLabels({
     groups: scene.groups.map((group) => ({
       id: group.groupId,
@@ -553,13 +556,15 @@ function syncGroupLabels(
       ...scene.sensors.map(({ x, y, scale }) => ({ x, y, radius: 16 * scale })),
     ],
     bounds: scene,
+    textScale,
   });
   for (const layout of layouts) {
     const entry = renderState.groupEntries.get(layout.id);
     if (!entry) continue;
     entry.label.text = layout.text;
-    entry.label.scale.set(1 / scale);
+    entry.label.scale.set(textScale / scale);
     entry.label.position.set(layout.x, layout.y);
+    entry.label.alpha = alpha;
     entry.labelBackground
       .clear()
       .roundRect(
@@ -567,12 +572,13 @@ function syncGroupLabels(
         -layout.height / 2,
         layout.width,
         layout.height,
-        4,
+        4 * textScale,
       )
       .fill({ color: 0xffffff, alpha: 0.95 })
       .stroke({ color: 0x829187, alpha: 0.3, width: 1 });
     entry.labelBackground.position.set(layout.x, layout.y);
     entry.labelBackground.scale.set(1 / scale);
+    entry.labelBackground.alpha = alpha;
     entry.labelBackground.visible = true;
     entry.label.visible = true;
   }

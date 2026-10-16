@@ -388,7 +388,10 @@ Groups with neither placements nor a mask render no preview. Previews hide
 floorplan labels unless this browser's "Labels on room previews" appearance
 setting is on. Room-name chips on the full floorplan and editor come from
 `layoutGroupLabels` (`ui/lib/floorplan-group-label.ts`): one line, whole words
-only, may overflow the room, never overlap each other, and move off markers. Shared queries read
+only, may overflow the room, never overlap each other, and move off markers.
+On the live map they shrink and fade below a zoom threshold
+(`groupLabelZoomStyle`) and disappear when zoomed far out; the editor keeps
+them full size. Shared queries read
 the floorplan editor API's grid and image metadata; only stored images are fetched,
 using their revision. Failed catalog/grid reads retry in the background so wall
 dashboards recover without a focus event or reload.

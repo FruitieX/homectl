@@ -6,6 +6,25 @@ export const GROUP_LABEL_LINE_HEIGHT = GROUP_LABEL_FONT_SIZE + 3;
 export const GROUP_LABEL_PADDING_X = 4;
 export const GROUP_LABEL_PADDING_Y = 3;
 
+// Map zoom at which room names reach full size. Below it they shrink with the
+// map, like the device markers do, and fade until they are hidden entirely.
+const FULL_SIZE_VIEW_SCALE = 0.6;
+const MIN_TEXT_SCALE = 0.25;
+const MIN_ALPHA = 0.35;
+
+/**
+ * Size and opacity of room names at a map zoom. Returns null once they would
+ * be too small to be worth drawing.
+ */
+export function groupLabelZoomStyle(
+  viewScale: number,
+): { textScale: number; alpha: number } | null {
+  const textScale = Math.min(1, viewScale / FULL_SIZE_VIEW_SCALE);
+  if (!(textScale >= MIN_TEXT_SCALE)) return null;
+  const fade = (textScale - MIN_TEXT_SCALE) / (1 - MIN_TEXT_SCALE);
+  return { textScale, alpha: MIN_ALPHA + (1 - MIN_ALPHA) * fade };
+}
+
 type Point = { x: number; y: number };
 type Rect = { x: number; y: number; width: number; height: number };
 
@@ -192,6 +211,7 @@ export function layoutGroupLabels({
   avoid = [],
   markerRadius = MARKER_RADIUS,
   bounds,
+  textScale = 1,
 }: {
   groups: readonly GroupLabelInput[];
   tileWidth: number;
@@ -205,8 +225,10 @@ export function layoutGroupLabels({
   markerRadius?: number;
   /** Scene size; chips are kept inside it. */
   bounds?: { width: number; height: number };
+  /** Screen size multiplier for the chips, see `groupLabelZoomStyle`. */
+  textScale?: number;
 }): GroupLabel[] {
-  if (scale <= 0) return [];
+  if (scale <= 0 || textScale <= 0) return [];
   const markers = avoid.map((p) => ({
     x: p.x * scale,
     y: p.y * scale,
@@ -217,8 +239,8 @@ export function layoutGroupLabels({
     .flatMap((group) => {
       const candidates = getCandidates(group.cells, tileWidth, tileHeight);
       return candidates &&
-        candidates.room.width * scale >= MIN_ROOM_WIDTH &&
-        candidates.room.height * scale >= MIN_ROOM_HEIGHT
+        candidates.room.width * scale >= MIN_ROOM_WIDTH * textScale &&
+        candidates.room.height * scale >= MIN_ROOM_HEIGHT * textScale
         ? [{ group, points: candidates.points }]
         : [];
     })
@@ -237,8 +259,9 @@ export function layoutGroupLabels({
       measure,
     );
     if (!text) continue;
-    const width = measure(text) + 2 * GROUP_LABEL_PADDING_X;
-    const height = GROUP_LABEL_LINE_HEIGHT + 2 * GROUP_LABEL_PADDING_Y;
+    const width = (measure(text) + 2 * GROUP_LABEL_PADDING_X) * textScale;
+    const height =
+      (GROUP_LABEL_LINE_HEIGHT + 2 * GROUP_LABEL_PADDING_Y) * textScale;
     // Prefer the nearest spot clear of markers, else the one covering fewest.
     let best: Rect | null = null,
       bestHits = Infinity;
@@ -252,7 +275,8 @@ export function layoutGroupLabels({
         if (maxY >= height / 2) y = Math.min(Math.max(y, height / 2), maxY);
       }
       const box = { x, y, width, height };
-      if (placed.some((other) => overlaps(box, other, LABEL_GAP))) continue;
+      if (placed.some((other) => overlaps(box, other, LABEL_GAP * textScale)))
+        continue;
       let hits = 0;
       for (const marker of markers)
         if (hitsMarker(box, marker, marker.radius) && ++hits >= bestHits) break;

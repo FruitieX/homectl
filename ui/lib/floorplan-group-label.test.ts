@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { layoutGroupLabels } from './floorplan-group-label.ts';
+import {
+  groupLabelZoomStyle,
+  layoutGroupLabels,
+} from './floorplan-group-label.ts';
 import { floorplanLabels } from './floorplan-labels.ts';
 import { readFloorplanDraft } from './floorplanDraft.ts';
 import { deserializeGrid } from './floorplan-editor.ts';
@@ -170,4 +173,34 @@ test('label toggles retain old defaults and survive both floorplan readers', () 
     ).grid,
     null,
   );
+});
+
+test('room names shrink and fade as the map zooms out', () => {
+  assert.deepEqual(groupLabelZoomStyle(1), { textScale: 1, alpha: 1 });
+  const half = groupLabelZoomStyle(0.3);
+  const small = groupLabelZoomStyle(0.2);
+  assert(half && small);
+  assert(small.textScale < half.textScale && half.textScale < 1);
+  assert(small.alpha < half.alpha && half.alpha < 1);
+  assert.equal(groupLabelZoomStyle(0.05), null);
+
+  const cells = rectangle(4, 2);
+  const [full] = layoutGroupLabels({
+    groups: [{ id: 'kitchen', cells, text: 'Kitchen' }],
+    tileWidth: 32,
+    tileHeight: 32,
+    scale: 1,
+    measure,
+  });
+  const [shrunk] = layoutGroupLabels({
+    groups: [{ id: 'kitchen', cells, text: 'Kitchen' }],
+    tileWidth: 32,
+    tileHeight: 32,
+    scale: 1,
+    measure,
+    textScale: 0.5,
+  });
+  assert.equal(shrunk.text, 'Kitchen');
+  assert.equal(shrunk.width, full.width / 2);
+  assert.equal(shrunk.height, full.height / 2);
 });
