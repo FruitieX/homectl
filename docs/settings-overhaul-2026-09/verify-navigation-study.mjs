@@ -2,7 +2,7 @@
 export default async function (cdp, { url, width }) {
   if (
     !url.startsWith(
-      "file:///home/rasse/homectl/docs/settings-overhaul-2026-09/navigation-study.html",
+      "file:///home/rasse/projects/homectl/docs/settings-overhaul-2026-09/navigation-study.html",
     )
   )
     throw Error("Standalone study required");

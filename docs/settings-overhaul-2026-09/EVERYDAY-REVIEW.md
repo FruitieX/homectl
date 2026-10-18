@@ -158,7 +158,7 @@ Reproduce from the repository root, with Chromium CDP listening on port 9337:
 
 ```sh
 CDP_PORT=9337 node ui/dev/cdp-probe.mjs \
-  --url file:///home/rasse/homectl/docs/settings-overhaul-2026-09/everyday.html#home \
+  --url file:///home/rasse/projects/homectl/docs/settings-overhaul-2026-09/everyday.html#home \
   --width 1440 --height 1000 \
   --driver-file docs/settings-overhaul-2026-09/verify-everyday.mjs
 ```

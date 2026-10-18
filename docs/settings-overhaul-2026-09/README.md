@@ -131,7 +131,7 @@ Screenshots use `ui/dev/cdp-probe.mjs` and a local Chromium CDP instance. Exampl
 
 ```sh
 CDP_PORT=9337 node ui/dev/cdp-probe.mjs \
-  --url 'file:///home/rasse/homectl/docs/settings-overhaul-2026-09/index.html#complex-routine' \
+  --url 'file:///home/rasse/projects/homectl/docs/settings-overhaul-2026-09/index.html#complex-routine' \
   --out docs/settings-overhaul-2026-09/previews/03-routine-desktop.png \
   --width 1440 --height 1080 --full 1
 ```
