@@ -19,7 +19,7 @@
     "singleQuote": true
   },
   "dependencies": {
-    "@hookform/resolvers": "5.9.1",
+    "@hookform/resolvers": "5.9.2",
     "@influxdata/influxdb-client": "1.35.0",
     "@monaco-editor/react": "4.7.0",
     "@radix-ui/react-alert-dialog": "1.2.1",
