@@ -1,4 +1,5 @@
 use super::{with_handle, with_snapshot};
+use crate::auth::{Auth, AuthMode, Principal};
 use crate::core::snapshot::SnapshotHandle;
 use crate::core::state::send_state_ws_from_snapshot;
 use crate::core::state::StateHandle;
@@ -8,6 +9,8 @@ use crate::types::websockets::WebSocketRequest;
 use futures::SinkExt;
 use futures_util::StreamExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc;
 use warp::{ws::WebSocket, Filter};
 
@@ -31,6 +34,7 @@ pub fn ws(
     handle: &StateHandle,
     ws_handle: WebSockets,
     event_tx: TxEventChannel,
+    auth_mode: AuthMode,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("ws")
         // The `ws()` filter will prepare the Websocket handshake.
@@ -39,19 +43,25 @@ pub fn ws(
         .and(with_handle(handle))
         .and(with_ws(ws_handle))
         .and(with_event_tx(event_tx))
+        .and(super::auth::with_principal(auth_mode))
         .map(
             |ws: warp::ws::Ws,
              snapshot: SnapshotHandle,
              handle: StateHandle,
              ws_handle: WebSockets,
-             event_tx: TxEventChannel| {
+             event_tx: TxEventChannel,
+             principal: Option<(Arc<Auth>, Principal)>| {
                 // This will call our function if the handshake succeeds.
                 ws.on_upgrade(move |socket| {
-                    user_connected(socket, snapshot, handle, ws_handle, event_tx)
+                    user_connected(socket, snapshot, handle, ws_handle, event_tx, principal)
                 })
             },
         )
 }
+
+/// How often an open websocket re-checks that its credential is still valid
+/// (a revoked device or an expired session is disconnected).
+const CREDENTIAL_RECHECK: Duration = Duration::from_secs(30);
 
 // https://github.com/seanmonstar/warp/blob/master/examples/websockets_chat.rs
 async fn user_connected(
@@ -60,6 +70,7 @@ async fn user_connected(
     handle: StateHandle,
     ws_handle: WebSockets,
     event_tx: TxEventChannel,
+    principal: Option<(Arc<Auth>, Principal)>,
 ) {
     // Use a counter to assign a new unique ID for this user.
     let my_id = NEXT_USER_ID.fetch_add(1, Ordering::Relaxed);
@@ -89,8 +100,30 @@ async fn user_connected(
     // Send snapshot of current state
     send_state_ws_from_snapshot(&snapshot, &ws_handle, Some(my_id)).await;
 
+    let mut recheck = tokio::time::interval(CREDENTIAL_RECHECK);
+    recheck.tick().await;
+
     // Forward incoming user messages onto the event channel.
-    while let Some(result) = user_ws_rx.next().await {
+    loop {
+        let result = tokio::select! {
+            next = user_ws_rx.next() => match next {
+                Some(result) => result,
+                None => break,
+            },
+            _ = recheck.tick() => {
+                if let Some((auth, principal)) = &principal {
+                    if !auth.still_valid(principal) {
+                        info!(
+                            "Closing websocket (uid={my_id}) of {} \"{}\": credential revoked or expired",
+                            principal.kind(),
+                            principal.name()
+                        );
+                        break;
+                    }
+                }
+                continue;
+            }
+        };
         let msg = match result {
             Ok(msg) => msg,
             Err(e) => {

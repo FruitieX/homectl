@@ -1,10 +1,12 @@
 //! Cross-origin request guard.
 //!
-//! homectl has no authentication and is expected to be reachable only from the
-//! local network. That alone does not stop a browser on the network from
-//! loading a malicious page that issues cross-origin requests to the API:
-//! without checks the page could read the configuration export (including
-//! widget secrets) or apply destructive writes such as a config import.
+//! Without authentication configured (see `crate::auth`), homectl is expected
+//! to be reachable only from the local network. That alone does not stop a
+//! browser on the network from loading a malicious page that issues
+//! cross-origin requests to the API: without checks the page could read the
+//! configuration export (including widget secrets) or apply destructive writes
+//! such as a config import. With authentication, cookies are `SameSite=Lax`
+//! and this guard still keeps other origins from using a signed-in browser.
 //!
 //! Every request that carries an `Origin` header is therefore checked against:
 //!

@@ -36,10 +36,23 @@ const wsTarget = apiTarget.replace(/^http/, 'ws');
 // server) the app must make same-origin requests instead, otherwise it keeps
 // talking to — and writing to — the deployed instance behind the proxy's back.
 const proxyMode = Boolean(process.env.HOMECTL_DEV_PROXY_TARGET);
+// A deployed backend with authentication enabled needs a credential: a
+// machine token from its HOMECTL_API_TOKENS or a paired device token. The
+// proxy adds it, so the preview itself needs no sign-in.
+const proxyToken = process.env.HOMECTL_DEV_PROXY_TOKEN;
+const proxyHeaders = proxyToken
+  ? { Authorization: `Bearer ${proxyToken}` }
+  : undefined;
 const apiProxy = {
-  '/api': { target: apiTarget, changeOrigin: true },
+  '/api': { target: apiTarget, changeOrigin: true, headers: proxyHeaders },
+  '/auth': { target: apiTarget, changeOrigin: true, headers: proxyHeaders },
   '/health': { target: apiTarget, changeOrigin: true },
-  '/ws': { target: wsTarget, ws: true, changeOrigin: true },
+  '/ws': {
+    target: wsTarget,
+    ws: true,
+    changeOrigin: true,
+    headers: proxyHeaders,
+  },
 };
 
 export default defineConfig({

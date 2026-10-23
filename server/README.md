@@ -178,6 +178,12 @@ and also other similar solutions to homectl:
 - `PORT` or `--port`: API port. Defaults to `45289`.
 - `WARMUP_TIME` or `--warmup-time`: Override the configured warmup time in
   seconds.
+- `HOMECTL_OIDC_ISSUER`, `HOMECTL_OIDC_CLIENT_ID`, `HOMECTL_OIDC_CLIENT_SECRET`,
+  `HOMECTL_PUBLIC_URL` (plus optional `HOMECTL_OIDC_ALLOWED_GROUPS`,
+  `HOMECTL_OIDC_ADMIN_GROUPS`, `HOMECTL_API_TOKENS`): optional sign-in with an
+  OIDC provider, device pairing for wall displays and machine tokens. Without
+  them there is no authentication. See
+  [../docs/authentication.md](../docs/authentication.md).
 
 ### Persistence behavior
 

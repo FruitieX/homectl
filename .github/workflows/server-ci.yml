@@ -74,6 +74,40 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo clippy -- -D warnings
 
+  auth-e2e:
+    name: Auth browser e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: server -> target
+      - run: cargo build --locked --bin homectl-server
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 12.13.0
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.0
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+      - name: Sign-in and pairing against a mock OIDC provider
+        working-directory: ui
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm test:auth-e2e
+      - name: Screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: auth-e2e
+          path: ui/test-artifacts/auth-e2e/
+          if-no-files-found: ignore
+          retention-days: 7
+
   build-image:
     name: Build & (optionally) push unified image
     runs-on: ubuntu-latest

@@ -307,6 +307,14 @@ The server uses **ts-rs** to generate TypeScript types from Rust structs. Genera
 - `HOMECTL_ALLOWED_ORIGINS` – Comma separated list of additional browser
   origins allowed to call the API cross-origin (same-origin and loopback
   origins are always allowed; all other origins are rejected before routing)
+- `HOMECTL_OIDC_ISSUER`, `HOMECTL_OIDC_CLIENT_ID`, `HOMECTL_OIDC_CLIENT_SECRET`,
+  `HOMECTL_PUBLIC_URL` – Optional sign-in through an OIDC provider (Pocket ID).
+  When all four are set, `/api` and `/ws` need a person session, a paired
+  device credential or a machine token; unset, there is no authentication.
+  `HOMECTL_OIDC_ALLOWED_GROUPS`, `HOMECTL_OIDC_ADMIN_GROUPS` (default
+  `admins`; admins pair and revoke devices) and `HOMECTL_API_TOKENS`
+  (`name:token,…` for scripts and the CLI) complete it. See
+  [docs/authentication.md](docs/authentication.md).
 - `HOMECTL_ASSISTANT_BASE_URL` – Optional OpenAI-compatible API base (hosted
   provider or a local runtime such as Ollama) that enables the routine drafting
   assistant. OpenCode Zen uses `https://opencode.ai/zen/v1` and the Go
@@ -432,7 +440,9 @@ cargo test                          # Unit + integration tests
 ### Live configuration scenarios
 After changing live routines, scenes, groups, or other configuration that affects
 household automations, run `TZ=Europe/Helsinki homectl --url
-https://homectl.fruitiex.org config test --server`. This fetches the current
+https://homectl.fruitiex.org config test --server`. The live server requires
+authentication: pass a machine token with `HOMECTL_TOKEN` (for agents:
+`HOMECTL_TOKEN=$(op-agent read "op://Agents/homectl agents API token/credential")`). This fetches the current
 configuration and its stored scenario suite in one snapshot. Run it again after
 the final live edit, report the result, and say explicitly if the suite or live
 server was unavailable. The runner simulates effects; it does not command

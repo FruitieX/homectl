@@ -4,7 +4,8 @@
 # changes against live data.
 #
 # Override with HOMECTL_PREVIEW_CHECKOUT, HOMECTL_PREVIEW_PORT or
-# HOMECTL_DEV_PROXY_TARGET.
+# HOMECTL_DEV_PROXY_TARGET. When the target has authentication enabled, set
+# HOMECTL_DEV_PROXY_TOKEN to a machine or paired-device token.
 set -euo pipefail
 
 checkout="${HOMECTL_PREVIEW_CHECKOUT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"

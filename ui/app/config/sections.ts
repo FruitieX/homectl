@@ -19,6 +19,7 @@ import {
   Settings,
   ScrollText,
   ArchiveRestore,
+  MonitorSmartphone,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -221,6 +222,27 @@ export const configCatalog = [
       'humidity',
       'influxdb',
       'widgets',
+    ],
+  },
+  {
+    href: '/config/paired-devices',
+    icon: MonitorSmartphone,
+    label: 'Paired devices',
+    description:
+      'Pair wall displays, see when they were last used, and revoke access.',
+    group: 'System',
+    keywords: [
+      'pair',
+      'pairing',
+      'tablet',
+      'wall display',
+      'kiosk',
+      'sign in',
+      'sign out',
+      'account',
+      'login',
+      'revoke',
+      'security',
     ],
   },
   {

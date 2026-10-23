@@ -9,7 +9,7 @@ use super::get_db_connection;
 pub mod calibration;
 use super::schema::DeviceColorCalibrations;
 use super::schema::{
-    AssistantThreads, AutomationBlocks, AutomationSources, AutomationTimerJobs,
+    AssistantThreads, AuthDevices, AutomationBlocks, AutomationSources, AutomationTimerJobs,
     AutomationValueState, AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts,
     DashboardWidgets, DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans,
     GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, RoutineHistory, Routines,
@@ -4300,6 +4300,72 @@ async fn prune_routine_history_on<C: ConnectionTrait>(db: &C, keep: u64) -> Resu
     Ok(deleted > 0)
 }
 
+/// Stored paired-device documents (JSON), see `crate::auth::devices`.
+pub async fn db_list_auth_device_documents() -> Result<Vec<String>> {
+    list_auth_device_documents_on(get_db_connection()?).await
+}
+
+async fn list_auth_device_documents_on<C: ConnectionTrait>(db: &C) -> Result<Vec<String>> {
+    let rows = all(
+        db,
+        Query::select()
+            .columns([AuthDevices::Id, AuthDevices::Document])
+            .from(AuthDevices::Table)
+            .order_by(AuthDevices::Id, Order::Asc)
+            .to_owned(),
+    )
+    .await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| row.try_get::<String>("", "document").ok())
+        .collect())
+}
+
+pub async fn db_save_auth_device_document(id: &str, document: &str) -> Result<()> {
+    save_auth_device_document_on(get_db_connection()?, id, document).await
+}
+
+async fn save_auth_device_document_on<C: ConnectionTrait>(
+    db: &C,
+    id: &str,
+    document: &str,
+) -> Result<()> {
+    execute(
+        db,
+        Query::insert()
+            .into_table(AuthDevices::Table)
+            .columns([AuthDevices::Id, AuthDevices::Document])
+            .values_panic([
+                Expr::value(id.to_string()),
+                Expr::value(document.to_string()),
+            ])
+            .on_conflict(
+                OnConflict::column(AuthDevices::Id)
+                    .update_columns([AuthDevices::Document])
+                    .to_owned(),
+            )
+            .to_owned(),
+    )
+    .await?;
+    Ok(())
+}
+
+pub async fn db_delete_auth_device(id: &str) -> Result<()> {
+    delete_auth_device_on(get_db_connection()?, id).await
+}
+
+async fn delete_auth_device_on<C: ConnectionTrait>(db: &C, id: &str) -> Result<()> {
+    execute(
+        db,
+        Query::delete()
+            .from_table(AuthDevices::Table)
+            .and_where(Expr::col(AuthDevices::Id).eq(id.to_string()))
+            .to_owned(),
+    )
+    .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod consistency_tests {
     use super::*;
@@ -4882,6 +4948,27 @@ mod consistency_tests {
         assert!(rows
             .iter()
             .all(|row| row.config["options"]["influxToken"] == "untouched"));
+    }
+
+    #[tokio::test]
+    async fn auth_device_documents_round_trip_and_delete() {
+        let db = database().await;
+        save_auth_device_document_on(&db, "b", "{\"id\":\"b\"}")
+            .await
+            .unwrap();
+        save_auth_device_document_on(&db, "a", "{\"id\":\"a\"}")
+            .await
+            .unwrap();
+        save_auth_device_document_on(&db, "a", "{\"id\":\"a\",\"name\":\"x\"}")
+            .await
+            .unwrap();
+        let docs = list_auth_device_documents_on(&db).await.unwrap();
+        assert_eq!(
+            docs,
+            vec!["{\"id\":\"a\",\"name\":\"x\"}", "{\"id\":\"b\"}"]
+        );
+        delete_auth_device_on(&db, "a").await.unwrap();
+        assert_eq!(list_auth_device_documents_on(&db).await.unwrap().len(), 1);
     }
 
     #[tokio::test]

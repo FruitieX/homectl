@@ -23,6 +23,11 @@ struct Cli {
     )]
     url: String,
 
+    /// API token for servers with authentication enabled: a machine token
+    /// from the server's HOMECTL_API_TOKENS or a paired device token (hcd_…)
+    #[arg(long, env = "HOMECTL_TOKEN", hide_env_values = true)]
+    token: Option<String>,
+
     /// Output format
     #[arg(long, short, default_value = "table")]
     format: output::Format,
@@ -183,7 +188,7 @@ enum ListOrGet {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    let client = Client::new(&cli.url);
+    let client = Client::new(&cli.url, cli.token.as_deref());
 
     let result = match cli.command {
         Commands::Devices { action } => commands::devices(&client, action, &cli.format).await,

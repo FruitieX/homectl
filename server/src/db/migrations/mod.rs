@@ -1,5 +1,5 @@
 use crate::db::schema::{
-    AssistantThreads, AutomationBlocks, AutomationSources, AutomationTimerJobs,
+    AssistantThreads, AuthDevices, AutomationBlocks, AutomationSources, AutomationTimerJobs,
     AutomationValueState, AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts,
     DashboardWidgets, DeviceColorCalibrations, DeviceDisplayOverrides, DeviceSensorConfigs,
     Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups, Integrations,
@@ -41,6 +41,7 @@ impl MigratorTrait for Migrator {
             Box::new(config_initialized::ConfigInitialized),
             Box::new(AutomationBlocksMigration),
             Box::new(ComputedHelpersMigration),
+            Box::new(AuthDevicesMigration),
         ]
     }
 }
@@ -1663,6 +1664,38 @@ impl MigrationTrait for ComputedHelpersMigration {
                     .drop_column(AutomationValues::Compute)
                     .to_owned(),
             )
+            .await
+    }
+}
+
+struct AuthDevicesMigration;
+impl MigrationName for AuthDevicesMigration {
+    fn name(&self) -> &str {
+        "m20261023000000_auth_devices"
+    }
+}
+#[async_trait::async_trait]
+impl MigrationTrait for AuthDevicesMigration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(AuthDevices::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(AuthDevices::Id)
+                            .text()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(AuthDevices::Document).text().not_null())
+                    .to_owned(),
+            )
+            .await
+    }
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(AuthDevices::Table).to_owned())
             .await
     }
 }

@@ -8,6 +8,7 @@ use crate::types::event::TxEventChannel;
 use serde::Serialize;
 
 mod actions;
+pub mod auth;
 pub mod config;
 pub mod device_commands;
 mod devices;
@@ -116,7 +117,9 @@ pub fn init_api(
         .map(Reply::into_response)
         .boxed();
 
-    let ws = ws(&snapshot, &handle, ws_handle, event_tx)
+    let auth_mode = crate::auth::AuthMode::from_env();
+
+    let ws = ws(&snapshot, &handle, ws_handle, event_tx, auth_mode.clone())
         .map(Reply::into_response)
         .boxed();
     let health = health(&snapshot).map(Reply::into_response).boxed();
@@ -146,6 +149,8 @@ pub fn init_api(
             configured.join(", ")
         );
     }
+    let routes = apply_auth_guard(routes, auth_mode.clone());
+    let routes = auth::routes(auth_mode).or(routes).unify().boxed();
     let routes = apply_origin_guard(routes, allowed_origins);
 
     info!("Starting API server on port {}", port);
@@ -186,6 +191,46 @@ fn apply_origin_guard(
         .and(routes)
         .map(|origin: Option<String>, response: Response| {
             origin::finalize(origin.as_deref(), response)
+        });
+
+    immediate.or(guarded).unify().boxed()
+}
+
+/// Require a credential for `/api` and `/ws` when authentication is enabled
+/// (see [`crate::auth`]). Unauthenticated requests get a `401` before any
+/// route handler runs; renewed session or device cookies are attached to the
+/// response.
+fn apply_auth_guard(
+    routes: BoxedFilter<(Response,)>,
+    mode: crate::auth::AuthMode,
+) -> BoxedFilter<(Response,)> {
+    if !mode.is_enabled() {
+        return routes;
+    }
+    let guard = auth::guard(mode);
+
+    let immediate = guard.clone().and_then(|verdict| async move {
+        match verdict {
+            auth::GuardVerdict::Immediate(response) => Ok(response),
+            auth::GuardVerdict::Proceed(_) => Err(warp::reject::not_found()),
+        }
+    });
+
+    let guarded = guard
+        .and_then(|verdict| async move {
+            match verdict {
+                auth::GuardVerdict::Proceed(cookie) => Ok(cookie),
+                auth::GuardVerdict::Immediate(_) => Err(warp::reject::not_found()),
+            }
+        })
+        .and(routes)
+        .map(|cookie: Option<String>, mut response: Response| {
+            if let Some(value) = cookie.and_then(|c| HeaderValue::from_str(&c).ok()) {
+                response
+                    .headers_mut()
+                    .append(warp::http::header::SET_COOKIE, value);
+            }
+            response
         });
 
     immediate.or(guarded).unify().boxed()
@@ -318,6 +363,8 @@ fn is_reserved_server_path(path: &str) -> bool {
     path == "/api"
         || path.starts_with("/api/")
         || path == "/ws"
+        || path == "/auth"
+        || path.starts_with("/auth/")
         || path == "/health"
         || path.starts_with("/health/")
 }

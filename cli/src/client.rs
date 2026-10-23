@@ -6,9 +6,22 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(base_url: &str) -> Self {
+    pub fn new(base_url: &str, token: Option<&str>) -> Self {
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Some(token) = token.map(str::trim).filter(|token| !token.is_empty()) {
+            match reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
+                Ok(mut value) => {
+                    value.set_sensitive(true);
+                    headers.insert(reqwest::header::AUTHORIZATION, value);
+                }
+                Err(_) => eprintln!("Ignoring HOMECTL_TOKEN: not a valid header value"),
+            }
+        }
         Self {
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .default_headers(headers)
+                .build()
+                .unwrap_or_default(),
             base_url: base_url.trim_end_matches('/').to_string(),
         }
     }

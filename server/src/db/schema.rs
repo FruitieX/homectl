@@ -307,3 +307,13 @@ pub enum AutomationBlocks {
     Id,
     Document,
 }
+
+/// Paired devices (wall tablets, dashboards) that hold a long-lived device
+/// credential. `document` stores the device JSON, including only a hash of
+/// its token. Auth state, not configuration: never exported or imported.
+#[derive(Clone, Copy, Iden)]
+pub enum AuthDevices {
+    Table,
+    Id,
+    Document,
+}

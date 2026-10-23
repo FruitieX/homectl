@@ -80,6 +80,10 @@ const GroupViewport = lazy(() => import('../app/groups/GroupViewport'));
 const GroupsPage = lazy(() => import('../app/groups/page'));
 const MapPage = lazy(() => import('../app/map/page'));
 const SettingsPage = lazy(() => import('../app/settings/page'));
+const PairApprovalPage = lazy(() => import('../app/pair/page'));
+const ConfigPairedDevicesPage = lazy(
+  () => import('../app/config/paired-devices/page'),
+);
 
 function RouteLoading() {
   return (
@@ -143,6 +147,15 @@ export const router = createBrowserRouter([
       {
         path: 'settings',
         element: withSuspense(<SettingsPage />),
+      },
+      {
+        path: 'pair',
+        element: withSuspense(<PairApprovalPage />),
+      },
+      {
+        // Start URL for wall displays; once paired it just opens the app.
+        path: 'pair-device',
+        element: <Navigate to="/" replace />,
       },
       {
         path: 'config',
@@ -288,6 +301,10 @@ export const router = createBrowserRouter([
           {
             path: 'settings',
             element: withSuspense(<ConfigSettingsPage />),
+          },
+          {
+            path: 'paired-devices',
+            element: withSuspense(<ConfigPairedDevicesPage />),
           },
         ],
       },

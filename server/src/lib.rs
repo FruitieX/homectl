@@ -16,6 +16,7 @@ extern crate log;
 extern crate eyre;
 
 pub mod api;
+pub mod auth;
 pub mod core;
 pub mod db;
 pub mod integrations;
