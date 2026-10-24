@@ -1,6 +1,7 @@
 #![allow(clippy::redundant_closure_call)]
 
 mod esphome;
+mod openmqttgateway;
 mod polling;
 mod utils;
 mod zigbee2mqtt;
@@ -20,6 +21,7 @@ use eyre::{eyre, Context};
 use rand::{distr::Alphanumeric, RngExt};
 use rumqttc::{AsyncClient, MqttOptions, QoS};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -42,6 +44,8 @@ pub enum MqttMode {
     Zigbee2Mqtt,
     #[serde(rename = "esphome")]
     EspHome,
+    #[serde(rename = "openmqttgateway")]
+    OpenMqttGateway,
 }
 
 #[derive(Default, Debug, Deserialize, Clone)]
@@ -59,6 +63,11 @@ pub struct MqttConfig {
     esphome_discovery_prefix: Option<String>,
     esphome_warm_white_kelvin: Option<u16>,
     esphome_cold_white_kelvin: Option<u16>,
+    /// OpenMQTTGateway topic prefix; gateways publish `{base}/<gateway>/BTtoMQTT/<MAC>`.
+    openmqttgateway_base_topic: Option<String>,
+    /// BLE sensors to accept, MAC → display name (empty name: model + MAC).
+    /// Missing or empty accepts every sensor that reports climate readings.
+    ble_devices: Option<BTreeMap<String, String>>,
     #[serde(default)]
     disabled_device_ids: Vec<String>,
     host: String,
@@ -224,6 +233,27 @@ fn normalize_config(mut config: MqttConfig) -> Result<MqttConfig> {
             config.topic_set = format!("{base}/{{id}}/light/{light_object_id}/command");
             config.mode = Some(MqttMode::EspHome);
         }
+        MqttMode::OpenMqttGateway => {
+            let base = normalize_topic_prefix(
+                config.openmqttgateway_base_topic.take(),
+                "OpenMQTTGateway base topic",
+                openmqttgateway::DEFAULT_BASE_TOPIC,
+            )?;
+            if let Some(devices) = config.ble_devices.take() {
+                let mut normalized = BTreeMap::new();
+                for (mac, name) in devices {
+                    let id = openmqttgateway::normalize_mac(&mac).ok_or_else(|| {
+                        eyre!("BLE device '{mac}' is not a MAC address such as C4:8D:1E:3E:57:67")
+                    })?;
+                    normalized.insert(id, name);
+                }
+                config.ble_devices = Some(normalized);
+            }
+            config.topic = format!("{base}/+/BTtoMQTT/{{id}}");
+            config.topic_set = String::new();
+            config.openmqttgateway_base_topic = Some(base);
+            config.mode = Some(MqttMode::OpenMqttGateway);
+        }
     }
 
     Ok(config)
@@ -232,7 +262,7 @@ fn normalize_config(mut config: MqttConfig) -> Result<MqttConfig> {
 fn retain_commands(config: &MqttConfig) -> bool {
     match config.mode() {
         MqttMode::Generic => config.retain_commands.unwrap_or(true),
-        MqttMode::Zigbee2Mqtt | MqttMode::EspHome => false,
+        MqttMode::Zigbee2Mqtt | MqttMode::EspHome | MqttMode::OpenMqttGateway => false,
     }
 }
 
@@ -291,6 +321,7 @@ impl Integration for Mqtt {
         self.tasks.spawn(async move {
             let mut discovery = zigbee2mqtt::Discovery::default();
             let mut esphome_discovery = esphome::Discovery::default();
+            let mut ble_sensors = openmqttgateway::Sensors::default();
             let mut polling = polling::Polling::configured(
                 config.mode() == MqttMode::Zigbee2Mqtt,
                 dry_run,
@@ -357,6 +388,15 @@ impl Integration for Mqtt {
                                         .subscribe(format!("{prefix}/light/#"), QoS::AtMostOnce)
                                         .await?;
                                 }
+                                MqttMode::OpenMqttGateway => {
+                                    let base = config.openmqttgateway_base_topic.as_ref().unwrap();
+                                    client
+                                        .subscribe(
+                                            openmqttgateway::subscription(base),
+                                            QoS::AtMostOnce,
+                                        )
+                                        .await?;
+                                }
                             }
                         }
 
@@ -390,6 +430,17 @@ impl Integration for Mqtt {
                                         )
                                     }
                                 }
+                                MqttMode::OpenMqttGateway => ble_sensors
+                                    .receive(
+                                        config.openmqttgateway_base_topic.as_ref().unwrap(),
+                                        &msg.topic,
+                                        &msg.payload,
+                                        id.clone(),
+                                        &config,
+                                        Instant::now(),
+                                    )
+                                    .into_iter()
+                                    .collect(),
                             };
 
                             if config.mode() == MqttMode::Zigbee2Mqtt {
@@ -554,6 +605,9 @@ impl Integration for Mqtt {
             MqttMode::Generic => homectl_to_mqtt(device.clone(), &self.config)?,
             MqttMode::Zigbee2Mqtt => zigbee2mqtt::encode(device)?,
             MqttMode::EspHome => esphome::encode(device, &self.config)?,
+            MqttMode::OpenMqttGateway => {
+                return Err(eyre!("OpenMQTTGateway BLE sensors are read-only"));
+            }
         };
         if mode != MqttMode::EspHome && mqtt_device.get("transition").is_none() {
             if let Some(transition) = self.config.default_transition {
@@ -687,6 +741,38 @@ mod packet_tests {
         )
         .unwrap_err();
         assert!(error.to_string().contains("lower than cold"));
+    }
+
+    #[test]
+    fn openmqttgateway_profile_normalizes_sensor_macs() {
+        let config = normalized(json!({
+            "mode": "openmqttgateway",
+            "host": "mqtt.example.org",
+            "port": 1883,
+            "openmqttgateway_base_topic": "home/sensors/",
+            "ble_devices": { "c4:8d:1e:3e:57:67": "Living room" }
+        }));
+        assert_eq!(config.mode(), MqttMode::OpenMqttGateway);
+        assert_eq!(config.topic, "home/sensors/+/BTtoMQTT/{id}");
+        assert_eq!(
+            config.ble_devices,
+            Some(BTreeMap::from([(
+                "C48D1E3E5767".to_string(),
+                "Living room".to_string()
+            )]))
+        );
+
+        let error = normalize_config(
+            serde_json::from_value(json!({
+                "mode": "openmqttgateway",
+                "host": "mqtt.example.org",
+                "port": 1883,
+                "ble_devices": { "kitchen": "Kitchen" }
+            }))
+            .unwrap(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("not a MAC address"));
     }
 
     #[test]

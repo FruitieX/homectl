@@ -5,7 +5,10 @@ import type { Device } from '@/bindings/Device';
 import { useDeviceSensorConfigs } from '@/hooks/useConfig';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { getDeviceKey } from '@/lib/device';
-import { getSensorDetails } from '@/lib/sensorInteraction';
+import {
+  formatSensorReadings,
+  getSensorDetails,
+} from '@/lib/sensorInteraction';
 import { devicePreviewState, LiveStatePreview } from '@/ui/LiveStatePreview';
 import { SensorQuickPopover } from '@/ui/SensorQuickPopover';
 import { Button } from '@/ui/primitives/button';
@@ -60,7 +63,9 @@ export function LiveSensorRow({
           ? sensor.value
             ? 'On'
             : 'Off'
-          : String(sensor.value);
+          : sensor.kind === 'readings'
+            ? formatSensorReadings(sensor.value)
+            : String(sensor.value);
   return (
     <>
       <div className="flex min-h-16 min-w-0 items-center rounded-lg border border-border bg-card">

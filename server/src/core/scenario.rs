@@ -1650,6 +1650,7 @@ impl SensorValue {
             SensorDevice::Boolean { value } => Self::Boolean(*value),
             SensorDevice::Number { value } => Self::Number(*value),
             SensorDevice::Text { value } => Self::Text(value.clone()),
+            SensorDevice::Readings { readings } => Self::Text(format!("readings:{readings:?}")),
             SensorDevice::Color(state) => Self::Text(format!("color:{state:?}")),
         }
     }
@@ -1661,7 +1662,7 @@ impl SensorValueKind {
             SensorDevice::Boolean { .. } => Some(Self::Boolean),
             SensorDevice::Number { .. } => Some(Self::Number),
             SensorDevice::Text { .. } => Some(Self::Text),
-            SensorDevice::Color(_) => None,
+            SensorDevice::Readings { .. } | SensorDevice::Color(_) => None,
         }
     }
 }

@@ -44,7 +44,10 @@ import {
 } from '@/hooks/useConfig';
 import { configItemHref } from '@/lib/configItemHref';
 import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
-import { getSensorDetails } from '@/lib/sensorInteraction';
+import {
+  formatSensorReadings,
+  getSensorDetails,
+} from '@/lib/sensorInteraction';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { rankByPreference } from '@/lib/preferences';
 import { cn } from '@/lib/cn';
@@ -335,9 +338,11 @@ export function CommandPalette() {
         label,
         description: state
           ? `${state.power ? 'On' : 'Off'}${state.power && state.brightness !== null ? ` · ${Math.round(state.brightness * 100)}%` : ''} · Device settings`
-          : sensor.kind !== 'unknown' && sensor.kind !== 'state'
-            ? `${String(sensor.value)} · Sensor settings`
-            : 'Device settings',
+          : sensor.kind === 'readings'
+            ? `${formatSensorReadings(sensor.value)} · Sensor settings`
+            : sensor.kind !== 'unknown' && sensor.kind !== 'state'
+              ? `${String(sensor.value)} · Sensor settings`
+              : 'Device settings',
         keywords: `${key} ${device.id} ${device.integration_id} device`,
         group: 'Devices',
         icon: state ? (

@@ -336,7 +336,9 @@ fn sensor_condition(sensor: &crate::types::rule::SensorRule) -> Option<Condition
     let (path, value) = match &sensor.state {
         SensorDevice::Boolean { value } => ("/value", serde_json::Value::Bool(*value)),
         SensorDevice::Text { value } => ("/value", serde_json::Value::String(value.clone())),
-        SensorDevice::Number { .. } | SensorDevice::Color(_) => return None,
+        SensorDevice::Number { .. } | SensorDevice::Readings { .. } | SensorDevice::Color(_) => {
+            return None
+        }
     };
     Some(ConditionExpr::Comparison {
         source: crate::types::automation_definition::ValueSource::Device {

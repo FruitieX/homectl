@@ -1126,6 +1126,16 @@ fn resolve_sensor_path(
             // (`{power, brightness, color, transition}`), so any other path
             // reads it as a JSON pointer. Computed-source references rely on
             // this for fields like `/brightness` and `/color/ct` (P11).
+            // Multi-reading sensors expose each metric by name, e.g.
+            // `/temperature`, `/value/temperature` or `/readings/temperature`.
+            if let crate::types::device::SensorDevice::Readings { readings } = sensor {
+                let pointer = path.strip_prefix("/value").unwrap_or(path);
+                let pointer = pointer.strip_prefix("/readings").unwrap_or(pointer);
+                let metric = pointer.strip_prefix('/').unwrap_or(pointer);
+                if let Some(value) = readings.get(metric).filter(|value| value.is_finite()) {
+                    return ResolvedValue::known(Value::from(*value));
+                }
+            }
             if let crate::types::device::SensorDevice::Color(state) = sensor {
                 let pointer = path.strip_prefix("/value").unwrap_or(path);
                 let pointer = if pointer.is_empty() { "/" } else { pointer };
@@ -1306,6 +1316,13 @@ fn sensor_value(sensor: &crate::types::device::SensorDevice) -> Result<Value, St
                 Err("nonfinite sensor value".to_string())
             }
         }
+        crate::types::device::SensorDevice::Readings { readings } => Ok(Value::Object(
+            readings
+                .iter()
+                .filter(|(_, value)| value.is_finite())
+                .map(|(metric, value)| (metric.clone(), Value::from(*value)))
+                .collect(),
+        )),
         crate::types::device::SensorDevice::Color(state) => serde_json::to_value(state)
             .map_err(|error| format!("unserializable color state: {error}")),
     }
@@ -2606,6 +2623,47 @@ mod tests {
         assert!(absent.value.is_none());
         assert!(matches!(
             absent.reason,
+            Some(UnknownReason::MissingField { .. })
+        ));
+    }
+
+    #[test]
+    fn multi_reading_sensors_resolve_each_metric_by_name() {
+        let sensor = Device::new(
+            IntegrationId::from("ble".to_string()),
+            DeviceId::new("D7353530665A"),
+            "Living room".to_string(),
+            DeviceData::Sensor(SensorDevice::Readings {
+                readings: std::collections::BTreeMap::from([
+                    ("humidity".to_string(), 45.0),
+                    ("temperature".to_string(), 21.4),
+                ]),
+            }),
+            None,
+        );
+        let key = sensor.get_device_key();
+        let devices = states(vec![sensor]);
+        let groups = no_groups();
+        let view = EvaluationView {
+            devices: &devices,
+            groups: &groups,
+            helpers: None,
+        };
+        let resolve = |path: &str| resolve_device_path(&key, path, view);
+
+        for path in [
+            "/temperature",
+            "/value/temperature",
+            "/readings/temperature",
+        ] {
+            assert_eq!(resolve(path).value, Some(json!(21.4)), "{path}");
+        }
+        assert_eq!(
+            resolve("/value").value,
+            Some(json!({ "humidity": 45.0, "temperature": 21.4 }))
+        );
+        assert!(matches!(
+            resolve("/battery").reason,
             Some(UnknownReason::MissingField { .. })
         ));
     }

@@ -3,7 +3,10 @@ import { Device } from '@/bindings/Device';
 import { Link } from 'react-router-dom';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { configItemHref } from '@/lib/configItemHref';
-import { getSensorDetails } from '@/lib/sensorInteraction';
+import {
+  formatSensorReadings,
+  getSensorDetails,
+} from '@/lib/sensorInteraction';
 import { useSensorInteraction } from '@/hooks/useSensorInteraction';
 import { HealthEvidence } from '@/ui/settings/HealthStatus';
 import { LiveStatePreview, devicePreviewState } from '@/ui/LiveStatePreview';
@@ -75,7 +78,9 @@ const SensorActionModalContent = ({
           ? sensor.value
             ? 'On'
             : 'Off'
-          : String(sensor.value);
+          : sensor.kind === 'readings'
+            ? formatSensorReadings(sensor.value, { full: true })
+            : String(sensor.value);
 
   return (
     <ResponsiveOverlay

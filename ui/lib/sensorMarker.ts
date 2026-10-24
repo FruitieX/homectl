@@ -28,6 +28,10 @@ export const sensorMarkerPaths = {
     'M12 14l4-5M5 13h1M8 6l1 1M16 6l-1 1M18 13h1',
   ],
   text: ['M4 4h16v13H9l-5 4Z', 'M8 8h8M8 12h5'],
+  climate: [
+    'M10 13.5V5a2 2 0 1 1 4 0v8.5a4 4 0 1 1-4 0Z',
+    'M12 9v7M17 6h2M17 10h2',
+  ],
   state: [
     'M12 3a9 9 0 1 0 0 18h1a3 3 0 0 0 2-5c-1-1 0-3 2-3h2c3 0 2-10-7-10Z',
     'M7 7a1 1 0 1 0 0 2a1 1 0 0 0 0-2ZM12 5a1 1 0 1 0 0 2a1 1 0 0 0 0-2ZM17 7a1 1 0 1 0 0 2a1 1 0 0 0 0-2ZM6 12a1 1 0 1 0 0 2a1 1 0 0 0 0-2Z',
@@ -62,6 +66,8 @@ export function getSensorMarkerKind(
       return 'text';
     case 'state':
       return 'state';
+    case 'readings':
+      return 'climate';
     default:
       return 'unknown';
   }

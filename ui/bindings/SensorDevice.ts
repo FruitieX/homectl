@@ -5,4 +5,5 @@ export type SensorDevice =
   | { value: boolean }
   | { value: string }
   | { value: number }
+  | { readings: { [key in string]: number } }
   | ControllableState;

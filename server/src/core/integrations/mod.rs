@@ -397,7 +397,7 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
         "mqtt" => Some(schema(
             "mqtt",
             "MQTT",
-            "Connect generic MQTT devices, Zigbee2MQTT bridges, or ESPHome MQTT JSON lights.",
+            "Connect generic MQTT devices, Zigbee2MQTT bridges, ESPHome MQTT JSON lights, or OpenMQTTGateway BLE sensors.",
             vec![
                 with_section(text_config_field("host", "Host", true, "MQTT broker hostname or IP address.", Some("mqtt.example.org")), "Connection"),
                 with_section(number_config_field("port", "Port", true, "MQTT broker port.", (Some(1.0), Some(65535.0), Some(1.0)), Some("1883")), "Connection"),
@@ -409,11 +409,12 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                             "mode",
                             "Mode",
                             true,
-                            "Generic MQTT: custom topics and payload mappings. Zigbee2MQTT: discover devices and capabilities from bridge metadata. ESPHome: standard ESPHome MQTT JSON lights.",
+                            "Generic MQTT: custom topics and payload mappings. Zigbee2MQTT: discover devices and capabilities from bridge metadata. ESPHome: standard ESPHome MQTT JSON lights. OpenMQTTGateway: BLE climate sensors heard by one or more gateways.",
                             vec![
                                 option("Generic MQTT", json!("generic"), Some("Custom MQTT topics and payload mappings.")),
                                 option("Zigbee2MQTT", json!("zigbee2mqtt"), Some("Discover devices and capabilities from Zigbee2MQTT bridge metadata.")),
                                 option("ESPHome", json!("esphome"), Some("ESPHome MQTT JSON lights using standard ESPHome light topics.")),
+                                option("OpenMQTTGateway BLE", json!("openmqttgateway"), Some("BLE temperature/humidity sensors decoded by OpenMQTTGateway, merged across gateways.")),
                             ],
                         ),
                         "Mode",
@@ -507,6 +508,31 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                     ),
                     "mode",
                     json!("esphome"),
+                ),
+                visible_when(
+                    with_help_text(
+                        with_default_value(
+                            with_section(
+                                text_config_field("openmqttgateway_base_topic", "Base topic", false, "Topic prefix in front of each gateway name.", Some("home")),
+                                "OpenMQTTGateway",
+                            ),
+                            json!("home"),
+                        ),
+                        "Gateways publish sensors on `<base>/<gateway>/BTtoMQTT/<MAC>`.",
+                    ),
+                    "mode",
+                    json!("openmqttgateway"),
+                ),
+                visible_when(
+                    with_help_text(
+                        with_section(
+                            json_config_field("ble_devices", "Sensors", false, "Sensors to add, as MAC address → name. Leave a name empty to use the model and MAC.", Some(json!({ "C48D1E3E5767": "Living room" }))),
+                            "OpenMQTTGateway",
+                        ),
+                        "Only these sensors become devices. Without a list, every sensor reporting temperature or humidity is added, including neighbours'.",
+                    ),
+                    "mode",
+                    json!("openmqttgateway"),
                 ),
                 advanced(visible_when(with_section(number_config_field("zigbee2mqtt_poll_interval_secs", "Poll interval", false, "Refresh stale Zigbee2MQTT lights after this many seconds. Default 300; values below 30 are clamped by the runtime; 0 disables polling.", (Some(0.0), Some(86_400.0), Some(1.0)), Some("300")), "Advanced settings"), "mode", json!("zigbee2mqtt"))),
                 advanced(with_section(select_config_field("managed", "Management mode", false, "Controls whether homectl corrects state drift for devices from this integration.", vec![option("Full", json!("Full"), Some("Continuously correct state drift.")), option("Unmanaged", json!("Unmanaged"), Some("Send commands without correcting later drift.")), option("Full read-only", json!("FullReadOnly"), Some("Track state but drop outbound commands.")), option("Unmanaged read-only", json!("UnmanagedReadOnly"), Some("Drop outbound commands and do not correct drift."))]), "Advanced settings")),

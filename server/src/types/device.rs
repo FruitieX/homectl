@@ -302,9 +302,20 @@ impl ControllableDevice {
 #[ts(export)]
 #[serde(untagged)]
 pub enum SensorDevice {
-    Boolean { value: bool },
-    Text { value: String },
-    Number { value: f64 },
+    Boolean {
+        value: bool,
+    },
+    Text {
+        value: String,
+    },
+    Number {
+        value: f64,
+    },
+    /// Several named numeric readings from one sensor, e.g. a BLE climate
+    /// sensor's `temperature`, `humidity` and `battery`.
+    Readings {
+        readings: BTreeMap<String, f64>,
+    },
     Color(ControllableState),
 }
 
@@ -331,6 +342,11 @@ impl Display for SensorDevice {
             SensorDevice::Boolean { value } => value.to_string(),
             SensorDevice::Text { value } => value.to_string(),
             SensorDevice::Number { value } => value.to_string(),
+            SensorDevice::Readings { readings } => readings
+                .iter()
+                .map(|(metric, value)| format!("{metric}={value}"))
+                .collect::<Vec<_>>()
+                .join(" "),
             SensorDevice::Color(state) => state.to_string(),
         };
 
@@ -1100,6 +1116,20 @@ mod tests {
         let json = r#"{"value":42.5}"#;
         let deserialized: SensorDevice = serde_json::from_str(json).unwrap();
         assert_eq!(deserialized, SensorDevice::Number { value: 42.5 });
+
+        // Test Readings variant
+        let json = r#"{"readings":{"humidity":45.0,"temperature":21.4}}"#;
+        let deserialized: SensorDevice = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            deserialized,
+            SensorDevice::Readings {
+                readings: BTreeMap::from([
+                    ("humidity".to_string(), 45.0),
+                    ("temperature".to_string(), 21.4),
+                ])
+            }
+        );
+        assert_eq!(serde_json::to_string(&deserialized).unwrap(), json);
 
         // Test Color variant
         let json =

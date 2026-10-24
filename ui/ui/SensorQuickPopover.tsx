@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import {
   Power,
   Plus,
@@ -15,6 +15,7 @@ import { useAppConfig } from '@/hooks/appConfig';
 import { useConnectionStatus } from '@/hooks/websocket';
 import { useSensorInteraction } from '@/hooks/useSensorInteraction';
 import {
+  describeSensorReadings,
   getSensorButtonValue,
   type DeviceSensorConfig,
 } from '@/lib/sensorInteraction';
@@ -229,6 +230,17 @@ export function SensorQuickPopover({
             </Button>
           </div>
         </form>
+      ) : sensor.kind === 'readings' ? (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-2xl bg-card/95 p-3 text-sm shadow-md">
+          {describeSensorReadings(sensor.value).map((reading) => (
+            <Fragment key={reading.metric}>
+              <dt className="text-muted-foreground">{reading.label}</dt>
+              <dd className="text-right font-medium tabular-nums">
+                {reading.value}
+              </dd>
+            </Fragment>
+          ))}
+        </dl>
       ) : (
         <p className="rounded-2xl bg-card/95 p-3 text-xs text-muted-foreground shadow-md">
           Open details for this sensor's full controls.

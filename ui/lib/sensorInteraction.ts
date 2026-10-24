@@ -13,7 +13,7 @@ export type SensorInteractionKind =
   | 'hue_dimmer';
 
 export type ResolvedSensorInteractionKind =
-  Exclude<SensorInteractionKind, 'auto'> | 'unknown';
+  Exclude<SensorInteractionKind, 'auto'> | 'readings' | 'unknown';
 
 export interface DeviceSensorConfig {
   device_ref: string;
@@ -25,6 +25,11 @@ export type SensorDetails =
   | { kind: 'boolean'; value: boolean; payload: { value: boolean } }
   | { kind: 'number'; value: number; payload: { value: number } }
   | { kind: 'text'; value: string; payload: { value: string } }
+  | {
+      kind: 'readings';
+      value: Record<string, number>;
+      payload: { readings: Record<string, number> };
+    }
   | {
       kind: 'state';
       value: Record<string, unknown>;
@@ -103,6 +108,20 @@ export const getSensorDetails = (device: Device | null): SensorDetails => {
     if (typeof value === 'string') {
       return { kind: 'text', value, payload: { value } };
     }
+  }
+
+  if (
+    isRecord(sensorPayload) &&
+    'readings' in sensorPayload &&
+    isRecord(sensorPayload.readings)
+  ) {
+    const readings = Object.fromEntries(
+      Object.entries(sensorPayload.readings).filter(
+        (entry): entry is [string, number] =>
+          typeof entry[1] === 'number' && Number.isFinite(entry[1]),
+      ),
+    );
+    return { kind: 'readings', value: readings, payload: { readings } };
   }
 
   if (isRecord(sensorPayload)) {
@@ -198,6 +217,8 @@ export const inferSensorInteractionKind = (
       return inferTextInteractionKind(sensor.value, observedValues);
     case 'state':
       return 'state';
+    case 'readings':
+      return 'readings';
     default:
       return 'unknown';
   }
@@ -249,6 +270,8 @@ export const getSensorInteractionLabel = (
       return 'Button events';
     case 'hue_dimmer':
       return 'Hue dimmer';
+    case 'readings':
+      return 'Readings';
     case 'unknown':
       return 'Advanced JSON only';
     default:
@@ -304,3 +327,69 @@ export function getSensorEventButtons(
       value,
     }));
 }
+
+/** Known reading metrics, in display order. */
+const READING_FORMATS: Array<{
+  metric: string;
+  label: string;
+  format: (value: number) => string;
+  compact: boolean;
+}> = [
+  {
+    metric: 'temperature',
+    label: 'Temperature',
+    format: (value) => `${value.toFixed(1)} °C`,
+    compact: true,
+  },
+  {
+    metric: 'humidity',
+    label: 'Humidity',
+    format: (value) => `${Math.round(value)}%`,
+    compact: true,
+  },
+  {
+    metric: 'battery',
+    label: 'Battery',
+    format: (value) => `${Math.round(value)}%`,
+    compact: false,
+  },
+];
+
+/** Labelled readings: known metrics first, then any others by name. */
+export const describeSensorReadings = (readings: Record<string, number>) => [
+  ...READING_FORMATS.filter(({ metric }) => metric in readings).map(
+    ({ metric, label, format, compact }) => ({
+      metric,
+      label,
+      value: format(readings[metric]),
+      compact,
+    }),
+  ),
+  ...Object.entries(readings)
+    .filter(([metric]) => !READING_FORMATS.some((f) => f.metric === metric))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([metric, value]) => ({
+      metric,
+      label: metric,
+      value: String(value),
+      compact: false,
+    })),
+];
+
+/**
+ * One-line summary, e.g. "21.4 °C · 45%". Battery and other extras are left
+ * out unless `full`, which labels them ("21.4 °C · 45% · Battery 68%").
+ */
+export const formatSensorReadings = (
+  readings: Record<string, number>,
+  { full = false }: { full?: boolean } = {},
+) => {
+  const described = describeSensorReadings(readings);
+  const compact = described.filter((reading) => reading.compact);
+  const shown = full || !compact.length ? described : compact;
+  return shown
+    .map((reading) =>
+      reading.compact ? reading.value : `${reading.label} ${reading.value}`,
+    )
+    .join(' · ');
+};

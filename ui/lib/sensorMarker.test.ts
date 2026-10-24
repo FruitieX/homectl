@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Device } from '../bindings/Device';
 import { getSensorMarkerKind } from './sensorMarker.ts';
+import { formatSensorReadings, getSensorDetails } from './sensorInteraction.ts';
 
 const device = (value: unknown): Device => ({
   id: 'input',
@@ -60,4 +61,23 @@ test('saved sensor interaction keeps button and dimmer icons stable across value
       'dimmer',
     );
   }
+});
+
+test('multi-reading climate sensors get a thermometer and a compact summary', () => {
+  const climate: Device = {
+    ...device(null),
+    data: {
+      Sensor: { readings: { temperature: 21.44, humidity: 45.6, battery: 68 } },
+    },
+  };
+  assert.equal(getSensorMarkerKind(climate), 'climate');
+  const details = getSensorDetails(climate);
+  assert.equal(details.kind, 'readings');
+  assert.ok(details.kind === 'readings');
+  assert.equal(formatSensorReadings(details.value), '21.4 °C · 46%');
+  assert.equal(
+    formatSensorReadings(details.value, { full: true }),
+    '21.4 °C · 46% · Battery 68%',
+  );
+  assert.equal(formatSensorReadings({ battery: 90 }), 'Battery 90%');
 });

@@ -5072,6 +5072,12 @@ fn non_matching_sensor_state(expected: &SensorDevice) -> SensorDevice {
         SensorDevice::Number { value } => SensorDevice::Number {
             value: if *value == 0.0 { 1.0 } else { 0.0 },
         },
+        SensorDevice::Readings { readings } => SensorDevice::Readings {
+            readings: readings
+                .iter()
+                .map(|(metric, value)| (metric.clone(), if *value == 0.0 { 1.0 } else { 0.0 }))
+                .collect(),
+        },
         SensorDevice::Color(state) => SensorDevice::Color(ControllableState {
             power: !state.power,
             brightness: None,

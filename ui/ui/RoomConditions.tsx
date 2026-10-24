@@ -11,15 +11,47 @@ import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
 import { TimeSeriesPlot } from '@/ui/charts/TimeSeriesPlot';
 import { SensorReadingsStatus } from '@/ui/SensorReadingsStatus';
 
-/** Match history by its full source identity; numeric sensor values have no unit. */
+type HistoryRow = ReturnType<typeof useTempSensorsResource>['rows'][number];
+
+/** BLE sensors are keyed by MAC, while history is stored per gateway. */
+const BLE_MAC = /^[0-9A-F]{12}$/;
+
+/** One sample per time: gateways hearing the same sensor are averaged. */
+function seriesOf(rows: HistoryRow[], field: string) {
+  const byTime = new Map<number, HistoryRow[]>();
+  for (const row of rows) {
+    if (row._field !== field) continue;
+    const time = row._time.getTime();
+    byTime.set(time, [...(byTime.get(time) ?? []), row]);
+  }
+  return [...byTime.values()]
+    .map((samples) => ({
+      ...samples[0],
+      _value:
+        samples.reduce((sum, row) => sum + row._value, 0) / samples.length,
+    }))
+    .sort((a, b) => a._time.getTime() - b._time.getTime());
+}
+
+/**
+ * Match history by its full source identity, or by MAC for a BLE sensor
+ * (`<integration>/<MAC>`) whose history comes from any gateway. Numeric
+ * sensor values have no unit.
+ */
 function useRoomReadings(deviceKeys: string[]) {
   const resource = useTempSensorsResource();
   const readings = useMemo(() => {
     const members = new Set(deviceKeys);
-    const sources = new Map<string, typeof resource.rows>();
+    const byMac = new Map<string, string>();
+    for (const key of deviceKeys) {
+      const id = key.slice(key.indexOf('/') + 1);
+      if (BLE_MAC.test(id)) byMac.set(id, key);
+    }
+    const sources = new Map<string, HistoryRow[]>();
     for (const row of resource.rows) {
-      const key = `${row.integration_id}/${row.device_id}`;
-      if (members.has(key)) {
+      const exact = `${row.integration_id}/${row.device_id}`;
+      const key = members.has(exact) ? exact : byMac.get(row.device_id);
+      if (key) {
         if (!sources.has(key)) sources.set(key, []);
         sources.get(key)!.push(row);
       }
@@ -28,12 +60,8 @@ function useRoomReadings(deviceKeys: string[]) {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, rows]) => ({
         key,
-        temperature: rows
-          .filter((row) => row._field === 'tempc')
-          .sort((a, b) => a._time.getTime() - b._time.getTime()),
-        humidity: rows
-          .filter((row) => row._field === 'hum')
-          .sort((a, b) => a._time.getTime() - b._time.getTime()),
+        temperature: seriesOf(rows, 'tempc'),
+        humidity: seriesOf(rows, 'hum'),
       }));
   }, [deviceKeys, resource.rows]);
   return { resource, readings };

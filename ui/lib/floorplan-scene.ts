@@ -6,7 +6,10 @@ import { type FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { getResolvedDeviceColorState } from '@/lib/colors';
 import { getDeviceKey } from '@/lib/device';
 import { getSensorMarkerKind, type SensorMarkerKind } from '@/lib/sensorMarker';
-import type { DeviceSensorConfig } from '@/lib/sensorInteraction';
+import {
+  formatSensorReadings,
+  type DeviceSensorConfig,
+} from '@/lib/sensorInteraction';
 import {
   getFloorplanDevicePositions,
   getFloorplanRenderMetrics,
@@ -374,6 +377,9 @@ function getSensorStatusLabel(device: Device) {
   }
 
   const sensor = device.data.Sensor;
+  if ('readings' in sensor) {
+    return formatSensorReadings(sensor.readings) || undefined;
+  }
   if (!('value' in sensor)) {
     return 'COLOR';
   }

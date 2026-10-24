@@ -1,6 +1,9 @@
 import type { Device } from '@/bindings/Device';
 import { StatePreview } from '@/ui/settings/StatePreview';
-import { getSensorDetails } from '@/lib/sensorInteraction';
+import {
+  formatSensorReadings,
+  getSensorDetails,
+} from '@/lib/sensorInteraction';
 import { getDeviceKey } from '@/lib/device';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
@@ -26,9 +29,11 @@ export function deviceSummary(device: Device) {
       : 'Off'
     : sensor.kind === 'number' || sensor.kind === 'text'
       ? String(sensor.value)
-      : sensor.kind === 'state'
-        ? 'Structured sensor value'
-        : 'No value received';
+      : sensor.kind === 'readings'
+        ? formatSensorReadings(sensor.value, { full: true })
+        : sensor.kind === 'state'
+          ? 'Structured sensor value'
+          : 'No value received';
 }
 export function DeviceStatePreview({ device }: { device: Device }) {
   if ('Sensor' in device.data && 'power' in device.data.Sensor)
