@@ -35,7 +35,7 @@ palette = { version = "=0.7.7", features = ["serializing"] }
 async-trait = "=0.1.92"
 rand = "=0.10.3"
 ring = "=0.17.14"
-warp = "=0.3.7"
+warp = "=0.4.3"
 serde_path_to_error = "=0.1.20"
 tokio = { version = "=1.54.1", features = ["full"] }
 futures-util = "=0.3.34"
