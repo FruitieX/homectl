@@ -125,6 +125,7 @@ export function FloorplanEditorWorkspace({
   grid,
   onChange,
   devices,
+  placedElsewhere = {},
   groups,
   background,
   name,
@@ -139,6 +140,8 @@ export function FloorplanEditorWorkspace({
   grid: FloorplanGrid | null;
   onChange: (g: FloorplanGrid) => void;
   devices: AvailableFloorplanDevice[];
+  /** Devices placed on other floorplans: device key → floorplan names. */
+  placedElsewhere?: Record<string, string>;
   groups: { id: string; name: string; device_keys?: string[] | null }[];
   background?: string;
   name: string;
@@ -332,6 +335,12 @@ export function FloorplanEditorWorkspace({
   while (groups.some((g) => g.id === allRoomsValue)) allRoomsValue += '_';
   const catalog = devices.filter(matches);
   const placedKeys = new Set(grid?.devices.map((d) => d.deviceKey));
+  const toPlace = catalog.filter(
+    (d) => !placedKeys.has(d.key) && !placedElsewhere[d.key],
+  );
+  const onOtherFloors = catalog.filter(
+    (d) => !placedKeys.has(d.key) && placedElsewhere[d.key],
+  );
   const selectDevice = (key: string) => {
     setSelected(key);
     setTool('devices');
@@ -373,7 +382,11 @@ export function FloorplanEditorWorkspace({
                   .join(' · ')
               : (groups.find((g) => d.groupIds.includes(g.id))?.name ??
                 'Device')}
-          {placedKeys.has(d.key) ? ' · placed' : ''}
+          {placedKeys.has(d.key)
+            ? ' · placed'
+            : placedElsewhere[d.key]
+              ? ` · on ${placedElsewhere[d.key]}`
+              : ''}
         </small>
       </span>
       {placedKeys.has(d.key) ? (
@@ -622,14 +635,9 @@ export function FloorplanEditorWorkspace({
                   ]}
                 />
                 <div className="fp-section-label">
-                  To place{' '}
-                  <span>
-                    {catalog.filter((d) => !placedKeys.has(d.key)).length}
-                  </span>
+                  To place <span>{toPlace.length}</span>
                 </div>
-                {catalog
-                  .filter((d) => !placedKeys.has(d.key))
-                  .map((d) => deviceRow(d))}
+                {toPlace.map((d) => deviceRow(d))}
                 <div className="fp-section-label">
                   Placed{' '}
                   <span>
@@ -639,6 +647,14 @@ export function FloorplanEditorWorkspace({
                 {catalog
                   .filter((d) => placedKeys.has(d.key))
                   .map((d) => deviceRow(d))}
+                {onOtherFloors.length > 0 && (
+                  <>
+                    <div className="fp-section-label">
+                      On other floors <span>{onOtherFloors.length}</span>
+                    </div>
+                    {onOtherFloors.map((d) => deviceRow(d))}
+                  </>
+                )}
                 {grid?.devices
                   .filter(
                     (p) =>

@@ -34,6 +34,7 @@ import {
 } from '@/hooks/useEntityDraft';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
+import { useAllFloorplans } from '@/hooks/useStoredFloorplan';
 import { getDeviceKey } from '@/lib/device';
 import { getSensorMarkerKind } from '@/lib/sensorMarker';
 import { sensorValueText } from '@/lib/sensorInteraction';
@@ -247,6 +248,20 @@ function FloorplanEditor({
   const displayNames = Object.fromEntries(
     names.data.map((row) => [row.device_key, row.display_name]),
   );
+  const { floorplans: allFloorplans } = useAllFloorplans();
+  const placedElsewhere = useMemo(() => {
+    const floors: Record<string, string[]> = {};
+    for (const floorplan of allFloorplans) {
+      if (floorplan.id === id) continue;
+      for (const placement of floorplan.grid?.devices ?? [])
+        (floors[placement.deviceKey] ??= []).push(
+          floorplan.name || floorplan.id,
+        );
+    }
+    return Object.fromEntries(
+      Object.entries(floors).map(([key, names]) => [key, names.join(', ')]),
+    );
+  }, [allFloorplans, id]);
   const memberGroups = groups.data.reduce<Record<string, string[]>>(
     (result, group) => {
       for (const key of group.device_keys ??
@@ -676,6 +691,7 @@ function FloorplanEditor({
         grid={parsed.grid}
         onChange={changeGrid}
         devices={available}
+        placedElsewhere={placedElsewhere}
         groups={groups.data}
         background={background}
         name={value.name}
