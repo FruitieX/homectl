@@ -183,6 +183,15 @@ export default async function (cdp, { url }) {
     `!document.querySelector('[data-testid="pair-device-screen"]') && !${button('Sign in with passkey')}`,
   );
   await screenshot('5-display-paired');
+  // The gateway-injected feedback-hub widget loads async; a display hides
+  // its button once the widget announces itself.
+  await evaluate(
+    `window.FeedbackHub={hidden:false,hideButton(){this.hidden=true},showButton(){this.hidden=false}};window.dispatchEvent(new Event('feedbackhub:ready'))`,
+  );
+  await check(
+    'display hides the feedback button',
+    `window.FeedbackHub.hidden === true`,
+  );
 
   // 6. Revoking the display signs it out on its next API call.
   const revoke = await fetch(`${origin}/auth/devices/${approved.device.id}`, {

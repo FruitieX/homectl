@@ -22,6 +22,7 @@ import {
   signIn,
   startPairing,
 } from '@/lib/auth';
+import { setFeedbackButtonHidden } from '@/lib/feedbackWidget';
 import { HomectlLogo } from '@/ui/HomectlLogo';
 import { Button } from '@/ui/primitives/button';
 
@@ -320,6 +321,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
       window.fetch = originalFetch;
     };
   }, [status, check]);
+
+  // Paired wall displays have no one to write feedback: hide the injected
+  // feedback-hub button there.
+  const isDevice = Boolean(status?.authenticated && status.kind === 'device');
+  useEffect(() => {
+    if (isDevice) return setFeedbackButtonHidden(true);
+  }, [isDevice]);
 
   const needsSignIn = Boolean(status?.enabled && !status.authenticated);
   // Opening an approval link (QR code) while signed out goes straight to
