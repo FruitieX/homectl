@@ -43,6 +43,20 @@ export const sensorMarkerPaths = {
 } as const;
 export type SensorMarkerKind = keyof typeof sensorMarkerPaths;
 
+/** Short human name for each marker kind, used next to the icon in lists. */
+export const sensorMarkerLabels: Record<SensorMarkerKind, string> = {
+  boolean: 'On/off sensor',
+  boolean_on: 'On/off sensor',
+  power: 'On/off buttons',
+  button: 'Button',
+  dimmer: 'Dimmer switch',
+  number: 'Numeric sensor',
+  text: 'Text sensor',
+  state: 'Light state',
+  climate: 'Climate',
+  unknown: 'Sensor',
+};
+
 export function getSensorMarkerKind(
   device: Device,
   config?: DeviceSensorConfig | null,

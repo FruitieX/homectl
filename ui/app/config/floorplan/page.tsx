@@ -36,6 +36,7 @@ import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { getDeviceKey } from '@/lib/device';
 import { getSensorMarkerKind } from '@/lib/sensorMarker';
+import { sensorValueText } from '@/lib/sensorInteraction';
 import { getResolvedDeviceColorState } from '@/lib/colors';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { readFloorplanDraft } from '@/lib/floorplanDraft';
@@ -279,6 +280,7 @@ function FloorplanEditor({
                 ),
               )
             : undefined,
+        sensorValue: sensorValueText(device),
         preview: state
           ? {
               color: state.color.hex(),

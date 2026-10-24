@@ -393,3 +393,21 @@ export const formatSensorReadings = (
     )
     .join(' · ');
 };
+
+/**
+ * A sensor's current reading for compact lists, or undefined when its value
+ * is not a meaningful reading (button events, structured state, no report).
+ */
+export const sensorValueText = (device: Device): string | undefined => {
+  const sensor = getSensorDetails(device);
+  switch (sensor.kind) {
+    case 'readings':
+      return formatSensorReadings(sensor.value) || undefined;
+    case 'number':
+      return String(Math.round(sensor.value * 100) / 100);
+    case 'boolean':
+      return sensor.value ? 'On' : 'Off';
+    default:
+      return undefined;
+  }
+};

@@ -2,7 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Device } from '../bindings/Device';
 import { getSensorMarkerKind } from './sensorMarker.ts';
-import { formatSensorReadings, getSensorDetails } from './sensorInteraction.ts';
+import {
+  formatSensorReadings,
+  getSensorDetails,
+  sensorValueText,
+} from './sensorInteraction.ts';
 
 const device = (value: unknown): Device => ({
   id: 'input',
@@ -80,4 +84,17 @@ test('multi-reading climate sensors get a thermometer and a compact summary', ()
     '21.4 °C · 46% · Battery 68%',
   );
   assert.equal(formatSensorReadings({ battery: 90 }), 'Battery 90%');
+});
+
+test('sensor list values show readings, numbers and on/off but not button events', () => {
+  assert.equal(sensorValueText(device(21.456)), '21.46');
+  assert.equal(sensorValueText(device(true)), 'On');
+  assert.equal(sensorValueText(device('on_press_release')), undefined);
+  assert.equal(
+    sensorValueText({
+      ...device(null),
+      data: { Sensor: { readings: { temperature: 21.4, humidity: 45 } } },
+    }),
+    '21.4 °C · 45%',
+  );
 });

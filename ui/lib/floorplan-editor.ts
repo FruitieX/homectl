@@ -32,6 +32,8 @@ type FloorplanDeviceType = 'controllable' | 'sensor' | 'other';
 
 export interface AvailableFloorplanDevice {
   sensorMarker?: SensorMarkerKind;
+  /** Current sensor reading for lists, e.g. "21.4 °C · 45%" or "On". */
+  sensorValue?: string;
   key: string;
   name: string;
   type: FloorplanDeviceType;

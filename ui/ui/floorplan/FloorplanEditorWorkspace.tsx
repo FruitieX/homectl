@@ -11,7 +11,6 @@ import {
   List,
   MapPin,
   MousePointer2,
-  Radio,
   Redo2,
   Search,
   SlidersHorizontal,
@@ -64,6 +63,7 @@ import { deepEqual } from '@/lib/configSection';
 import { snapDevicePoint, type DeviceSnap } from '@/lib/floorplan-snapping';
 import './floorplan-editor.css';
 import { floorplanLabels } from '@/lib/floorplan-labels';
+import { sensorMarkerLabels, sensorMarkerPaths } from '@/lib/sensorMarker';
 import { FloorplanLayerToggles } from './FloorplanLayerToggles';
 const tools = [
   { id: 'select', name: 'Select', icon: MousePointer2, key: 'V' },
@@ -101,7 +101,23 @@ function DevicePreview({ device }: { device?: AvailableFloorplanDevice }) {
     </span>
   ) : (
     <span className="fp-sensor-preview">
-      {device?.type === 'sensor' ? <Radio /> : <MapPin />}
+      {device?.type === 'sensor' ? (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          {sensorMarkerPaths[device.sensorMarker ?? 'unknown'].map((d) => (
+            <path key={d} d={d} />
+          ))}
+        </svg>
+      ) : (
+        <MapPin />
+      )}
     </span>
   );
 }
@@ -347,8 +363,16 @@ export function FloorplanEditorWorkspace({
         <small>
           {missing
             ? 'Unavailable · placement retained'
-            : (groups.find((g) => d.groupIds.includes(g.id))?.name ??
-              (d.type === 'sensor' ? 'Sensor' : 'Device'))}
+            : d.type === 'sensor'
+              ? [
+                  sensorMarkerLabels[d.sensorMarker ?? 'unknown'],
+                  d.sensorValue,
+                  groups.find((g) => d.groupIds.includes(g.id))?.name,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
+              : (groups.find((g) => d.groupIds.includes(g.id))?.name ??
+                'Device')}
           {placedKeys.has(d.key) ? ' · placed' : ''}
         </small>
       </span>
