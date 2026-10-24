@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFloorplanDraft } from './floorplanDraft.ts';
+import { FLOORPLAN_DEVICE_MARGIN } from './floorplan-snapping.ts';
 import { describeConflictValue } from './conflictPresentation.ts';
 const grid = {
   width: 2,
@@ -34,7 +35,10 @@ test('malformed or future layouts are kept out of drawing controls instead of si
     { ...grid, width: 0 },
     { ...grid, tiles: [['wall']] },
     { ...grid, labelMode: 'future-mode' },
-    { ...grid, devices: [{ ...grid.devices[0], x: 3 }] },
+    {
+      ...grid,
+      devices: [{ ...grid.devices[0], x: 3 + FLOORPLAN_DEVICE_MARGIN }],
+    },
     { ...grid, groups: { room: [{ x: 0.5, y: 1 }] } },
   ])
     assert.equal(readFloorplanDraft(JSON.stringify(bad)).grid, null);

@@ -30,6 +30,7 @@ import {
 import { getFloorplanRenderMetrics } from '@/lib/floorplan-metrics';
 import {
   effectiveDeviceSnap,
+  isDevicePlacementInRange,
   snapDevicePoint,
   type DeviceSnap,
 } from '@/lib/floorplan-snapping';
@@ -642,6 +643,10 @@ export function FloorplanEditorCanvas({
   };
   const inBounds = (p: GridPoint) =>
     p.x >= 0 && p.y >= 0 && p.x < grid.width && p.y < grid.height;
+  // Devices may also go in the margin around the grid (yards, driveways).
+  const inPlacementBounds = (p: GridPoint) =>
+    isDevicePlacementInRange(p.x - 0.5, grid.width) &&
+    isDevicePlacementInRange(p.y - 0.5, grid.height);
   const placement = (
     p: GridPoint,
     modifiers: { altKey?: boolean; shiftKey?: boolean },
@@ -737,7 +742,7 @@ export function FloorplanEditorCanvas({
             setIsPanning(true);
             return;
           }
-          if (pending && inBounds(p)) {
+          if (pending && inPlacementBounds(p)) {
             const position = placement({ x: p.x - 0.5, y: p.y - 0.5 }, e);
             emit(
               placeSelectedDeviceOnGrid(
@@ -823,11 +828,13 @@ export function FloorplanEditorCanvas({
             ? placement({ x: p.x - 0.5, y: p.y - 0.5 }, e)
             : null;
           setHover(
-            inBounds(p)
-              ? preview
+            preview
+              ? inPlacementBounds(p)
                 ? { x: preview.x + 0.5, y: preview.y + 0.5 }
-                : p
-              : null,
+                : null
+              : inBounds(p)
+                ? p
+                : null,
           );
           if (touches.current.has(e.pointerId))
             touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });

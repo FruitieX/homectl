@@ -1152,6 +1152,8 @@ function getFitTransform(
     return { x: 0, y: 0, scale: 1 };
   }
 
+  // Without a focus, fit the layout plus any devices placed outside it.
+  focusBounds ??= scene.contentBounds;
   if (focusBounds && focusBounds.width > 0 && focusBounds.height > 0) {
     const scale = clampScale(
       fitPadding *
@@ -1945,7 +1947,16 @@ export function PixiFloorplanRenderer({
 
     hasInteractedRef.current = false;
     fitSceneRef.current();
-  }, [fitPadding, focusBoundsKey, scene.height, scene.width]);
+  }, [
+    fitPadding,
+    focusBoundsKey,
+    scene.height,
+    scene.width,
+    scene.contentBounds.x,
+    scene.contentBounds.y,
+    scene.contentBounds.width,
+    scene.contentBounds.height,
+  ]);
 
   return (
     <div

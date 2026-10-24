@@ -1,4 +1,8 @@
 import { validFloorplanLayers } from './floorplan-labels.ts';
+import {
+  FLOORPLAN_DEVICE_MARGIN,
+  isDevicePlacementInRange,
+} from './floorplan-snapping.ts';
 import type { FloorplanGrid } from '../ui/FloorplanGridEditor';
 const object = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
@@ -59,14 +63,12 @@ export function readFloorplanDraft(raw: string): {
         keys.has(device.deviceKey) ||
         typeof device.deviceName !== 'string' ||
         !finite(device.x) ||
-        device.x < 0 ||
-        device.x >= width ||
+        !isDevicePlacementInRange(device.x, width) ||
         !finite(device.y) ||
-        device.y < 0 ||
-        device.y >= height
+        !isDevicePlacementInRange(device.y, height)
       )
         throw Error(
-          'Device placements need unique keys, names and positions inside the canvas.',
+          `Device placements need unique keys, names and positions within ${FLOORPLAN_DEVICE_MARGIN} tiles of the canvas.`,
         );
       keys.add(device.deviceKey);
     }

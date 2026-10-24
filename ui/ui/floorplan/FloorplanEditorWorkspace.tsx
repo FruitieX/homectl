@@ -60,9 +60,19 @@ import {
 } from './FloorplanEditorCanvas';
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { deepEqual } from '@/lib/configSection';
-import { snapDevicePoint, type DeviceSnap } from '@/lib/floorplan-snapping';
+import {
+  FLOORPLAN_DEVICE_MARGIN,
+  isDevicePlacementInRange,
+  snapDevicePoint,
+  type DeviceSnap,
+} from '@/lib/floorplan-snapping';
 import './floorplan-editor.css';
 import { floorplanLabels } from '@/lib/floorplan-labels';
+import {
+  roomAtPlacement,
+  roomMembershipSuggestions,
+  type RoomMembershipSuggestion,
+} from '@/lib/floorplan-room-membership';
 import { sensorMarkerLabels, sensorMarkerPaths } from '@/lib/sensorMarker';
 import { FloorplanLayerToggles } from './FloorplanLayerToggles';
 const tools = [
@@ -126,6 +136,7 @@ export function FloorplanEditorWorkspace({
   onChange,
   devices,
   placedElsewhere = {},
+  onAssignRooms,
   groups,
   background,
   name,
@@ -142,6 +153,8 @@ export function FloorplanEditorWorkspace({
   devices: AvailableFloorplanDevice[];
   /** Devices placed on other floorplans: device key → floorplan names. */
   placedElsewhere?: Record<string, string>;
+  /** Adds devices to the room groups whose areas they are placed in. */
+  onAssignRooms?: (suggestions: RoomMembershipSuggestion[]) => Promise<void>;
   groups: { id: string; name: string; device_keys?: string[] | null }[];
   background?: string;
   name: string;
@@ -167,6 +180,8 @@ export function FloorplanEditorWorkspace({
     } | null>(null),
     [pending, setPending] = useState<string | null>(null),
     [search, setSearch] = useState(''),
+    [assigning, setAssigning] = useState(false),
+    [assignError, setAssignError] = useState(''),
     [filter, setFilter] = useState('all'),
     [groupFilter, setGroupFilter] = useState<string | null>(null),
     [tray, setTray] = useState<'library' | 'inspector' | null>(
@@ -291,6 +306,19 @@ export function FloorplanEditorWorkspace({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   });
+  const roomSuggestions = roomMembershipSuggestions(grid, groups);
+  const assignRooms = async (suggestions: RoomMembershipSuggestion[]) => {
+    if (!onAssignRooms || assigning) return;
+    setAssigning(true);
+    setAssignError('');
+    try {
+      await onAssignRooms(suggestions);
+    } catch (e) {
+      setAssignError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAssigning(false);
+    }
+  };
   const placement = grid?.devices.find((d) => d.deviceKey === selected),
     info = devices.find((d) => d.key === selected),
     selectedRoom = groups.find((g) => g.id === room),
@@ -654,6 +682,40 @@ export function FloorplanEditorWorkspace({
                     </div>
                     {onOtherFloors.map((d) => deviceRow(d))}
                   </>
+                )}
+                {onAssignRooms && roomSuggestions.length > 0 && (
+                  <div
+                    className="fp-room-suggestion"
+                    data-testid="room-membership-suggestions"
+                  >
+                    <div className="fp-section-label">
+                      Not in their room <span>{roomSuggestions.length}</span>
+                    </div>
+                    <ul className="fp-note">
+                      {roomSuggestions.map((s) => (
+                        <li key={s.deviceKey}>
+                          {devices.find((d) => d.key === s.deviceKey)?.name ??
+                            s.deviceName}{' '}
+                          → {s.groupName}
+                        </li>
+                      ))}
+                    </ul>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={assigning}
+                      onClick={() => void assignRooms(roomSuggestions)}
+                    >
+                      <Layers3 />
+                      Add {roomSuggestions.length === 1 ? 'it' : 'all'} to their
+                      rooms
+                    </Button>
+                    {assignError && (
+                      <p role="alert" className="fp-note text-destructive">
+                        {assignError}
+                      </p>
+                    )}
+                  </div>
                 )}
                 {grid?.devices
                   .filter(
@@ -1111,6 +1173,37 @@ export function FloorplanEditorWorkspace({
                     </small>
                   </div>
                 </div>
+                {(() => {
+                  const room = roomAtPlacement(grid!, groups, placement);
+                  if (!room) return null;
+                  const suggestion = roomSuggestions.find(
+                    (s) => s.deviceKey === placement.deviceKey,
+                  );
+                  return suggestion && onAssignRooms ? (
+                    <div className="fp-room-suggestion">
+                      <p className="fp-note">
+                        Inside <strong>{room.name}</strong>, but not one of its
+                        devices.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={assigning}
+                        onClick={() => void assignRooms([suggestion])}
+                      >
+                        <Layers3 />
+                        Add to {room.name}
+                      </Button>
+                      {assignError && (
+                        <p role="alert" className="fp-note text-destructive">
+                          {assignError}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="fp-note">In {room.name}.</p>
+                  );
+                })()}
                 <div className="fp-section-heading">
                   <MapPin />
                   Position · tiles
@@ -1124,15 +1217,20 @@ export function FloorplanEditorWorkspace({
                         aria-label={`Placement ${axis.toUpperCase()}`}
                         type="number"
                         step={snap || 0.1}
-                        min="0"
+                        min={-FLOORPLAN_DEVICE_MARGIN}
                         max={
-                          (axis === 'x' ? grid!.width : grid!.height) - 0.001
+                          (axis === 'x' ? grid!.width : grid!.height) +
+                          FLOORPLAN_DEVICE_MARGIN -
+                          0.001
                         }
                         defaultValue={placement[axis]}
                         onBlur={(e) => {
                           const n = Number(e.target.value),
                             limit = axis === 'x' ? grid!.width : grid!.height;
-                          if (Number.isFinite(n) && n >= 0 && n < limit)
+                          if (
+                            Number.isFinite(n) &&
+                            isDevicePlacementInRange(n, limit)
+                          )
                             discrete(
                               moveDeviceOnGrid(
                                 grid!,

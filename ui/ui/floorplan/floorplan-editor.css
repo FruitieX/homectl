@@ -987,3 +987,13 @@
     background: #b78736;
   }
 }
+.fp-room-suggestion {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.fp-room-suggestion ul {
+  margin: 0;
+  padding-left: 16px;
+  list-style: disc;
+}

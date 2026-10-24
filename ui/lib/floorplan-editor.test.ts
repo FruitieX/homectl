@@ -79,8 +79,20 @@ test('left/top resize shifts placements and masks together and prunes only out-o
   assert.deepEqual(grown.groups.room, [{ x: 4, y: 3, future: 'mask' }]);
   assert.deepEqual(grown.future, original.future);
   const shrunk = resizeGridState(grown, 2, 2, 'right', 'bottom')!;
-  assert.equal(shrunk.devices.length, 0);
+  // Devices left just outside stay placed in the margin; room masks don't.
+  assert.deepEqual(
+    shrunk.devices.map(({ x, y }) => ({ x, y })),
+    [{ x: 4.7, y: 3.3 }],
+  );
   assert.deepEqual(shrunk.groups, {});
+  const cropped = resizeGridState(
+    { ...grown, devices: [{ ...grown.devices[0], x: 40 }] },
+    2,
+    2,
+    'right',
+    'bottom',
+  )!;
+  assert.equal(cropped.devices.length, 0);
 });
 test('moving and placing keep fractional coordinates and preserve unknown fields', () => {
   const original = fixture(),

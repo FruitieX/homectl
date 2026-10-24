@@ -35,6 +35,10 @@ import {
 import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { useAllFloorplans } from '@/hooks/useStoredFloorplan';
+import {
+  membershipAdditions,
+  type RoomMembershipSuggestion,
+} from '@/lib/floorplan-room-membership';
 import { getDeviceKey } from '@/lib/device';
 import { getSensorMarkerKind } from '@/lib/sensorMarker';
 import { sensorValueText } from '@/lib/sensorInteraction';
@@ -249,6 +253,20 @@ function FloorplanEditor({
     names.data.map((row) => [row.device_key, row.display_name]),
   );
   const { floorplans: allFloorplans } = useAllFloorplans();
+  // Membership is saved to the groups right away; the layout draft is not.
+  const assignRooms = async (suggestions: RoomMembershipSuggestion[]) => {
+    for (const [groupId, refs] of membershipAdditions(suggestions)) {
+      const row = groups.data.find((row) => row.id === groupId);
+      if (!row) continue;
+      // `device_keys` is derived by the server and not part of the stored row.
+      const { device_keys: _derived, ...group } = row;
+      await groups.update(
+        group.id,
+        { ...group, devices: [...group.devices, ...refs] },
+        group,
+      );
+    }
+  };
   const placedElsewhere = useMemo(() => {
     const floors: Record<string, string[]> = {};
     for (const floorplan of allFloorplans) {
@@ -692,6 +710,7 @@ function FloorplanEditor({
         onChange={changeGrid}
         devices={available}
         placedElsewhere={placedElsewhere}
+        onAssignRooms={assignRooms}
         groups={groups.data}
         background={background}
         name={value.name}

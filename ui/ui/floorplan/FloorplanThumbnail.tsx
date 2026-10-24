@@ -19,12 +19,7 @@ export function FloorplanThumbnail({
   bounds?: { x: number; y: number; width: number; height: number } | null;
   label: string;
 }) {
-  const view = bounds ?? {
-    x: 0,
-    y: 0,
-    width: scene.width,
-    height: scene.height,
-  };
+  const view = bounds ?? scene.contentBounds;
   const idPrefix = `fpt${useId().replace(/[^\w-]/g, '')}`;
   const radius = Math.max(view.width, view.height) * 0.028;
   const glowingLights = scene.lights.filter(

@@ -66,6 +66,11 @@ export interface FloorplanScene {
   layoutKey: string;
   width: number;
   height: number;
+  /**
+   * Area worth showing: the layout plus any devices placed outside it (e.g.
+   * outdoor sensors), padded for their markers and labels.
+   */
+  contentBounds: { x: number; y: number; width: number; height: number };
   backgroundImage?: HTMLImageElement;
   tileWidth: number;
   tileHeight: number;
@@ -482,6 +487,26 @@ function getCachedVisibilityPolygon(
   return staticScene.visibilityPolygons.get(cacheKey) ?? undefined;
 }
 
+function getContentBounds(staticScene: StaticFloorplanScene) {
+  let minX = 0,
+    minY = 0,
+    maxX = staticScene.width,
+    maxY = staticScene.height;
+  const padX = staticScene.tileWidth * 1.5,
+    padY = staticScene.tileHeight * 1.5;
+  for (const { x, y } of Object.values(staticScene.positions)) {
+    if (x < 0 || x > staticScene.width) {
+      minX = Math.min(minX, x - padX);
+      maxX = Math.max(maxX, x + padX);
+    }
+    if (y < 0 || y > staticScene.height) {
+      minY = Math.min(minY, y - padY);
+      maxY = Math.max(maxY, y + padY);
+    }
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
 export function buildFloorplanScene({
   healthByDevice,
   grid,
@@ -567,6 +592,7 @@ export function buildFloorplanScene({
 
   return {
     layoutKey: staticScene.key,
+    contentBounds: getContentBounds(staticScene),
     labelMode: grid?.labelMode ?? 'sensors',
     labelVisibility: floorplanLabels(grid),
     width: staticScene.width,

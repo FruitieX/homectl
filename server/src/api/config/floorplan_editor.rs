@@ -95,6 +95,14 @@ fn image_bytes(image: &Image) -> Result<Option<Vec<u8>>, String> {
     }
     Ok(Some(bytes))
 }
+/// Devices may sit this many tiles outside the grid (yards, driveways). Keep in
+/// sync with `FLOORPLAN_DEVICE_MARGIN` in the UI.
+const DEVICE_MARGIN: u64 = 16;
+
+fn in_device_range(value: f64, size: u64) -> bool {
+    value >= -(DEVICE_MARGIN as f64) && value < (size + DEVICE_MARGIN) as f64
+}
+
 fn validate_grid(raw: &str) -> Result<(), String> {
     let value: Value =
         serde_json::from_str(raw).map_err(|_| "The layout must contain valid JSON.".to_string())?;
@@ -147,15 +155,14 @@ fn validate_grid(raw: &str) -> Result<(), String> {
                 || device["deviceName"].as_str().is_none()
                 || !device["x"]
                     .as_f64()
-                    .is_some_and(|v| v >= 0.0 && v < width as f64)
+                    .is_some_and(|v| in_device_range(v, width))
                 || !device["y"]
                     .as_f64()
-                    .is_some_and(|v| v >= 0.0 && v < height as f64)
+                    .is_some_and(|v| in_device_range(v, height))
             {
-                return Err(
-                    "Device placements need unique keys, names and positions inside the canvas."
-                        .into(),
-                );
+                return Err(format!(
+                    "Device placements need unique keys, names and positions within {DEVICE_MARGIN} tiles of the canvas."
+                ));
             }
         }
     }
@@ -488,7 +495,13 @@ mod tests {
         value["devices"] =
             json!([{"deviceKey":"dummy/lamp","deviceName":"Lamp","x":1,"y":0,"future":42}]);
         assert!(validate_grid(&value.to_string()).is_ok());
+        // Outside the grid within the margin is fine (outdoor sensors)…
         value["devices"][0]["x"] = json!(2);
+        value["devices"][0]["y"] = json!(-(DEVICE_MARGIN as f64));
+        assert!(validate_grid(&value.to_string()).is_ok());
+        // …but not beyond it.
+        let width = value["width"].as_u64().unwrap();
+        value["devices"][0]["x"] = json!(width + DEVICE_MARGIN);
         assert!(validate_grid(&value.to_string()).is_err());
         value["devices"] = json!([]);
         value["groups"] = json!({"room":[{"x":0.5,"y":1}]});

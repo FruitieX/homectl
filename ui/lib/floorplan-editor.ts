@@ -1,4 +1,5 @@
 import { validFloorplanLayers } from './floorplan-labels.ts';
+import { isDevicePlacementInRange } from './floorplan-snapping.ts';
 import type { SensorMarkerKind } from './sensorMarker.ts';
 
 export type TileType = 'empty' | 'floor' | 'wall' | 'door' | 'window';
@@ -435,7 +436,10 @@ export const resizeGridState = (
   const newDevices = sourceGrid.devices.flatMap((device) => {
     const x = device.x + offsets.x;
     const y = device.y + offsets.y;
-    if (x < 0 || y < 0 || x >= newWidth || y >= newHeight) {
+    if (
+      !isDevicePlacementInRange(x, newWidth) ||
+      !isDevicePlacementInRange(y, newHeight)
+    ) {
       return [];
     }
 
