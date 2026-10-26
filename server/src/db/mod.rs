@@ -100,7 +100,10 @@ async fn connect_database(target: &DatabaseTarget) -> Result<bool> {
 
     ensure_database_exists(target).await?;
 
-    info!("Connecting to database at {}...", target.url);
+    info!(
+        "Connecting to database at {}...",
+        redact_database_url(&target.url)
+    );
     let mut options = ConnectOptions::new(target.url.clone());
     options.acquire_timeout(Duration::from_secs(2));
 
@@ -256,8 +259,51 @@ fn sqlite_database_path(database_url: &str) -> Option<PathBuf> {
     }
 }
 
+/// Loggable form of a database URL: scheme, host, port and database only.
+/// Credentials (`user:password@`) and query parameters (which may carry
+/// `password=`/`sslpassword=`) are dropped.
+pub fn redact_database_url(database_url: &str) -> String {
+    let without_query = database_url.split('?').next().unwrap_or(database_url);
+    let Some((scheme, rest)) = without_query.split_once("://") else {
+        return without_query.to_string();
+    };
+    let (authority, path) = match rest.find('/') {
+        Some(index) => rest.split_at(index),
+        None => (rest, ""),
+    };
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    format!("{scheme}://{host}{path}")
+}
+
 fn is_sqlite_memory_url(database_url: &str) -> bool {
     database_url == "sqlite::memory:"
         || database_url.starts_with("sqlite://:memory:")
         || database_url.contains("mode=memory")
+}
+
+#[cfg(test)]
+mod redact_tests {
+    use super::redact_database_url;
+
+    #[test]
+    fn database_urls_are_logged_without_credentials() {
+        assert_eq!(
+            redact_database_url(
+                "postgres://homectl:s3cr%40t@db.example:5432/homectl?sslmode=require&password=x"
+            ),
+            "postgres://db.example:5432/homectl"
+        );
+        assert_eq!(
+            redact_database_url("postgresql://user@db/homectl"),
+            "postgresql://db/homectl"
+        );
+        assert_eq!(redact_database_url("postgres://u:p@w@db"), "postgres://db");
+        assert_eq!(
+            redact_database_url("sqlite:///data/homectl.db?mode=rwc"),
+            "sqlite:///data/homectl.db"
+        );
+        assert_eq!(redact_database_url("sqlite::memory:"), "sqlite::memory:");
+    }
 }

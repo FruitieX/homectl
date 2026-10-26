@@ -183,6 +183,8 @@ async fn run_convert(cli: &Cli, args: &ConvertArgs) -> Result<(), Box<dyn Error>
     let source_db = args.source_db.clone().or_else(|| cli.database_url.clone());
     let (source, export) =
         convert::load_source_export(source_db.as_deref(), args.source_export.as_deref()).await?;
+    // The source label is printed and archived; never include credentials.
+    let source = homectl_server::db::redact_database_url(&source);
     if args.cron_timezone.is_none()
         && export
             .integrations
