@@ -317,3 +317,15 @@ pub enum AuthDevices {
     Id,
     Document,
 }
+
+/// Runtime caches owned by integrations (for example the last Zigbee2MQTT
+/// `bridge/devices` inventory), keyed by integration id and cache key. Not
+/// configuration: never exported or imported.
+#[derive(Clone, Copy, Iden)]
+pub enum IntegrationCache {
+    Table,
+    IntegrationId,
+    Key,
+    Document,
+    UpdatedAtMs,
+}

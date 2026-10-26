@@ -27,6 +27,13 @@ fn live() -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection>
     })
 }
 
+/// Degraded integrations (e.g. Zigbee2MQTT running on cached device metadata)
+/// do not fail readiness, but are listed so the failure is visible.
+fn integration_details() -> Option<serde_json::Value> {
+    let integrations = crate::utils::integration_health::snapshot();
+    (!integrations.is_empty()).then(|| serde_json::json!({ "integrations": integrations }))
+}
+
 fn ready(
     snapshot: &SnapshotHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -54,7 +61,7 @@ async fn ready_impl(
 
     let body = HealthResponse {
         status: "ready",
-        details: None,
+        details: integration_details(),
     };
     let reply = warp::reply::json(&body);
     Ok(warp::reply::with_status(reply, StatusCode::OK))

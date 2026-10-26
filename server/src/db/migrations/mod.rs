@@ -2,9 +2,9 @@ use crate::db::schema::{
     AssistantThreads, AuthDevices, AutomationBlocks, AutomationSources, AutomationTimerJobs,
     AutomationValueState, AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts,
     DashboardWidgets, DeviceColorCalibrations, DeviceDisplayOverrides, DeviceSensorConfigs,
-    Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups, Integrations,
-    RoutineHistory, Routines, ScenarioSuites, SceneDeviceStates, SceneGroupStates, SceneOverrides,
-    Scenes, UiState, ValueHistory, WidgetSettings,
+    Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups, IntegrationCache,
+    Integrations, RoutineHistory, Routines, ScenarioSuites, SceneDeviceStates, SceneGroupStates,
+    SceneOverrides, Scenes, UiState, ValueHistory, WidgetSettings,
 };
 use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm_migration::prelude::*;
@@ -42,6 +42,7 @@ impl MigratorTrait for Migrator {
             Box::new(AutomationBlocksMigration),
             Box::new(ComputedHelpersMigration),
             Box::new(AuthDevicesMigration),
+            Box::new(IntegrationCacheMigration),
         ]
     }
 }
@@ -1696,6 +1697,50 @@ impl MigrationTrait for AuthDevicesMigration {
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .drop_table(Table::drop().table(AuthDevices::Table).to_owned())
+            .await
+    }
+}
+
+/// Integration-owned runtime caches, e.g. the last Zigbee2MQTT device
+/// inventory so discovery works before the broker replays it.
+struct IntegrationCacheMigration;
+impl MigrationName for IntegrationCacheMigration {
+    fn name(&self) -> &str {
+        "m20261026000000_integration_cache"
+    }
+}
+#[async_trait::async_trait]
+impl MigrationTrait for IntegrationCacheMigration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(IntegrationCache::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(IntegrationCache::IntegrationId)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(IntegrationCache::Key).text().not_null())
+                    .col(ColumnDef::new(IntegrationCache::Document).text().not_null())
+                    .col(
+                        ColumnDef::new(IntegrationCache::UpdatedAtMs)
+                            .big_integer()
+                            .not_null(),
+                    )
+                    .primary_key(
+                        Index::create()
+                            .col(IntegrationCache::IntegrationId)
+                            .col(IntegrationCache::Key),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(IntegrationCache::Table).to_owned())
             .await
     }
 }

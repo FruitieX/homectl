@@ -4,6 +4,7 @@ use color_eyre::Result;
 use serde::{de, Deserialize};
 
 pub mod cli;
+pub mod integration_health;
 
 pub fn from_hh_mm<'de, D>(d: D) -> Result<chrono::NaiveTime, D::Error>
 where

@@ -14,6 +14,20 @@ Temperature ranges are converted from mired to Kelvin. Reports select the active
 representation using `color_mode`; outbound commands translate Kelvin to mired and
 HS saturation from a fraction to a percentage. Commands are not retained.
 
+Device reports can only be decoded with that inventory, so the last live
+`bridge/devices` payload is stored in the `integration_cache` table (keyed by
+integration id and `<base>/bridge/devices`) and loaded at integration start:
+decoding and `/get` polling work before the broker replays the retained list,
+for example after a broker restart that lost retained messages. A live list
+replaces the cache and is written back when it changed. If no live list arrives
+within 60 s of connecting, the integration logs a WARN (saying whether cached
+metadata is in use) and `/health/ready` lists it under
+`details.integrations.<id>.bridge_devices` as `cached` or `missing` (otherwise
+`waiting` or `live`); readiness stays 200. Button events (`action`,
+`action_*`) are only decoded from live messages for known devices: retained
+payloads and state buffered while no inventory exists have them stripped, so a
+press is never replayed late.
+
 The profile accepts incoming MQTT packets up to 4 MiB (outgoing limit 64 KiB).
 The generic MQTT default is unchanged. Production bridge metadata exceeded the
 client's previous 10 KiB incoming default and caused repeated reconnects.

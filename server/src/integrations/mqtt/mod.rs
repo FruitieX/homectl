@@ -318,8 +318,18 @@ impl Integration for Mqtt {
         let config = Arc::new(self.config.clone());
 
         let dry_run = self.cli.dry_run;
+        let zigbee_base = config
+            .zigbee2mqtt_base_topic
+            .clone()
+            .filter(|_| config.mode() == MqttMode::Zigbee2Mqtt);
+        let mut discovery = zigbee2mqtt::Discovery::default();
+        let mut stored_inventory = zigbee2mqtt::StoredInventory::default();
+        if let Some(base) = &zigbee_base {
+            load_cached_inventory(&self.id, base, &mut discovery, &mut stored_inventory).await;
+            publish_zigbee_health(&self.id, &zigbee2mqtt::BridgeWatch::default(), &discovery);
+        }
         self.tasks.spawn(async move {
-            let mut discovery = zigbee2mqtt::Discovery::default();
+            let mut bridge_watch = zigbee2mqtt::BridgeWatch::default();
             let mut esphome_discovery = esphome::Discovery::default();
             let mut ble_sensors = openmqttgateway::Sensors::default();
             let mut polling = polling::Polling::configured(
@@ -327,14 +337,35 @@ impl Integration for Mqtt {
                 dry_run,
                 config.zigbee2mqtt_poll_interval_secs,
             );
+            if let Some(base) = &zigbee_base {
+                if let Some(scheduler) = polling.as_mut() {
+                    // Cached metadata lets readback polling start immediately.
+                    scheduler.sync(
+                        discovery.poll_requests(base, &config.disabled_device_ids),
+                        Instant::now(),
+                    );
+                }
+            }
             let mut tick = tokio::time::interval(Duration::from_secs(1));
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             let mut connected = false;
             loop {
                 let notification = tokio::select! {
                     notification = eventloop.poll() => notification,
-                    _ = tick.tick(), if polling.is_some() && connected => {
-                        polling.as_mut().unwrap().publish_due(&client, Instant::now());
+                    _ = tick.tick(), if connected && (polling.is_some() || bridge_watch.armed()) => {
+                        let now = Instant::now();
+                        if let Some(scheduler) = polling.as_mut() {
+                            scheduler.publish_due(&client, now);
+                        }
+                        if let Some(base) = &zigbee_base {
+                            if let Some(warning) = bridge_watch.check(now, base, &discovery) {
+                                warn!(
+                                    target: &format!("homectl_server::integrations::mqtt::{id}"),
+                                    "{warning}"
+                                );
+                                publish_zigbee_health(&id, &bridge_watch, &discovery);
+                            }
+                        }
                         continue;
                     }
                 };
@@ -347,6 +378,10 @@ impl Integration for Mqtt {
                     match notification? {
                         rumqttc::Event::Incoming(rumqttc::Packet::ConnAck(_)) => {
                             connected = true;
+                            if zigbee_base.is_some() {
+                                bridge_watch.connected(Instant::now());
+                                publish_zigbee_health(&id, &bridge_watch, &discovery);
+                            }
                             event_tx.send(Event::IntegrationConnected {
                                 integration_id: id.clone(),
                                 integration_epoch: None,
@@ -409,7 +444,33 @@ impl Integration for Mqtt {
                                 }
                                 MqttMode::Zigbee2Mqtt => {
                                     let base = config.zigbee2mqtt_base_topic.as_ref().unwrap();
-                                    discovery.receive(base, &msg.topic, &msg.payload, &id, &config)
+                                    let devices = discovery.receive(
+                                        base,
+                                        &msg.topic,
+                                        &msg.payload,
+                                        msg.retain,
+                                        &id,
+                                        &config,
+                                    );
+                                    if discovery.take_live_inventory() {
+                                        if bridge_watch.live_received() {
+                                            info!(
+                                                target: &format!("homectl_server::integrations::mqtt::{id}"),
+                                                "Live {base}/bridge/devices received ({} devices); Zigbee discovery recovered",
+                                                discovery.device_count()
+                                            );
+                                        }
+                                        publish_zigbee_health(&id, &bridge_watch, &discovery);
+                                        store_inventory(
+                                            &id,
+                                            base,
+                                            &msg.payload,
+                                            discovery.device_count(),
+                                            &mut stored_inventory,
+                                        )
+                                        .await;
+                                    }
+                                    devices
                                 }
                                 MqttMode::EspHome => {
                                     let prefix = config.esphome_discovery_prefix.as_ref().unwrap();
@@ -586,6 +647,7 @@ impl Integration for Mqtt {
     async fn stop(&mut self) -> Result<()> {
         self.tasks.shutdown().await;
         self.client = None;
+        crate::utils::integration_health::clear(&self.id.to_string());
         Ok(())
     }
 
@@ -640,6 +702,90 @@ impl Integration for Mqtt {
             .await?;
 
         Ok(())
+    }
+}
+
+fn publish_zigbee_health(
+    id: &IntegrationId,
+    watch: &zigbee2mqtt::BridgeWatch,
+    discovery: &zigbee2mqtt::Discovery,
+) {
+    crate::utils::integration_health::set(
+        &id.to_string(),
+        serde_json::json!({
+            "mode": "zigbee2mqtt",
+            "bridge_devices": watch.status(discovery),
+            "devices": discovery.device_count(),
+        }),
+    );
+}
+
+/// Seed Zigbee2MQTT discovery from the database copy of `bridge/devices`.
+async fn load_cached_inventory(
+    id: &IntegrationId,
+    base: &str,
+    discovery: &mut zigbee2mqtt::Discovery,
+    stored: &mut zigbee2mqtt::StoredInventory,
+) {
+    if !crate::db::is_db_connected() {
+        return;
+    }
+    let target = format!("homectl_server::integrations::mqtt::{id}");
+    match crate::db::config_queries::db_get_integration_cache(
+        &id.to_string(),
+        &zigbee2mqtt::cache_key(base),
+    )
+    .await
+    {
+        Ok(Some(document)) if discovery.load_cached(document.as_bytes()) => {
+            stored.remember(document.as_bytes());
+            info!(
+                target: &target,
+                "Loaded cached {base}/bridge/devices from database ({} devices)",
+                discovery.device_count()
+            );
+        }
+        Ok(Some(_)) => warn!(target: &target, "Ignoring unusable cached {base}/bridge/devices"),
+        Ok(None) => info!(target: &target, "No cached {base}/bridge/devices in database yet"),
+        Err(error) => {
+            warn!(target: &target, "Failed to load cached {base}/bridge/devices: {error}")
+        }
+    }
+}
+
+/// Persist a live `bridge/devices` payload when it changed. Bounded so a slow
+/// database cannot stall the MQTT event loop for long.
+async fn store_inventory(
+    id: &IntegrationId,
+    base: &str,
+    payload: &[u8],
+    devices: usize,
+    stored: &mut zigbee2mqtt::StoredInventory,
+) {
+    if !crate::db::is_db_connected() || !stored.needs_store(payload) {
+        return;
+    }
+    let target = format!("homectl_server::integrations::mqtt::{id}");
+    let Ok(document) = std::str::from_utf8(payload) else {
+        stored.forget();
+        return;
+    };
+    let (integration_id, key) = (id.to_string(), zigbee2mqtt::cache_key(base));
+    let write =
+        crate::db::config_queries::db_set_integration_cache(&integration_id, &key, document);
+    match tokio::time::timeout(Duration::from_secs(5), write).await {
+        Ok(Ok(())) => info!(
+            target: &target,
+            "Stored {base}/bridge/devices in database cache ({devices} devices)"
+        ),
+        Ok(Err(error)) => {
+            stored.forget();
+            warn!(target: &target, "Failed to store {base}/bridge/devices cache: {error}");
+        }
+        Err(_) => {
+            stored.forget();
+            warn!(target: &target, "Timed out storing {base}/bridge/devices cache");
+        }
     }
 }
 

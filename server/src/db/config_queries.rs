@@ -12,9 +12,9 @@ use super::schema::{
     AssistantThreads, AuthDevices, AutomationBlocks, AutomationSources, AutomationTimerJobs,
     AutomationValueState, AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts,
     DashboardWidgets, DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans,
-    GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, RoutineHistory, Routines,
-    ScenarioSuites, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, ValueHistory,
-    WidgetSettings,
+    GroupDevices, GroupLinks, GroupPositions, Groups, IntegrationCache, Integrations,
+    RoutineHistory, Routines, ScenarioSuites, SceneDeviceStates, SceneGroupStates, SceneOverrides,
+    Scenes, ValueHistory, WidgetSettings,
 };
 use crate::core::color_calibration::DeviceColorCalibration;
 use crate::types::assistant::{AssistantHistoryMessage, AssistantThread, AssistantThreadSummary};
@@ -4366,6 +4366,71 @@ async fn delete_auth_device_on<C: ConnectionTrait>(db: &C, id: &str) -> Result<(
     Ok(())
 }
 
+/// Integration-owned runtime cache document (see `IntegrationCache`).
+pub async fn db_get_integration_cache(integration_id: &str, key: &str) -> Result<Option<String>> {
+    get_integration_cache_on(get_db_connection()?, integration_id, key).await
+}
+
+pub(crate) async fn get_integration_cache_on<C: ConnectionTrait>(
+    db: &C,
+    integration_id: &str,
+    key: &str,
+) -> Result<Option<String>> {
+    let row = one(
+        db,
+        Query::select()
+            .column(IntegrationCache::Document)
+            .from(IntegrationCache::Table)
+            .and_where(Expr::col(IntegrationCache::IntegrationId).eq(integration_id.to_string()))
+            .and_where(Expr::col(IntegrationCache::Key).eq(key.to_string()))
+            .to_owned(),
+    )
+    .await?;
+    row.map(|row| Ok(row.try_get::<String>("", "document")?))
+        .transpose()
+}
+
+pub async fn db_set_integration_cache(
+    integration_id: &str,
+    key: &str,
+    document: &str,
+) -> Result<()> {
+    set_integration_cache_on(get_db_connection()?, integration_id, key, document).await
+}
+
+pub(crate) async fn set_integration_cache_on<C: ConnectionTrait>(
+    db: &C,
+    integration_id: &str,
+    key: &str,
+    document: &str,
+) -> Result<()> {
+    execute(
+        db,
+        Query::insert()
+            .into_table(IntegrationCache::Table)
+            .columns([
+                IntegrationCache::IntegrationId,
+                IntegrationCache::Key,
+                IntegrationCache::Document,
+                IntegrationCache::UpdatedAtMs,
+            ])
+            .values_panic([
+                Expr::value(integration_id.to_string()),
+                Expr::value(key.to_string()),
+                Expr::value(document.to_string()),
+                Expr::value(chrono::Utc::now().timestamp_millis()),
+            ])
+            .on_conflict(
+                OnConflict::columns([IntegrationCache::IntegrationId, IntegrationCache::Key])
+                    .update_columns([IntegrationCache::Document, IntegrationCache::UpdatedAtMs])
+                    .to_owned(),
+            )
+            .to_owned(),
+    )
+    .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod consistency_tests {
     use super::*;
@@ -4969,6 +5034,46 @@ mod consistency_tests {
         );
         delete_auth_device_on(&db, "a").await.unwrap();
         assert_eq!(list_auth_device_documents_on(&db).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn integration_cache_is_keyed_by_integration_and_key_and_upserts() {
+        let db = database().await;
+        assert_eq!(
+            get_integration_cache_on(&db, "zigbee", "z/bridge/devices")
+                .await
+                .unwrap(),
+            None
+        );
+        set_integration_cache_on(&db, "zigbee", "z/bridge/devices", "[1]")
+            .await
+            .unwrap();
+        set_integration_cache_on(&db, "other", "z/bridge/devices", "[2]")
+            .await
+            .unwrap();
+        set_integration_cache_on(&db, "zigbee", "z/bridge/devices", "[3]")
+            .await
+            .unwrap();
+        assert_eq!(
+            get_integration_cache_on(&db, "zigbee", "z/bridge/devices")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("[3]")
+        );
+        assert_eq!(
+            get_integration_cache_on(&db, "other", "z/bridge/devices")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("[2]")
+        );
+        assert_eq!(
+            get_integration_cache_on(&db, "zigbee", "y/bridge/devices")
+                .await
+                .unwrap(),
+            None
+        );
     }
 
     #[tokio::test]
