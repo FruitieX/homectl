@@ -4,6 +4,7 @@ import { useAtom } from 'jotai';
 import {
   accentAtom,
   densityAtom,
+  fullscreenEdgeToEdgeAtom,
   previewLabelsAtom,
 } from '@/hooks/preferences';
 import { useTheme } from '@/hooks/theme';
@@ -20,11 +21,20 @@ export function AppearanceSection() {
   const [accent, setAccent] = useAtom(accentAtom);
   const [density, setDensity] = useAtom(densityAtom);
   const [previewLabels, setPreviewLabels] = useAtom(previewLabelsAtom);
+  const [edgeToEdge, setEdgeToEdge] = useAtom(fullscreenEdgeToEdgeAtom);
   const [blur, setBlur] = useBackdropBlurEffects();
   const [developerMode, setDeveloperMode] = useDeveloperMode();
   const saved = useMemo(
-    () => ({ theme, accent, density, blur, previewLabels, developerMode }),
-    [theme, accent, density, blur, previewLabels, developerMode],
+    () => ({
+      theme,
+      accent,
+      density,
+      blur,
+      previewLabels,
+      edgeToEdge,
+      developerMode,
+    }),
+    [theme, accent, density, blur, previewLabels, edgeToEdge, developerMode],
   );
   const draft = useEntityDraft({
     key: 'browser/appearance',
@@ -43,6 +53,7 @@ export function AppearanceSection() {
       setDensity(value.density);
       setBlur(value.blur);
       setPreviewLabels(value.previewLabels);
+      setEdgeToEdge(value.edgeToEdge);
       setDeveloperMode(value.developerMode);
       return value;
     },
@@ -154,6 +165,26 @@ export function AppearanceSection() {
               <span className="mt-1 block text-xs text-muted-foreground">
                 Show the floorplan&apos;s labels on room cards and dashboard
                 room widgets. The full floorplan always shows them.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 text-sm">
+            <Switch
+              aria-label="Edge-to-edge dashboard in fullscreen"
+              className="mt-0.5"
+              checked={value.edgeToEdge}
+              onCheckedChange={(checked) =>
+                draft.patch({ edgeToEdge: checked })
+              }
+            />
+            <span>
+              <strong className="font-medium">
+                Edge-to-edge dashboard in fullscreen
+              </strong>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Remove the padding around the dashboard while this display is
+                fullscreen, for wall tablets and kiosks. Widgets keep their
+                spacing.
               </span>
             </span>
           </label>

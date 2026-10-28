@@ -15,6 +15,8 @@ import { useDashboardEditingSettings } from '@/hooks/dashboardEditing';
 import { cn } from '@/lib/cn';
 import { useDashboardScroll } from '@/hooks/dashboardScroll';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
+import { useAtomValue } from 'jotai';
+import { fullscreenEdgeToEdgeAtom } from '@/hooks/preferences';
 import { getDashboardWidgetResponsiveGridStyle } from '@/lib/dashboard-layout';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
@@ -45,6 +47,10 @@ export default function Page() {
   const spacing =
     storedSpacing in dashboardSpacingStyles ? storedSpacing : 'balanced';
   const [isFullscreen] = useIsFullscreen();
+  const fullscreenEdgeToEdge = useAtomValue(fullscreenEdgeToEdgeAtom);
+  // Edge widgets touch the screen edges: no outer padding, no centered max
+  // width, and the grid's outer half-gap margins are cancelled.
+  const edgeToEdge = isFullscreen && fullscreenEdgeToEdge && !isEditing;
   const navigate = useNavigate();
   const {
     layouts,
@@ -208,7 +214,9 @@ export default function Page() {
         style={
           {
             ...dashboardSpacingStyles[spacing],
-            '--dashboard-outer': `${spacingSettings.outer}px`,
+            '--dashboard-outer': edgeToEdge
+              ? '0px'
+              : `${spacingSettings.outer}px`,
             '--dashboard-gap': `${spacingSettings.gap}px`,
           } as React.CSSProperties
         }
@@ -221,7 +229,8 @@ export default function Page() {
       >
         <div
           className={cn(
-            'mx-auto max-w-[100rem] space-y-8',
+            'space-y-8',
+            !edgeToEdge && 'mx-auto max-w-[100rem]',
             !dashboardScrollEnabled && 'flex h-full min-h-0 flex-col',
           )}
         >
@@ -268,6 +277,9 @@ export default function Page() {
                     : 'min-h-0 flex-1 overflow-hidden',
                 )}
                 style={{
+                  margin: edgeToEdge
+                    ? 'calc(var(--dashboard-gap) / -2)'
+                    : undefined,
                   gridAutoRows: dashboardScrollEnabled
                     ? 'minmax(calc(var(--dashboard-row) / 4), auto)'
                     : 'minmax(0, 1fr)',

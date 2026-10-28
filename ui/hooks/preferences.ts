@@ -32,6 +32,14 @@ export const previewLabelsAtom = atomWithStorage<boolean>(
   { getOnInit: true },
 );
 
+/** Wall displays use every pixel: no dashboard padding while fullscreen. */
+export const fullscreenEdgeToEdgeAtom = atomWithStorage<boolean>(
+  'homectl-fullscreen-edge-to-edge',
+  true,
+  undefined,
+  { getOnInit: true },
+);
+
 export const favoritesAtom = atomWithStorage<string[]>('homectl-favorites', []);
 
 export const recentsAtom = atomWithStorage<string[]>('homectl-recents', []);
