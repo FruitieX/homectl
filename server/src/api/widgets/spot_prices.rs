@@ -8,7 +8,12 @@ use warp::{
     Filter, Reply,
 };
 
-use super::{influx, widget_setting_string_or_env, INFLUXDB_SETTING_KEY, TOKEN_FIELD, URL_FIELD};
+use super::{
+    influx, widget_setting_string_or_env, Fetched, INFLUXDB_SETTING_KEY, TOKEN_FIELD, URL_FIELD,
+};
+
+/// Keep in sync with `ttl_secs` on [`fetch_spot_prices`].
+const TTL: std::time::Duration = std::time::Duration::from_secs(60);
 
 const QUERY: &str = r#"
           import "date"
@@ -59,7 +64,7 @@ async fn handle(snapshot: SnapshotHandle, http: reqwest::Client) -> Response {
     let result = fetch_spot_prices(url, token, http).await;
 
     match result {
-        Ok(value) => reply::json(&value).into_response(),
+        Ok(fetched) => fetched.reply(TTL, reply::json(&fetched.value).into_response()),
         Err(err) => {
             log::error!("Error fetching spot prices: {err}");
             error(StatusCode::BAD_GATEWAY, "Failed to fetch spot price data")
@@ -77,9 +82,9 @@ async fn fetch_spot_prices(
     url: String,
     token: String,
     http: reqwest::Client,
-) -> Result<Value, String> {
+) -> Result<Fetched<Value>, String> {
     let rows = influx::query(&http, &url, &token, QUERY).await?;
-    Ok(Value::Array(rows))
+    Ok(Fetched::now(Value::Array(rows)))
 }
 
 fn error(status: StatusCode, message: &str) -> Response {

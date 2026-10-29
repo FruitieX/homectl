@@ -20,6 +20,7 @@ import {
 } from '@/lib/trainSchedule';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { useWidgetResource } from '@/hooks/useWidgetResource';
+import { earlierDataSuffix } from '@/lib/widgetStale';
 import { CardContent } from '@/ui/primitives/card';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { WidgetCard, WidgetHeading } from './WidgetChrome';
@@ -148,7 +149,12 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
     now,
     maxMinutesAhead,
   );
-  const error = query.isError ? 'Departures could not be refreshed.' : null;
+  const error = query.refreshFailed
+    ? `Departures could not be refreshed${earlierDataSuffix(
+        trains.length > 0,
+        query.staleSince,
+      )}`
+    : null;
   const compactTrain = trains[0];
   const compactDeparture = compactTrain
     ? compactTrain.realtimeState === 'CANCELED'
@@ -252,8 +258,7 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
                 role="status"
                 className="dashboard-widget-status text-sm text-muted-foreground"
               >
-                Departures could not be refreshed
-                {trains.length ? '; showing earlier results.' : '.'}
+                {error}
               </p>
             )}
             {trains.length === 0 ? (

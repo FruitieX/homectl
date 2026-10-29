@@ -24,6 +24,7 @@ import { CloudSun } from 'lucide-react';
 import { WidgetCard, WidgetHeading } from './WidgetChrome';
 import { useWidgetResource } from '@/hooks/useWidgetResource';
 import { latestTemperature, precipitationPeriods } from '@/lib/widgetData';
+import { earlierDataSuffix } from '@/lib/widgetStale';
 
 type WeatherTimeSeries = {
   time: Date;
@@ -534,13 +535,13 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
                 </>
               )}
             </div>
-            {weatherQuery.isError && (
+            {weatherQuery.refreshFailed && (
               <p
                 role="status"
                 className="dashboard-widget-status whitespace-normal text-xs text-muted-foreground"
               >
                 {weather
-                  ? 'Forecast could not be refreshed.'
+                  ? `Forecast could not be refreshed${earlierDataSuffix(true, weatherQuery.staleSince)}`
                   : 'Weather unavailable.'}
               </p>
             )}

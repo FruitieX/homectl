@@ -9,7 +9,10 @@ use warp::{
     Filter, Reply,
 };
 
-use super::{widget_setting_string_or_env, API_URL_FIELD, WEATHER_SETTING_KEY};
+use super::{widget_setting_string_or_env, Fetched, API_URL_FIELD, WEATHER_SETTING_KEY};
+
+/// Keep in sync with `ttl_secs` on [`fetch_weather`].
+const TTL: std::time::Duration = std::time::Duration::from_secs(3600);
 
 pub fn route(snapshot: SnapshotHandle, http: reqwest::Client) -> BoxedFilter<(Response,)> {
     warp::path!("api" / "weather")
@@ -55,7 +58,7 @@ async fn handle(query: WeatherQuery, snapshot: SnapshotHandle, http: reqwest::Cl
     let result = fetch_weather(url, http).await;
 
     match result {
-        Ok(value) => reply::json(&value).into_response(),
+        Ok(fetched) => fetched.reply(TTL, reply::json(&fetched.value).into_response()),
         Err(err) => {
             log::error!("Error fetching weather: {err}");
             error(StatusCode::BAD_GATEWAY, "Failed to fetch weather data")
@@ -69,13 +72,16 @@ async fn handle(query: WeatherQuery, snapshot: SnapshotHandle, http: reqwest::Cl
     convert = r#"{ url.clone() }"#,
     result_fallback = true
 )]
-async fn fetch_weather(url: String, http: reqwest::Client) -> Result<Value, String> {
+async fn fetch_weather(url: String, http: reqwest::Client) -> Result<Fetched<Value>, String> {
     log::info!("Fetching weather data...");
     let res = http.get(&url).send().await.map_err(|e| e.to_string())?;
     if !res.status().is_success() {
         return Err(format!("Failed to fetch weather: {}", res.status()));
     }
-    res.json::<Value>().await.map_err(|e| e.to_string())
+    res.json::<Value>()
+        .await
+        .map(Fetched::now)
+        .map_err(|e| e.to_string())
 }
 
 fn error(status: StatusCode, message: &str) -> Response {

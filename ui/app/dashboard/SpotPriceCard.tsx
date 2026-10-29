@@ -5,6 +5,7 @@ import { useTimeout } from 'usehooks-ts';
 import useIdle from '@/hooks/useIdle';
 import { useSpotPriceResource } from '@/hooks/influxdb';
 import { priceWindow } from '@/lib/widgetData';
+import { earlierDataSuffix } from '@/lib/widgetStale';
 import { useInterval } from 'usehooks-ts';
 import {
   type DashboardWidget,
@@ -176,13 +177,13 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
                 </div>
               </div>
             </div>
-            {priceQuery.isError && (
+            {priceQuery.refreshFailed && (
               <p
                 role="status"
                 className="dashboard-widget-status pointer-events-none relative z-[1] text-xs text-muted-foreground"
               >
                 Prices could not be refreshed
-                {data.length ? '; showing earlier results.' : '.'}
+                {earlierDataSuffix(data.length > 0, priceQuery.staleSince)}
               </p>
             )}
           </CardContent>

@@ -10,7 +10,10 @@ use warp::{
     Filter, Reply,
 };
 
-use super::{widget_setting_string_or_env, API_URL_FIELD, TRAIN_SCHEDULE_SETTING_KEY};
+use super::{widget_setting_string_or_env, Fetched, API_URL_FIELD, TRAIN_SCHEDULE_SETTING_KEY};
+
+/// Keep in sync with `ttl_secs` on [`fetch_train_schedule`].
+const TTL: std::time::Duration = std::time::Duration::from_secs(60);
 
 const DEFAULT_STATION_ID: &str = "HSL:2131551";
 const DEFAULT_WALK_MINUTES: i64 = 12;
@@ -105,16 +108,19 @@ async fn handle(
     let result = fetch_train_schedule(url, station_id, http).await;
 
     match result {
-        Ok(value) => reply::json(&transform(
-            value,
-            walk_minutes,
-            limit,
-            non_empty(query.destination).as_deref(),
-            query.direction_id,
-            overdue_minutes,
-            Utc::now().timestamp(),
-        ))
-        .into_response(),
+        Ok(fetched) => fetched.reply(
+            TTL,
+            reply::json(&transform(
+                fetched.value.clone(),
+                walk_minutes,
+                limit,
+                non_empty(query.destination).as_deref(),
+                query.direction_id,
+                overdue_minutes,
+                Utc::now().timestamp(),
+            ))
+            .into_response(),
+        ),
         Err(err) => {
             log::error!("Error fetching train schedule: {err}");
             error(StatusCode::BAD_GATEWAY, "Failed to fetch train schedule")
@@ -132,7 +138,7 @@ async fn fetch_train_schedule(
     url: String,
     station_id: String,
     http: reqwest::Client,
-) -> Result<HslResponse, String> {
+) -> Result<Fetched<HslResponse>, String> {
     let res = http
         .post(&url)
         .header("Content-Type", "application/graphql")
@@ -146,7 +152,7 @@ async fn fetch_train_schedule(
     }
 
     let parsed: HslResponse = res.json().await.map_err(|e| e.to_string())?;
-    Ok(parsed)
+    Ok(Fetched::now(parsed))
 }
 
 fn error(status: StatusCode, message: &str) -> Response {

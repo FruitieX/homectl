@@ -12,7 +12,10 @@ use warp::{
     Filter, Reply,
 };
 
-use super::{widget_setting_string_or_env, CALENDAR_SETTING_KEY, ICS_URL_FIELD};
+use super::{widget_setting_string_or_env, Fetched, CALENDAR_SETTING_KEY, ICS_URL_FIELD};
+
+/// Keep in sync with `ttl_secs` on [`fetch_calendar`].
+const TTL: std::time::Duration = std::time::Duration::from_secs(14400);
 
 pub fn route(snapshot: SnapshotHandle, http: reqwest::Client) -> BoxedFilter<(Response,)> {
     warp::path!("api" / "calendar")
@@ -76,7 +79,7 @@ async fn handle(
     let result = fetch_calendar(url, http).await;
 
     match result {
-        Ok(value) => reply::json(&value).into_response(),
+        Ok(fetched) => fetched.reply(TTL, reply::json(&fetched.value).into_response()),
         Err(err) => {
             log::error!("Error fetching calendar events: {err}");
             error(StatusCode::BAD_GATEWAY, "Failed to fetch calendar events")
@@ -90,7 +93,7 @@ async fn handle(
     convert = r#"{ url.clone() }"#,
     result_fallback = true
 )]
-async fn fetch_calendar(url: String, http: reqwest::Client) -> Result<Value, String> {
+async fn fetch_calendar(url: String, http: reqwest::Client) -> Result<Fetched<Value>, String> {
     let res = http
         .get(&url)
         .send()
@@ -100,7 +103,9 @@ async fn fetch_calendar(url: String, http: reqwest::Client) -> Result<Value, Str
         return Err(format!("Failed to fetch ICS: {}", res.status()));
     }
     let body = res.text().await.map_err(|e| e.without_url().to_string())?;
-    parse_events(&body).map_err(|e| e.to_string())
+    parse_events(&body)
+        .map(Fetched::now)
+        .map_err(|e| e.to_string())
 }
 fn error(status: StatusCode, message: &str) -> Response {
     reply::with_status(reply::json(&json!({ "error": message })), status).into_response()

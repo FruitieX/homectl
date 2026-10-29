@@ -9,7 +9,12 @@ use warp::{
     Filter, Reply,
 };
 
-use super::{influx, widget_setting_string_or_env, INFLUXDB_SETTING_KEY, TOKEN_FIELD, URL_FIELD};
+use super::{
+    influx, widget_setting_string_or_env, Fetched, INFLUXDB_SETTING_KEY, TOKEN_FIELD, URL_FIELD,
+};
+
+/// Keep in sync with `ttl_secs` on [`fetch_temp_sensors`].
+const TTL: std::time::Duration = std::time::Duration::from_secs(60);
 
 pub fn route(snapshot: SnapshotHandle, http: reqwest::Client) -> BoxedFilter<(Response,)> {
     warp::path!("api" / "influxdb" / "temp-sensors")
@@ -120,7 +125,7 @@ async fn handle(
     let result = fetch_temp_sensors(url, token, device_ids, range, window, http).await;
 
     match result {
-        Ok(value) => reply::json(&value).into_response(),
+        Ok(fetched) => fetched.reply(TTL, reply::json(&fetched.value).into_response()),
         Err(err) => {
             log::error!("Error fetching temperature/humidity sensors: {err}");
             error(StatusCode::BAD_GATEWAY, "Failed to fetch sensor data")
@@ -141,7 +146,7 @@ async fn fetch_temp_sensors(
     range: String,
     window: String,
     http: reqwest::Client,
-) -> Result<Value, String> {
+) -> Result<Fetched<Value>, String> {
     let rows = influx::query(
         &http,
         &url,
@@ -149,7 +154,7 @@ async fn fetch_temp_sensors(
         &build_query(&device_ids, &range, &window),
     )
     .await?;
-    Ok(Value::Array(rows))
+    Ok(Fetched::now(Value::Array(rows)))
 }
 
 fn error(status: StatusCode, message: &str) -> Response {
