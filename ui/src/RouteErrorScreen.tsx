@@ -1,5 +1,8 @@
 import { AlertTriangle, RotateCw } from 'lucide-react';
+import { useEffect } from 'react';
 import { Link, isRouteErrorResponse, useRouteError } from 'react-router-dom';
+
+import { isStaleBuildError, reloadForNewBuild } from '@/lib/staleBuild';
 
 import { Button } from '@/ui/primitives/button';
 
@@ -10,6 +13,23 @@ import { Button } from '@/ui/primitives/button';
  */
 export function RouteErrorScreen() {
   const error = useRouteError();
+  const staleBuild = isStaleBuildError(error);
+
+  useEffect(() => {
+    if (staleBuild) reloadForNewBuild();
+  }, [staleBuild]);
+
+  if (staleBuild) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-background p-6 text-center text-foreground">
+        <RotateCw className="size-5 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">
+          homectl was updated. Loading the new version…
+        </p>
+      </div>
+    );
+  }
+
   const message = isRouteErrorResponse(error)
     ? `${error.status} ${error.statusText}`
     : error instanceof Error
