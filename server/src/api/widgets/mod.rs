@@ -54,9 +54,15 @@ pub(crate) fn option_string(options: &serde_json::Value, key: &str) -> Option<St
         .map(str::to_owned)
 }
 
+// Widget sources (InfluxDB, weather, calendar, trains) must not hang a
+// dashboard: with no timeout one stuck upstream request held every widget
+// request behind it until the display's own 10 s timeout. A failed refresh
+// serves the last good value instead (`result_fallback` on each fetcher).
 static HTTP: Lazy<reqwest::Client> = Lazy::new(|| {
     reqwest::Client::builder()
         .user_agent(concat!("homectl/", env!("CARGO_PKG_VERSION")))
+        .connect_timeout(std::time::Duration::from_secs(3))
+        .timeout(std::time::Duration::from_secs(6))
         .build()
         .expect("failed to build reqwest client")
 });

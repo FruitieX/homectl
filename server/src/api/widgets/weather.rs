@@ -67,7 +67,7 @@ async fn handle(query: WeatherQuery, snapshot: SnapshotHandle, http: reqwest::Cl
     ttl_secs = 3600,
     key = "String",
     convert = r#"{ url.clone() }"#,
-    sync_writes = "by_key"
+    result_fallback = true
 )]
 async fn fetch_weather(url: String, http: reqwest::Client) -> Result<Value, String> {
     log::info!("Fetching weather data...");

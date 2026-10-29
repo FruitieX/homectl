@@ -88,7 +88,7 @@ async fn handle(
     ttl_secs = 14400,
     key = "String",
     convert = r#"{ url.clone() }"#,
-    sync_writes = "by_key"
+    result_fallback = true
 )]
 async fn fetch_calendar(url: String, http: reqwest::Client) -> Result<Value, String> {
     let res = http

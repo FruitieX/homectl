@@ -126,7 +126,7 @@ async fn handle(
     ttl_secs = 60,
     key = "String",
     convert = r#"{ format!("{url}|{station_id}") }"#,
-    sync_writes = "by_key"
+    result_fallback = true
 )]
 async fn fetch_train_schedule(
     url: String,

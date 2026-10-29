@@ -71,7 +71,7 @@ async fn handle(snapshot: SnapshotHandle, http: reqwest::Client) -> Response {
     ttl_secs = 60,
     key = "String",
     convert = r#"{ url.clone() }"#,
-    sync_writes = "by_key"
+    result_fallback = true
 )]
 async fn fetch_spot_prices(
     url: String,
