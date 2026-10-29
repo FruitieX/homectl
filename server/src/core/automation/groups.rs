@@ -3,7 +3,10 @@
 //! The denominator is always the configured membership from the group
 //! definition, recursively flattened and deduplicated. References that do not
 //! resolve to a runtime device are counted as unknown members instead of being
-//! removed from the group (G01/G02). Membership changes bump the group
+//! removed from the group (G01/G02). Sensors (switches, motion and climate
+//! sensors placed in a room group) have no power or scene, so present sensor
+//! members are left out of power/scene conditions instead of making them
+//! unknown. Membership changes bump the group
 //! definition revision so v2 subscriptions and transition memory can
 //! invalidate (G06).
 
@@ -13,7 +16,7 @@ use crate::types::automation_trace::{
     GroupEvaluation, GroupMemberEvaluation, GroupSceneSummary, GroupSceneSummaryKind, TruthValue,
     UnknownReason,
 };
-use crate::types::device::{Device, DeviceKey, DeviceRef, DevicesState};
+use crate::types::device::{Device, DeviceData, DeviceKey, DeviceRef, DevicesState};
 use crate::types::group::GroupId;
 
 /// Maximum member details retained in one evaluation result. Counts still
@@ -35,6 +38,7 @@ pub fn evaluate_group(
     let configured = groups.configured_device_refs(group_id)?;
 
     let mut members = Vec::with_capacity(configured.len().min(MAX_GROUP_EVAL_MEMBERS));
+    let mut configured_count = 0usize;
     let mut true_count = 0usize;
     let mut false_count = 0usize;
     let mut unknown_count = 0usize;
@@ -47,6 +51,10 @@ pub fn evaluate_group(
             DeviceRef::Id(id_ref) => id_ref.clone().into_device_key(),
         };
         let device = devices.0.get(&device_key);
+        if device.is_some_and(|device| matches!(device.data, DeviceData::Sensor(_))) {
+            continue;
+        }
+        configured_count += 1;
 
         let member = evaluate_member(&device_key, device, power, scene);
         match member.member_truth {
@@ -80,7 +88,6 @@ pub fn evaluate_group(
         }
     }
 
-    let configured_count = configured.len();
     let truth = quantifier_truth(
         quantifier,
         configured_count,

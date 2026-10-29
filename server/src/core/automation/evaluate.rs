@@ -2357,6 +2357,54 @@ mod tests {
         assert_eq!(evaluation.unknown_count, 1, "missing reference preserved");
     }
 
+    // Sensors placed in a room group (switches, motion, climate) have no
+    // power or scene; they must not turn "all lights off" into unknown.
+    #[test]
+    fn present_sensor_members_are_left_out_of_power_and_scene_conditions() {
+        let light = key("dummy", "lamp");
+        let switch = key("dummy", "sensor");
+        let (group_id, config) = group_config(&[&light, &switch], &[]);
+        let groups = Groups::new(config);
+
+        let off = states(vec![lamp(false), sensor(false)]);
+        let all_off = group_condition(&group_id, Quantifier::All, Some(false));
+        assert_eq!(eval(&all_off, &off, &groups).truth, TruthValue::True);
+        let evaluation =
+            evaluate_group(&group_id, Quantifier::All, Some(false), None, &off, &groups)
+                .expect("group exists");
+        assert_eq!(evaluation.configured_count, 1);
+        assert_eq!(evaluation.unknown_count, 0);
+
+        let on = states(vec![lamp(true), sensor(true)]);
+        assert_eq!(eval(&all_off, &on, &groups).truth, TruthValue::False);
+
+        let mut bright_lamp = lamp(true);
+        set_scene(&mut bright_lamp, "bright");
+        let bright = states(vec![bright_lamp, sensor(false)]);
+        let scene = |quantifier| ConditionExpr::Group {
+            group_id: group_id.clone(),
+            quantifier,
+            power: None,
+            scene: Some(SceneId::from("bright".to_string())),
+        };
+        assert_eq!(
+            eval(&scene(Quantifier::All), &bright, &groups).truth,
+            TruthValue::True
+        );
+        assert_eq!(
+            eval(&scene(Quantifier::Partial), &bright, &groups).truth,
+            TruthValue::Unknown,
+            "one light cannot be a partial mixture; the sensor is not a non-bright member"
+        );
+
+        let only_sensor = states(vec![sensor(false)]);
+        assert_eq!(
+            eval(&all_off, &only_sensor, &groups).truth,
+            TruthValue::Unknown,
+            "a missing light is still unknown"
+        );
+    }
+
     // G03: an empty group is unknown for all/any, and not(empty-all) stays
     // unknown.
     #[test]
