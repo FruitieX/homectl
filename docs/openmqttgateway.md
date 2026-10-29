@@ -33,6 +33,8 @@ be placed on the floorplan, assigned to rooms and used in automations.
   report is only sent when a rounded reading changes, or every 5 minutes to
   show the sensor is alive.
 - The devices are read-only; commands are rejected.
+- The allowlist is reported to the state as sensors at start, so group
+  power/scene conditions skip these members even before their first reading.
 
 ## Readings in the rest of homectl
 

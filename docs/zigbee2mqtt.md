@@ -28,6 +28,12 @@ metadata is in use) and `/health/ready` lists it under
 payloads and state buffered while no inventory exists have them stripped, so a
 press is never replayed late.
 
+Inventory entries without a root light/switch expose (buttons, motion and
+climate sensors) are reported to the state as sensors (`Event::SensorInventory`),
+from the cache at start and again for each live list. Group power/scene
+conditions skip sensor members, so a switch placed in a room group never makes
+"all lights off" unknown, even before its first report.
+
 The profile accepts incoming MQTT packets up to 4 MiB (outgoing limit 64 KiB).
 The generic MQTT default is unchanged. Production bridge metadata exceeded the
 client's previous 10 KiB incoming default and caused repeated reconnects.

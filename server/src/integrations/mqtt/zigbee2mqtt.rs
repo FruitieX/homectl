@@ -21,6 +21,8 @@ struct Metadata {
     name: String,
     capabilities: Capabilities,
     get_fields: Vec<String>,
+    /// No root light/switch expose: a button, motion or climate sensor.
+    sensor: bool,
 }
 
 /// Where the current device inventory came from.
@@ -87,6 +89,7 @@ fn metadata(value: &Value) -> Option<Metadata> {
             name,
             capabilities,
             get_fields: vec![],
+            sensor: true,
         });
     };
     let features = light["features"].as_array()?;
@@ -135,6 +138,7 @@ fn metadata(value: &Value) -> Option<Metadata> {
         name,
         capabilities,
         get_fields,
+        sensor: false,
     })
 }
 
@@ -173,6 +177,20 @@ impl Discovery {
             .map(|meta| meta.id.as_str())
             .collect::<HashSet<_>>()
             .len()
+    }
+
+    /// Inventory devices without a light: read-only sensors, so group
+    /// conditions can skip them before their first report.
+    pub(super) fn sensor_ids(&self) -> Vec<String> {
+        let ids: HashSet<&str> = self
+            .devices
+            .values()
+            .filter(|meta| meta.sensor)
+            .map(|meta| meta.id.as_str())
+            .collect();
+        let mut ids: Vec<String> = ids.into_iter().map(str::to_owned).collect();
+        ids.sort();
+        ids
     }
 
     /// True once after a valid live `bridge/devices` was applied.
@@ -617,6 +635,14 @@ mod tests {
             "definition": {"exposes": [{"name": "action", "type": "enum", "access": 1}]}
         }));
         inventory
+    }
+
+    #[test]
+    fn inventory_lists_devices_without_a_light_as_sensors() {
+        let mut discovery = Discovery::default();
+        let inventory = serde_json::to_vec(&inventory_with_dimmer()).unwrap();
+        assert!(discovery.load_cached(&inventory));
+        assert_eq!(discovery.sensor_ids(), vec!["0xdim".to_string()]);
     }
 
     fn action_of(device: &Device) -> Option<Value> {

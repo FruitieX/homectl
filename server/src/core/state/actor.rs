@@ -457,6 +457,7 @@ fn spawn_watchdog(
 fn event_kind(event: &Event) -> &'static str {
     match event {
         Event::IntegrationConnected { .. } => "IntegrationConnected",
+        Event::SensorInventory { .. } => "SensorInventory",
         Event::DeviceAvailability { .. } | Event::ExternalStateUpdate { .. } => {
             "ExternalStateUpdate"
         }

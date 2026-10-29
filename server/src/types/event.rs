@@ -38,6 +38,14 @@ pub enum Event {
         #[serde(default)]
         integration_epoch: Option<IntegrationEpoch>,
     },
+    /// Device ids an integration knows to be read-only sensors, including
+    /// ones that have not reported yet (Zigbee2MQTT inventory, BLE allowlist).
+    /// Replaces the integration's previous list. Group power/scene conditions
+    /// skip these members instead of waiting for their first report.
+    SensorInventory {
+        integration_id: super::integration::IntegrationId,
+        device_ids: Vec<super::device::DeviceId>,
+    },
     DeviceAvailability {
         device_key: DeviceKey,
         online: bool,

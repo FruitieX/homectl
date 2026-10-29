@@ -327,6 +327,15 @@ impl Integration for Mqtt {
         if let Some(base) = &zigbee_base {
             load_cached_inventory(&self.id, base, &mut discovery, &mut stored_inventory).await;
             publish_zigbee_health(&self.id, &zigbee2mqtt::BridgeWatch::default(), &discovery);
+            send_sensor_inventory(&self.event_tx, &self.id, discovery.sensor_ids());
+        }
+        if let Some(devices) = config
+            .ble_devices
+            .as_ref()
+            .filter(|_| config.mode() == MqttMode::OpenMqttGateway)
+        {
+            // BLE climate sensors are read-only and configured up front.
+            send_sensor_inventory(&self.event_tx, &self.id, devices.keys().cloned().collect());
         }
         self.tasks.spawn(async move {
             let mut bridge_watch = zigbee2mqtt::BridgeWatch::default();
@@ -461,6 +470,7 @@ impl Integration for Mqtt {
                                             );
                                         }
                                         publish_zigbee_health(&id, &bridge_watch, &discovery);
+                                        send_sensor_inventory(&event_tx, &id, discovery.sensor_ids());
                                         store_inventory(
                                             &id,
                                             base,
@@ -718,6 +728,17 @@ fn publish_zigbee_health(
             "devices": discovery.device_count(),
         }),
     );
+}
+
+/// Tell the state which of this integration's devices are read-only sensors.
+fn send_sensor_inventory(event_tx: &TxEventChannel, id: &IntegrationId, device_ids: Vec<String>) {
+    event_tx.send(Event::SensorInventory {
+        integration_id: id.clone(),
+        device_ids: device_ids
+            .iter()
+            .map(|id| crate::types::device::DeviceId::new(id))
+            .collect(),
+    });
 }
 
 /// Seed Zigbee2MQTT discovery from the database copy of `bridge/devices`.

@@ -4,9 +4,10 @@
 //! definition, recursively flattened and deduplicated. References that do not
 //! resolve to a runtime device are counted as unknown members instead of being
 //! removed from the group (G01/G02). Sensors (switches, motion and climate
-//! sensors placed in a room group) have no power or scene, so present sensor
-//! members are left out of power/scene conditions instead of making them
-//! unknown. Membership changes bump the group
+//! sensors placed in a room group) have no power or scene, so sensor members
+//! are left out of power/scene conditions instead of making them unknown:
+//! present ones by their data, not-yet-reported ones when their integration
+//! listed them as sensors (Zigbee2MQTT inventory, BLE allowlist). Membership changes bump the group
 //! definition revision so v2 subscriptions and transition memory can
 //! invalidate (G06).
 
@@ -51,7 +52,11 @@ pub fn evaluate_group(
             DeviceRef::Id(id_ref) => id_ref.clone().into_device_key(),
         };
         let device = devices.0.get(&device_key);
-        if device.is_some_and(|device| matches!(device.data, DeviceData::Sensor(_))) {
+        let sensor = match device {
+            Some(device) => matches!(device.data, DeviceData::Sensor(_)),
+            None => groups.is_known_sensor(&device_key),
+        };
+        if sensor {
             continue;
         }
         configured_count += 1;

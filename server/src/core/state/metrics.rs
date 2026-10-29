@@ -192,6 +192,7 @@ fn event_kind_index(event: &crate::types::event::Event) -> usize {
     use crate::types::event::Event;
     match event {
         Event::IntegrationConnected { .. }
+        | Event::SensorInventory { .. }
         | Event::DeviceAvailability { .. }
         | Event::ExternalStateUpdate { .. } => 0,
         Event::InternalStateUpdate { .. } => 1,

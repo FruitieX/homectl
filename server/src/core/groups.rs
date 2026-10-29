@@ -1,11 +1,11 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use color_eyre::Result;
 
 use crate::{
     db::config_queries,
     types::{
-        device::{Device, DeviceKey, DeviceRef, DevicesState},
+        device::{Device, DeviceId, DeviceKey, DeviceRef, DevicesState},
         group::{
             FlattenedGroupConfig, FlattenedGroupsConfig, GroupConfig, GroupId, GroupLink,
             GroupsConfig,
@@ -26,6 +26,10 @@ pub struct Groups {
     /// configured membership) changes. V2 evaluation uses it to invalidate
     /// predicate subscriptions and transition memory (G06).
     definition_revision: u64,
+    /// Device ids each integration reported as read-only sensors. Only used
+    /// for members that have not reported yet; a present device's own data
+    /// decides otherwise.
+    known_sensors: HashMap<IntegrationId, HashSet<DeviceId>>,
 }
 
 /// Evaluates the group config and returns a flattened version of it
@@ -166,6 +170,7 @@ impl Groups {
             device_refs_by_groups,
             flattened_groups: Default::default(),
             definition_revision: 0,
+            known_sensors: HashMap::new(),
         }
     }
 
@@ -174,6 +179,23 @@ impl Groups {
     /// This is the denominator for v2 group evaluation (G01/G02).
     pub fn configured_device_refs(&self, group_id: &GroupId) -> Option<&BTreeSet<DeviceRef>> {
         self.device_refs_by_groups.get(group_id)
+    }
+
+    /// Replace the sensor ids known for one integration.
+    pub fn set_known_sensors(
+        &mut self,
+        integration_id: IntegrationId,
+        device_ids: impl IntoIterator<Item = DeviceId>,
+    ) {
+        self.known_sensors
+            .insert(integration_id, device_ids.into_iter().collect());
+    }
+
+    /// Whether an integration reported this device as a read-only sensor.
+    pub fn is_known_sensor(&self, key: &DeviceKey) -> bool {
+        self.known_sensors
+            .get(&key.integration_id)
+            .is_some_and(|ids| ids.contains(&key.device_id))
     }
 
     /// Monotonic group-configuration revision (G06).

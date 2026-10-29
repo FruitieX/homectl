@@ -448,6 +448,14 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 );
             }
         }
+        Event::SensorInventory {
+            integration_id,
+            device_ids,
+        } => {
+            state
+                .groups
+                .set_known_sensors(integration_id.clone(), device_ids.iter().cloned());
+        }
         Event::DeviceAvailability {
             device_key,
             online,

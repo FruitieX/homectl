@@ -2397,6 +2397,25 @@ mod tests {
             "one light cannot be a partial mixture; the sensor is not a non-bright member"
         );
 
+        // A sensor that has not reported yet is skipped once its integration
+        // listed it; any other missing member stays unknown.
+        let unreported = states(vec![lamp(false)]);
+        assert_eq!(
+            eval(&all_off, &unreported, &groups).truth,
+            TruthValue::Unknown
+        );
+        let mut known = Groups::new(group_config(&[&light, &switch], &[]).1);
+        known.set_known_sensors(
+            IntegrationId::from("dummy".to_string()),
+            [DeviceId::new("sensor")],
+        );
+        assert_eq!(eval(&all_off, &unreported, &known).truth, TruthValue::True);
+        assert_eq!(
+            eval(&all_off, &states(vec![]), &known).truth,
+            TruthValue::Unknown,
+            "a missing light is unknown even when its neighbour is a known sensor"
+        );
+
         let only_sensor = states(vec![sensor(false)]);
         assert_eq!(
             eval(&all_off, &only_sensor, &groups).truth,
