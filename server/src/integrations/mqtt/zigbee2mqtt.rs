@@ -84,12 +84,16 @@ fn metadata(value: &Value) -> Option<Metadata> {
     });
     let Some(light) = light else {
         // Preserve explicitly configured sensor mappings on this integration.
+        // Endpoint-only lights/switches are not sensors, just unsupported.
+        let sensor = !exposes
+            .iter()
+            .any(|entry| matches!(entry["type"].as_str(), Some("light" | "switch")));
         return Some(Metadata {
             id,
             name,
             capabilities,
             get_fields: vec![],
-            sensor: true,
+            sensor,
         });
     };
     let features = light["features"].as_array()?;
@@ -406,6 +410,19 @@ fn decode(
     config: &MqttConfig,
 ) -> Option<Device> {
     let raw = value.clone();
+    if meta.sensor {
+        // A button or sensor has no light state. Some still publish a stale
+        // `state` (e.g. a scene button's retained payload), which would
+        // otherwise decode as a light and collide with the sensor device.
+        if let Some(object) = value.as_object_mut() {
+            object.retain(|key, _| {
+                !matches!(
+                    key.as_str(),
+                    "state" | "brightness" | "color" | "color_mode" | "color_temp"
+                )
+            });
+        }
+    }
     // Do not invent an off report from metadata or an incomplete update.
     if !matches!(value["state"].as_str(), Some("ON" | "OFF"))
         && !config.sensor_value_fields.as_ref().is_some_and(|fields| {
@@ -635,6 +652,18 @@ mod tests {
             "definition": {"exposes": [{"name": "action", "type": "enum", "access": 1}]}
         }));
         inventory
+    }
+
+    #[test]
+    fn sensor_state_field_never_decodes_as_a_light() {
+        let mut discovery = Discovery::default();
+        assert!(discovery.load_cached(&serde_json::to_vec(&inventory_with_dimmer()).unwrap()));
+        // A retained scene-button payload: action stripped, stale `state` left.
+        let retained = json!({"state": "OFF", "battery": 100, "action": "single"});
+        assert!(receive(&mut discovery, "z/Dimmer", &retained, true).is_empty());
+        let presses = receive(&mut discovery, "z/Dimmer", &retained, false);
+        assert_eq!(presses.len(), 1);
+        assert!(matches!(presses[0].data, DeviceData::Sensor(_)));
     }
 
     #[test]
