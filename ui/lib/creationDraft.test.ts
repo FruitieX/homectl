@@ -91,7 +91,24 @@ test('a draft from another version or another kind is ignored', () => {
   assert.equal(loadCreationDraft('routine', storage), null);
 });
 
-test('no storage at all is survivable', () => {
+test('no storage at all is survivable', (t) => {
+  // Node 25+ provides a global sessionStorage, which an `undefined` argument
+  // falls back to; hide it so this covers an environment without storage.
+  const descriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    'sessionStorage',
+  );
+  Object.defineProperty(globalThis, 'sessionStorage', {
+    configurable: true,
+    value: undefined,
+  });
+  t.after(() => {
+    if (descriptor) {
+      Object.defineProperty(globalThis, 'sessionStorage', descriptor);
+    } else {
+      delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+    }
+  });
   assert.equal(saveCreationDraft('scene', { name: 'x' }, undefined), false);
   assert.equal(loadCreationDraft('scene', undefined), null);
   assert.doesNotThrow(() => clearCreationDraft('scene', undefined));

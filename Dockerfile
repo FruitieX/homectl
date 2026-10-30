@@ -1,7 +1,8 @@
-FROM node:24.22.2-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85 AS ui-builder
+FROM node:26.13.0-alpine@sha256:c6ad9e9c1d80f6eb607c26b4b0a132ff7a2344fad1c78ea3baa2a7d4c8de6d94 AS ui-builder
 
 RUN apk add --no-cache pango-dev g++ make jpeg-dev giflib-dev librsvg-dev
-RUN corepack enable && corepack prepare pnpm@10.18.0 --activate
+# Node 25+ no longer bundles corepack; keep pnpm in step with CI.
+RUN npm install --global pnpm@12.16.1
 
 WORKDIR /app/ui
 
@@ -15,7 +16,7 @@ RUN VITE_GIT_COMMIT="$VITE_GIT_COMMIT" VITE_BUILD_DATE="$VITE_BUILD_DATE" pnpm b
 
 # The workspace dependencies declare rust-version 1.94 (sea-orm 2, sqlx 0.9), so
 # the image toolchain must not trail the flake's.
-FROM rust:1.99-slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400 AS server-builder
+FROM rust:1.99.1-slim-trixie@sha256:b8e062b1c3a80183df83d9ba187cadd2b5ab84bc78d453dbfeb2fccd5f982247 AS server-builder
 
 WORKDIR /app
 
@@ -25,7 +26,7 @@ COPY server ./server
 
 RUN cargo build --release -p homectl-server
 
-FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3 AS runtime
+FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS runtime
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates \
