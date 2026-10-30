@@ -11,6 +11,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/server-ci.yml'
+      - 'scripts/smoke-image.sh'
   pull_request:
     paths:
       - 'server/**'
@@ -20,6 +21,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/server-ci.yml'
+      - 'scripts/smoke-image.sh'
   workflow_dispatch: {}
 
 env:
@@ -47,6 +49,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify Docker for Postgres testcontainers
         run: docker version
+      # The hurl API scenarios in server/tests/hurl are skipped without hurl.
+      - name: Install hurl
+        env:
+          HURL_VERSION: 8.1.0
+          HURL_SHA256: c56222c8923d3940533ac3d7085f66cb6fa6c05639f33aaeef8d857ab70622f9
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/hurl.deb" \
+            "https://github.com/Orange-OpenSource/hurl/releases/download/${HURL_VERSION}/hurl_${HURL_VERSION}_amd64.deb"
+          echo "${HURL_SHA256}  $RUNNER_TEMP/hurl.deb" | sha256sum --check
+          sudo apt-get install --yes --no-install-recommends "$RUNNER_TEMP/hurl.deb"
+          hurl --version
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: server -> target
@@ -141,8 +154,7 @@ jobs:
             type=semver,pattern={{major}}
             type=sha
 
-      - name: Build (and push)
-        id: build
+      - name: Build image for smoke test
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -150,7 +162,28 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
+          load: true
+          tags: homectl:smoke
+          build-args: |
+            VITE_GIT_COMMIT=${{ github.sha }}
+            VITE_BUILD_DATE=${{ github.event.head_commit.timestamp || github.run_started_at }}
+
+      # The image must start on its runtime base and serve health, API and UI
+      # before it is published (base image and dependency bumps land here).
+      - name: Smoke test image
+        run: scripts/smoke-image.sh homectl:smoke
+
+      - name: Build (and push)
+        id: build
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
             VITE_GIT_COMMIT=${{ github.sha }}
