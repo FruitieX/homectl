@@ -2775,16 +2775,16 @@ async fn chat_assistant(
         inner: ReceiverStream::new(rx).map(Ok::<Bytes, Infallible>),
         cancel: cancel_tx,
     };
-    let body = warp::hyper::Body::wrap_stream(stream);
-    let response = warp::http::Response::builder()
-        .status(StatusCode::OK)
-        .header(
-            warp::http::header::CONTENT_TYPE,
-            "text/event-stream; charset=utf-8",
-        )
-        .header(warp::http::header::CACHE_CONTROL, "no-cache")
-        .body(body)
-        .expect("assistant SSE response");
+    let mut response = warp::reply::stream(stream).into_response();
+    let headers = response.headers_mut();
+    headers.insert(
+        warp::http::header::CONTENT_TYPE,
+        warp::http::HeaderValue::from_static("text/event-stream; charset=utf-8"),
+    );
+    headers.insert(
+        warp::http::header::CACHE_CONTROL,
+        warp::http::HeaderValue::from_static("no-cache"),
+    );
     Ok(response)
 }
 
@@ -6009,9 +6009,10 @@ mod tests {
         .unwrap()
         .into_response();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = warp::hyper::body::to_bytes(response.into_body())
+        let body = http_body_util::BodyExt::collect(response.into_body())
             .await
-            .unwrap();
+            .unwrap()
+            .to_bytes();
         let text = String::from_utf8(body.to_vec()).unwrap();
         assert!(!text.contains("replacement-secret"));
         let changed = assistant_settings_view(&snapshot.load().runtime_config.widget_settings);
@@ -6029,9 +6030,10 @@ mod tests {
         .unwrap()
         .into_response();
         assert_eq!(response.status(), StatusCode::CONFLICT);
-        let body = warp::hyper::body::to_bytes(response.into_body())
+        let body = http_body_util::BodyExt::collect(response.into_body())
             .await
-            .unwrap();
+            .unwrap()
+            .to_bytes();
         assert!(!String::from_utf8(body.to_vec())
             .unwrap()
             .contains("replacement-secret"));
@@ -6892,22 +6894,27 @@ mod tests {
             });
             let stream =
                 initial.chain(futures_util::stream::pending::<Result<Bytes, Infallible>>());
-            warp::http::Response::builder()
-                .header("content-type", "text/event-stream")
-                .body(warp::hyper::Body::wrap_stream(stream))
-                .unwrap()
+            warp::reply::with_header(
+                warp::reply::stream(stream),
+                "content-type",
+                "text/event-stream",
+            )
         });
-        let (addr, server) = warp::serve(provider).bind_ephemeral(([127, 0, 0, 1], 0));
-        let provider_task = tokio::spawn(server);
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let addr = listener.local_addr().unwrap();
+        let provider_task = tokio::spawn(warp::serve(provider).incoming(listener).run());
         let mut config = test_config();
         config.base_url = format!("http://{addr}/v1");
         config.timeout_ms = 30_000;
         let (tx, mut rx) = mpsc::channel(8);
         let (cancel_tx, cancel_rx) = watch::channel(false);
-        let response_body = warp::hyper::Body::wrap_stream(CancelOnDrop {
+        let response_body = warp::reply::stream(CancelOnDrop {
             inner: futures_util::stream::pending::<Result<Bytes, Infallible>>(),
             cancel: cancel_tx,
-        });
+        })
+        .into_response();
         let work = tokio::spawn(async move {
             let mut sink = EventSink {
                 tx,

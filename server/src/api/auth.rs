@@ -16,7 +16,6 @@ use serde_json::{json, Value};
 use warp::filters::BoxedFilter;
 use warp::http::header::{HeaderValue, CACHE_CONTROL, CONTENT_TYPE, LOCATION, SET_COOKIE};
 use warp::http::{HeaderMap, Method, StatusCode};
-use warp::hyper::Body;
 use warp::reply::Response;
 use warp::{Filter, Rejection};
 
@@ -30,7 +29,7 @@ const MAX_BODY_BYTES: u64 = 16 * 1024;
 const MAX_DEVICE_NAME: usize = 80;
 
 fn response(status: StatusCode, body: Value, cookies: &[String]) -> Response {
-    let mut response = Response::new(Body::from(body.to_string()));
+    let mut response = Response::new(body.to_string().into());
     *response.status_mut() = status;
     let headers = response.headers_mut();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
@@ -48,7 +47,7 @@ fn error(status: StatusCode, message: &str) -> Response {
 }
 
 fn redirect(location: &str, cookies: &[String]) -> Response {
-    let mut response = Response::new(Body::empty());
+    let mut response = Response::default();
     *response.status_mut() = StatusCode::FOUND;
     if let Ok(value) = HeaderValue::from_str(location) {
         response.headers_mut().insert(LOCATION, value);
@@ -80,7 +79,7 @@ fn sign_in_page(status: StatusCode, title: &str, message: &str, cookies: &[Strin
         escape_html(title),
         escape_html(message)
     );
-    let mut response = Response::new(Body::from(html));
+    let mut response = Response::new(html.into());
     *response.status_mut() = status;
     response.headers_mut().insert(
         CONTENT_TYPE,

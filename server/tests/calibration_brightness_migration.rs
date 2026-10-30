@@ -1,3 +1,5 @@
+mod postgres_container;
+
 use homectl_server::db::migrations::Migrator;
 use sea_orm::{ConnectionTrait, Database, DatabaseConnection, Statement};
 use sea_orm_migration::MigratorTrait;
@@ -64,8 +66,9 @@ async fn sqlite_existing_color_calibration_survives_brightness_migration() {
 fn postgres_existing_color_calibration_survives_brightness_migration() {
     use testcontainers::core::IntoContainerPort;
     use testcontainers::runners::SyncRunner;
-    use testcontainers_modules::postgres::Postgres;
-    let container = Postgres::default().start().expect("postgres should start");
+    let container = postgres_container::postgres()
+        .start()
+        .expect("postgres should start");
     let port = container.get_host_port_ipv4(5432.tcp()).unwrap();
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         verify(

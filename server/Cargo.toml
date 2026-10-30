@@ -35,7 +35,7 @@ palette = { version = "=0.7.7", features = ["serializing"] }
 async-trait = "=0.1.92"
 rand = "=0.10.3"
 ring = "=0.17.14"
-warp = "=0.3.7"
+warp = { version = "=0.4.3", features = ["server", "websocket", "multipart"] }
 serde_path_to_error = "=0.1.20"
 tokio = { version = "=1.54.1", features = ["full"] }
 futures-util = "=0.3.34"
@@ -75,7 +75,7 @@ env_logger = "=0.11.11"
 eyre = "=0.6.14"
 color-eyre = "=0.6.5"
 croner = "=4.0.2"
-ordered-float = { version = "=5.5.0", features = ["serde"] }
+ordered-float = { version = "=5.5.1", features = ["serde"] }
 jsonptr = "=0.8.2"
 serde-this-or-that = "=0.5.0"
 clap = { version = "=4.6.7", features = ["derive", "env"] }
@@ -101,11 +101,12 @@ default = []
 tokio-console = ["dep:console-subscriber"]
 
 [dev-dependencies]
+http-body-util = "=0.1.5"
 datatest-stable = "=0.3.3"
 tokio = { version = "=1.54.1", features = ["test-util"] }
 reqwest = { version = "=0.13.5", features = ["blocking", "json"] }
-testcontainers = { version = "=0.27.3", features = ["blocking"] }
-testcontainers-modules = { version = "=0.15.0", features = ["postgres"] }
+warp = { version = "=0.4.3", features = ["test"] }
+testcontainers = { version = "=0.28.0", features = ["blocking"] }
 which = "=8.0.6"
 
 [[test]]

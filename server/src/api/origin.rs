@@ -33,7 +33,6 @@ use warp::http::header::{
     ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE, VARY,
 };
 use warp::http::{Method, StatusCode};
-use warp::hyper::Body;
 use warp::reply::Response;
 use warp::{Filter, Rejection};
 
@@ -166,7 +165,7 @@ fn classify(
 }
 
 fn forbidden_response() -> Response {
-    let mut response = Response::new(Body::from("cross-origin request is not allowed"));
+    let mut response = Response::new("cross-origin request is not allowed".into());
     *response.status_mut() = StatusCode::FORBIDDEN;
     response.headers_mut().insert(
         CONTENT_TYPE,
@@ -176,7 +175,7 @@ fn forbidden_response() -> Response {
 }
 
 fn preflight_response(origin: &str) -> Response {
-    let mut response = Response::new(Body::empty());
+    let mut response = Response::default();
     *response.status_mut() = StatusCode::NO_CONTENT;
 
     let headers = response.headers_mut();
@@ -348,7 +347,7 @@ mod tests {
 
     #[test]
     fn allowed_cross_origin_responses_echo_the_origin() {
-        let response = finalize(Some("http://localhost:3000"), Response::new(Body::empty()));
+        let response = finalize(Some("http://localhost:3000"), Response::default());
 
         assert_eq!(
             response.headers().get(ACCESS_CONTROL_ALLOW_ORIGIN).unwrap(),

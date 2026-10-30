@@ -266,9 +266,10 @@ mod tests {
         .unwrap()
         .into_response();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        let body = warp::hyper::body::to_bytes(response.into_body())
+        let body = http_body_util::BodyExt::collect(response.into_body())
             .await
-            .unwrap();
+            .unwrap()
+            .to_bytes();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert!(body["error"].as_str().unwrap().contains("deleted"));
         assert!(!snapshot
@@ -313,9 +314,10 @@ mod tests {
         .unwrap()
         .into_response();
         assert_eq!(response.status(), StatusCode::CONFLICT);
-        let body = warp::hyper::body::to_bytes(response.into_body())
+        let body = http_body_util::BodyExt::collect(response.into_body())
             .await
-            .unwrap();
+            .unwrap()
+            .to_bytes();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["current"]["name"], latest.name);
         let duplicate = create_group(original, handle.clone())

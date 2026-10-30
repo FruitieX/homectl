@@ -149,9 +149,10 @@ mod tests {
             .unwrap()
             .into_response();
         let status = response.status();
-        let body = warp::hyper::body::to_bytes(response.into_body())
+        let body = http_body_util::BodyExt::collect(response.into_body())
             .await
-            .unwrap();
+            .unwrap()
+            .to_bytes();
         (status, serde_json::from_slice(&body).unwrap())
     }
     #[tokio::test]
