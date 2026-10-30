@@ -5526,9 +5526,10 @@ mod tests {
             .unwrap()
             .into_response();
         assert_eq!(reply.status(), StatusCode::OK);
-        let bytes = warp::hyper::body::to_bytes(reply.into_body())
+        let bytes = http_body_util::BodyExt::collect(reply.into_body())
             .await
-            .unwrap();
+            .unwrap()
+            .to_bytes();
         let response: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(response["data"]["would_run"], true);
         assert_eq!(response["data"]["steps"][0]["kind"], "set_power");
@@ -5746,9 +5747,10 @@ mod tests {
             };
             let response =
                 config_write_response((), result, available, StatusCode::OK).into_response();
-            let body = warp::hyper::body::to_bytes(response.into_body())
+            let body = http_body_util::BodyExt::collect(response.into_body())
                 .await
-                .unwrap();
+                .unwrap()
+                .to_bytes();
             let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
             assert_eq!(json["success"], true);
             assert_eq!(json["write"]["applied"], true);

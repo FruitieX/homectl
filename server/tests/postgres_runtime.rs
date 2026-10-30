@@ -1,4 +1,5 @@
 mod common;
+mod postgres_container;
 
 use common::{TestServer, TestServerConfig};
 use homectl_server::core::simulate::prepare_simulation_config;
@@ -15,7 +16,6 @@ use std::time::{Duration, Instant};
 use testcontainers::core::IntoContainerPort;
 use testcontainers::runners::SyncRunner;
 use testcontainers::ImageExt;
-use testcontainers_modules::postgres::Postgres;
 
 fn get_json(base_url: &str, path: &str) -> Value {
     reqwest::blocking::get(format!("{base_url}{path}"))
@@ -103,7 +103,9 @@ fn database_exists(database_url: &str) -> bool {
 
 #[test]
 fn postgres_runtime_creates_missing_database_automatically() {
-    let container = Postgres::default().start().expect("postgres should start");
+    let container = postgres_container::postgres()
+        .start()
+        .expect("postgres should start");
     let port = container
         .get_host_port_ipv4(5432)
         .expect("postgres port should be mapped");
@@ -126,7 +128,9 @@ fn postgres_runtime_creates_missing_database_automatically() {
 
 #[test]
 fn postgres_runtime_persists_config_across_restarts() {
-    let container = Postgres::default().start().expect("postgres should start");
+    let container = postgres_container::postgres()
+        .start()
+        .expect("postgres should start");
     let port = container
         .get_host_port_ipv4(5432)
         .expect("postgres port should be mapped");
@@ -202,7 +206,7 @@ fn postgres_runtime_reconnects_and_backfills_memory_state() {
     );
     assert_eq!(create_response.status(), StatusCode::CREATED);
 
-    let _container = Postgres::default()
+    let _container = postgres_container::postgres()
         .with_mapped_port(host_port, 5432.tcp())
         .start()
         .expect("postgres should start on reserved host port");
@@ -254,7 +258,9 @@ fn postgres_runtime_reconnects_and_backfills_memory_state() {
 
 #[test]
 fn postgres_runtime_ignores_external_config_changes_while_running() {
-    let container = Postgres::default().start().expect("postgres should start");
+    let container = postgres_container::postgres()
+        .start()
+        .expect("postgres should start");
     let port = container
         .get_host_port_ipv4(5432)
         .expect("postgres port should be mapped");
@@ -304,7 +310,9 @@ fn postgres_runtime_ignores_external_config_changes_while_running() {
 
 #[test]
 fn simulation_prepare_config_accepts_postgres_source_database() {
-    let container = Postgres::default().start().expect("postgres should start");
+    let container = postgres_container::postgres()
+        .start()
+        .expect("postgres should start");
     let port = container
         .get_host_port_ipv4(5432)
         .expect("postgres port should be mapped");
@@ -346,7 +354,9 @@ fn simulation_prepare_config_accepts_postgres_source_database() {
 
 #[test]
 fn postgres_runtime_stores_mixed_semantics_routines() {
-    let container = Postgres::default().start().expect("postgres should start");
+    let container = postgres_container::postgres()
+        .start()
+        .expect("postgres should start");
     let port = container
         .get_host_port_ipv4(5432)
         .expect("postgres port should be mapped");

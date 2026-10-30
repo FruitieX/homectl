@@ -453,9 +453,10 @@ mod tests {
     }
     async fn body(reply: impl Reply) -> serde_json::Value {
         serde_json::from_slice(
-            &warp::hyper::body::to_bytes(reply.into_response().into_body())
+            &http_body_util::BodyExt::collect(reply.into_response().into_body())
                 .await
-                .unwrap(),
+                .unwrap()
+                .to_bytes(),
         )
         .unwrap()
     }
