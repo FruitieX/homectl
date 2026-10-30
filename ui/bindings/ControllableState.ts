@@ -15,4 +15,15 @@ export type ControllableState = {
    * Transition time in seconds
    */
   transition: number | null;
+  /**
+   * Active effect (preset) name, if supported. `None` means "not set": the
+   * effect is not requested, or the device reports a customised look.
+   */
+  effect?: string;
+  /**
+   * Colors of every color slot of the active effect, if the device has
+   * several. Slot 0 is the primary color; when `color` is also set it is
+   * authoritative for slot 0. `None` means "not set".
+   */
+  colors?: Array<DeviceColor>;
 };

@@ -421,6 +421,8 @@ async fn execute(handle: &StateHandle, action: &UserTimerAction) -> Result<()> {
                 color: None,
                 transition: None,
                 preserve_scene: false,
+                colors: None,
+                effect: None,
             })
             .await?;
         if !result.applied {

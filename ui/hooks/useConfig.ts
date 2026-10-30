@@ -83,6 +83,10 @@ export interface SceneDeviceState {
   color?: DeviceColor;
   brightness?: number;
   transition?: number;
+  /** Effect (preset) name, for devices that report effects. */
+  effect?: string;
+  /** Every color slot, for devices with several color slots. */
+  colors?: DeviceColor[];
 }
 
 /**

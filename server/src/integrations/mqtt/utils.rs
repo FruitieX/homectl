@@ -224,6 +224,41 @@ pub fn mqtt_to_homectl(
         .ok()
         .and_then(|value| serde_json::from_value::<DeviceColor>(value.clone()).ok());
 
+    // Optional fields without defaults: they are only read when configured.
+    let colors = config
+        .colors_field
+        .as_deref()
+        .and_then(|field| field.resolve(&value).ok())
+        .and_then(serde_json::Value::as_array)
+        .and_then(|items| {
+            // A list with an unparseable item is dropped as a whole so that
+            // color slot positions never shift.
+            items
+                .iter()
+                .map(|item| serde_json::from_value::<DeviceColor>(item.clone()).ok())
+                .collect::<Option<Vec<_>>>()
+        });
+
+    let effect = config
+        .effect_field
+        .as_deref()
+        .and_then(|field| field.resolve(&value).ok())
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+
+    let effect_list = config
+        .effect_list_field
+        .as_deref()
+        .and_then(|field| field.resolve(&value).ok())
+        .and_then(serde_json::Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        });
+
     let power = power_field.resolve(&value).ok().and_then(|value| {
         if config
             .power_on_value
@@ -272,7 +307,11 @@ pub fn mqtt_to_homectl(
         .iter()
         .find_map(|field| Some((field, field.resolve(&value).ok()?)))
         .filter(|(_, v)| !v.is_null());
-    let has_controllable_state = power.is_some() || brightness.is_some() || color.is_some();
+    let has_controllable_state = power.is_some()
+        || brightness.is_some()
+        || color.is_some()
+        || colors.is_some()
+        || effect.is_some();
 
     let device_state = if let Some((field, value)) = resolved_sensor_value_field {
         DeviceData::Sensor(match value {
@@ -304,14 +343,17 @@ pub fn mqtt_to_homectl(
         warn!("Unable to determine device type for {topic}, discarding MQTT message");
         return None;
     } else {
-        let capabilities: Capabilities = capabilities_field
+        let mut capabilities: Capabilities = capabilities_field
             .resolve(&value)
             .ok()
             .and_then(|value| serde_json::from_value(value.clone()).ok())
             .or_else(|| config.capabilities_override.clone())
             .unwrap_or_default();
+        if let Some(effects) = effect_list {
+            capabilities.effects = effects;
+        }
 
-        let controllable_device = ControllableDevice::new(
+        let mut controllable_device = ControllableDevice::new(
             None,
             power.unwrap_or_default(),
             brightness,
@@ -320,6 +362,8 @@ pub fn mqtt_to_homectl(
             capabilities,
             config.managed.clone().unwrap_or_default(),
         );
+        controllable_device.state.effect = effect;
+        controllable_device.state.colors = colors;
 
         DeviceData::Controllable(controllable_device)
     };
@@ -399,6 +443,16 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
 
         if let Some(color) = &device.state.color {
             payload.assign(&color_field, serde_json::to_value(color)?)?;
+        }
+
+        if let (Some(colors_field), Some(colors)) =
+            (&config.colors_field, device.state.colors_with_primary())
+        {
+            payload.assign(colors_field, serde_json::to_value(colors)?)?;
+        }
+
+        if let (Some(effect_field), Some(effect)) = (&config.effect_field, &device.state.effect) {
+            payload.assign(effect_field, serde_json::Value::String(effect.clone()))?;
         }
 
         let transition = device
@@ -666,6 +720,207 @@ mod tests {
         assert_eq!(
             device.data,
             DeviceData::Sensor(SensorDevice::unknown_placeholder())
+        );
+    }
+
+    fn twinkly_config() -> MqttConfig {
+        MqttConfig {
+            host: "localhost".to_string(),
+            port: 1883,
+            topic: "home/lights/twinkly/{id}".to_string(),
+            topic_set: "home/lights/twinkly/{id}/set".to_string(),
+            colors_field: Some(PointerBuf::from_tokens(["colors"])),
+            effect_field: Some(PointerBuf::from_tokens(["preset"])),
+            effect_list_field: Some(PointerBuf::from_tokens(["presets"])),
+            ..Default::default()
+        }
+    }
+
+    fn hs(h: u64, s: f32) -> DeviceColor {
+        DeviceColor::Hs(Hs {
+            h,
+            s: OrderedFloat(s),
+        })
+    }
+
+    #[test]
+    fn mqtt_to_homectl_reads_effect_effect_list_and_colors() {
+        let mqtt_json = json!({
+            "id": "Curtain",
+            "name": "Curtain",
+            "power": true,
+            "brightness": 0.6,
+            "color": { "h": 30, "s": 0.58 },
+            "colors": [{ "h": 30, "s": 0.58 }, { "x": 0.3, "y": 0.3 }, { "r": 255, "g": 0, "b": 0 }],
+            "preset": "Aurora",
+            "presets": ["Aurora", "Fire", "Snowfall"],
+            "effect": "aurora"
+        });
+        let device = mqtt_to_homectl(
+            mqtt_json.to_string().as_bytes(),
+            "home/lights/twinkly/Curtain",
+            "twinkly".parse().unwrap(),
+            &twinkly_config(),
+        )
+        .unwrap();
+
+        let DeviceData::Controllable(data) = device.data else {
+            panic!("expected a controllable device");
+        };
+        assert_eq!(data.state.effect.as_deref(), Some("Aurora"));
+        assert_eq!(
+            data.state.colors,
+            Some(vec![
+                hs(30, 0.58),
+                serde_json::from_value(json!({ "x": 0.3, "y": 0.3 })).unwrap(),
+                serde_json::from_value(json!({ "r": 255, "g": 0, "b": 0 })).unwrap(),
+            ])
+        );
+        assert_eq!(data.state.color, Some(hs(30, 0.58)));
+        assert_eq!(
+            data.capabilities.effects,
+            vec!["Aurora", "Fire", "Snowfall"]
+        );
+    }
+
+    #[test]
+    fn mqtt_to_homectl_reads_customised_look_and_bad_color_lists() {
+        let mqtt_json = json!({
+            "id": "Curtain",
+            "power": true,
+            "preset": null,
+            "presets": ["Aurora"],
+            "colors": [{ "h": 30, "s": 0.58 }, "not a color"]
+        });
+        let device = mqtt_to_homectl(
+            mqtt_json.to_string().as_bytes(),
+            "home/lights/twinkly/Curtain",
+            "twinkly".parse().unwrap(),
+            &twinkly_config(),
+        )
+        .unwrap();
+
+        let DeviceData::Controllable(data) = device.data else {
+            panic!("expected a controllable device");
+        };
+        assert_eq!(data.state.effect, None);
+        // One bad item drops the list rather than shifting the slots.
+        assert_eq!(data.state.colors, None);
+        assert_eq!(data.capabilities.effects, vec!["Aurora"]);
+    }
+
+    #[test]
+    fn mqtt_to_homectl_ignores_effect_and_colors_unless_configured() {
+        let mqtt_json = json!({
+            "id": "device1",
+            "power": true,
+            "colors": [{ "h": 30, "s": 0.58 }],
+            "preset": "Aurora",
+            "presets": ["Aurora"],
+            "effect": "aurora"
+        });
+        let config = MqttConfig {
+            host: "localhost".to_string(),
+            port: 1883,
+            topic: "homectl/devices/{id}".to_string(),
+            topic_set: "homectl/set/{id}".to_string(),
+            ..Default::default()
+        };
+        let device = mqtt_to_homectl(
+            mqtt_json.to_string().as_bytes(),
+            "homectl/devices/device1",
+            "mqtt".parse().unwrap(),
+            &config,
+        )
+        .unwrap();
+
+        let DeviceData::Controllable(data) = device.data else {
+            panic!("expected a controllable device");
+        };
+        assert_eq!(data.state.effect, None);
+        assert_eq!(data.state.colors, None);
+        assert!(data.capabilities.effects.is_empty());
+    }
+
+    #[test]
+    fn homectl_to_mqtt_writes_effect_and_colors() {
+        let mut controllable = ControllableDevice::new(
+            None,
+            true,
+            Some(0.6),
+            Some(hs(40, 0.5)),
+            Some(1.5),
+            Capabilities::singleton(ColorMode::Hs),
+            ManageKind::Full,
+        );
+        controllable.state.effect = Some("Fire".to_string());
+        // `color` is authoritative for slot 0.
+        controllable.state.colors = Some(vec![hs(0, 1.0), hs(270, 0.8)]);
+        let device = Device {
+            id: DeviceId::new("Curtain"),
+            name: "Curtain".to_string(),
+            integration_id: IntegrationId::from_str("twinkly").unwrap(),
+            data: DeviceData::Controllable(controllable),
+            raw: None,
+        };
+
+        let payload = homectl_to_mqtt(device, &twinkly_config()).unwrap();
+
+        assert_eq!(
+            payload,
+            json!({
+                "power": true,
+                "brightness": 0.6000000238418579,
+                "color": { "h": 40, "s": 0.5 },
+                "colors": [{ "h": 40, "s": 0.5 }, { "h": 270, "s": 0.800000011920929 }],
+                "preset": "Fire",
+                "transition": 1.5,
+            })
+        );
+    }
+
+    #[test]
+    fn homectl_to_mqtt_omits_unset_effect_and_colors() {
+        let device = Device {
+            id: DeviceId::new("Curtain"),
+            name: "Curtain".to_string(),
+            integration_id: IntegrationId::from_str("twinkly").unwrap(),
+            data: DeviceData::Controllable(ControllableDevice::new(
+                None,
+                true,
+                None,
+                None,
+                None,
+                Capabilities::default(),
+                ManageKind::Full,
+            )),
+            raw: None,
+        };
+
+        let payload = homectl_to_mqtt(device, &twinkly_config()).unwrap();
+
+        assert_eq!(payload, json!({ "power": true }));
+    }
+
+    #[test]
+    fn effect_and_colors_round_trip_through_generic_mqtt() {
+        let mqtt_json = json!({
+            "power": true,
+            "brightness": 0.5,
+            "colors": [{ "h": 30, "s": 0.5 }, { "h": 270, "s": 0.25 }],
+            "preset": "Aurora",
+        });
+        let device = mqtt_to_homectl(
+            mqtt_json.to_string().as_bytes(),
+            "home/lights/twinkly/Curtain",
+            "twinkly".parse().unwrap(),
+            &twinkly_config(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            homectl_to_mqtt(device, &twinkly_config()).unwrap(),
+            mqtt_json
         );
     }
 

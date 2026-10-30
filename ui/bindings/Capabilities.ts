@@ -22,4 +22,9 @@ export type Capabilities = {
    * Color temperature (2000 - 6500)
    */
   ct: { start: number; end: number } | null;
+  /**
+   * Names of the effects (presets) the device can show, as reported by the
+   * device. Empty when the device has no effects.
+   */
+  effects?: Array<string>;
 };

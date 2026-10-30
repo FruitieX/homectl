@@ -149,6 +149,8 @@ fn mk_circadian_device_at(circadian: &Circadian, local: chrono::NaiveTime) -> De
         color: profile.color,
         brightness: profile.brightness,
         transition: Some(OrderedFloat(CIRCADIAN_COMPAT_TRANSITION_MS as f32 / 1000.0)),
+        colors: None,
+        effect: None,
     }));
 
     Device {

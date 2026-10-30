@@ -12,5 +12,15 @@ export type DeviceCommand = {
   brightness: number | null;
   color: DeviceColor | null;
   transition: number | null;
+  /**
+   * Activate this effect (preset). The preset defines the look, so the
+   * requested colors are cleared.
+   */
+  effect?: string;
+  /**
+   * Set every color slot. This customises the look, so the requested
+   * effect is cleared; slot 0 also becomes the primary color.
+   */
+  colors?: Array<DeviceColor>;
   preserve_scene: boolean;
 };

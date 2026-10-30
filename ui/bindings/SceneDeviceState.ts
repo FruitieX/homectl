@@ -6,4 +6,12 @@ export type SceneDeviceState = {
   color: DeviceColor | null;
   brightness: number | null;
   transition: number | null;
+  /**
+   * Effect (preset) to activate, for devices that report effects.
+   */
+  effect?: string;
+  /**
+   * Colors of every color slot, for devices with several color slots.
+   */
+  colors?: Array<DeviceColor>;
 };

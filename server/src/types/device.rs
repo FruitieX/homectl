@@ -53,6 +53,19 @@ pub struct ControllableState {
 
     /// Transition time in seconds
     pub transition: Option<OrderedFloat<f32>>,
+
+    /// Active effect (preset) name, if supported. `None` means "not set": the
+    /// effect is not requested, or the device reports a customised look.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub effect: Option<String>,
+
+    /// Colors of every color slot of the active effect, if the device has
+    /// several. Slot 0 is the primary color; when `color` is also set it is
+    /// authoritative for slot 0. `None` means "not set".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub colors: Option<Vec<DeviceColor>>,
 }
 
 impl Display for ControllableState {
@@ -72,10 +85,20 @@ impl Display for ControllableState {
                 "on".to_string()
             };
 
-            if let Some(bri) = self.brightness {
+            let s = if let Some(bri) = self.brightness {
                 format!("{}, bri({})", color_str, bri)
             } else {
                 color_str
+            };
+
+            let s = match &self.effect {
+                Some(effect) if self.power => format!("{s}, effect({effect})"),
+                _ => s,
+            };
+
+            match &self.colors {
+                Some(colors) if self.power => format!("{s}, colors({})", colors.len()),
+                _ => s,
             }
         };
 
@@ -91,7 +114,27 @@ impl ControllableState {
             state.color = color.to_device_preferred_mode(capabilities);
         }
 
+        if let Some(colors) = &mut state.colors {
+            // Keep slot positions stable: leave a color that cannot be
+            // converted as it is instead of dropping its slot.
+            for color in colors.iter_mut() {
+                if let Some(converted) = color.to_device_preferred_mode(capabilities) {
+                    *color = converted;
+                }
+            }
+        }
+
         state
+    }
+
+    /// Color slots with `color` (when set) taking precedence for slot 0, as
+    /// sent to devices with several color slots.
+    pub fn colors_with_primary(&self) -> Option<Vec<DeviceColor>> {
+        let mut colors = self.colors.clone()?;
+        if let (Some(first), Some(color)) = (colors.first_mut(), &self.color) {
+            *first = color.clone();
+        }
+        Some(colors)
     }
 
     pub fn is_ct(&self) -> bool {
@@ -273,6 +316,8 @@ impl ControllableDevice {
                 brightness: brightness.map(OrderedFloat),
                 color,
                 transition: transition.map(OrderedFloat),
+                effect: None,
+                colors: None,
             },
             capabilities,
             managed,
@@ -354,6 +399,9 @@ impl Display for SensorDevice {
     }
 }
 
+// Controllable devices are the common case; boxing them would touch most of the
+// codebase for a negligible copy cost.
+#[allow(clippy::large_enum_variant)]
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
 pub enum DeviceData {
@@ -384,6 +432,10 @@ impl DeviceData {
                 a.scene_id == b.scene_id
                     && a.scene_paused == b.scene_paused
                     && a.state_source == b.state_source
+                    // Requested effect/colors changes must never be dropped
+                    // by the lenient report comparison below.
+                    && a.state.effect == b.state.effect
+                    && a.state.colors == b.state.colors
                     && cmp_device_states(a, &b.state)
             }
             (DeviceData::Sensor(a), DeviceData::Sensor(b)) => cmp_sensor_states(a, b),
@@ -506,6 +558,10 @@ pub fn cmp_device_states(device: &ControllableDevice, expected: &ControllableSta
         return false;
     }
 
+    if !cmp_effect(device, expected) || !cmp_colors(device, expected) {
+        return false;
+    }
+
     // Compare colors if supported
     // ESPHome reports an off light with an UNKNOWN color mode as a sparse
     // snapshot (`{"color":{}}`). In that snapshot the stored color is
@@ -529,6 +585,53 @@ pub fn cmp_device_states(device: &ControllableDevice, expected: &ControllableSta
     }
 
     true
+}
+
+/// Compares the requested effect. An unset expected effect never conflicts.
+///
+/// Devices without effect support (no advertised effects and no reported
+/// effect) are not compared, so a scene effect cannot fight such a device.
+/// Devices report no effect once their look is customised; when the expected
+/// state customises a color on top of the effect, that report is accepted
+/// rather than re-applying the preset over the customised colors forever.
+fn cmp_effect(device: &ControllableDevice, expected: &ControllableState) -> bool {
+    let Some(expected_effect) = &expected.effect else {
+        return true;
+    };
+    match &device.state.effect {
+        Some(effect) => effect == expected_effect,
+        // Like colors, a sparse report of an off device is not drift.
+        None if !device.state.power => true,
+        None => {
+            device.capabilities.effects.is_empty()
+                || expected.colors.is_some()
+                || expected.color.is_some()
+        }
+    }
+}
+
+/// Compares the requested color slots. Unset expected colors never conflict,
+/// and only slots present in both states are compared. Slot 0 is covered by
+/// the `color` comparison when the expected state also sets `color`.
+fn cmp_colors(device: &ControllableDevice, expected: &ControllableState) -> bool {
+    let (Some(expected_colors), Some(device_colors)) = (&expected.colors, &device.state.colors)
+    else {
+        return true;
+    };
+    let skip = usize::from(expected.color.is_some());
+    device_colors
+        .iter()
+        .zip(expected_colors.iter())
+        .skip(skip)
+        .all(|(incoming, expected)| {
+            cmp_light_color(
+                &device.capabilities,
+                &Some(incoming.clone()),
+                &None,
+                &Some(expected.clone()),
+                &None,
+            )
+        })
 }
 
 /// Compares the state of two sensor devices.
@@ -961,6 +1064,160 @@ mod tests {
         assert!(!restored.scene_paused);
     }
 
+    fn effect_device() -> ControllableDevice {
+        let mut capabilities = Capabilities::singleton(ColorMode::Hs);
+        capabilities.effects = vec!["Aurora".to_string(), "Fire".to_string()];
+        let mut device = ControllableDevice::new(
+            None,
+            true,
+            Some(0.6),
+            Some(DeviceColor::new_from_hs(30, 0.58)),
+            None,
+            capabilities,
+            ManageKind::Full,
+        );
+        device.state.effect = Some("Aurora".to_string());
+        device.state.colors = Some(vec![
+            DeviceColor::new_from_hs(30, 0.58),
+            DeviceColor::new_from_hs(270, 0.8),
+        ]);
+        device
+    }
+
+    #[test]
+    fn legacy_state_json_deserializes_without_effect_or_colors() {
+        let state: ControllableState = serde_json::from_value(serde_json::json!({
+            "power": true,
+            "brightness": 0.5,
+            "color": { "h": 30, "s": 0.5 },
+            "transition": null
+        }))
+        .unwrap();
+        assert_eq!(state.effect, None);
+        assert_eq!(state.colors, None);
+
+        // Unset fields stay out of serialized state, so exports, snapshots and
+        // websocket messages of existing devices do not change.
+        let serialized = serde_json::to_value(&state).unwrap();
+        assert!(serialized.get("effect").is_none());
+        assert!(serialized.get("colors").is_none());
+
+        let capabilities: Capabilities =
+            serde_json::from_value(serde_json::json!({ "xy": true, "ct": null })).unwrap();
+        assert!(capabilities.effects.is_empty());
+        assert!(serde_json::to_value(&capabilities)
+            .unwrap()
+            .get("effects")
+            .is_none());
+
+        let device = effect_device();
+        let restored: ControllableDevice =
+            serde_json::from_value(serde_json::to_value(&device).unwrap()).unwrap();
+        assert_eq!(restored, device);
+    }
+
+    #[test]
+    fn unset_effect_and_colors_never_conflict_with_the_device() {
+        let device = effect_device();
+        let mut expected = device.state.clone();
+        expected.effect = None;
+        expected.colors = None;
+        assert!(cmp_device_states(&device, &expected));
+
+        // A device without effect support never fights a requested effect.
+        let mut plain = ControllableDevice::new(
+            None,
+            true,
+            Some(0.6),
+            Some(DeviceColor::new_from_hs(30, 0.58)),
+            None,
+            Capabilities::singleton(ColorMode::Hs),
+            ManageKind::Full,
+        );
+        let mut expected = plain.state.clone();
+        expected.effect = Some("Aurora".to_string());
+        expected.colors = Some(vec![DeviceColor::new_from_hs(0, 1.0)]);
+        assert!(cmp_device_states(&plain, &expected));
+        plain.state.power = false;
+        expected.power = false;
+        assert!(cmp_device_states(&plain, &expected));
+    }
+
+    #[test]
+    fn effect_and_colors_mismatches_are_drift() {
+        let device = effect_device();
+
+        let mut expected = device.state.clone();
+        expected.effect = Some("Fire".to_string());
+        assert!(!cmp_device_states(&device, &expected));
+
+        let mut expected = device.state.clone();
+        expected.colors = Some(vec![
+            DeviceColor::new_from_hs(30, 0.58),
+            DeviceColor::new_from_hs(120, 0.8),
+        ]);
+        assert!(!cmp_device_states(&device, &expected));
+
+        // Rounding differences within the color tolerance are not drift.
+        let mut expected = device.state.clone();
+        expected.colors = Some(vec![
+            DeviceColor::new_from_hs(30, 0.58),
+            DeviceColor::new_from_hs(271, 0.805),
+        ]);
+        assert!(cmp_device_states(&device, &expected));
+
+        // A device reporting no preset while the expected effect has no
+        // customised colors has lost the effect.
+        let mut reported = device.clone();
+        reported.state.effect = None;
+        let mut expected = device.state.clone();
+        expected.color = None;
+        expected.colors = None;
+        assert!(!cmp_device_states(&reported, &expected));
+    }
+
+    #[test]
+    fn customised_colors_on_top_of_an_effect_accept_a_cleared_preset() {
+        // Devices report no preset once their look is customised.
+        let mut reported = effect_device();
+        reported.state.effect = None;
+        let expected = effect_device().state;
+        assert!(cmp_device_states(&reported, &expected));
+    }
+
+    #[test]
+    fn primary_color_is_authoritative_for_the_first_color_slot() {
+        let device = effect_device();
+        let mut expected = device.state.clone();
+        expected.colors = Some(vec![
+            DeviceColor::new_from_hs(200, 0.1),
+            DeviceColor::new_from_hs(270, 0.8),
+        ]);
+        // Slot 0 is compared through `color`, which matches.
+        assert!(cmp_device_states(&device, &expected));
+        assert_eq!(
+            expected.colors_with_primary(),
+            Some(vec![
+                DeviceColor::new_from_hs(30, 0.58),
+                DeviceColor::new_from_hs(270, 0.8),
+            ])
+        );
+    }
+
+    #[test]
+    fn requested_effect_and_colors_changes_are_state_changes() {
+        let device = effect_device();
+        let mut changed = device.clone();
+        changed.state.effect = None;
+        assert!(!DeviceData::Controllable(device.clone())
+            .is_state_eq(&DeviceData::Controllable(changed)));
+
+        let mut changed = device.clone();
+        changed.state.colors = None;
+        assert!(!DeviceData::Controllable(device.clone())
+            .is_state_eq(&DeviceData::Controllable(changed)));
+    }
+
     #[test]
     fn report_and_scene_comparison_share_tolerance_and_reported_mode() {
         let capabilities = Capabilities {
@@ -969,6 +1226,7 @@ mod tests {
             hs: true,
             rgb: false,
             ct: Some(2000..6500),
+            effects: Vec::new(),
         };
         let mut device = ControllableDevice::new(
             None,
@@ -1086,6 +1344,8 @@ mod tests {
             brightness: Some(OrderedFloat(0.8)),
             color: Some(DeviceColor::Rgb(Rgb { r: 255, g: 0, b: 0 })),
             transition: Some(OrderedFloat(1.0)),
+            colors: None,
+            effect: None,
         });
         let serialized = serde_json::to_string(&color_sensor).unwrap();
         println!("Color sensor serialized: {}", serialized);
@@ -1142,6 +1402,8 @@ mod tests {
                 brightness: Some(OrderedFloat(0.8)),
                 color: Some(DeviceColor::Rgb(Rgb { r: 255, g: 0, b: 0 })),
                 transition: Some(OrderedFloat(1.0)),
+                colors: None,
+                effect: None,
             })
         );
     }

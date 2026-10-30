@@ -439,6 +439,8 @@ mod tests {
                     brightness: None,
                     color: None,
                     transition: None,
+                    colors: None,
+                    effect: None,
                 },
                 received_at_ms: 1,
                 retained: false,

@@ -155,6 +155,8 @@ fn mk_random_device(random: &Random) -> Device {
         transition: Some(OrderedFloat(
             random.config.transition.unwrap_or(0.6).clamp(0.0, 10.0),
         )),
+        colors: None,
+        effect: None,
     }));
 
     Device {

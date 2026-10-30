@@ -69,7 +69,7 @@ The server unifies home automation systems from different brands by assuming con
 
 ### Integrations
 Plugins that connect to various home automation systems:
-- **mqtt** – Generic MQTT devices with configurable message formats, plus Zigbee2MQTT, ESPHome and OpenMQTTGateway BLE sensor modes (`docs/esphome-mqtt.md`, `docs/zigbee2mqtt.md`, `docs/openmqttgateway.md`)
+- **mqtt** – Generic MQTT devices with configurable message formats (effects and color slots: `docs/generic-mqtt.md`), plus Zigbee2MQTT, ESPHome and OpenMQTTGateway BLE sensor modes (`docs/esphome-mqtt.md`, `docs/zigbee2mqtt.md`, `docs/openmqttgateway.md`)
 - **circadian** – Virtual device for circadian rhythm color following
 - **cron** – Scheduled actions
 - **timer** – Timed actions (e.g., delay motion sensor re-activation)

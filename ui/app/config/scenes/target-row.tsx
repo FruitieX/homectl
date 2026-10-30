@@ -44,6 +44,8 @@ import {
 } from '@/ui/primitives/dropdown-menu';
 import { StatePreview } from '@/ui/settings/StatePreview';
 import { SceneColorControl } from '@/ui/settings/SceneColorControl';
+import { commonEffects, withColorSlot } from '@/lib/deviceEffects';
+import type { DeviceColor } from '@/bindings/DeviceColor';
 import { ReferenceSelect } from '@/ui/settings/ReferenceSelect';
 import { EntityPicker } from '@/ui/settings/EntityPicker';
 import { SettingsSelect } from '@/ui/settings/SettingsSelect';
@@ -319,6 +321,19 @@ export function SceneTargetRow({
               brightness={state.brightness ?? 1}
               onChange={(color) => patch({ color })}
               capabilities={caps}
+            />
+            <SceneEffectFields
+              name={name}
+              prefix={prefix}
+              state={state}
+              capabilities={caps}
+              reportedColors={keys.map((key) => {
+                const data = context.devices[key]?.data;
+                return data && 'Controllable' in data
+                  ? (data.Controllable.state.colors ?? [])
+                  : [];
+              })}
+              onChange={patch}
             />
           </div>
         </>
@@ -615,6 +630,77 @@ export function SceneTargetRow({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Effect picker and color slots for targets whose devices report them. */
+function SceneEffectFields({
+  name,
+  prefix,
+  state,
+  capabilities,
+  reportedColors,
+  onChange,
+}: {
+  name: string;
+  prefix: string;
+  state: SceneDeviceState;
+  capabilities: Capabilities[];
+  reportedColors: DeviceColor[][];
+  onChange: (value: Record<string, unknown>) => void;
+}) {
+  const effects = commonEffects(capabilities);
+  if (state.effect && !effects.includes(state.effect))
+    effects.push(state.effect);
+  const fallback = reportedColors.find((colors) => colors.length > 1) ?? [];
+  const slotCount = Math.max(state.colors?.length ?? 0, fallback.length);
+  if (!effects.length && slotCount < 2) return null;
+  return (
+    <div className="mt-2 space-y-2">
+      {effects.length > 0 && (
+        <span className="block text-[10px] text-muted-foreground">Effect</span>
+      )}
+      {effects.length > 0 && (
+        <SettingsSelect
+          data-field={`${prefix}/effect`}
+          aria-label={`${name} effect`}
+          className="w-full"
+          value={state.effect ?? 'none'}
+          onValueChange={(next) =>
+            onChange({ effect: next === 'none' ? undefined : next })
+          }
+          options={[
+            { value: 'none', label: 'Not specified' },
+            ...effects.map((effect) => ({
+              value: effect,
+              label: effect,
+            })),
+          ]}
+        />
+      )}
+      {slotCount > 1 && (
+        <span className="block text-[10px] text-muted-foreground">
+          Effect colors
+        </span>
+      )}
+      {slotCount > 1 &&
+        Array.from({ length: slotCount }, (_, index) => (
+          <SceneColorControl
+            key={index}
+            field={`${prefix}/colors/${index}`}
+            color={state.colors?.[index]}
+            capabilities={capabilities}
+            onChange={(color) =>
+              onChange({
+                // Clearing any slot leaves the effect's own colors in place.
+                colors: color
+                  ? withColorSlot(state.colors, index, color, fallback)
+                  : undefined,
+              })
+            }
+          />
+        ))}
     </div>
   );
 }

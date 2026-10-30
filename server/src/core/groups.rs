@@ -496,6 +496,7 @@ mod groups_runtime_tests {
                     hs: true,
                     rgb: false,
                     ct: None,
+                    effects: Vec::new(),
                 },
                 state: ControllableState {
                     power: true,
@@ -505,6 +506,8 @@ mod groups_runtime_tests {
                         s: OrderedFloat(0.0),
                     })),
                     transition: None,
+                    colors: None,
+                    effect: None,
                 },
                 managed: ManageKind::Full,
             }),

@@ -87,6 +87,14 @@ pub struct MqttConfig {
     id_field: Option<jsonptr::PointerBuf>,
     name_field: Option<jsonptr::PointerBuf>,
     color_field: Option<jsonptr::PointerBuf>,
+    /// Optional pointer to an array of colors, one per color slot of the
+    /// device's effect. Not read or written unless configured.
+    colors_field: Option<jsonptr::PointerBuf>,
+    /// Optional pointer to the active effect (preset) name; `null` means no
+    /// named effect is active. Not read or written unless configured.
+    effect_field: Option<jsonptr::PointerBuf>,
+    /// Optional pointer to the array of effect names the device can show.
+    effect_list_field: Option<jsonptr::PointerBuf>,
     power_field: Option<jsonptr::PointerBuf>,
     power_on_value: Option<serde_json::Value>,
     power_off_value: Option<serde_json::Value>,
@@ -183,6 +191,17 @@ fn normalize_config(mut config: MqttConfig) -> Result<MqttConfig> {
                 .wrap_err("Invalid generic MQTT state topic")?;
             validate_mqtt_topic_template(&config.topic_set, true, false)
                 .wrap_err("Invalid generic MQTT command topic")?;
+            // The optional effect/colors pointers have no default. An empty
+            // value would point at the whole payload; treat it as unset.
+            for field in [
+                &mut config.colors_field,
+                &mut config.effect_field,
+                &mut config.effect_list_field,
+            ] {
+                if field.as_ref().is_some_and(|pointer| pointer.is_root()) {
+                    *field = None;
+                }
+            }
             config.mode = Some(MqttMode::Generic);
         }
         MqttMode::Zigbee2Mqtt => {
@@ -817,6 +836,22 @@ mod packet_tests {
 
     fn normalized(value: serde_json::Value) -> MqttConfig {
         normalize_config(serde_json::from_value(value).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn generic_config_reads_effect_and_colors_pointers_and_ignores_empty_ones() {
+        let config = normalized(json!({
+            "host": "mqtt.example.org",
+            "port": 1883,
+            "topic": "home/lights/twinkly/{id}",
+            "topic_set": "home/lights/twinkly/{id}/set",
+            "colors_field": "/colors",
+            "effect_field": "/preset",
+            "effect_list_field": ""
+        }));
+        assert_eq!(config.colors_field.as_ref().unwrap().as_str(), "/colors");
+        assert_eq!(config.effect_field.as_ref().unwrap().as_str(), "/preset");
+        assert!(config.effect_list_field.is_none());
     }
 
     #[test]

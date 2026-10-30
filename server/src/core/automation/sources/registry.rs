@@ -195,6 +195,8 @@ pub fn synthetic_device(definition: &SourceDefinition, profile: &LightProfile) -
             transition: profile
                 .transition_ms
                 .map(|ms| OrderedFloat(ms as f32 / 1000.0)),
+            colors: None,
+            effect: None,
         })),
         raw: None,
     }

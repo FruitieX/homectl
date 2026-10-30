@@ -27,6 +27,9 @@ pub struct RandomizeColorActionDescriptor {
     pub transition: Option<ordered_float::OrderedFloat<f32>>,
 }
 
+// Device state (with its effect and color slots) is the common payload; boxing
+// it would touch every action constructor for a negligible copy cost.
+#[allow(clippy::large_enum_variant)]
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
 #[serde(tag = "action")]
 #[ts(export)]

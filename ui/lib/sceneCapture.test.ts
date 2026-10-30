@@ -193,10 +193,7 @@ test('color shapes convert from live to scene form and match capabilities', () =
     true,
   );
   assert.equal(
-    colorMatchesCapabilities(
-      { ct: 2000 },
-      { ...brightnessOnly, ct: null },
-    ),
+    colorMatchesCapabilities({ ct: 2000 }, { ...brightnessOnly, ct: null }),
     false,
   );
 });
@@ -239,4 +236,38 @@ test('room targets start from a manual shared state', () => {
     color: undefined,
     transition: undefined,
   });
+});
+
+test('captures the requested effect and color slots', () => {
+  const result = captureSceneDeviceState(
+    device(
+      controllable({
+        capabilities: {
+          ...brightnessOnly,
+          hs: true,
+          effects: ['Aurora', 'Fire'],
+        },
+        state: {
+          power: true,
+          brightness: 0.5,
+          color: { h: 30, s: 0.5 },
+          transition: null,
+          effect: 'Aurora',
+          colors: [
+            { h: 30, s: 0.5 },
+            { h: 270, s: 0.8 },
+          ],
+        },
+      }),
+    ),
+  );
+  assert.equal(result.state.effect, 'Aurora');
+  assert.deepEqual(result.state.colors, [
+    { h: 30, s: 0.5 },
+    { h: 270, s: 0.8 },
+  ]);
+
+  const plain = captureSceneDeviceState(device(controllable()));
+  assert.equal('effect' in plain.state, false);
+  assert.equal('colors' in plain.state, false);
 });

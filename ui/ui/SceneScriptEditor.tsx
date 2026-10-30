@@ -179,6 +179,8 @@ function buildSceneScriptTypes(
     '  brightness?: number;',
     '  transition?: number;',
     '  color?: SceneColor;',
+    '  effect?: string;',
+    '  colors?: SceneColor[];',
     '}',
     '',
     'interface SceneDeviceLink {',

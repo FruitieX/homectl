@@ -176,6 +176,16 @@ export function captureSceneDeviceState(
     notes.push('This device does not support color, so it is left out.');
   }
 
+  // Effects and color slots are captured as requested; unset stays unset.
+  const requestedLook = requested as { effect?: string; colors?: unknown[] };
+  if (typeof requestedLook.effect === 'string')
+    state.effect = requestedLook.effect;
+  if (Array.isArray(requestedLook.colors) && requestedLook.colors.length) {
+    const colors = requestedLook.colors.map(toSceneColor);
+    if (colors.every((color) => color !== undefined))
+      state.colors = colors as DeviceColor[];
+  }
+
   if (isOffline(device)) {
     notes.push(
       'Captured from the last requested state: the device is offline, so this is not a live value.',

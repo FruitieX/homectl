@@ -24,6 +24,12 @@ pub struct Capabilities {
 
     /// Color temperature (2000 - 6500)
     pub ct: Option<std::ops::Range<u16>>,
+
+    /// Names of the effects (presets) the device can show, as reported by the
+    /// device. Empty when the device has no effects.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<String>>", optional)]
+    pub effects: Vec<String>,
 }
 
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -63,6 +69,7 @@ impl Capabilities {
             rgb,
             ct,
             brightness: Some(true),
+            effects: Vec::new(),
         }
     }
 

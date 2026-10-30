@@ -5083,6 +5083,8 @@ fn non_matching_sensor_state(expected: &SensorDevice) -> SensorDevice {
             brightness: None,
             color: None,
             transition: None,
+            colors: None,
+            effect: None,
         }),
     }
 }
@@ -6269,12 +6271,16 @@ devices = [
                 brightness: Some(OrderedFloat(0.5)),
                 color: None,
                 transition: None,
+                colors: None,
+                effect: None,
             })),
             SensorDevice::Color(ControllableState {
                 power: false,
                 brightness: None,
                 color: None,
                 transition: None,
+                colors: None,
+                effect: None,
             })
         );
     }

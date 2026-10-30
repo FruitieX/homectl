@@ -1,4 +1,5 @@
 import { DeviceColorTabs, colorToDeviceHs } from '@/ui/DeviceColorTabs';
+import { DeviceEffectControls } from '@/ui/DeviceEffectControls';
 import {
   isDeviceReadOnly,
   supportsDeviceBrightness,
@@ -376,6 +377,9 @@ export function DeviceQuickControls({
             </div>
           )}
         </div>
+      )}
+      {!compact && showColorTabs && (
+        <DeviceEffectControls devices={devices} connected={connected} />
       )}
       {!compact && showColorTabs && (
         <DeviceColorTabs

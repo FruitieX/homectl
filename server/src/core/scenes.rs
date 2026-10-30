@@ -288,6 +288,8 @@ fn compute_scene_device_state_inner(
                     color: scene_device.color.clone(),
                     power: scene_device.power.unwrap_or(true),
                     transition: scene_device.transition,
+                    effect: scene_device.effect.clone(),
+                    colors: scene_device.colors.clone(),
                 },
                 scene_device_config.to_state_source(None, None),
             ))
@@ -2009,6 +2011,8 @@ mod tests {
                         color: None,
                         brightness: Some(OrderedFloat(0.45)),
                         transition: None,
+                        colors: None,
+                        effect: None,
                     }),
                 )),
                 groups: None,
@@ -2038,6 +2042,89 @@ mod tests {
                 linked_device_key: None,
             })
         );
+    }
+
+    #[test]
+    fn scene_device_state_stores_and_applies_effect_and_colors() {
+        let (mut devices, _event_rx) = test_devices();
+        let mut groups = Groups::new(GroupsConfig::new());
+        let target = create_test_device("test", "target");
+        let target_key = target.get_device_key();
+
+        devices.set_state(&target, true, true);
+        groups.force_invalidate(&devices);
+
+        let colors = vec![
+            crate::types::color::DeviceColor::new_from_hs(30, 0.5),
+            crate::types::color::DeviceColor::new_from_hs(270, 0.8),
+        ];
+        let scene_id = SceneId::from_str("aurora").unwrap();
+        let mut scenes_config = ScenesConfig::new();
+        scenes_config.insert(
+            scene_id.clone(),
+            SceneConfig {
+                name: "Aurora".to_string(),
+                devices: Some(create_scene_device_config(
+                    &target_key.to_string(),
+                    SceneDeviceConfig::DeviceState(SceneDeviceState {
+                        power: Some(true),
+                        color: None,
+                        brightness: Some(OrderedFloat(0.6)),
+                        transition: None,
+                        effect: Some("Aurora".to_string()),
+                        colors: Some(colors.clone()),
+                    }),
+                )),
+                groups: None,
+                hidden: None,
+                script: None,
+            },
+        );
+
+        let mut scenes = Scenes::new(scenes_config);
+        scenes.force_invalidate(&devices, &groups);
+
+        let resolved = target.set_scene(Some(&scene_id), &scenes, &devices);
+        let DeviceData::Controllable(data) = resolved.data else {
+            panic!("expected controllable device");
+        };
+        assert_eq!(data.state.effect.as_deref(), Some("Aurora"));
+        assert_eq!(data.state.colors, Some(colors.clone()));
+
+        // Capturing the device state into a scene keeps both fields.
+        let captured = SceneDeviceState::from(data.state);
+        assert_eq!(captured.effect.as_deref(), Some("Aurora"));
+        assert_eq!(captured.colors, Some(colors));
+    }
+
+    #[test]
+    fn legacy_scene_device_state_json_has_no_effect_or_colors() {
+        let legacy = serde_json::json!({
+            "power": true,
+            "color": { "h": 30, "s": 0.5 },
+            "brightness": 0.5,
+            "transition": null
+        });
+        let config: SceneDeviceConfig = serde_json::from_value(legacy.clone()).unwrap();
+        let SceneDeviceConfig::DeviceState(state) = &config else {
+            panic!("expected a device state");
+        };
+        assert_eq!(state.effect, None);
+        assert_eq!(state.colors, None);
+        // Stored scenes without the new fields serialize exactly as before.
+        assert_eq!(serde_json::to_value(&config).unwrap(), legacy);
+
+        let with_effect = serde_json::json!({
+            "power": true,
+            "effect": "Fire",
+            "colors": [{ "h": 0, "s": 1.0 }, { "h": 40, "s": 1.0 }]
+        });
+        let config: SceneDeviceConfig = serde_json::from_value(with_effect).unwrap();
+        let SceneDeviceConfig::DeviceState(state) = config else {
+            panic!("expected a device state");
+        };
+        assert_eq!(state.effect.as_deref(), Some("Fire"));
+        assert_eq!(state.colors.map(|colors| colors.len()), Some(2));
     }
 
     #[test]
@@ -2139,6 +2226,8 @@ mod tests {
                         color: None,
                         brightness: Some(OrderedFloat(0.55)),
                         transition: None,
+                        colors: None,
+                        effect: None,
                     }),
                 )),
                 groups: None,
@@ -2213,6 +2302,8 @@ mod tests {
                         color: None,
                         brightness: Some(OrderedFloat(0.55)),
                         transition: Some(OrderedFloat(0.4)),
+                        colors: None,
+                        effect: None,
                     }),
                 )),
                 groups: None,

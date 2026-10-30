@@ -1497,6 +1497,8 @@ async fn apply_device_changes(
             }),
             transition: Some(MANUAL_TRANSITION_SECONDS),
             preserve_scene: false,
+            colors: None,
+            effect: None,
         };
         let result = handle.control_device(command).await;
         let (ok, error) = match result {

@@ -12,6 +12,8 @@ pub fn prepare_device_command(state: &AppState, command: &DeviceCommand) -> Resu
         && command.brightness.is_none()
         && command.color.is_none()
         && command.transition.is_none()
+        && command.effect.is_none()
+        && command.colors.is_none()
     {
         return Err("No device changes supplied".into());
     }
@@ -41,25 +43,45 @@ pub fn prepare_device_command(state: &AppState, command: &DeviceCommand) -> Resu
         }
         data.state.transition = Some(OrderedFloat(transition));
     }
+    if let Some(effect) = &command.effect {
+        if effect.is_empty() || effect.len() > 256 {
+            return Err("An effect name of 1–256 bytes is required".into());
+        }
+        if !data.capabilities.effects.contains(effect) {
+            return Err("This device does not offer that effect".into());
+        }
+        data.state.effect = Some(effect.clone());
+        // The preset defines its own colors; requesting the previous ones
+        // would immediately customise it again.
+        data.state.color = None;
+        data.state.colors = None;
+    }
+    if let Some(colors) = &command.colors {
+        if colors.is_empty() || colors.len() > 64 {
+            return Err("Between 1 and 64 colors are required".into());
+        }
+        for color in colors {
+            validate_color(color, &data.capabilities)?;
+        }
+        data.state.colors = Some(colors.clone());
+        data.state.color = colors.first().cloned();
+        // Devices report no named effect once their colors are customised.
+        if command.effect.is_none() {
+            data.state.effect = None;
+        }
+    }
     if let Some(color) = &command.color {
-        let valid = match color {
-            DeviceColor::Hs(c) => c.h <= 360 && c.s.is_finite() && (0.0..=1.0).contains(&c.s.0),
-            DeviceColor::Xy(c) => {
-                c.x.is_finite()
-                    && c.y.is_finite()
-                    && (0.0..=1.0).contains(&c.x.0)
-                    && (0.0..=1.0).contains(&c.y.0)
-            }
-            DeviceColor::Rgb(c) => c.r <= 255 && c.g <= 255 && c.b <= 255,
-            DeviceColor::Ct(c) => c.ct > 0 && c.ct <= u16::MAX as u64,
-        };
-        if !valid {
-            return Err("Invalid color value".into());
-        }
-        if color.to_device_preferred_mode(&data.capabilities).is_none() {
-            return Err("This device does not support color control".into());
-        }
+        validate_color(color, &data.capabilities)?;
         data.state.color = Some(color.clone());
+        if let Some(first) = data.state.colors.as_mut().and_then(|c| c.first_mut()) {
+            *first = color.clone();
+        }
+        // A new color customises the active effect, which devices then report
+        // as no named effect. Keeping it would make homectl re-apply the
+        // preset over the new color.
+        if command.effect.is_none() {
+            data.state.effect = None;
+        }
     }
     if let Some(power) = command.power {
         data.state.power = power;
@@ -80,6 +102,30 @@ pub fn prepare_device_command(state: &AppState, command: &DeviceCommand) -> Resu
         causation: None,
         integration_epoch: None,
     })
+}
+
+fn validate_color(
+    color: &DeviceColor,
+    capabilities: &crate::types::color::Capabilities,
+) -> Result<(), String> {
+    let valid = match color {
+        DeviceColor::Hs(c) => c.h <= 360 && c.s.is_finite() && (0.0..=1.0).contains(&c.s.0),
+        DeviceColor::Xy(c) => {
+            c.x.is_finite()
+                && c.y.is_finite()
+                && (0.0..=1.0).contains(&c.x.0)
+                && (0.0..=1.0).contains(&c.y.0)
+        }
+        DeviceColor::Rgb(c) => c.r <= 255 && c.g <= 255 && c.b <= 255,
+        DeviceColor::Ct(c) => c.ct > 0 && c.ct <= u16::MAX as u64,
+    };
+    if !valid {
+        return Err("Invalid color value".into());
+    }
+    if color.to_device_preferred_mode(capabilities).is_none() {
+        return Err("This device does not support color control".into());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -123,10 +169,106 @@ mod tests {
             brightness: None,
             color: None,
             transition: None,
+            effect: None,
+            colors: None,
             preserve_scene: false,
         };
         state.devices.set_state(&device, true, true);
         (state, command, event_rx)
+    }
+
+    fn effect_fixture() -> (AppState, DeviceCommand) {
+        let (mut state, mut command, _event_rx) = fixture(ManageKind::Full, true);
+        let mut device = state
+            .devices
+            .get_device(&command.device_key)
+            .unwrap()
+            .clone();
+        let DeviceData::Controllable(data) = &mut device.data else {
+            unreachable!()
+        };
+        data.capabilities.hs = true;
+        data.capabilities.effects = vec!["Aurora".into(), "Fire".into()];
+        data.state.effect = Some("Aurora".into());
+        data.state.color = Some(DeviceColor::new_from_hs(30, 0.5));
+        data.state.colors = Some(vec![
+            DeviceColor::new_from_hs(30, 0.5),
+            DeviceColor::new_from_hs(270, 0.8),
+        ]);
+        state.devices.set_state(&device, true, true);
+        command.power = None;
+        (state, command)
+    }
+
+    fn commanded_state(
+        state: &AppState,
+        command: &DeviceCommand,
+    ) -> Result<crate::types::device::ControllableState, String> {
+        match prepare_device_command(state, command)? {
+            Event::SetInternalState { device, .. } => match device.data {
+                DeviceData::Controllable(data) => Ok(data.state),
+                _ => panic!("expected controllable device"),
+            },
+            _ => panic!("expected device event"),
+        }
+    }
+
+    #[test]
+    fn effect_command_selects_an_offered_preset_and_clears_colors() {
+        let (state, mut command) = effect_fixture();
+        command.effect = Some("Fire".into());
+        let next = commanded_state(&state, &command).unwrap();
+        assert_eq!(next.effect.as_deref(), Some("Fire"));
+        assert_eq!(next.color, None);
+        assert_eq!(next.colors, None);
+
+        command.effect = Some("Unknown".into());
+        assert!(commanded_state(&state, &command).is_err());
+    }
+
+    #[test]
+    fn colors_and_color_commands_customise_the_look() {
+        let (state, mut command) = effect_fixture();
+        let colors = vec![
+            DeviceColor::new_from_hs(0, 1.0),
+            DeviceColor::new_from_hs(120, 1.0),
+        ];
+        command.colors = Some(colors.clone());
+        let next = commanded_state(&state, &command).unwrap();
+        assert_eq!(next.colors, Some(colors.clone()));
+        assert_eq!(next.color, Some(colors[0].clone()));
+        assert_eq!(next.effect, None);
+
+        let (state, mut command) = effect_fixture();
+        command.color = Some(DeviceColor::new_from_hs(200, 0.4));
+        let next = commanded_state(&state, &command).unwrap();
+        assert_eq!(next.effect, None);
+        assert_eq!(
+            next.colors,
+            Some(vec![
+                DeviceColor::new_from_hs(200, 0.4),
+                DeviceColor::new_from_hs(270, 0.8),
+            ])
+        );
+
+        let (state, mut command) = effect_fixture();
+        command.colors = Some(Vec::new());
+        assert!(commanded_state(&state, &command).is_err());
+    }
+
+    #[test]
+    fn legacy_device_command_json_needs_no_effect_or_colors() {
+        let command: DeviceCommand = serde_json::from_value(serde_json::json!({
+            "request_id": "r",
+            "device_key": "dummy/lamp",
+            "power": true,
+            "brightness": null,
+            "color": null,
+            "transition": null
+        }))
+        .unwrap();
+        assert_eq!(command.effect, None);
+        assert_eq!(command.colors, None);
     }
 
     #[tokio::test]

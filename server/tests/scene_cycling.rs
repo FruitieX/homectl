@@ -43,6 +43,7 @@ fn create_device(
                 hs: true,
                 rgb: false,
                 ct: None,
+                effects: Vec::new(),
             },
             state: ControllableState {
                 power,
@@ -52,6 +53,8 @@ fn create_device(
                     s: OrderedFloat(color.1),
                 })),
                 transition: None,
+                colors: None,
+                effect: None,
             },
             managed: ManageKind::Full,
             disabled: Some(false),

@@ -1566,6 +1566,8 @@ impl ScenarioDevice {
                         brightness: brightness.map(OrderedFloat),
                         color: color.clone(),
                         transition: transition.map(OrderedFloat),
+                        colors: None,
+                        effect: None,
                     })),
                     None,
                 ))

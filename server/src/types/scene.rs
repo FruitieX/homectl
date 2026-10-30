@@ -157,6 +157,14 @@ pub struct SceneDeviceState {
     pub color: Option<DeviceColor>,
     pub brightness: Option<OrderedFloat<f32>>,
     pub transition: Option<OrderedFloat<f32>>,
+    /// Effect (preset) to activate, for devices that report effects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub effect: Option<String>,
+    /// Colors of every color slot, for devices with several color slots.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub colors: Option<Vec<DeviceColor>>,
 }
 
 impl From<ControllableState> for SceneDeviceState {
@@ -166,6 +174,8 @@ impl From<ControllableState> for SceneDeviceState {
             color: state.color,
             brightness: state.brightness,
             transition: state.transition,
+            effect: state.effect,
+            colors: state.colors,
         }
     }
 }

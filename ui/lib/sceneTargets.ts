@@ -44,27 +44,42 @@ export function sceneTargetIssue(value: unknown): string | null {
     )
       return `The saved ${field} is not a list of IDs.`;
   if (v.color != null) {
-    if (typeof v.color !== 'object' || Array.isArray(v.color))
-      return 'The saved color is not a supported color object.';
-    const color = v.color as Record<string, unknown>;
-    const channels =
-      'h' in color
-        ? ['h', 's']
-        : 'ct' in color
-          ? ['ct']
-          : 'r' in color
-            ? ['r', 'g', 'b']
-            : 'x' in color
-              ? ['x', 'y']
-              : [];
-    if (
-      !channels.length ||
-      channels.some(
-        (key) => typeof color[key] !== 'number' || !Number.isFinite(color[key]),
-      )
-    )
-      return 'The saved color has unknown or incomplete channels.';
+    const issue = colorIssue(v.color);
+    if (issue) return `The saved color ${issue}.`;
   }
+  if (v.effect != null && typeof v.effect !== 'string')
+    return 'The saved effect is not text.';
+  if (v.colors != null) {
+    if (!Array.isArray(v.colors)) return 'The saved colors are not a list.';
+    for (const color of v.colors) {
+      const issue = colorIssue(color);
+      if (issue) return `A saved effect color ${issue}.`;
+    }
+  }
+  return null;
+}
+
+function colorIssue(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    return 'is not a supported color object';
+  const color = value as Record<string, unknown>;
+  const channels =
+    'h' in color
+      ? ['h', 's']
+      : 'ct' in color
+        ? ['ct']
+        : 'r' in color
+          ? ['r', 'g', 'b']
+          : 'x' in color
+            ? ['x', 'y']
+            : [];
+  if (
+    !channels.length ||
+    channels.some(
+      (key) => typeof color[key] !== 'number' || !Number.isFinite(color[key]),
+    )
+  )
+    return 'has unknown or incomplete channels';
   return null;
 }
 

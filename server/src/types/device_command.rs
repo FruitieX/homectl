@@ -13,6 +13,16 @@ pub struct DeviceCommand {
     pub brightness: Option<f32>,
     pub color: Option<DeviceColor>,
     pub transition: Option<f32>,
+    /// Activate this effect (preset). The preset defines the look, so the
+    /// requested colors are cleared.
+    #[serde(default)]
+    #[ts(optional)]
+    pub effect: Option<String>,
+    /// Set every color slot. This customises the look, so the requested
+    /// effect is cleared; slot 0 also becomes the primary color.
+    #[serde(default)]
+    #[ts(optional)]
+    pub colors: Option<Vec<DeviceColor>>,
     #[serde(default)]
     pub preserve_scene: bool,
 }

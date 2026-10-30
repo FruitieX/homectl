@@ -1554,6 +1554,8 @@ mod tests {
                     brightness: None,
                     color: None,
                     transition: None,
+                    colors: None,
+                    effect: None,
                 },
                 received_at_ms: 1,
                 retained: false,
@@ -2629,6 +2631,8 @@ mod tests {
                 brightness: Some(ordered_float::OrderedFloat(brightness)),
                 color: Some(crate::types::color::DeviceColor::new_from_kelvin(ct)),
                 transition: Some(ordered_float::OrderedFloat(60.0)),
+                colors: None,
+                effect: None,
             })),
             None,
         )
