@@ -2,7 +2,6 @@
 
 # Global tooling/env
 .direnv/
-.envrc
 .moon/cache/
 .env*
 !.env*.example
@@ -61,3 +60,5 @@ ui/bindings/generated/
 /docs/todo.md
 /homectl-*-plan.md
 /v2.md
+
+.envrc.local
