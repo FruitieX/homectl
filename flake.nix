@@ -24,7 +24,7 @@
           pkgs.postgresql
           pkgs.stdenv.cc
           pkgs.pkg-config
-          pkgs.nodejs
+          pkgs.nodejs_26
           pkgs.pnpm
           pkgs.moon
           pkgs.hurl
