@@ -98,7 +98,7 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes false
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" == false
 
 # 2. First button press - should cycle to "bright" (first scene)
 PUT {{base_url}}/api/v1/devices/pulse_switch
@@ -119,8 +119,8 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes true
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.brightness" includes 1.0
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.brightness" == 1.0
 
 # 3. Second button press - SAME VALUE "press" again
 #    With pulse mode, this should STILL trigger and cycle to "dim"
@@ -142,8 +142,8 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes true
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.brightness" includes 0.3
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.brightness" == 0.3
 
 # 4. Third button press - SAME VALUE "press" again
 #    Should cycle to "off"
@@ -165,7 +165,7 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes false
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" == false
 
 # 5. Fourth button press - Should cycle back to "bright"
 PUT {{base_url}}/api/v1/devices/pulse_switch
@@ -186,8 +186,8 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes true
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.brightness" includes 1.0
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.brightness" == 1.0
 
 
 # ============================================================================
@@ -236,7 +236,7 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes false
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" == false
 
 # 1. First edge button press - should trigger and turn lights bright
 PUT {{base_url}}/api/v1/devices/edge_switch
@@ -257,8 +257,8 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes true
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.brightness" includes 1.0
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.brightness" == 1.0
 
 # 2. Turn lights off manually for the next test
 PUT {{base_url}}/api/v1/devices/bed_light_1
@@ -317,7 +317,7 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes false
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" == false
 
 # 4. Change switch to different value, then back to "press"
 #    This should now trigger because it's a real transition
@@ -340,7 +340,7 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes false
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" == false
 
 # Now press again - this IS a transition from "release" to "press"
 PUT {{base_url}}/api/v1/devices/edge_switch
@@ -362,5 +362,5 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes true
-jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.brightness" includes 1.0
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.brightness" == 1.0

@@ -115,9 +115,9 @@ HTTP 200
 GET {{base_url}}/api/v1/devices
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='staircase_lamp')].data.Controllable.state.power" contains false
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" contains false
-jsonpath "$.devices[?(@.id=='kids_room_lamp')].data.Controllable.state.power" contains false
+jsonpath "$.devices[?(@.id=='staircase_lamp')].data.Controllable.state.power" == false
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" == false
+jsonpath "$.devices[?(@.id=='kids_room_lamp')].data.Controllable.state.power" == false
 
 # Trigger motion sensor
 PUT {{base_url}}/api/v1/devices/staircase_motion
@@ -139,10 +139,10 @@ retry: 10
 retry-interval: 50ms
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='staircase_lamp')].data.Controllable.state.power" contains true
-jsonpath "$.devices[?(@.id=='staircase_lamp')].data.Controllable.state.brightness" contains 1.0
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" contains true
-jsonpath "$.devices[?(@.id=='kids_room_lamp')].data.Controllable.state.power" contains true
+jsonpath "$.devices[?(@.id=='staircase_lamp')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='staircase_lamp')].data.Controllable.state.brightness" == 1.0
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='kids_room_lamp')].data.Controllable.state.power" == true
 
 # ============================================================================
 # TEST 2: Motion sensor should NOT turn on upstairs when already on
@@ -216,9 +216,9 @@ retry: 10
 retry-interval: 50ms
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='staircase_lamp')].data.Controllable.state.power" contains true
-jsonpath "$.devices[?(@.id=='staircase_lamp')].data.Controllable.state.brightness" contains 0.25
-jsonpath "$.devices[?(@.id=='staircase_lamp')].data.Controllable.scene_id" contains "dark"
+jsonpath "$.devices[?(@.id=='staircase_lamp')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='staircase_lamp')].data.Controllable.state.brightness" == 0.25
+jsonpath "$.devices[?(@.id=='staircase_lamp')].data.Controllable.scene_id" == "dark"
 
 
 # ============================================================================
@@ -310,9 +310,9 @@ retry: 10
 retry-interval: 50ms
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='living_room_lamp')].data.Controllable.state.power" contains true
-jsonpath "$.devices[?(@.id=='living_room_lamp')].data.Controllable.state.brightness" contains 1.0
-jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.power" contains true
+jsonpath "$.devices[?(@.id=='living_room_lamp')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='living_room_lamp')].data.Controllable.state.brightness" == 1.0
+jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.power" == true
 
 
 # ============================================================================
@@ -404,7 +404,7 @@ retry: 10
 retry-interval: 50ms
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='living_room_lamp')].data.Controllable.state.power" contains true
-jsonpath "$.devices[?(@.id=='living_room_lamp')].data.Controllable.state.brightness" contains 0.25
-jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.power" contains true
-jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.brightness" contains 0.25
+jsonpath "$.devices[?(@.id=='living_room_lamp')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='living_room_lamp')].data.Controllable.state.brightness" == 0.25
+jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.brightness" == 0.25

@@ -150,10 +150,10 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" contains true
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.brightness" contains 0.25
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" contains "dark"
-jsonpath "$.devices[?(@.id=='bedroom_lamp_2')].data.Controllable.scene_id" contains "dark"
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.brightness" == 0.25
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" == "dark"
+jsonpath "$.devices[?(@.id=='bedroom_lamp_2')].data.Controllable.scene_id" == "dark"
 
 
 # ============================================================================
@@ -180,8 +180,8 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" contains false
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" contains "night"
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" == false
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" == "night"
 
 
 # ============================================================================
@@ -208,8 +208,8 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" contains false
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" contains "night"
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" == false
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" == "night"
 
 
 # ============================================================================
@@ -253,7 +253,7 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bathroom_lamp')].data.Controllable.scene_id" contains "dark"
+jsonpath "$.devices[?(@.id=='bathroom_lamp')].data.Controllable.scene_id" == "dark"
 
 # Press 2 - cycle to night
 PUT {{base_url}}/api/v1/devices/bathroom_switch
@@ -274,7 +274,7 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bathroom_lamp')].data.Controllable.scene_id" contains "night"
+jsonpath "$.devices[?(@.id=='bathroom_lamp')].data.Controllable.scene_id" == "night"
 
 # Press 3 - should WRAP back to normal
 PUT {{base_url}}/api/v1/devices/bathroom_switch
@@ -295,9 +295,9 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bathroom_lamp')].data.Controllable.scene_id" contains "normal"
-jsonpath "$.devices[?(@.id=='bathroom_lamp')].data.Controllable.state.power" contains true
-jsonpath "$.devices[?(@.id=='bathroom_lamp')].data.Controllable.state.brightness" contains 1.0
+jsonpath "$.devices[?(@.id=='bathroom_lamp')].data.Controllable.scene_id" == "normal"
+jsonpath "$.devices[?(@.id=='bathroom_lamp')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='bathroom_lamp')].data.Controllable.state.brightness" == 1.0
 
 
 # ============================================================================
@@ -359,8 +359,8 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" contains "dark"
-jsonpath "$.devices[?(@.id=='bedroom_lamp_2')].data.Controllable.scene_id" contains "dark"
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" == "dark"
+jsonpath "$.devices[?(@.id=='bedroom_lamp_2')].data.Controllable.scene_id" == "dark"
 
 
 # ============================================================================
@@ -421,8 +421,8 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" contains "normal"
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.brightness" contains 1.0
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" == "normal"
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.brightness" == 1.0
 
 # Press up again - should cycle to bright
 PUT {{base_url}}/api/v1/devices/bedroom_switch
@@ -443,4 +443,4 @@ retry: 10
 retry-interval: 50
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" contains "bright"
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" == "bright"

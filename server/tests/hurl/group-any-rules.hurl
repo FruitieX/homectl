@@ -118,8 +118,8 @@ HTTP 200
 GET {{base_url}}/api/v1/devices
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" contains true
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" contains "normal"
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" == "normal"
 
 # Press bedroom switch off_press
 PUT {{base_url}}/api/v1/devices/bedroom_switch
@@ -141,9 +141,9 @@ retry: 10
 retry-interval: 50ms
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" contains false
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" contains "night"
-jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.power" contains false
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" == false
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" == "night"
+jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.power" == false
 
 # ============================================================================
 # TEST 2: "Any" rule - Second switch (Kitchen) also triggers night scene
@@ -204,8 +204,8 @@ retry: 10
 retry-interval: 50ms
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" contains false
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" contains "night"
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" == false
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" == "night"
 
 # ============================================================================
 # TEST 3: "Any" rule - Third switch (Bathroom) also triggers night scene
@@ -266,8 +266,8 @@ retry: 10
 retry-interval: 50ms
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" contains false
-jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" contains "night"
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" == false
+jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" == "night"
 
 # ============================================================================
 # TEST 4: "Any" rule with group scene condition - motion + dark/night bedroom
@@ -345,9 +345,9 @@ retry: 10
 retry-interval: 50ms
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.power" contains true
-jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.scene_id" contains "dark"
-jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.brightness" contains 0.25
+jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.scene_id" == "dark"
+jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.brightness" == 0.25
 
 # ============================================================================
 # TEST 5: Group rule (power = false) + scene match -> normal_wake routine
@@ -438,9 +438,9 @@ retry: 10
 retry-interval: 50ms
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.power" contains true
-jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.scene_id" contains "normal"
-jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.brightness" contains 1.0
+jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.power" == true
+jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.scene_id" == "normal"
+jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.state.brightness" == 1.0
 
 # ============================================================================
 # TEST 6: Group rule (power = false) not met -> routine should NOT trigger
@@ -481,4 +481,4 @@ retry: 10
 retry-interval: 50ms
 HTTP 200
 [Asserts]
-jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.scene_id" contains "normal"
+jsonpath "$.devices[?(@.id=='kitchen_lamp')].data.Controllable.scene_id" == "normal"
