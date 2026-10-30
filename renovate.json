@@ -26,5 +26,8 @@
         "ui/**"
       ]
     }
-  ]
+  ],
+  "lockFileMaintenance": {
+    "semanticCommitType": "chore"
+  }
 }
