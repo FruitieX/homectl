@@ -144,6 +144,9 @@ pub async fn preview_execute(body: &str, context: Value) -> Result<Value, String
                 worker_binary,
                 workers: 1,
                 max_outstanding_requests: 8,
+                #[cfg(test)]
+                invocation_timeout:
+                    crate::core::js_worker::supervisor::UNIT_TEST_INVOCATION_TIMEOUT,
                 ..Default::default()
             })
         })

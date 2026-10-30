@@ -346,6 +346,8 @@ impl ScriptExecution {
         }
         let config = SupervisorConfig {
             worker_binary: self.worker_binary.clone(),
+            #[cfg(test)]
+            invocation_timeout: crate::core::js_worker::supervisor::UNIT_TEST_INVOCATION_TIMEOUT,
             ..SupervisorConfig::default()
         };
         match JsWorkerPool::new(config).await {
