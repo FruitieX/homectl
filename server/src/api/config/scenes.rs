@@ -454,6 +454,7 @@ mod tests {
         let pool = JsWorkerPool::new(SupervisorConfig {
             worker_binary: Some(binary),
             workers: 1,
+            invocation_timeout: crate::core::js_worker::supervisor::UNIT_TEST_INVOCATION_TIMEOUT,
             ..Default::default()
         })
         .await

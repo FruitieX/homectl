@@ -61,6 +61,13 @@ use super::protocol::{
 pub const DEFAULT_WORKERS: usize = 2;
 /// Default per-invocation planning budget.
 pub const DEFAULT_INVOCATION_TIMEOUT: Duration = Duration::from_millis(200);
+
+/// Budget for unit tests whose subject is script behaviour, not the timeout:
+/// a fresh worker's first invocation in an unoptimized build (process start
+/// plus Boa realm setup) can exceed the production budget on a busy runner.
+/// Timeout containment itself is covered by `tests/script_worker.rs`.
+#[cfg(test)]
+pub(crate) const UNIT_TEST_INVOCATION_TIMEOUT: Duration = Duration::from_secs(10);
 /// Default bound on outstanding requests (running plus waiting).
 pub const DEFAULT_MAX_OUTSTANDING_REQUESTS: usize = 32;
 /// Default per-worker stderr retention.
