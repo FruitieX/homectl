@@ -8,7 +8,7 @@ be placed on the floorplan, assigned to rooms and used in automations.
 ```json
 {
   "mode": "openmqttgateway",
-  "host": "mqtt.fruitiex.org",
+  "host": "mqtt.example.com",
   "port": 1883,
   "openmqttgateway_base_topic": "home/sensors",
   "ble_devices": {

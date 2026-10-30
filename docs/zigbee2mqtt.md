@@ -88,8 +88,8 @@ Use fixtures for command conversion tests before testing an Office light.
 
 This profile does not configure Zigbee attribute reporting. The household
 installation currently needs `/get` requests for fresh device reports
-(user-confirmed 2026-09-08); the Zigbee2MQTT frontend is at
-http://192.168.1.15:8080. Old raw reports must not be interpreted as proof of device
+(user-confirmed 2026-09-08), which can be sent from the Zigbee2MQTT frontend.
+Old raw reports must not be interpreted as proof of device
 failure. A homectl command acknowledgement means acceptance, not Zigbee readback.
 
 Read-only inspection of the frontend inventory on 2026-09-08 confirmed that the

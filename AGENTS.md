@@ -440,7 +440,8 @@ cargo test                          # Unit + integration tests
 ### Live configuration scenarios
 After changing live routines, scenes, groups, or other configuration that affects
 household automations, run `TZ=Europe/Helsinki homectl --url
-https://homectl.fruitiex.org config test --server`. The live server requires
+<live server URL> config test --server` (the owner's knowledge base lists the
+URL). The live server requires
 authentication: pass a machine token with `HOMECTL_TOKEN` (for agents:
 `HOMECTL_TOKEN=$(op-agent read "op://Agents/homectl agents API token/credential")`). This fetches the current
 configuration and its stored scenario suite in one snapshot. Run it again after

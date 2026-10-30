@@ -9,7 +9,7 @@ The small profile configuration is:
 ```json
 {
   "mode": "esphome",
-  "host": "mqtt.fruitiex.org",
+  "host": "mqtt.example.com",
   "port": 1883,
   "esphome_base_topic": "esphome",
   "esphome_light_object_id": "light",

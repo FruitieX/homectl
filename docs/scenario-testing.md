@@ -12,7 +12,7 @@ The scenario suite is stored in the runtime database and included in configurati
 exports and imports. Upload an existing JSON suite once with:
 
 ```sh
-homectl --url https://homectl.fruitiex.org config upload-scenarios ~/.config/homectl/scenarios.json
+homectl --url https://homectl.example.com config upload-scenarios ~/.config/homectl/scenarios.json
 ```
 
 The upload validates the suite format and persists it through the normal config
@@ -20,7 +20,7 @@ write path. `--scenarios PATH` or `HOMECTL_SCENARIOS` overrides the stored suite
 for local drafts; no default file is read implicitly.
 The same document is available through `GET /api/v1/config/scenarios` and can
 be replaced through `PUT /api/v1/config/scenarios`.
-To save a copy from the server, run `homectl --url https://homectl.fruitiex.org
+To save a copy from the server, run `homectl --url https://homectl.example.com
 config download-scenarios ./scenarios.json`. The command refuses to overwrite an
 existing file unless `--force` is passed.
 
@@ -156,7 +156,7 @@ To check the **current live configuration** from a machine that can reach the
 server, fetch one current export including the stored suite:
 
 ```sh
-TZ=Europe/Helsinki homectl --url https://homectl.fruitiex.org config test --server
+TZ=Europe/Helsinki homectl --url https://homectl.example.com config test --server
 ```
 
 The command fails if the export or suite is unavailable. `--scenarios PATH` can
