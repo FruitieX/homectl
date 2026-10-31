@@ -176,6 +176,10 @@ and also other similar solutions to homectl:
   config file. Used to seed an empty database and as a startup fallback when
   the database is unavailable.
 - `PORT` or `--port`: API port. Defaults to `45289`.
+- `TSDB_URL`: optional PostgreSQL URL (read-only role) of a TimescaleDB
+  database with Telegraf's `mqtt_consumer` and `nordpool_price` tables. When
+  set, the sensor history and spot price widgets read it instead of the
+  InfluxDB widget source.
 - `WARMUP_TIME` or `--warmup-time`: Override the configured warmup time in
   seconds.
 - `HOMECTL_OIDC_ISSUER`, `HOMECTL_OIDC_CLIENT_ID`, `HOMECTL_OIDC_CLIENT_SECRET`,

@@ -1,14 +1,16 @@
 //! Dashboard data-feed endpoints.
 //!
 //! These routes proxy/transform data from external services (weather, HSL
-//! trains, Google Calendar ICS, InfluxDB) for the dashboard cards. Each
-//! response is cached briefly in-process to keep upstream calls down.
+//! trains, Google Calendar ICS, TimescaleDB or InfluxDB) for the dashboard
+//! cards. Each response is cached briefly in-process to keep upstream calls
+//! down.
 
 mod calendar;
 mod influx;
 mod spot_prices;
 mod temp_sensors;
 mod train_schedule;
+mod tsdb;
 mod weather;
 
 use std::env;

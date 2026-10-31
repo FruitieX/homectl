@@ -303,6 +303,13 @@ The server uses **ts-rs** to generate TypeScript types from Rust structs. Genera
 - `DATABASE_URL` – Optional database connection string used for persistence
   (SQLite and PostgreSQL are supported; defaults to `./homectl.db` SQLite)
 - `CONFIG_FILE` – JSON export backup or legacy TOML file used for seeding and fallback startup
+- `TSDB_URL` – Optional PostgreSQL URL of a TimescaleDB database (read-only
+  role) holding Telegraf's `mqtt_consumer` and `nordpool_price` tables. When
+  set, the sensor history and spot price widgets
+  (`/api/influxdb/temp-sensors`, `/api/influxdb/spot-prices`) read it instead
+  of the InfluxDB widget source, returning the same rows
+  (`server/src/api/widgets/tsdb.rs`); only a widget with its own InfluxDB URL
+  still queries InfluxDB.
 - `RUST_LOG` – Logging level (e.g., `homectl_server=info`)
 - `HOMECTL_ALLOWED_ORIGINS` – Comma separated list of additional browser
   origins allowed to call the API cross-origin (same-origin and loopback

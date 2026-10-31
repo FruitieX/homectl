@@ -9,10 +9,12 @@ use warp::{
 };
 
 use super::{
-    influx, widget_setting_string_or_env, Fetched, INFLUXDB_SETTING_KEY, TOKEN_FIELD, URL_FIELD,
+    influx, tsdb, widget_setting_string_or_env, Fetched, INFLUXDB_SETTING_KEY, TOKEN_FIELD,
+    URL_FIELD,
 };
 
-/// Keep in sync with `ttl_secs` on [`fetch_spot_prices`].
+/// Keep in sync with `ttl_secs` on [`fetch_spot_prices`] and
+/// [`fetch_spot_prices_tsdb`].
 const TTL: std::time::Duration = std::time::Duration::from_secs(60);
 
 const QUERY: &str = r#"
@@ -38,6 +40,17 @@ pub fn route(snapshot: SnapshotHandle, http: reqwest::Client) -> BoxedFilter<(Re
 }
 
 async fn handle(snapshot: SnapshotHandle, http: reqwest::Client) -> Response {
+    // TimescaleDB, when configured, replaces the InfluxDB source.
+    if tsdb::pool().is_some() {
+        return match fetch_spot_prices_tsdb().await {
+            Ok(fetched) => fetched.reply(TTL, reply::json(&fetched.value).into_response()),
+            Err(err) => {
+                log::error!("Error fetching spot prices from TimescaleDB: {err}");
+                error(StatusCode::BAD_GATEWAY, "Failed to fetch spot price data")
+            }
+        };
+    }
+
     let (url, token) = match (
         widget_setting_string_or_env(
             &snapshot.load().runtime_config.widget_settings,
@@ -84,6 +97,13 @@ async fn fetch_spot_prices(
     http: reqwest::Client,
 ) -> Result<Fetched<Value>, String> {
     let rows = influx::query(&http, &url, &token, QUERY).await?;
+    Ok(Fetched::now(Value::Array(rows)))
+}
+
+#[cached(ttl_secs = 60, result_fallback = true)]
+async fn fetch_spot_prices_tsdb() -> Result<Fetched<Value>, String> {
+    let pool = tsdb::pool().ok_or("TimescaleDB not configured")?;
+    let rows = tsdb::spot_prices(pool, tsdb::now()).await?;
     Ok(Fetched::now(Value::Array(rows)))
 }
 

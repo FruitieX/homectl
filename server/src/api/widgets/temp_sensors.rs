@@ -10,10 +10,12 @@ use warp::{
 };
 
 use super::{
-    influx, widget_setting_string_or_env, Fetched, INFLUXDB_SETTING_KEY, TOKEN_FIELD, URL_FIELD,
+    influx, tsdb, widget_setting_string_or_env, Fetched, INFLUXDB_SETTING_KEY, TOKEN_FIELD,
+    URL_FIELD,
 };
 
-/// Keep in sync with `ttl_secs` on [`fetch_temp_sensors`].
+/// Keep in sync with `ttl_secs` on [`fetch_temp_sensors`] and
+/// [`fetch_temp_sensors_tsdb`].
 const TTL: std::time::Duration = std::time::Duration::from_secs(60);
 
 pub fn route(snapshot: SnapshotHandle, http: reqwest::Client) -> BoxedFilter<(Response,)> {
@@ -88,6 +90,12 @@ async fn handle(
         query.url = super::option_string(&options, "influxUrl");
         query.token = super::option_string(&options, "influxToken");
     }
+
+    // TimescaleDB, when configured, replaces the shared InfluxDB source. A
+    // widget or request naming its own InfluxDB URL still queries that.
+    if tsdb::pool().is_some() && non_empty(query.url.clone()).is_none() {
+        return handle_tsdb(query).await;
+    }
     let (url, token) = match (
         non_empty(query.url).or_else(|| {
             widget_setting_string_or_env(
@@ -154,6 +162,46 @@ async fn fetch_temp_sensors(
         &build_query(&device_ids, &range, &window),
     )
     .await?;
+    Ok(Fetched::now(Value::Array(rows)))
+}
+
+async fn handle_tsdb(query: TempSensorsQuery) -> Response {
+    let device_ids = parse_device_ids(query.device_ids);
+    let range = non_empty(query.range)
+        .filter(|value| is_safe_flux_duration(value))
+        .unwrap_or_else(|| "-6h".to_string());
+    let window = non_empty(query.window)
+        .filter(|value| is_safe_flux_duration(value))
+        .unwrap_or_else(|| "10m".to_string());
+    let (Some(range), Some(window)) = (
+        tsdb::FluxDuration::parse(&range),
+        tsdb::FluxDuration::parse(&window).filter(|w| w.months == 0 && w.micros > 0),
+    ) else {
+        return error(StatusCode::BAD_REQUEST, "Invalid range or window duration");
+    };
+
+    match fetch_temp_sensors_tsdb(device_ids, range, window).await {
+        Ok(fetched) => fetched.reply(TTL, reply::json(&fetched.value).into_response()),
+        Err(err) => {
+            log::error!("Error fetching temperature/humidity sensors from TimescaleDB: {err}");
+            error(StatusCode::BAD_GATEWAY, "Failed to fetch sensor data")
+        }
+    }
+}
+
+#[cached(
+    ttl_secs = 60,
+    key = "String",
+    convert = r#"{ format!("{}|{:?}|{:?}", device_ids.join(","), range, window) }"#,
+    result_fallback = true
+)]
+async fn fetch_temp_sensors_tsdb(
+    device_ids: Vec<String>,
+    range: tsdb::FluxDuration,
+    window: tsdb::FluxDuration,
+) -> Result<Fetched<Value>, String> {
+    let pool = tsdb::pool().ok_or("TimescaleDB not configured")?;
+    let rows = tsdb::temp_sensors(pool, &device_ids, range, window, tsdb::now()).await?;
     Ok(Fetched::now(Value::Array(rows)))
 }
 

@@ -43,7 +43,7 @@ The device state is `{"Sensor": {"readings": {"temperature": 21.4, ...}}}`
 `/temperature` (also `/value/temperature` or `/readings/temperature`); `/value`
 returns all readings as an object.
 
-History stays in InfluxDB, written by telegraf per gateway (`integration_id`
+History stays in InfluxDB or TimescaleDB (`TSDB_URL`), written by telegraf per gateway (`integration_id`
 = gateway, `device_id` = MAC). Room views match a member whose device ID is a
 MAC against that history from every gateway, averaging gateways that reported
 the same window.

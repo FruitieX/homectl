@@ -20,7 +20,8 @@ export const sourceDefinitions: Record<
 > = {
   influxdb: {
     name: 'InfluxDB',
-    description: 'Historical sensor readings and electricity prices.',
+    description:
+      'Historical sensor readings and electricity prices. Not used when the server has TSDB_URL (TimescaleDB) set.',
     fields: [
       { key: 'url', label: 'Server URL', url: true },
       { key: 'token', label: 'API token', secret: true },
