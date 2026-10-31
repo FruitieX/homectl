@@ -70,7 +70,7 @@ ts-rs = { version = "=12.0.1", features = [
 ] }
 macro-attr = "=0.2.0"
 newtype_derive = "=0.1.6"
-log = "=0.4.34"
+log = "=0.4.35"
 env_logger = "=0.11.11"
 eyre = "=0.6.14"
 color-eyre = "=0.6.5"
