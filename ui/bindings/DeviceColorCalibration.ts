@@ -9,4 +9,10 @@ export type DeviceColorCalibration = {
    * Brightness anchors resolved for this device; empty means identity.
    */
   brightness_points: Array<BrightnessCalibrationPoint>;
+  /**
+   * Per-light output cap (0..1] from the light's settings, applied after
+   * the brightness curve: 100% means this fraction of the light's output.
+   * Resolved at runtime and never stored with a calibration.
+   */
+  max_brightness?: number;
 };

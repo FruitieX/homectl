@@ -116,6 +116,35 @@ pub struct DeviceColorCalibration {
     /// Brightness anchors resolved for this device; empty means identity.
     #[serde(default)]
     pub brightness_points: Vec<BrightnessCalibrationPoint>,
+    /// Per-light output cap (0..1] from the light's settings, applied after
+    /// the brightness curve: 100% means this fraction of the light's output.
+    /// Resolved at runtime and never stored with a calibration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub max_brightness: Option<f32>,
+}
+
+/// `widget_settings` key holding one light's brightness cap.
+pub fn max_brightness_key(device_key: &str) -> String {
+    format!("light/max-brightness/{device_key}")
+}
+
+pub fn max_brightness_row(
+    device_key: &str,
+    max_brightness: f32,
+) -> crate::db::config_queries::WidgetSettingRow {
+    crate::db::config_queries::WidgetSettingRow {
+        key: max_brightness_key(device_key),
+        config: serde_json::json!({ "max_brightness": max_brightness }),
+    }
+}
+
+pub fn validate_max_brightness(value: f32) -> Result<(), String> {
+    if value.is_finite() && (0.01..=1.0).contains(&value) {
+        Ok(())
+    } else {
+        Err("Maximum brightness must be between 1 and 100%".into())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -159,6 +188,7 @@ impl ColorCalibrationProfile {
             device_key: self.id.clone(),
             points: self.points.clone(),
             brightness_points: self.brightness_points.clone(),
+            max_brightness: None,
         }
         .validate()
     }
@@ -186,7 +216,38 @@ pub struct ColorCalibrationAssignment {
 }
 
 impl crate::db::config_queries::ConfigExport {
+    /// The light's brightness cap; 1.0 (no cap) unless a valid one is set.
+    pub fn max_brightness_for(&self, key: &str) -> f32 {
+        let setting_key = max_brightness_key(key);
+        self.widget_settings
+            .iter()
+            .find(|row| row.key == setting_key)
+            .and_then(|row| row.config["max_brightness"].as_f64())
+            .map(|value| value as f32)
+            .filter(|value| validate_max_brightness(*value).is_ok())
+            .unwrap_or(1.0)
+    }
+
+    /// Everything that turns this light's logical state into its physical
+    /// command: calibration profile or legacy points, plus its brightness cap.
     pub fn calibration_for_device(&self, key: &str) -> Option<DeviceColorCalibration> {
+        let max = self.max_brightness_for(key);
+        let max_brightness = (max < 1.0).then_some(max);
+        match self.stored_calibration_for_device(key) {
+            Some(calibration) => Some(DeviceColorCalibration {
+                max_brightness,
+                ..calibration
+            }),
+            None => max_brightness.map(|max_brightness| DeviceColorCalibration {
+                device_key: key.into(),
+                points: vec![],
+                brightness_points: vec![],
+                max_brightness: Some(max_brightness),
+            }),
+        }
+    }
+
+    fn stored_calibration_for_device(&self, key: &str) -> Option<DeviceColorCalibration> {
         if let Some(assignment) = self
             .color_calibration_assignments
             .iter()
@@ -200,6 +261,7 @@ impl crate::db::config_queries::ConfigExport {
                     device_key: key.into(),
                     points: profile.points.clone(),
                     brightness_points: profile.brightness_points.clone(),
+                    max_brightness: None,
                 });
         }
         self.device_color_calibrations
@@ -506,7 +568,21 @@ fn distance(a: &Uv, b: &Uv) -> f32 {
 impl DeviceColorCalibration {
     /// True when the resolved calibration changes nothing.
     pub fn is_identity(&self) -> bool {
-        self.points.is_empty() && self.brightness_points.is_empty()
+        self.points.is_empty() && self.brightness_points.is_empty() && self.max_brightness.is_none()
+    }
+
+    fn max_brightness(&self) -> f32 {
+        self.max_brightness.unwrap_or(1.0)
+    }
+
+    /// Logical brightness → physical command: the curve, then the cap.
+    pub fn output_brightness(&self, logical: f32) -> f32 {
+        map_brightness_output(&self.brightness_points, logical) * self.max_brightness()
+    }
+
+    /// Physical report → the logical brightness that produced it.
+    pub fn input_brightness(&self, physical: f32) -> f32 {
+        map_brightness_input(&self.brightness_points, physical / self.max_brightness()).min(1.0)
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -793,10 +869,9 @@ pub fn calibrated_device(device: &Device, calibration: Option<&DeviceColorCalibr
         // Brightness travels on its own channel: `None` and zero stay as they
         // are, so a saved next-on level can be mapped while the light is off.
         if let Some(brightness) = data.state.brightness {
-            data.state.brightness = Some(OrderedFloat(map_brightness_output(
-                &calibration.brightness_points,
-                brightness.into_inner(),
-            )));
+            data.state.brightness = Some(OrderedFloat(
+                calibration.output_brightness(brightness.into_inner()),
+            ));
         }
     }
     physical.color_to_preferred_mode()
@@ -928,6 +1003,7 @@ mod tests {
                 output: uv(55, 0.1),
             }],
             brightness_points: Vec::new(),
+            max_brightness: None,
         };
 
         // Authoring brightness for a device that already matches color keeps
@@ -977,6 +1053,7 @@ mod tests {
             device_key: "mqtt/lamp".into(),
             points: Vec::new(),
             brightness_points: Vec::new(),
+            max_brightness: None,
         };
         assert!(empty.validate().is_err());
     }
@@ -1030,9 +1107,76 @@ mod tests {
             device_key: "mqtt/lamp".into(),
             points: combined_round_trip.points.clone(),
             brightness_points: combined_round_trip.brightness_points.clone(),
+            max_brightness: None,
         };
         assert_eq!(resolved.points.len(), 1);
         assert_eq!(resolved.brightness_points.len(), 3);
+    }
+
+    #[test]
+    fn max_brightness_scales_output_and_reports_map_back() {
+        let capped = DeviceColorCalibration {
+            device_key: "mqtt/lamp".into(),
+            points: Vec::new(),
+            brightness_points: Vec::new(),
+            max_brightness: Some(0.3),
+        };
+        assert!((capped.output_brightness(1.0) - 0.3).abs() < 1e-6);
+        assert!((capped.output_brightness(0.5) - 0.15).abs() < 1e-6);
+        assert!((capped.input_brightness(0.15) - 0.5).abs() < 1e-6);
+        assert_eq!(
+            capped.input_brightness(0.9),
+            1.0,
+            "an external level above the cap reads as 100%"
+        );
+
+        // The cap applies after the curve.
+        let curved = DeviceColorCalibration {
+            brightness_points: curve(),
+            max_brightness: Some(0.5),
+            ..capped.clone()
+        };
+        assert!((curved.output_brightness(0.5) - 0.15).abs() < 1e-6);
+        assert!((curved.input_brightness(0.15) - 0.5).abs() < 1e-4);
+    }
+
+    #[test]
+    fn max_brightness_resolves_with_or_without_a_profile() {
+        let mut config = crate::core::event::tests::test_state().0.runtime_config;
+        config.widget_settings.clear();
+        config.device_color_calibrations.clear();
+        config.color_calibration_assignments.clear();
+        assert!(config.calibration_for_device("mqtt/lamp").is_none());
+        config
+            .widget_settings
+            .push(max_brightness_row("mqtt/lamp", 0.2));
+        let only_cap = config.calibration_for_device("mqtt/lamp").unwrap();
+        assert_eq!(only_cap.max_brightness, Some(0.2));
+        assert!(!only_cap.is_identity());
+
+        config
+            .device_color_calibrations
+            .push(DeviceColorCalibration {
+                device_key: "mqtt/lamp".into(),
+                points: Vec::new(),
+                brightness_points: curve(),
+                max_brightness: None,
+            });
+        let both = config.calibration_for_device("mqtt/lamp").unwrap();
+        assert_eq!(both.brightness_points.len(), 3);
+        assert_eq!(both.max_brightness, Some(0.2));
+
+        // Full brightness, or an invalid stored value, means no cap.
+        config.widget_settings[0] = max_brightness_row("mqtt/lamp", 1.0);
+        assert_eq!(
+            config
+                .calibration_for_device("mqtt/lamp")
+                .unwrap()
+                .max_brightness,
+            None
+        );
+        config.widget_settings[0] = max_brightness_row("mqtt/lamp", 7.0);
+        assert_eq!(config.max_brightness_for("mqtt/lamp"), 1.0);
     }
 
     #[test]
@@ -1041,6 +1185,7 @@ mod tests {
             device_key: "mqtt/lamp".into(),
             points: Vec::new(),
             brightness_points: curve(),
+            max_brightness: None,
         };
 
         // Off stays off, and a zero level stays zero.
@@ -1100,6 +1245,7 @@ mod tests {
                     output: uv(35, 0.8),
                 },
             ],
+            max_brightness: None,
         }
     }
 
@@ -1157,6 +1303,7 @@ mod tests {
                 reference: white.clone(),
                 output: white,
             }],
+            max_brightness: None,
         };
         let physical = calibrated_device(
             &lamp(
@@ -1184,6 +1331,7 @@ mod tests {
                 reference: uv(0, 1.0),
                 output: uv(120, 1.0),
             }],
+            max_brightness: None,
         };
         for capabilities in [
             Capabilities::singleton(crate::types::color::ColorMode::Rgb),
@@ -1229,6 +1377,7 @@ mod tests {
                 reference: uv(0, 1.0),
                 output: uv(120, 1.0),
             }],
+            max_brightness: None,
         };
         assert!(calibration.interpolate(&input).to_xy().is_some());
     }

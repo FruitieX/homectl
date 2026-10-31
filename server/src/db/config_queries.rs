@@ -828,21 +828,21 @@ pub async fn db_save_device_settings(
     device_key: &str,
     display_name: Option<&str>,
     sensor: Option<&DeviceSensorConfigRow>,
-    reporting: Option<&WidgetSettingRow>,
+    settings: &[WidgetSettingRow],
 ) -> Result<()> {
     let db = get_db_connection()?;
-    save_device_settings_on(db, device_key, display_name, sensor, reporting).await
+    save_device_settings_on(db, device_key, display_name, sensor, settings).await
 }
 async fn save_device_settings_on(
     db: &sea_orm::DatabaseConnection,
     device_key: &str,
     display_name: Option<&str>,
     sensor: Option<&DeviceSensorConfigRow>,
-    reporting: Option<&WidgetSettingRow>,
+    settings: &[WidgetSettingRow],
 ) -> Result<()> {
     let txn = db.begin().await?;
-    if let Some(reporting) = reporting {
-        upsert_widget_setting_on(&txn, reporting).await?;
+    for setting in settings {
+        upsert_widget_setting_on(&txn, setting).await?;
     }
     if let Some(name) = display_name {
         upsert_device_display_override_on(
@@ -5206,25 +5206,29 @@ mod consistency_tests {
             "test/button",
             Some("Button"),
             Some(&sensor),
-            Some(&initial_policy),
+            &[
+                initial_policy.clone(),
+                crate::core::color_calibration::max_brightness_row("test/button", 0.2),
+            ],
         )
         .await
         .unwrap();
         let before = db_export_config_from_connection(&db).await.unwrap();
         assert_eq!(before.device_sensor_configs[0].config, sensor.config);
+        assert_eq!(before.max_brightness_for("test/button"), 0.2);
         db.execute_raw(Statement::from_string(DbBackend::Sqlite, "CREATE TRIGGER reject_sensor_update BEFORE UPDATE ON device_sensor_configs BEGIN SELECT RAISE(ABORT, 'test failure'); END")).await.unwrap();
         assert!(save_device_settings_on(
             &db,
             "test/button",
             Some("Not saved"),
             Some(&sensor),
-            Some(&policy_row(
+            &[policy_row(
                 "device",
                 "test/button",
                 &ReportingPolicy::Custom {
                     expected_interval_seconds: 60
                 }
-            ))
+            )]
         )
         .await
         .is_err());
@@ -5236,7 +5240,7 @@ mod consistency_tests {
             ReportingPolicy::Ignore,
             "failed sensor write must also roll back the earlier reporting-policy write"
         );
-        save_device_settings_on(&db, "test/button", None, None, None)
+        save_device_settings_on(&db, "test/button", None, None, &[])
             .await
             .unwrap();
         let cleared = db_export_config_from_connection(&db).await.unwrap();
@@ -5361,6 +5365,7 @@ mod consistency_tests {
             device_key: "mqtt/brightness-only".into(),
             points: vec![],
             brightness_points: row.brightness_points.clone(),
+            max_brightness: None,
         };
         upsert_device_color_calibration_on(&source, &brightness_only)
             .await
@@ -5714,6 +5719,7 @@ fn device_color_calibration_from_row(row: QueryResult) -> Result<DeviceColorCali
         device_key: row.try_get("", "device_key")?,
         points: serde_json::from_str(&points)?,
         brightness_points: serde_json::from_str(&row.try_get::<String>("", "brightness_points")?)?,
+        max_brightness: None,
     };
     calibration.validate().map_err(|error| eyre!(error))?;
     Ok(calibration)

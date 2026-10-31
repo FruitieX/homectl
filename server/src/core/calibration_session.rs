@@ -111,6 +111,7 @@ mod tests {
                     reference: Uv::from_xy(&DeviceColor::new_from_hs(45, 0.3).to_xy().unwrap()),
                     output: Uv::from_xy(&DeviceColor::new_from_hs(80, 0.5).to_xy().unwrap()),
                 }],
+                max_brightness: None,
             });
         while rx.try_recv().is_ok() {}
         state
@@ -369,6 +370,7 @@ mod tests {
                         output: 0.8.into(),
                     },
                 ],
+                max_brightness: None,
             });
 
         state
@@ -586,6 +588,7 @@ impl AppState {
             // The color preview authors color points only; brightness is
             // calibrated by its own session.
             brightness_points: Vec::new(),
+            max_brightness: None,
         }
         .validate()?;
         if start && self.calibration_sessions.contains_key(&id) {

@@ -9,6 +9,8 @@ export type DeviceSettings = {
   display_name: string | null;
   sensor: DeviceSensorConfig | null;
   reporting_policy?: ReportingPolicy;
+  /** Light output cap, 0.01–1; 1 means no cap. */
+  max_brightness?: number;
 };
 export function useDeviceSettings(key: string) {
   const { apiEndpoint } = useAppConfig();

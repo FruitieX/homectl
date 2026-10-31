@@ -577,10 +577,7 @@ impl Devices {
                         if report_is_ours {
                             if let Some(physical_brightness) = data.state.brightness {
                                 data.state.brightness = Some(OrderedFloat(
-                                    crate::core::color_calibration::map_brightness_input(
-                                        &calibration.brightness_points,
-                                        physical_brightness.0,
-                                    ),
+                                    calibration.input_brightness(physical_brightness.0),
                                 ));
                             }
                         }

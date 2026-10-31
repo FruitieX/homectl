@@ -349,6 +349,37 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
                 draftKey={key}
               />
             </SettingsSection>
+            {isDimmableDevice(device) && (
+              <SettingsSection
+                id="brightness-limit"
+                title="Brightness limit"
+                description="Scenes, scripts and controls set brightness within this limit: 100% sends the limit, 50% sends half of it."
+              >
+                <label className="grid gap-2 text-xs">
+                  Maximum brightness (%)
+                  <Input
+                    data-field="max_brightness"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={100}
+                    step={1}
+                    value={Math.round((value.max_brightness ?? 1) * 100)}
+                    onChange={(event) => {
+                      const percent = Number(event.target.value);
+                      if (!Number.isFinite(percent)) return;
+                      draft.patch({
+                        max_brightness:
+                          Math.min(Math.max(Math.round(percent), 1), 100) / 100,
+                      });
+                    }}
+                  />
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  100% means no limit. The light is updated when you save.
+                </p>
+              </SettingsSection>
+            )}
             <SettingsSection
               id="live"
               title={

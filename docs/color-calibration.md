@@ -113,3 +113,15 @@ several lights rejects the whole batch with a per-device reason when
 any selected light cannot do what the profile needs — a brightness-only curve
 applies to dimmers that have no color support, while a color profile still needs
 HSV.
+
+## Brightness limit
+
+A dimmable light's page has a **Brightness limit** (default 100%, no limit).
+Every brightness homectl sends to the light is scaled by it after the brightness
+curve: with a 30% limit, 100% from a scene, script or control sends 30% and 50%
+sends 15%. Reports are mapped back the same way, so the app keeps showing the
+requested level, and a managed light that is set brighter outside homectl is
+corrected back within the limit. The limit is a per-light setting (stored as the
+`light/max-brightness/<device key>` widget setting) and applies to every scene,
+so raising it is the only way to get more light. Calibration-wizard previews
+send raw levels and bypass it.

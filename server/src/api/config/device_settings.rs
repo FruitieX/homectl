@@ -9,6 +9,12 @@ struct DeviceSettings {
     sensor: Option<DeviceSensorConfigRow>,
     #[serde(default)]
     reporting_policy: crate::types::device_health::ReportingPolicy,
+    /// Light output cap (0.01..=1); 1 means no cap.
+    #[serde(default = "full_brightness")]
+    max_brightness: f32,
+}
+fn full_brightness() -> f32 {
+    1.0
 }
 #[derive(Deserialize)]
 struct SettingsWrite {
@@ -23,6 +29,7 @@ struct SettingsQuery {
 fn current(config: &config_queries::ConfigExport, key: &str) -> DeviceSettings {
     DeviceSettings {
         reporting_policy: crate::core::device_health::read_policy(config, "device", key),
+        max_brightness: config.max_brightness_for(key),
         device_key: key.into(),
         display_name: config
             .device_display_overrides
@@ -58,6 +65,11 @@ pub(super) fn routes(
 async fn write(request: SettingsWrite, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
     if let Err(error) = request.value.reporting_policy.validate() {
         return Ok(error_response(error, StatusCode::BAD_REQUEST));
+    }
+    if let Err(error) =
+        crate::core::color_calibration::validate_max_brightness(request.value.max_brightness)
+    {
+        return Ok(error_response(&error, StatusCode::BAD_REQUEST));
     }
     let _guard = match config_write_lock(&handle).await {
         Ok(guard) => guard,
@@ -131,6 +143,27 @@ async fn write(request: SettingsWrite, handle: StateHandle) -> Result<impl Reply
                 } else {
                     state.delete_device_sensor_config(&value.device_key);
                 }
+                let max_changed = saved.max_brightness != value.max_brightness;
+                state.upsert_widget_setting(crate::core::color_calibration::max_brightness_row(
+                    &value.device_key,
+                    value.max_brightness,
+                ));
+                if max_changed {
+                    // Re-send the light so the new cap applies right away.
+                    if let Some(device) = state
+                        .devices
+                        .get_state()
+                        .0
+                        .iter()
+                        .find(|(key, _)| key.to_string() == value.device_key)
+                        .map(|(_, device)| device.clone())
+                        .filter(|device| matches!(device.data, DeviceData::Controllable(_)))
+                    {
+                        state
+                            .event_tx
+                            .send(crate::types::event::Event::SetExternalState { device });
+                    }
+                }
                 Ok(value)
             })
         })
@@ -152,11 +185,17 @@ async fn write(request: SettingsWrite, handle: StateHandle) -> Result<impl Reply
         &value.device_key,
         value.display_name.as_deref(),
         value.sensor.as_ref(),
-        Some(&crate::core::device_health::policy_row(
-            "device",
-            &value.device_key,
-            &value.reporting_policy,
-        )),
+        &[
+            crate::core::device_health::policy_row(
+                "device",
+                &value.device_key,
+                &value.reporting_policy,
+            ),
+            crate::core::color_calibration::max_brightness_row(
+                &value.device_key,
+                value.max_brightness,
+            ),
+        ],
     )
     .await;
     Ok(config_write_response(
@@ -193,7 +232,9 @@ mod tests {
     async fn device_settings_reject_stale_scope_and_keep_unrecognized_sensor_fields() {
         let (handle, snapshot, expected) = setup().await;
         let mut value = expected.clone();
+        assert_eq!(expected.max_brightness, 1.0, "no cap by default");
         value.display_name = Some("New label".into());
+        value.max_brightness = 0.2;
         value.reporting_policy = crate::types::device_health::ReportingPolicy::Custom {
             expected_interval_seconds: 120,
         };
@@ -233,6 +274,22 @@ mod tests {
             .into_response()
             .status(),
             StatusCode::CONFLICT
+        );
+        let mut out_of_range = value.clone();
+        out_of_range.max_brightness = 0.0;
+        assert_eq!(
+            write(
+                SettingsWrite {
+                    value: out_of_range,
+                    expected: value.clone()
+                },
+                handle.clone()
+            )
+            .await
+            .unwrap()
+            .into_response()
+            .status(),
+            StatusCode::BAD_REQUEST
         );
         let mut mismatched = value.clone();
         mismatched.device_key = "test/other".into();
