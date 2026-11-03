@@ -66,6 +66,13 @@ export function DeviceEffectControls({
           />
         </label>
       )}
+      {current && current !== "mixed" && current.startsWith("Playlist: ") && (
+        <p className="-mt-1 text-xs text-muted">
+          This light is playing a playlist. Color changes customize the current
+          entry; the playlist keeps running and may replace them when it moves
+          on.
+        </p>
+      )}
       {single && slots.length > 1 && (
         <div>
           <span className="mb-1 block text-sm">Effect colors</span>
