@@ -83,6 +83,7 @@ export function DeviceEffectControls({
                 field={`effect-color-${index}`}
                 color={color}
                 capabilities={capabilities}
+                live
                 onChange={(next) => {
                   if (connected && next)
                     void setLook(single, {

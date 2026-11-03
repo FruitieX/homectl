@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Color from 'color';
 import type { DeviceColor } from '@/bindings/DeviceColor';
 import type { Capabilities } from '@/bindings/Capabilities';
 import {
@@ -21,6 +22,7 @@ import {
 } from '@/ui/primitives/dialog';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
+import { ColorSlider } from '@/ui/ColorSlider';
 import { StatePreview } from './StatePreview';
 import { SettingsSelect } from './SettingsSelect';
 const MODES: DeviceColorMode[] = ['ct', 'hs', 'rgb', 'xy'];
@@ -30,12 +32,15 @@ export function SceneColorControl({
   onChange,
   capabilities,
   field,
+  live = false,
 }: {
   color?: DeviceColor | null;
   brightness?: number | null;
   onChange: (color: DeviceColor | undefined) => void;
   capabilities?: Capabilities[];
   field: string;
+  /** The dialog edits a running light rather than a page draft. */
+  live?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<DeviceColor | undefined>();
@@ -80,7 +85,9 @@ export function SceneColorControl({
           <DialogHeader>
             <DialogTitle>Color</DialogTitle>
             <DialogDescription>
-              Apply updates your draft. Save the page to keep the change.
+              {live
+                ? 'Changes are applied to the light when you press Apply.'
+                : 'Apply updates your draft. Save the page to keep the change.'}
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-4">
@@ -136,7 +143,10 @@ export function SceneColorControl({
               ]}
             />
           </label>
-          {pending && (
+          {pending && mode === 'hs' && (
+            <HsSliders color={pending} onChange={setPending} />
+          )}
+          {pending && mode !== 'hs' && (
             <div className="grid gap-4">
               {colorParts(pending).map((raw) => {
                 const part =
@@ -237,5 +247,75 @@ export function SceneColorControl({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/** Hue and saturation with the same gradient tracks as the device controls. */
+function HsSliders({
+  color,
+  onChange,
+}: {
+  color: DeviceColor;
+  onChange: (color: DeviceColor) => void;
+}) {
+  const parts = colorParts(color);
+  const hue = parts.find((part) => part.key === 'h')?.display ?? 0;
+  const saturation = parts.find((part) => part.key === 's')?.display ?? 0;
+  const preview = Color.hsv(hue, saturation, 100);
+  const set = (key: 'h' | 's', value: number) =>
+    onChange(withColorPart(color, key, value));
+  return (
+    <div className="grid gap-4">
+      <div className="flex items-center gap-3">
+        <ColorSlider
+          label="Hue"
+          className="min-w-0 flex-1"
+          channel="hue"
+          color={preview}
+          value={hue}
+          min={0}
+          max={360}
+          onChange={(event) => set('h', Number(event.currentTarget.value))}
+        />
+        <Input
+          className="w-20"
+          type="number"
+          aria-label="Hue in degrees"
+          min={0}
+          max={360}
+          value={Math.round(hue)}
+          onChange={(event) => {
+            if (event.target.value !== '')
+              set('h', Number(event.target.value));
+          }}
+        />
+      </div>
+      <div className="flex items-center gap-3">
+        <ColorSlider
+          label="Saturation"
+          className="min-w-0 flex-1"
+          channel="saturation"
+          color={preview}
+          value={saturation}
+          min={0}
+          max={100}
+          onChange={(event) =>
+            set('s', Number(event.currentTarget.value))
+          }
+        />
+        <Input
+          className="w-20"
+          type="number"
+          aria-label="Saturation percent"
+          min={0}
+          max={100}
+          value={Math.round(saturation)}
+          onChange={(event) => {
+            if (event.target.value !== '')
+              set('s', Number(event.target.value));
+          }}
+        />
+      </div>
+    </div>
   );
 }
