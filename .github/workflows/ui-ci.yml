@@ -1,17 +1,9 @@
 name: UI CI
 
+# Called from server-ci.yml, whose publish job waits for these checks because
+# they gate the unified image. Runs on its own only via workflow_dispatch.
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - 'ui/**'
-      - 'Dockerfile'
-      - '.github/workflows/ui-ci.yml'
-  pull_request:
-    paths:
-      - 'ui/**'
-      - 'Dockerfile'
-      - '.github/workflows/ui-ci.yml'
+  workflow_call: {}
   workflow_dispatch: {}
 
 jobs:
