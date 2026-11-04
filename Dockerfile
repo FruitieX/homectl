@@ -16,7 +16,7 @@ RUN VITE_GIT_COMMIT="$VITE_GIT_COMMIT" VITE_BUILD_DATE="$VITE_BUILD_DATE" pnpm b
 
 # The workspace dependencies declare rust-version 1.94 (sea-orm 2, sqlx 0.9), so
 # the image toolchain must not trail the flake's.
-FROM rust:1.99.1-slim-trixie@sha256:9daf2b244ccc30523e55cafe32edf8465671ba567d0101620e5612ccb76ea1a7 AS server-builder
+FROM rust:1.99.1-slim-trixie@sha256:ea0999ff67355d958b8799b6751c879a6d770076d26047dca66f6e51e77930d3 AS server-builder
 
 WORKDIR /app
 
