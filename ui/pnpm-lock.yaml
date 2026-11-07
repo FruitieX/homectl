@@ -159,8 +159,8 @@ importers:
         specifier: 4.0.2
         version: 4.0.2
       d3-time-format:
-        specifier: 4.1.0
-        version: 4.1.0
+        specifier: 4.1.1
+        version: 4.1.1
       deep-equal:
         specifier: 2.2.3
         version: 2.2.3
@@ -1847,6 +1847,10 @@ packages:
 
   d3-time-format@4.1.0:
     resolution: {integrity: sha512-dJxPBlzC7NugB2PDLwo9Q8JiTR3M3e4/XANkreKSUxF8vvXKqm1Yfq4Q5dl8budlunRVlUUaDUgFt7eA8D6NLg==}
+    engines: {node: '>=12'}
+
+  d3-time-format@4.1.1:
+    resolution: {integrity: sha512-22XaqjyCjpqgda20erhsOjGmC3vvYwTNYniKAd45W5UWLDF43moeOuV9qYpRqobIlsnK0UhnKZjUUJm3VgORUA==}
     engines: {node: '>=12'}
 
   d3-time@3.1.0:
@@ -4293,13 +4297,17 @@ snapshots:
       d3-format: 3.1.2
       d3-interpolate: 3.0.1
       d3-time: 3.1.0
-      d3-time-format: 4.1.0
+      d3-time-format: 4.1.1
 
   d3-shape@3.2.0:
     dependencies:
       d3-path: 3.1.0
 
   d3-time-format@4.1.0:
+    dependencies:
+      d3-time: 3.1.0
+
+  d3-time-format@4.1.1:
     dependencies:
       d3-time: 3.1.0
 
