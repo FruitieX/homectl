@@ -51,6 +51,8 @@ export function useChartInteraction<T extends Element>({
         id: event.pointerId,
         x: event.clientX,
         y: event.clientY,
+        // Time the hold from when inspection starts to the release's input
+        // timestamp, so a busy main thread cannot turn a quick tap into a hold.
         started: performance.now(),
         dragged: false,
       };
@@ -77,7 +79,7 @@ export function useChartInteraction<T extends Element>({
       const current = gesture.current;
       if (current?.id !== event.pointerId) return;
       suppressTap.current =
-        current.dragged || performance.now() - current.started >= 450;
+        current.dragged || event.timeStamp - current.started >= 450;
       gesture.current = null;
       callbacks.current.clear();
     },
