@@ -43,27 +43,35 @@ export default async function (cdp, { width, url }) {
   const button = (label) =>
     `[...document.querySelectorAll('button')].find(e=>e.textContent.trim()===${JSON.stringify(label)})`;
   const click = async (expression) => {
-    let point = await evaluate(
-      `(()=>{const e=${expression};if(!e)throw Error('Missing target: '+${JSON.stringify(expression)});e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()`,
-    );
-    // Radix/framer dialogs can exist before their opening transform settles.
-    // Wait for stable hit-test geometry rather than tapping their old position.
-    let stable = 0;
+    // Targets can mount a render after the state a check waited for (portals),
+    // and Radix/framer dialogs can exist before their opening transform
+    // settles. Wait for a present target with stable hit-test geometry rather
+    // than tapping a missing element or its old position.
+    const locate = `(()=>{const e=${expression};if(!e)return null;e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2,hit=document.elementFromPoint(x,y);return {x,y,hit:e===hit||e.contains(hit)}})()`;
+    let point = null,
+      seen = false,
+      stable = 0;
     const deadline = Date.now() + 5000;
     while (stable < 2 && Date.now() < deadline) {
-      await pause();
-      const next = await evaluate(
-        `(()=>{const e=${expression};if(!e)return null;const r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2,hit=document.elementFromPoint(x,y);return {x,y,hit:e===hit||e.contains(hit)}})()`,
-      );
-      if (!next) throw Error('Click target disappeared: ' + expression);
+      const next = await evaluate(locate);
+      if (!next) {
+        point = null;
+        stable = 0;
+        await pause();
+        continue;
+      }
+      seen = true;
       stable =
+        point &&
         next.hit &&
         Math.abs(next.x - point.x) < 0.5 &&
         Math.abs(next.y - point.y) < 0.5
           ? stable + 1
           : 0;
       point = { x: next.x, y: next.y };
+      if (stable < 2) await pause();
     }
+    if (!seen) throw Error('Missing target: ' + expression);
     if (stable < 2) throw Error('Click target is not hittable: ' + expression);
     for (const type of ['mousePressed', 'mouseReleased'])
       await cdp.send('Input.dispatchMouseEvent', {
@@ -225,6 +233,9 @@ export default async function (cdp, { width, url }) {
       }
       await cdp.send('Fetch.continueRequest', { requestId: event.requestId });
     } catch (error) {
+      // Chromium cancels paused requests on navigation or abort; answering one
+      // afterwards reports a stale interception id, which is not a failure.
+      if (String(error).includes('Invalid InterceptionId')) return;
       console.error(error);
       foreignRequests.push(String(error));
     }
@@ -503,13 +514,25 @@ export default async function (cdp, { width, url }) {
         touchPoints: point ? [{ ...point, id: 1 }] : [],
       });
     const chartPoint = async (selector) => {
-      await evaluate(
-        `document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'center'})`,
-      );
-      await pause();
-      return evaluate(
-        `(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{x:r.x+r.width*.6,y:r.y+r.height*.5}})()`,
-      );
+      // Let the scroll event fire before the tap (a scroll during a gesture
+      // cancels it) and wait for dialogs to finish moving the chart.
+      const locate = `(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'center'});return new Promise((done)=>requestAnimationFrame(()=>requestAnimationFrame(()=>{const r=e.getBoundingClientRect(),x=r.x+r.width*.6,y=r.y+r.height*.5,hit=document.elementFromPoint(x,y);done({x,y,hit:e===hit||e.contains(hit)})})))})()`;
+      let point = await evaluate(locate),
+        stable = 0;
+      const deadline = Date.now() + 5000;
+      while (stable < 2 && Date.now() < deadline) {
+        await pause();
+        const next = await evaluate(locate);
+        stable =
+          next.hit &&
+          Math.abs(next.x - point.x) < 0.5 &&
+          Math.abs(next.y - point.y) < 0.5
+            ? stable + 1
+            : 0;
+        point = next;
+      }
+      if (stable < 2) throw Error('Chart is not hittable: ' + selector);
+      return { x: point.x, y: point.y };
     };
     for (const [className, title] of [
       ['.dashboard-weather-card', 'Weather forecast'],
