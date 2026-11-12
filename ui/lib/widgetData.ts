@@ -44,8 +44,7 @@ export function priceWindow(
       end: Math.min(sorted[index + 1]?.[0] ?? time + interval, time + interval),
       fill: 'currentColor',
     }))
-    .filter((p) => p.end > now && p.time < now + 86400000)
-    .map((p) => ({ ...p, end: Math.min(p.end, now + 86400000) }));
+    .filter((p) => p.end > now);
   const current = data.find((p) => p.time <= now && p.end > now);
   const duration = data.reduce(
     (sum, p) => sum + p.end - Math.max(now, p.time),

@@ -113,7 +113,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
               <div className="dashboard-spot-summary mt-3 flex flex-row-reverse items-end justify-between gap-4 pb-1">
                 <div className="dashboard-spot-secondary text-right">
                   <div className="text-xs text-muted-foreground">
-                    Next 24 hours
+                    Upcoming prices
                   </div>
                   {stats ? (
                     <div className="mt-1 text-xs text-muted-foreground">
@@ -194,7 +194,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
         open={detailsOpen}
         onOpenChange={setDetailsOpen}
         title="Electricity prices"
-        description="Available prices for the next 24 hours, in c/kWh."
+        description="All available upcoming prices, in c/kWh."
         className="max-w-5xl"
       >
         <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
