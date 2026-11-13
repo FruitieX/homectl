@@ -48,6 +48,19 @@ pub enum MqttMode {
     OpenMqttGateway,
 }
 
+/// How a generic MQTT integration reads several `sensor_value_fields`.
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SensorValueMode {
+    /// Keep every listed numeric or boolean value as a named reading of one
+    /// sensor. A single listed field still yields a plain value.
+    #[default]
+    All,
+    /// Use the first listed field that is present: one value per device.
+    /// Suits one list covering different kinds of device.
+    First,
+}
+
 #[derive(Default, Debug, Deserialize, Clone)]
 pub struct MqttConfig {
     /// Explicit protocol profile. Missing values are inferred for legacy configs.
@@ -101,6 +114,8 @@ pub struct MqttConfig {
     brightness_field: Option<jsonptr::PointerBuf>,
     brightness_range: Option<(f32, f32)>,
     sensor_value_fields: Option<Vec<jsonptr::PointerBuf>>,
+    /// How several `sensor_value_fields` are read. Defaults to `all`.
+    sensor_value_mode: Option<SensorValueMode>,
     transition_field: Option<jsonptr::PointerBuf>,
     transition_range: Option<(f32, f32)>,
     default_transition: Option<f32>,
@@ -360,6 +375,7 @@ impl Integration for Mqtt {
             let mut bridge_watch = zigbee2mqtt::BridgeWatch::default();
             let mut esphome_discovery = esphome::Discovery::default();
             let mut ble_sensors = openmqttgateway::Sensors::default();
+            let mut generic_readings = utils::SensorReadings::default();
             let mut polling = polling::Polling::configured(
                 config.mode() == MqttMode::Zigbee2Mqtt,
                 dry_run,
@@ -467,6 +483,7 @@ impl Integration for Mqtt {
                             let devices = match config.mode() {
                                 MqttMode::Generic => {
                                     mqtt_to_homectl(&msg.payload, &msg.topic, id.clone(), &config)
+                                        .map(|device| generic_readings.merge(device))
                                         .into_iter()
                                         .collect()
                                 }

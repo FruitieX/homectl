@@ -12,6 +12,7 @@ use sea_orm_migration::prelude::*;
 mod calibration_brightness;
 mod config_initialized;
 mod group_links;
+mod sensor_value_mode;
 
 pub struct Migrator;
 
@@ -43,6 +44,7 @@ impl MigratorTrait for Migrator {
             Box::new(ComputedHelpersMigration),
             Box::new(AuthDevicesMigration),
             Box::new(IntegrationCacheMigration),
+            Box::new(sensor_value_mode::PinSensorValueMode),
         ]
     }
 }

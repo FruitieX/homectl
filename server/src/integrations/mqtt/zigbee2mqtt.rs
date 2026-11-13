@@ -463,6 +463,9 @@ fn decode(
         brightness_range: Some((0.0, 254.0)),
         managed: config.managed.clone(),
         sensor_value_fields: config.sensor_value_fields.clone(),
+        // One list covers every kind of Zigbee device (buttons, presence,
+        // climate), so each device keeps the first listed value it reports.
+        sensor_value_mode: Some(super::SensorValueMode::First),
         ..Default::default()
     };
     let mut device = mqtt_to_homectl(

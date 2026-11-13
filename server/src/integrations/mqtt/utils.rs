@@ -1,4 +1,4 @@
-use crate::integrations::mqtt::MqttConfig;
+use crate::integrations::mqtt::{MqttConfig, SensorValueMode};
 use crate::types::color::{Capabilities, DeviceColor};
 use crate::types::{
     device::{ControllableDevice, Device, DeviceData, DeviceId, SensorDevice},
@@ -7,6 +7,7 @@ use crate::types::{
 use color_eyre::{eyre::eyre, Result};
 use jsonptr::{Assign, Pointer};
 use ordered_float::OrderedFloat;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MqttTopicMatch {
@@ -303,9 +304,18 @@ pub fn mqtt_to_homectl(
             .map(|value| (value - range.0) / (range.1 - range.0))
     };
 
-    let resolved_sensor_value_field = sensor_value_fields
-        .iter()
-        .find_map(|field| Some((field, field.resolve(&value).ok()?)))
+    let keep_all_sensor_values = sensor_value_fields.len() > 1
+        && config.sensor_value_mode.unwrap_or_default() == SensorValueMode::All;
+    let sensor_readings = keep_all_sensor_values
+        .then(|| sensor_readings(&sensor_value_fields, &value))
+        .filter(|readings| !readings.is_empty());
+    let resolved_sensor_value_field = (!keep_all_sensor_values)
+        .then(|| {
+            sensor_value_fields
+                .iter()
+                .find_map(|field| Some((field, field.resolve(&value).ok()?)))
+        })
+        .flatten()
         .filter(|(_, v)| !v.is_null());
     let has_controllable_state = power.is_some()
         || brightness.is_some()
@@ -313,7 +323,9 @@ pub fn mqtt_to_homectl(
         || colors.is_some()
         || effect.is_some();
 
-    let device_state = if let Some((field, value)) = resolved_sensor_value_field {
+    let device_state = if let Some(readings) = sensor_readings {
+        DeviceData::Sensor(SensorDevice::Readings { readings })
+    } else if let Some((field, value)) = resolved_sensor_value_field {
         DeviceData::Sensor(match value {
             serde_json::Value::Number(value) => SensorDevice::Number {
                 value: value.as_f64().unwrap(),
@@ -380,6 +392,64 @@ pub fn mqtt_to_homectl(
         data: device_state,
         raw,
     })
+}
+
+/// Last readings per generic MQTT sensor, so a message carrying only some of
+/// the listed values (say humidity alone) keeps the others.
+#[derive(Default)]
+pub struct SensorReadings(HashMap<DeviceId, BTreeMap<String, f64>>);
+
+impl SensorReadings {
+    pub fn merge(&mut self, mut device: Device) -> Device {
+        if let DeviceData::Sensor(SensorDevice::Readings { readings }) = &mut device.data {
+            let known = self.0.entry(device.id.clone()).or_default();
+            known.extend(std::mem::take(readings));
+            readings.clone_from(known);
+        }
+        device
+    }
+}
+
+/// Name of the reading a sensor value pointer fills: its last token
+/// (`/sensor/temperature` → `temperature`), or the whole pointer without the
+/// leading slash when another listed pointer ends in the same token.
+fn reading_name(field: &Pointer, fields: &[&Pointer]) -> String {
+    let full = || {
+        let full = field.as_str().trim_start_matches('/');
+        if full.is_empty() { "value" } else { full }.to_string()
+    };
+    match field.last() {
+        Some(last)
+            if fields
+                .iter()
+                .filter(|other| other.last().as_ref() == Some(&last))
+                .count()
+                == 1 =>
+        {
+            last.decoded().into_owned()
+        }
+        _ => full(),
+    }
+}
+
+/// Every listed numeric or boolean value present in `value`, by reading name.
+/// Booleans (and the strings `"true"`/`"false"`) read as 1 and 0; strings and
+/// other values are skipped.
+fn sensor_readings(fields: &[&Pointer], value: &serde_json::Value) -> BTreeMap<String, f64> {
+    fields
+        .iter()
+        .filter_map(|field| {
+            let reading = match field.resolve(value).ok()? {
+                serde_json::Value::Number(number) => number.as_f64(),
+                serde_json::Value::Bool(value) => Some(f64::from(u8::from(*value))),
+                serde_json::Value::String(value) if value == "true" => Some(1.0),
+                serde_json::Value::String(value) if value == "false" => Some(0.0),
+                _ => None,
+            }
+            .filter(|reading| reading.is_finite())?;
+            Some((reading_name(field, fields), reading))
+        })
+        .collect()
 }
 
 pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json::Value> {
@@ -720,6 +790,141 @@ mod tests {
         assert_eq!(
             device.data,
             DeviceData::Sensor(SensorDevice::unknown_placeholder())
+        );
+    }
+
+    fn sensor_config(fields: &[&str], mode: Option<SensorValueMode>) -> MqttConfig {
+        MqttConfig {
+            host: "localhost".to_string(),
+            port: 1883,
+            topic: "sensors/{id}".to_string(),
+            topic_set: "sensors/{id}/set".to_string(),
+            sensor_value_fields: Some(
+                fields
+                    .iter()
+                    .map(|field| PointerBuf::parse(*field).unwrap())
+                    .collect(),
+            ),
+            sensor_value_mode: mode,
+            ..Default::default()
+        }
+    }
+
+    fn decode_sensor(payload: serde_json::Value, config: &MqttConfig) -> Option<DeviceData> {
+        mqtt_to_homectl(
+            payload.to_string().as_bytes(),
+            "sensors/hall",
+            IntegrationId::from_str("mqtt").unwrap(),
+            config,
+        )
+        .map(|device| device.data)
+    }
+
+    fn readings(pairs: &[(&str, f64)]) -> DeviceData {
+        DeviceData::Sensor(SensorDevice::Readings {
+            readings: pairs
+                .iter()
+                .map(|(name, value)| (name.to_string(), *value))
+                .collect(),
+        })
+    }
+
+    #[test]
+    fn several_sensor_value_fields_become_readings_by_default() {
+        let config = sensor_config(&["/temperature", "/humidity", "/battery"], None);
+        let payload = json!({"id": "hall", "temperature": 21.5, "humidity": 40, "battery": 87});
+        assert_eq!(
+            decode_sensor(payload, &config),
+            Some(readings(&[
+                ("battery", 87.0),
+                ("humidity", 40.0),
+                ("temperature", 21.5)
+            ]))
+        );
+    }
+
+    #[test]
+    fn readings_keep_their_shape_when_one_value_is_present() {
+        let config = sensor_config(&["/temperature", "/humidity"], None);
+        assert_eq!(
+            decode_sensor(json!({"id": "hall", "humidity": 40}), &config),
+            Some(readings(&[("humidity", 40.0)]))
+        );
+    }
+
+    #[test]
+    fn readings_map_booleans_and_skip_strings() {
+        let config = sensor_config(&["/temperature", "/contact", "/leak", "/battery"], None);
+        let payload = json!({"id": "hall", "temperature": 20, "contact": true, "leak": "false", "battery": "85%"});
+        assert_eq!(
+            decode_sensor(payload, &config),
+            Some(readings(&[
+                ("contact", 1.0),
+                ("leak", 0.0),
+                ("temperature", 20.0)
+            ]))
+        );
+    }
+
+    #[test]
+    fn colliding_reading_names_use_the_whole_pointer() {
+        let config = sensor_config(&["/indoor/value", "/outdoor/value", "/humidity"], None);
+        let payload = json!({"id": "hall", "indoor": {"value": 21}, "outdoor": {"value": -3}, "humidity": 50});
+        assert_eq!(
+            decode_sensor(payload, &config),
+            Some(readings(&[
+                ("humidity", 50.0),
+                ("indoor/value", 21.0),
+                ("outdoor/value", -3.0)
+            ]))
+        );
+    }
+
+    #[test]
+    fn first_mode_keeps_the_first_present_value() {
+        let config = sensor_config(&["/action", "/occupancy"], Some(SensorValueMode::First));
+        assert_eq!(
+            decode_sensor(json!({"id": "hall", "occupancy": true}), &config),
+            Some(DeviceData::Sensor(SensorDevice::Boolean { value: true }))
+        );
+    }
+
+    #[test]
+    fn a_single_sensor_value_field_stays_a_plain_value() {
+        let config = sensor_config(&["/temperature"], None);
+        assert_eq!(
+            decode_sensor(json!({"id": "hall", "temperature": 21.5}), &config),
+            Some(DeviceData::Sensor(SensorDevice::Number { value: 21.5 }))
+        );
+    }
+
+    #[test]
+    fn readings_without_any_listed_value_fall_back_to_a_placeholder() {
+        let config = sensor_config(&["/temperature", "/humidity"], None);
+        assert_eq!(
+            decode_sensor(json!({"id": "hall", "battery": "85%"}), &config),
+            Some(DeviceData::Sensor(SensorDevice::unknown_placeholder()))
+        );
+    }
+
+    #[test]
+    fn partial_messages_keep_earlier_readings() {
+        let config = sensor_config(&["/temperature", "/humidity"], None);
+        let mut known = SensorReadings::default();
+        let mut receive = |payload| {
+            let device = mqtt_to_homectl(
+                serde_json::to_vec(&payload).unwrap().as_slice(),
+                "sensors/hall",
+                IntegrationId::from_str("mqtt").unwrap(),
+                &config,
+            )
+            .unwrap();
+            known.merge(device).data
+        };
+        receive(json!({"id": "hall", "temperature": 21.0, "humidity": 40}));
+        assert_eq!(
+            receive(json!({"id": "hall", "humidity": 45})),
+            readings(&[("humidity", 45.0), ("temperature", 21.0)])
         );
     }
 

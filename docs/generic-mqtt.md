@@ -1,4 +1,4 @@
-# Generic MQTT effects and color slots
+# Generic MQTT effects, color slots and sensor values
 
 The `mqtt` integration's `mode: "generic"` maps JSON payloads with RFC 6901
 pointers (`power_field`, `brightness_field`, `color_field`, …; see the
@@ -56,3 +56,37 @@ Controls and scenes:
   a device that reports no preset, instead of re-applying the preset forever.
 - Devices that report neither effects nor color slots are never corrected for
   an effect or colors a scene asks for.
+
+## Sensor values
+
+`sensor_value_fields` lists pointers to sensor values (default `["/sensor_value"]`).
+How several fields are read depends on `sensor_value_mode`:
+
+- `"all"` (default): every listed numeric or boolean value present in a payload
+  becomes a named reading of **one** sensor device. Booleans read as 1 and 0;
+  strings are skipped. A reading is named after the pointer's last token
+  (`/temperature` → `temperature`), or the whole pointer without the leading
+  slash (`indoor/value`) when two pointers end in the same token. Readings from
+  earlier messages are kept, so a device that sends humidity on its own keeps
+  its last temperature.
+- `"first"`: the first listed field present in the payload is the device's
+  single value (number, boolean or text). Use it when one list covers different
+  kinds of device, such as `["/action", "/occupancy"]` for buttons and motion
+  sensors.
+
+A single listed field always yields a plain value, in either mode.
+
+```json
+{
+  "mode": "generic",
+  "topic": "home/sensors/{id}",
+  "topic_set": "home/sensors/{id}/set",
+  "sensor_value_fields": ["/temperature", "/humidity", "/battery"]
+}
+```
+
+With `{"temperature": 21.4, "humidity": 45, "battery": 87}` the device shows
+"21.4 °C · 45%" (battery in the details), and automations read one value by
+path, e.g. `/temperature`. Configurations saved before `sensor_value_mode`
+existed that list several fields were migrated to `"first"`, so they keep
+decoding as before. Zigbee2MQTT always uses `"first"`.
