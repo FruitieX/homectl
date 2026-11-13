@@ -672,3 +672,119 @@ async fn reusable_blocks_preserve_production_event_execution_and_fixture_discove
     let error = run_scenario_suite(&config, &missing).await.unwrap_err();
     assert!(error.to_string().contains("required devices"), "{error:#}");
 }
+
+fn bathroom_config() -> ConfigExport {
+    serde_json::from_value(json!({
+        "version": 1,
+        "core": {},
+        "integrations": [],
+        "groups": [],
+        "scenes": [],
+        "routines": [{
+            "id": "bathroom_fan",
+            "name": "Bathroom fan",
+            "enabled": true,
+            "semantics_version": 2,
+            "revision": 1,
+            "definition_v2": {
+                "triggers": [{
+                    "kind": "predicate_transition",
+                    "id": "humid",
+                    "predicate": {
+                        "kind": "comparison",
+                        "source": { "kind": "device", "device": { "integration_id": "sim", "device_id": "bathroom_climate" }, "path": "/humidity" },
+                        "operator": "gt",
+                        "value": 60
+                    }
+                }],
+                "condition": {
+                    "kind": "comparison",
+                    "source": { "kind": "device", "device": { "integration_id": "sim", "device_id": "bathroom_climate" }, "path": "/battery" },
+                    "operator": "ne",
+                    "value": "low"
+                },
+                "program": { "kind": "native", "steps": [
+                    { "action": "set_power", "id": "fan_on",
+                      "device": { "integration_id": "sim", "device_id": "bathroom_fan" },
+                      "power": true }
+                ]}
+            },
+            "rules": [],
+            "actions": []
+        }],
+        "floorplan": null,
+        "dashboard_layouts": [],
+        "dashboard_widgets": []
+    }))
+    .expect("synthetic config export should decode")
+}
+
+fn bathroom_scenario(name: &str, update: Value, fan_on: bool) -> Value {
+    let commands = if fan_on {
+        json!([{ "type": "device_power", "device": "sim/bathroom_fan", "power": true }])
+    } else {
+        json!([])
+    };
+    json!({
+        "name": name,
+        "routines": ["Bathroom fan"],
+        "initial_state": [
+            { "kind": "sensor", "device": "sim/bathroom_climate",
+              "value": { "temperature": 22.5, "humidity": 45, "battery": "ok" } },
+            { "kind": "light", "device": "sim/bathroom_fan", "power": false }
+        ],
+        "events": [
+            { "type": "sensor", "device": "sim/bathroom_climate", "value": update }
+        ],
+        "expect": {
+            "commands": commands,
+            "final_state": [
+                { "kind": "sensor", "device": "sim/bathroom_climate",
+                  "value": { "temperature": 22.5 } },
+                { "kind": "light_power", "device": "sim/bathroom_fan", "power": fan_on }
+            ]
+        }
+    })
+}
+
+#[tokio::test]
+async fn scenarios_inject_and_check_individual_sensor_readings() {
+    let suite: ScenarioSuite = serde_json::from_value(json!({
+        "version": 1,
+        "devices": [
+            { "kind": "sensor", "device": "sim/bathroom_climate", "name": "Bathroom climate" },
+            { "kind": "light", "device": "sim/bathroom_fan", "name": "Bathroom fan", "capabilities": {} }
+        ],
+        "scenarios": [
+            bathroom_scenario("humid air turns the fan on", json!({ "humidity": 72 }), true),
+            bathroom_scenario("dry air leaves the fan off", json!({ "humidity": 50 }), false),
+            bathroom_scenario(
+                "a low battery reading blocks the fan",
+                json!({ "humidity": 72, "battery": "low" }),
+                false
+            )
+        ]
+    }))
+    .expect("readings scenario suite should decode");
+
+    let report = run_scenario_suite(&bathroom_config(), &suite)
+        .await
+        .expect("readings suite should run");
+    assert!(
+        report.scenarios.iter().all(|scenario| scenario.passed),
+        "{report:#?}"
+    );
+
+    // Expectations compare the listed readings, so a wrong value fails.
+    let mut failing = suite;
+    failing.scenarios.truncate(1);
+    failing.scenarios[0].expect.final_state = serde_json::from_value(json!([
+        { "kind": "sensor", "device": "sim/bathroom_climate", "value": { "humidity": 45 } },
+        { "kind": "light_power", "device": "sim/bathroom_fan", "power": true }
+    ]))
+    .unwrap();
+    let report = run_scenario_suite(&bathroom_config(), &failing)
+        .await
+        .expect("readings suite should run");
+    assert!(!report.scenarios[0].passed, "{report:#?}");
+}

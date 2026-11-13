@@ -1132,8 +1132,8 @@ fn resolve_sensor_path(
                 let pointer = path.strip_prefix("/value").unwrap_or(path);
                 let pointer = pointer.strip_prefix("/readings").unwrap_or(pointer);
                 let metric = pointer.strip_prefix('/').unwrap_or(pointer);
-                if let Some(value) = readings.get(metric).filter(|value| value.is_finite()) {
-                    return ResolvedValue::known(Value::from(*value));
+                if let Some(value) = readings.get(metric).and_then(|value| value.to_json()) {
+                    return ResolvedValue::known(value);
                 }
             }
             if let crate::types::device::SensorDevice::Color(state) = sensor {
@@ -1319,8 +1319,7 @@ fn sensor_value(sensor: &crate::types::device::SensorDevice) -> Result<Value, St
         crate::types::device::SensorDevice::Readings { readings } => Ok(Value::Object(
             readings
                 .iter()
-                .filter(|(_, value)| value.is_finite())
-                .map(|(metric, value)| (metric.clone(), Value::from(*value)))
+                .filter_map(|(metric, value)| Some((metric.clone(), value.to_json()?)))
                 .collect(),
         )),
         crate::types::device::SensorDevice::Color(state) => serde_json::to_value(state)
@@ -2706,8 +2705,16 @@ mod tests {
             "Living room".to_string(),
             DeviceData::Sensor(SensorDevice::Readings {
                 readings: std::collections::BTreeMap::from([
-                    ("humidity".to_string(), 45.0),
-                    ("temperature".to_string(), 21.4),
+                    ("humidity".to_string(), 45.0.into()),
+                    ("temperature".to_string(), 21.4.into()),
+                    (
+                        "battery".to_string(),
+                        crate::types::device::ReadingValue::Text("85%".to_string()),
+                    ),
+                    (
+                        "charging".to_string(),
+                        crate::types::device::ReadingValue::Boolean(true),
+                    ),
                 ]),
             }),
             None,
@@ -2731,10 +2738,14 @@ mod tests {
         }
         assert_eq!(
             resolve("/value").value,
-            Some(json!({ "humidity": 45.0, "temperature": 21.4 }))
+            Some(
+                json!({ "battery": "85%", "charging": true, "humidity": 45.0, "temperature": 21.4 })
+            )
         );
+        assert_eq!(resolve("/battery").value, Some(json!("85%")));
+        assert_eq!(resolve("/charging").value, Some(json!(true)));
         assert!(matches!(
-            resolve("/battery").reason,
+            resolve("/pressure").reason,
             Some(UnknownReason::MissingField { .. })
         ));
     }

@@ -138,7 +138,12 @@ impl Sensors {
             integration_id,
             DeviceId::new(&mac),
             name,
-            DeviceData::Sensor(SensorDevice::Readings { readings }),
+            DeviceData::Sensor(SensorDevice::Readings {
+                readings: readings
+                    .into_iter()
+                    .map(|(metric, value)| (metric, value.into()))
+                    .collect(),
+            }),
             Some(json!({
                 "gateway": gateway,
                 "rssi": value.get("rssi"),
@@ -168,9 +173,12 @@ mod tests {
         }
     }
 
-    fn readings(device: &Device) -> &BTreeMap<String, f64> {
+    fn readings(device: &Device) -> BTreeMap<String, f64> {
         match &device.data {
-            DeviceData::Sensor(SensorDevice::Readings { readings }) => readings,
+            DeviceData::Sensor(SensorDevice::Readings { readings }) => readings
+                .iter()
+                .map(|(metric, value)| (metric.clone(), value.as_f64().unwrap()))
+                .collect(),
             other => panic!("expected readings, got {other:?}"),
         }
     }
@@ -207,7 +215,7 @@ mod tests {
         assert_eq!(device.name, "Patio");
         assert_eq!(
             readings(&device),
-            &BTreeMap::from([
+            BTreeMap::from([
                 ("battery".to_string(), 68.0),
                 ("humidity".to_string(), 33.0),
                 ("temperature".to_string(), 25.5),

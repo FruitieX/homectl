@@ -119,7 +119,10 @@ the runner does not start the source integration or compute its value.
 
 Every initial device must appear in `final_state` or `unchanged`, so scenarios
 cannot silently skip checking unrelated devices. Sensor events must retain the
-value type seeded for that sensor. `advance_time` events move the fake wall and
+value type seeded for that sensor. A multi-reading sensor is seeded with an
+object, `{"kind":"sensor","device":"sim/bath","value":{"humidity":45,"battery":"ok"}}`;
+an event with an object updates only the listed readings (like a partial MQTT
+report), and a `final_state` object checks only the readings it lists. `advance_time` events move the fake wall and
 monotonic clocks and fire due routine timers. Script-backed routines use the same
 supervised worker path and have a bounded 15-second result timeout.
 

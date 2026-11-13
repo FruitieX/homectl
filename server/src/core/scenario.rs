@@ -24,7 +24,7 @@ use crate::types::{
     color::{Capabilities, DeviceColor},
     device::{
         ControllableDevice, ControllableState, Device, DeviceData, DeviceKey, DeviceStateSource,
-        ManageKind, SensorDevice,
+        ManageKind, ReadingValue, SensorDevice,
     },
     event::{mk_event_channel, Event, RxEventChannel},
     scene::SceneId,
@@ -70,6 +70,7 @@ enum SensorValueKind {
     Boolean,
     Number,
     Text,
+    Readings,
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,6 +138,10 @@ pub enum SensorValue {
     Boolean(bool),
     Number(f64),
     Text(String),
+    /// Named readings of a multi-reading sensor, e.g.
+    /// `{"temperature": 21.5, "battery": "85%"}`. An event updates only the
+    /// listed readings and a final-state check compares only the listed ones.
+    Readings(BTreeMap<String, ReadingValue>),
 }
 
 #[derive(Debug, Deserialize)]
@@ -418,7 +423,15 @@ async fn run_scenario(
                         label(device, &labels)
                     ));
                 }
-                current.data = DeviceData::Sensor(value.to_sensor()?);
+                current.data = DeviceData::Sensor(match (sensor, value) {
+                    // Like an MQTT report carrying some of the readings.
+                    (SensorDevice::Readings { readings }, SensorValue::Readings(update)) => {
+                        let mut readings = readings.clone();
+                        readings.extend(update.clone());
+                        SensorDevice::Readings { readings }
+                    }
+                    _ => value.to_sensor()?,
+                });
                 process_events(
                     &mut state,
                     &mut event_rx,
@@ -1288,6 +1301,15 @@ fn compare_final_state(
                 },
                 DeviceData::Controllable(light),
             ) => light.scene_id.as_ref() == Some(scene_id) && *power == light.state.power,
+            (
+                ExpectedDeviceState::Sensor {
+                    value: SensorValue::Readings(expected),
+                    ..
+                },
+                DeviceData::Sensor(SensorDevice::Readings { readings }),
+            ) => expected
+                .iter()
+                .all(|(metric, value)| readings.get(metric) == Some(value)),
             (ExpectedDeviceState::Sensor { value, .. }, DeviceData::Sensor(sensor)) => {
                 value == &SensorValue::from_sensor(sensor)
             }
@@ -1634,6 +1656,7 @@ impl SensorValue {
             Self::Boolean(_) => SensorValueKind::Boolean,
             Self::Number(_) => SensorValueKind::Number,
             Self::Text(_) => SensorValueKind::Text,
+            Self::Readings(_) => SensorValueKind::Readings,
         }
     }
 
@@ -1644,6 +1667,9 @@ impl SensorValue {
             Self::Text(value) => SensorDevice::Text {
                 value: value.clone(),
             },
+            Self::Readings(readings) => SensorDevice::Readings {
+                readings: readings.clone(),
+            },
         })
     }
 
@@ -1652,7 +1678,7 @@ impl SensorValue {
             SensorDevice::Boolean { value } => Self::Boolean(*value),
             SensorDevice::Number { value } => Self::Number(*value),
             SensorDevice::Text { value } => Self::Text(value.clone()),
-            SensorDevice::Readings { readings } => Self::Text(format!("readings:{readings:?}")),
+            SensorDevice::Readings { readings } => Self::Readings(readings.clone()),
             SensorDevice::Color(state) => Self::Text(format!("color:{state:?}")),
         }
     }
@@ -1664,7 +1690,8 @@ impl SensorValueKind {
             SensorDevice::Boolean { .. } => Some(Self::Boolean),
             SensorDevice::Number { .. } => Some(Self::Number),
             SensorDevice::Text { .. } => Some(Self::Text),
-            SensorDevice::Readings { .. } | SensorDevice::Color(_) => None,
+            SensorDevice::Readings { .. } => Some(Self::Readings),
+            SensorDevice::Color(_) => None,
         }
     }
 }

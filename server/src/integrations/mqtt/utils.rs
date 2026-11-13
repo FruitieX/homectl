@@ -1,7 +1,7 @@
 use crate::integrations::mqtt::{MqttConfig, SensorValueMode};
 use crate::types::color::{Capabilities, DeviceColor};
 use crate::types::{
-    device::{ControllableDevice, Device, DeviceData, DeviceId, SensorDevice},
+    device::{ControllableDevice, Device, DeviceData, DeviceId, ReadingValue, SensorDevice},
     integration::IntegrationId,
 };
 use color_eyre::{eyre::eyre, Result};
@@ -397,7 +397,7 @@ pub fn mqtt_to_homectl(
 /// Last readings per generic MQTT sensor, so a message carrying only some of
 /// the listed values (say humidity alone) keeps the others.
 #[derive(Default)]
-pub struct SensorReadings(HashMap<DeviceId, BTreeMap<String, f64>>);
+pub struct SensorReadings(HashMap<DeviceId, BTreeMap<String, ReadingValue>>);
 
 impl SensorReadings {
     pub fn merge(&mut self, mut device: Device) -> Device {
@@ -432,24 +432,51 @@ fn reading_name(field: &Pointer, fields: &[&Pointer]) -> String {
     }
 }
 
-/// Every listed numeric or boolean value present in `value`, by reading name.
-/// Booleans (and the strings `"true"`/`"false"`) read as 1 and 0; strings and
-/// other values are skipped.
-fn sensor_readings(fields: &[&Pointer], value: &serde_json::Value) -> BTreeMap<String, f64> {
+/// Every listed scalar value present in `value`, by reading name. Strings
+/// holding just a number (`"40"`) read as numbers and `"true"`/`"false"` as
+/// booleans; any other string is kept verbatim (`"85%"`, `"charging"`).
+/// Objects, arrays, nulls and empty strings are skipped.
+fn sensor_readings(
+    fields: &[&Pointer],
+    value: &serde_json::Value,
+) -> BTreeMap<String, ReadingValue> {
     fields
         .iter()
         .filter_map(|field| {
             let reading = match field.resolve(value).ok()? {
-                serde_json::Value::Number(number) => number.as_f64(),
-                serde_json::Value::Bool(value) => Some(f64::from(u8::from(*value))),
-                serde_json::Value::String(value) if value == "true" => Some(1.0),
-                serde_json::Value::String(value) if value == "false" => Some(0.0),
-                _ => None,
-            }
-            .filter(|reading| reading.is_finite())?;
+                serde_json::Value::Number(number) => {
+                    ReadingValue::Number(number.as_f64().filter(|value| value.is_finite())?)
+                }
+                serde_json::Value::Bool(value) => ReadingValue::Boolean(*value),
+                serde_json::Value::String(value) => string_reading(value)?,
+                _ => return None,
+            };
             Some((reading_name(field, fields), reading))
         })
         .collect()
+}
+
+fn string_reading(value: &str) -> Option<ReadingValue> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(match trimmed {
+        "true" => ReadingValue::Boolean(true),
+        "false" => ReadingValue::Boolean(false),
+        // `f64::from_str` also accepts "inf" and "NaN"; keep those as text.
+        _ => match trimmed.parse::<f64>() {
+            Ok(number)
+                if number.is_finite()
+                    && trimmed
+                        .bytes()
+                        .all(|byte| byte.is_ascii_digit() || b"+-.eE".contains(&byte)) =>
+            {
+                ReadingValue::Number(number)
+            }
+            _ => ReadingValue::Text(value.to_string()),
+        },
+    })
 }
 
 pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json::Value> {
@@ -821,10 +848,19 @@ mod tests {
     }
 
     fn readings(pairs: &[(&str, f64)]) -> DeviceData {
+        mixed_readings(
+            &pairs
+                .iter()
+                .map(|(name, value)| (*name, ReadingValue::Number(*value)))
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    fn mixed_readings(pairs: &[(&str, ReadingValue)]) -> DeviceData {
         DeviceData::Sensor(SensorDevice::Readings {
             readings: pairs
                 .iter()
-                .map(|(name, value)| (name.to_string(), *value))
+                .map(|(name, value)| (name.to_string(), value.clone()))
                 .collect(),
         })
     }
@@ -853,15 +889,47 @@ mod tests {
     }
 
     #[test]
-    fn readings_map_booleans_and_skip_strings() {
-        let config = sensor_config(&["/temperature", "/contact", "/leak", "/battery"], None);
-        let payload = json!({"id": "hall", "temperature": 20, "contact": true, "leak": "false", "battery": "85%"});
+    fn readings_keep_booleans_numeric_strings_and_text() {
+        let config = sensor_config(
+            &[
+                "/temperature",
+                "/humidity",
+                "/contact",
+                "/leak",
+                "/battery",
+                "/state",
+                "/updated",
+                "/errors",
+                "/blank",
+                "/nested",
+            ],
+            None,
+        );
+        let payload = json!({
+            "id": "hall",
+            "temperature": 20,
+            "humidity": " 40.5 ",
+            "contact": true,
+            "leak": "false",
+            "battery": "85%",
+            "state": "charging",
+            "updated": "2026-11-13",
+            "errors": "NaN",
+            "blank": " ",
+            "nested": {"value": 1}
+        });
+        let text = |value: &str| ReadingValue::Text(value.to_string());
         assert_eq!(
             decode_sensor(payload, &config),
-            Some(readings(&[
-                ("contact", 1.0),
-                ("leak", 0.0),
-                ("temperature", 20.0)
+            Some(mixed_readings(&[
+                ("battery", text("85%")),
+                ("contact", ReadingValue::Boolean(true)),
+                ("errors", text("NaN")),
+                ("humidity", ReadingValue::Number(40.5)),
+                ("leak", ReadingValue::Boolean(false)),
+                ("state", text("charging")),
+                ("temperature", ReadingValue::Number(20.0)),
+                ("updated", text("2026-11-13")),
             ]))
         );
     }
@@ -902,7 +970,10 @@ mod tests {
     fn readings_without_any_listed_value_fall_back_to_a_placeholder() {
         let config = sensor_config(&["/temperature", "/humidity"], None);
         assert_eq!(
-            decode_sensor(json!({"id": "hall", "battery": "85%"}), &config),
+            decode_sensor(
+                json!({"id": "hall", "battery": "85%", "humidity": null}),
+                &config
+            ),
             Some(DeviceData::Sensor(SensorDevice::unknown_placeholder()))
         );
     }

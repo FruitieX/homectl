@@ -1,4 +1,5 @@
 import type { Device } from '../bindings/Device';
+import type { ReadingValue } from '../bindings/ReadingValue';
 
 const UNKNOWN_SENSOR_PLACEHOLDER_VALUE = '__homectl_unknown_sensor__';
 
@@ -27,8 +28,8 @@ export type SensorDetails =
   | { kind: 'text'; value: string; payload: { value: string } }
   | {
       kind: 'readings';
-      value: Record<string, number>;
-      payload: { readings: Record<string, number> };
+      value: Record<string, ReadingValue>;
+      payload: { readings: Record<string, ReadingValue> };
     }
   | {
       kind: 'state';
@@ -117,8 +118,10 @@ export const getSensorDetails = (device: Device | null): SensorDetails => {
   ) {
     const readings = Object.fromEntries(
       Object.entries(sensorPayload.readings).filter(
-        (entry): entry is [string, number] =>
-          typeof entry[1] === 'number' && Number.isFinite(entry[1]),
+        (entry): entry is [string, ReadingValue] =>
+          typeof entry[1] === 'number'
+            ? Number.isFinite(entry[1])
+            : typeof entry[1] === 'boolean' || typeof entry[1] === 'string',
       ),
     );
     return { kind: 'readings', value: readings, payload: { readings } };
@@ -355,15 +358,27 @@ const READING_FORMATS: Array<{
   },
 ];
 
-/** Labelled readings: known metrics first, then any others by name. */
-export const describeSensorReadings = (readings: Record<string, number>) => [
+/** A reading without a known format: text verbatim, booleans as On/Off. */
+const readingText = (value: ReadingValue) =>
+  typeof value === 'boolean' ? (value ? 'On' : 'Off') : String(value);
+
+/**
+ * Labelled readings: known metrics first, then any others by name. Known
+ * metrics are formatted only when numeric; text such as "85%" is shown as-is.
+ */
+export const describeSensorReadings = (
+  readings: Record<string, ReadingValue>,
+) => [
   ...READING_FORMATS.filter(({ metric }) => metric in readings).map(
-    ({ metric, label, format, compact }) => ({
-      metric,
-      label,
-      value: format(readings[metric]),
-      compact,
-    }),
+    ({ metric, label, format, compact }) => {
+      const value = readings[metric];
+      return {
+        metric,
+        label,
+        value: typeof value === 'number' ? format(value) : readingText(value),
+        compact,
+      };
+    },
   ),
   ...Object.entries(readings)
     .filter(([metric]) => !READING_FORMATS.some((f) => f.metric === metric))
@@ -371,7 +386,7 @@ export const describeSensorReadings = (readings: Record<string, number>) => [
     .map(([metric, value]) => ({
       metric,
       label: metric,
-      value: String(value),
+      value: readingText(value),
       compact: false,
     })),
 ];
@@ -381,7 +396,7 @@ export const describeSensorReadings = (readings: Record<string, number>) => [
  * out unless `full`, which labels them ("21.4 °C · 45% · Battery 68%").
  */
 export const formatSensorReadings = (
-  readings: Record<string, number>,
+  readings: Record<string, ReadingValue>,
   { full = false }: { full?: boolean } = {},
 ) => {
   const described = describeSensorReadings(readings);

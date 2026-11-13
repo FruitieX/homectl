@@ -62,9 +62,12 @@ Controls and scenes:
 `sensor_value_fields` lists pointers to sensor values (default `["/sensor_value"]`).
 How several fields are read depends on `sensor_value_mode`:
 
-- `"all"` (default): every listed numeric or boolean value present in a payload
-  becomes a named reading of **one** sensor device. Booleans read as 1 and 0;
-  strings are skipped. A reading is named after the pointer's last token
+- `"all"` (default): every listed value present in a payload becomes a named
+  reading of **one** sensor device. A reading is a number, boolean or text:
+  strings holding just a number (`"40"`) become numbers, `"true"`/`"false"`
+  become booleans, and any other string is kept verbatim (`"85%"`,
+  `"charging"`); a JavaScript block can parse it further. Objects, arrays,
+  nulls and empty strings are skipped. A reading is named after the pointer's last token
   (`/temperature` → `temperature`), or the whole pointer without the leading
   slash (`indoor/value`) when two pointers end in the same token. Readings from
   earlier messages are kept, so a device that sends humidity on its own keeps
@@ -85,8 +88,12 @@ A single listed field always yields a plain value, in either mode.
 }
 ```
 
-With `{"temperature": 21.4, "humidity": 45, "battery": 87}` the device shows
-"21.4 °C · 45%" (battery in the details), and automations read one value by
-path, e.g. `/temperature`. Configurations saved before `sensor_value_mode`
+With `{"temperature": 21.4, "humidity": 45, "battery": "87%"}` the device shows
+"21.4 °C · 45%" (battery in the details). Automations read one reading by path
+(`/temperature`, also `/readings/temperature` or `/value/temperature`); `/value`
+is the object of all readings. A reading the device hasn't reported reads as
+unknown. React to a threshold with a `predicate_transition` trigger such as
+`/humidity` `gt` 60; `state_change` triggers follow on/off state and don't fire
+for readings. Configurations saved before `sensor_value_mode`
 existed that list several fields were migrated to `"first"`, so they keep
 decoding as before. Zigbee2MQTT always uses `"first"`.

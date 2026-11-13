@@ -33,7 +33,8 @@ use crate::types::{
     automation_definition::{HelperId, RoutineSemantics},
     automation_value::HelperDefinition,
     device::{
-        ControllableState, Device, DeviceData, DeviceKey, DeviceRef, DevicesState, SensorDevice,
+        ControllableState, Device, DeviceData, DeviceKey, DeviceRef, DevicesState, ReadingValue,
+        SensorDevice,
     },
     integration::IntegrationId,
     rule::{AnyRule, Rule, Rules},
@@ -5075,7 +5076,20 @@ fn non_matching_sensor_state(expected: &SensorDevice) -> SensorDevice {
         SensorDevice::Readings { readings } => SensorDevice::Readings {
             readings: readings
                 .iter()
-                .map(|(metric, value)| (metric.clone(), if *value == 0.0 { 1.0 } else { 0.0 }))
+                .map(|(metric, value)| {
+                    let other = match value {
+                        ReadingValue::Boolean(value) => ReadingValue::Boolean(!value),
+                        ReadingValue::Number(value) => {
+                            ReadingValue::Number(if *value == 0.0 { 1.0 } else { 0.0 })
+                        }
+                        ReadingValue::Text(value) => ReadingValue::Text(if value.is_empty() {
+                            "__unknown__".to_string()
+                        } else {
+                            String::new()
+                        }),
+                    };
+                    (metric.clone(), other)
+                })
                 .collect(),
         },
         SensorDevice::Color(state) => SensorDevice::Color(ControllableState {

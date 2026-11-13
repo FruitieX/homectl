@@ -52,7 +52,9 @@ Conditions (three-valued; missing/stale input is unknown, not false):
 VALUE_SOURCE:
 - {"kind":"device","device":DEVICE_REF,"path":"/value"}: sensor value; use actual
   catalog paths; text/action buttons use normalized /value (e.g. "single").
-  Raw MQTT property names are not automatically condition paths.
+  Raw MQTT property names are not automatically condition paths. A multi-reading
+  sensor exposes each reading by name, e.g. "/humidity" (number) or "/battery"
+  (may be text such as "85%"); trigger thresholds with predicate_transition.
 - {"kind":"device","device":DEVICE_REF,"path":"/power"}: controllable state.
 - {"kind":"helper","helper":"helper-id"}.
 - {"kind":"computed_source","source":"source-id","path":"/value"}.

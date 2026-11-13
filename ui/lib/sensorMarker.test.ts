@@ -86,6 +86,30 @@ test('multi-reading climate sensors get a thermometer and a compact summary', ()
   assert.equal(formatSensorReadings({ battery: 90 }), 'Battery 90%');
 });
 
+test('readings keep text and boolean values', () => {
+  const details = getSensorDetails({
+    ...device(null),
+    data: {
+      Sensor: {
+        readings: {
+          temperature: '21.5 °C',
+          humidity: 40,
+          battery: '85%',
+          charging: true,
+          state: 'idle',
+        },
+      },
+    },
+  });
+  assert.equal(details.kind, 'readings');
+  if (details.kind !== 'readings') return;
+  assert.equal(formatSensorReadings(details.value), '21.5 °C · 40%');
+  assert.equal(
+    formatSensorReadings(details.value, { full: true }),
+    '21.5 °C · 40% · Battery 85% · charging On · state idle',
+  );
+});
+
 test('sensor list values show readings, numbers and on/off but not button events', () => {
   assert.equal(sensorValueText(device(21.456)), '21.46');
   assert.equal(sensorValueText(device(true)), 'On');

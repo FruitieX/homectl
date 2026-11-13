@@ -356,12 +356,57 @@ pub enum SensorDevice {
     Number {
         value: f64,
     },
-    /// Several named numeric readings from one sensor, e.g. a BLE climate
-    /// sensor's `temperature`, `humidity` and `battery`.
+    /// Several named readings from one sensor, e.g. a climate sensor's
+    /// `temperature`, `humidity` and `battery`.
     Readings {
-        readings: BTreeMap<String, f64>,
+        readings: BTreeMap<String, ReadingValue>,
     },
     Color(ControllableState),
+}
+
+/// One named reading of a multi-reading sensor. Text is kept verbatim
+/// (`"85%"`, `"charging"`) so automations and scripts can interpret it.
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[ts(export)]
+#[serde(untagged)]
+pub enum ReadingValue {
+    Boolean(bool),
+    Number(f64),
+    Text(String),
+}
+
+impl ReadingValue {
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            ReadingValue::Number(value) => Some(*value),
+            ReadingValue::Boolean(_) | ReadingValue::Text(_) => None,
+        }
+    }
+
+    /// The reading as JSON; `None` for a non-finite number.
+    pub fn to_json(&self) -> Option<serde_json::Value> {
+        match self {
+            ReadingValue::Boolean(value) => Some(serde_json::Value::Bool(*value)),
+            ReadingValue::Number(value) => serde_json::Number::from_f64(*value).map(Into::into),
+            ReadingValue::Text(value) => Some(serde_json::Value::String(value.clone())),
+        }
+    }
+}
+
+impl From<f64> for ReadingValue {
+    fn from(value: f64) -> Self {
+        ReadingValue::Number(value)
+    }
+}
+
+impl Display for ReadingValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReadingValue::Boolean(value) => write!(f, "{value}"),
+            ReadingValue::Number(value) => write!(f, "{value}"),
+            ReadingValue::Text(value) => f.write_str(value),
+        }
+    }
 }
 
 pub const UNKNOWN_SENSOR_PLACEHOLDER_VALUE: &str = "__homectl_unknown_sensor__";
@@ -1384,8 +1429,23 @@ mod tests {
             deserialized,
             SensorDevice::Readings {
                 readings: BTreeMap::from([
-                    ("humidity".to_string(), 45.0),
-                    ("temperature".to_string(), 21.4),
+                    ("humidity".to_string(), 45.0.into()),
+                    ("temperature".to_string(), 21.4.into()),
+                ])
+            }
+        );
+        assert_eq!(serde_json::to_string(&deserialized).unwrap(), json);
+
+        // Readings keep booleans and text alongside numbers.
+        let json = r#"{"readings":{"battery":"85%","charging":true,"temperature":21.4}}"#;
+        let deserialized: SensorDevice = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            deserialized,
+            SensorDevice::Readings {
+                readings: BTreeMap::from([
+                    ("battery".to_string(), ReadingValue::Text("85%".to_string())),
+                    ("charging".to_string(), ReadingValue::Boolean(true)),
+                    ("temperature".to_string(), 21.4.into()),
                 ])
             }
         );
