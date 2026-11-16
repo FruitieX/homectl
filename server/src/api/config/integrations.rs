@@ -129,6 +129,7 @@ async fn set_device_enabled(
         Ok(guard) => guard,
         Err(_) => return Ok(actor_unavailable()),
     };
+    let id = decode_path_key(id);
     let device_id = decode_path_key(device_id);
     if !handle
         .snapshot
@@ -210,6 +211,7 @@ pub(super) async fn get_integration(
     id: String,
     snapshot: SnapshotHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let id = decode_path_key(id);
     let snap = snapshot.load();
     match snap
         .runtime_config
@@ -245,7 +247,7 @@ pub(super) async fn update_integration(
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     write_integration(
-        Some(id),
+        Some(decode_path_key(id)),
         request.integration,
         request.expected,
         request.reporting_policy,
@@ -376,6 +378,7 @@ pub(super) async fn delete_integration(
     _snapshot: SnapshotHandle,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let id = decode_path_key(id);
     let _write_guard = match config_write_lock(&handle).await {
         Ok(guard) => guard,
         Err(_) => return Ok(actor_unavailable()),
@@ -459,6 +462,89 @@ mod tests {
                 .to_bytes(),
         )
         .unwrap()
+    }
+    #[tokio::test]
+    async fn encoded_integration_ids_work_through_routes() {
+        for id in ["test mqtt", "test%20mqtt", "test/mqtt", "test + café"] {
+            let (handle, snapshot) = setup().await;
+            let mut integration = row();
+            integration.id = id.into();
+            assert_eq!(
+                create_integration(
+                    IntegrationUpdate {
+                        integration: integration.clone(),
+                        expected: None,
+                        reporting_policy: None,
+                    },
+                    handle.clone(),
+                )
+                .await
+                .unwrap()
+                .into_response()
+                .status(),
+                StatusCode::CREATED
+            );
+            let encoded =
+                percent_encoding::utf8_percent_encode(id, percent_encoding::NON_ALPHANUMERIC)
+                    .to_string();
+            let path = format!("/integrations/{encoded}");
+            let routes = integrations_routes(&snapshot, &handle);
+            let response = warp::test::request().path(&path).reply(&routes).await;
+            assert_eq!(response.status(), StatusCode::OK, "{id}");
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(response.body()).unwrap()["data"]["id"],
+                id
+            );
+            integration.config["host"] = json!("changed.example");
+            let response = warp::test::request()
+                .method("PUT")
+                .path(&path)
+                .json(&integration)
+                .reply(&routes)
+                .await;
+            assert_eq!(response.status(), StatusCode::OK, "{id}");
+            assert_eq!(
+                snapshot
+                    .load()
+                    .runtime_config
+                    .integrations
+                    .iter()
+                    .find(|row| row.id == id)
+                    .unwrap()
+                    .config["host"],
+                "changed.example"
+            );
+            let response = warp::test::request()
+                .method("PUT")
+                .path(&format!("{path}/devices/test%20device/enabled"))
+                .json(&json!({"enabled": false}))
+                .reply(&routes)
+                .await;
+            assert_eq!(response.status(), StatusCode::OK, "{id}");
+            assert_eq!(
+                snapshot
+                    .load()
+                    .runtime_config
+                    .integrations
+                    .iter()
+                    .find(|row| row.id == id)
+                    .unwrap()
+                    .config["disabled_device_ids"],
+                json!(["test device"])
+            );
+            let response = warp::test::request()
+                .method("DELETE")
+                .path(&path)
+                .reply(&routes)
+                .await;
+            assert_eq!(response.status(), StatusCode::OK, "{id}");
+            assert!(!snapshot
+                .load()
+                .runtime_config
+                .integrations
+                .iter()
+                .any(|row| row.id == id));
+        }
     }
     #[test]
     fn credentials_are_omitted_and_secret_changes_invalidate_tokens() {
