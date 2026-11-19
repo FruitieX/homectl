@@ -178,3 +178,12 @@ Computed light-profile source:
   day_fade_start/night_fade_start HH:MM, day_fade_duration_hours/
   night_fade_duration_hours, day_color/night_color, optional day_brightness/
   night_brightness. Durations positive; no overlapping/cross-midnight fades.
+
+
+Sensor collections (`DeviceData::Sensors`) contain named Boolean, Text and Number
+SensorDevice values, plus optional display metadata. Automation references read
+scalar values at `/property`, `/value/property`, `/readings/property` or
+`/observed/value/property`; `/value` returns the object of scalar readings. Use
+JSON pointer escaping for property names containing `~` or `/`. Zigbee2MQTT
+sensor properties come from published binary, text and numeric exposes. A
+missing reading is unavailable; do not infer a value from its label or unit.

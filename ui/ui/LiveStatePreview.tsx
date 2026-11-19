@@ -20,5 +20,7 @@ export function devicePreviewState(
     return device.data.Controllable.disabled
       ? undefined
       : device.data.Controllable.state;
-  return 'power' in device.data.Sensor ? device.data.Sensor : undefined;
+  return 'Sensor' in device.data && 'power' in device.data.Sensor
+    ? device.data.Sensor
+    : undefined;
 }

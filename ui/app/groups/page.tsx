@@ -115,7 +115,7 @@ export default function Page() {
       (deviceType === 'all' ||
         (deviceType === 'lights'
           ? 'Controllable' in device.data
-          : 'Sensor' in device.data)),
+          : 'Sensor' in device.data || 'Sensors' in device.data)),
   );
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">

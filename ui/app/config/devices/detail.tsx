@@ -24,6 +24,8 @@ import { canCalibrateDevice } from '@/lib/colorCalibration';
 import { isDimmableDevice } from '@/lib/brightnessCalibration';
 import {
   getDefaultSensorInteractionConfig,
+  getSensorDetails,
+  describeSensorReadings,
   SENSOR_INTERACTION_OPTIONS,
   type SensorInteractionKind,
 } from '@/lib/sensorInteraction';
@@ -64,6 +66,7 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
   const mutations = useConfigDevices();
   const device = catalog.byKey[deviceKey];
   const name = device ? catalog.label(device) : deviceKey;
+  const readingDetails = getSensorDetails(device ?? null);
   const navigate = useNavigate();
   const [replacement, setReplacement] = useState(''),
     [busy, setBusy] = useState(false);
@@ -383,7 +386,9 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
             <SettingsSection
               id="live"
               title={
-                'Sensor' in device.data ? 'Current reading' : 'Live controls'
+                !('Controllable' in device.data)
+                  ? 'Current reading'
+                  : 'Live controls'
               }
               description={
                 data
@@ -418,6 +423,24 @@ export default function DeviceEditor({ deviceKey }: { deviceKey: string }) {
                     </div>
                   )}
                 </>
+              ) : readingDetails.kind === 'readings' ? (
+                <dl className="space-y-2">
+                  {describeSensorReadings(
+                    readingDetails.value,
+                    readingDetails.metadata,
+                    readingDetails.order,
+                  ).map((reading) => (
+                    <div
+                      key={reading.metric}
+                      className="flex justify-between gap-4 text-sm"
+                    >
+                      <dt className="text-muted-foreground">{reading.label}</dt>
+                      <dd className="text-right font-medium tabular-nums">
+                        {reading.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
               ) : (
                 <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
                   {JSON.stringify(

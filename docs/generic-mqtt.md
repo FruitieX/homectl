@@ -89,11 +89,20 @@ A single listed field always yields a plain value, in either mode.
 ```
 
 With `{"temperature": 21.4, "humidity": 45, "battery": "87%"}` the device shows
-"21.4 °C · 45%" (battery in the details). Automations read one reading by path
+"21.4 · 45 · 87%". All reported readings are
+shown without inferred units or rounding. Automations read one reading by path
 (`/temperature`, also `/readings/temperature` or `/value/temperature`); `/value`
 is the object of all readings. A reading the device hasn't reported reads as
 unknown. React to a threshold with a `predicate_transition` trigger such as
 `/humidity` `gt` 60; `state_change` triggers follow on/off state and don't fire
 for readings. Configurations saved before `sensor_value_mode`
 existed that list several fields were migrated to `"first"`, so they keep
-decoding as before. Zigbee2MQTT always uses `"first"`.
+decoding as before. Zigbee2MQTT discovers binary, text and numeric sensor values from exposes by
+default; explicit sensor mappings still use `"first"` (see
+[Zigbee2MQTT](zigbee2mqtt.md)).
+
+Named values use `DeviceData::Sensors` with a `values` map of the existing scalar
+`SensorDevice` types (`{"value": 21.4}`, `{"value": true}`, …). The old
+`SensorDevice::Readings` representation is accepted when loading earlier device
+snapshots, then serialized using the new collection. Scenario reading objects
+and automation value paths keep their scalar wire format.

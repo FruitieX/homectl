@@ -61,15 +61,34 @@ pub fn observe_device(device: &Device) {
 pub fn fields_for_device(device: &Device) -> Vec<(String, Value)> {
     let mut fields = Vec::new();
     match &device.data {
-        DeviceData::Sensor(sensor) => {
-            if let Ok(value) = serde_json::to_value(sensor) {
-                let value = value.get("value").cloned().unwrap_or(value);
-                fields.push(("/value".into(), value.clone()));
-                fields.push(("/observed/value".into(), value.clone()));
-                if value.is_object() {
-                    flatten(&value, "/value", &mut fields, 0);
-                    flatten(&value, "", &mut fields, 0);
-                }
+        DeviceData::Sensor(_) | DeviceData::Sensors(_) => {
+            let value = device.get_value();
+            let value = if matches!(device.data, DeviceData::Sensor(_)) {
+                value.get("value").cloned().unwrap_or(value)
+            } else {
+                value
+            };
+            fields.push(("/value".into(), value.clone()));
+            fields.push(("/observed/value".into(), value.clone()));
+            if value.is_object() {
+                flatten(&value, "/value", &mut fields, 0);
+                flatten(&value, "/observed/value", &mut fields, 0);
+                let mut direct = Vec::new();
+                flatten(&value, "", &mut direct, 0);
+                // These root paths belong to the device document. A sensor
+                // property with the same name is available under /value/….
+                fields.extend(direct.into_iter().filter(|(path, _)| {
+                    !matches!(
+                        path.as_str(),
+                        "/value"
+                            | "/observed"
+                            | "/name"
+                            | "/integration_id"
+                            | "/device_id"
+                            | "/is_sensor"
+                            | "/is_controllable"
+                    )
+                }));
             }
         }
         DeviceData::Controllable(data) => {
@@ -125,4 +144,36 @@ pub fn observe_helper(id: &str, value: &Value) {
         vec![("/value".into(), value.clone())],
         chrono::Utc::now().timestamp_millis(),
     ));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::device::{DeviceId, SensorDevice, SensorValues};
+    use serde_json::json;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn collections_record_scalar_paths_including_a_property_named_value() {
+        let device = Device::new(
+            "zigbee".parse().unwrap(),
+            DeviceId::new("sensor"),
+            "Sensor".into(),
+            DeviceData::Sensors(SensorValues::new(BTreeMap::from([
+                ("value".into(), SensorDevice::Boolean { value: false }),
+                ("temperature".into(), SensorDevice::Number { value: 21.5 }),
+                ("rate/day~total".into(), SensorDevice::Number { value: 0.0 }),
+            ]))),
+            None,
+        );
+        let fields: BTreeMap<_, _> = fields_for_device(&device).into_iter().collect();
+        assert_eq!(
+            fields["/value"],
+            json!({"value":false,"temperature":21.5,"rate/day~total":0.0})
+        );
+        assert_eq!(fields["/value/value"], json!(false));
+        assert_eq!(fields["/temperature"], json!(21.5));
+        assert_eq!(fields["/observed/value/temperature"], json!(21.5));
+        assert_eq!(fields["/value/rate~1day~0total"], json!(0.0));
+    }
 }

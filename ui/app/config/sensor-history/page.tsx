@@ -7,6 +7,7 @@ import { useDevicesState } from '@/hooks/websocket';
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { sensorValueLabel } from '@/lib/sensorHistory';
+import { getSensorDetails } from '@/lib/sensorInteraction';
 import { SearchablePicker } from '@/ui/SearchablePicker';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
@@ -23,6 +24,7 @@ export default function SensorHistoryPage() {
   );
   const [params, setParams] = useSearchParams();
   const sensor = params.get('sensor') ?? '';
+  const selectedSensor = getSensorDetails(devices?.[sensor] ?? null);
   const [search, setSearch] = useState('');
   const query = useInfiniteQuery({
     queryKey: ['sensor-activity', apiEndpoint, sensor],
@@ -48,7 +50,7 @@ export default function SensorHistoryPage() {
   const label = (key: string) =>
     devices?.[key] ? getDeviceDisplayLabel(devices[key]!, names) : key;
   const knownKeys = Object.entries(devices ?? {})
-    .filter(([, d]) => d && 'Sensor' in d.data)
+    .filter(([, d]) => d && ('Sensor' in d.data || 'Sensors' in d.data))
     .map(([key]) => key);
   const keys = [
     ...new Set([
@@ -102,7 +104,15 @@ export default function SensorHistoryPage() {
       </div>
       {sensor && (
         <div className="max-w-3xl rounded-lg border border-border bg-card p-4">
-          <SensorHistoryPanel deviceKey={sensor} showLink={false} />
+          <SensorHistoryPanel
+            deviceKey={sensor}
+            showLink={false}
+            order={
+              selectedSensor.kind === 'readings'
+                ? selectedSensor.order
+                : undefined
+            }
+          />
         </div>
       )}
       {query.isError && (

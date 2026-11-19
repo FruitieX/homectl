@@ -1070,12 +1070,12 @@ fn build_catalog(snapshot: &RuntimeSnapshot, configured_timezone: Option<&str>) 
     for (key, device) in snapshot.devices.0.iter().take(MAX_CATALOG_DEVICES) {
         let device_ref = serde_json::to_value(DeviceRef::from(key)).unwrap_or(Value::Null);
         let entry = match &device.data {
-            DeviceData::Sensor(sensor) => json!({
+            DeviceData::Sensor(_) | DeviceData::Sensors(_) => json!({
                 "deviceRef": device_ref,
                 "key": key.to_string(),
                 "name": device_label(snapshot, &key.to_string(), &device.name),
                 "kind": "sensor",
-                "state": sensor,
+                "state": device.get_value(),
                 "sensorConfiguration": snapshot.runtime_config.device_sensor_configs.iter().find(|row|row.device_ref == key.to_string()),
             }),
             DeviceData::Controllable(controllable) => json!({
@@ -1810,7 +1810,7 @@ fn kind_entities(
             .iter()
             .map(|(key, device)| {
                 let kind = match &device.data {
-                    DeviceData::Sensor(_) => "sensor",
+                    DeviceData::Sensor(_) | DeviceData::Sensors(_) => "sensor",
                     DeviceData::Controllable(_) => "controllable",
                 };
                 (
@@ -4227,11 +4227,11 @@ fn build_live_state(
 
 fn live_device_entry(snapshot: &RuntimeSnapshot, key: &DeviceKey, device: &Device) -> Value {
     match &device.data {
-        DeviceData::Sensor(sensor) => json!({
+        DeviceData::Sensor(_) | DeviceData::Sensors(_) => json!({
             "device_key": key.to_string(),
             "name": device_label(snapshot, &key.to_string(), &device.name),
             "kind": "sensor",
-            "state": sensor,
+            "state": device.get_value(),
         }),
         DeviceData::Controllable(controllable) => json!({
             "device_key": key.to_string(),
@@ -4281,7 +4281,7 @@ fn build_context_devices(snapshot: &RuntimeSnapshot) -> Vec<Value> {
         .iter()
         .take(MAX_CONTEXT_DEVICES)
         .map(|(key, device)| match &device.data {
-            DeviceData::Sensor(_) => json!({
+            DeviceData::Sensor(_) | DeviceData::Sensors(_) => json!({
                 "device_key": key.to_string(),
                 "name": device_label(snapshot, &key.to_string(), &device.name),
                 "kind": "sensor",
@@ -4342,7 +4342,7 @@ fn entity_snapshot(
                 .find(|row| row.device_key == id)
                 .map(|row| row.display_name.clone());
             let data_kind = match &device.data {
-                DeviceData::Sensor(_) => "sensor",
+                DeviceData::Sensor(_) | DeviceData::Sensors(_) => "sensor",
                 DeviceData::Controllable(_) => "controllable",
             };
             Some(json!({

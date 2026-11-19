@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 use crate::types::{
-    device::{Device, DeviceData, DeviceId, SensorDevice},
+    device::{Device, DeviceData, DeviceId, SensorValues},
     integration::IntegrationId,
 };
 
@@ -138,12 +138,12 @@ impl Sensors {
             integration_id,
             DeviceId::new(&mac),
             name,
-            DeviceData::Sensor(SensorDevice::Readings {
-                readings: readings
+            DeviceData::Sensors(SensorValues::new(
+                readings
                     .into_iter()
                     .map(|(metric, value)| (metric, value.into()))
                     .collect(),
-            }),
+            )),
             Some(json!({
                 "gateway": gateway,
                 "rssi": value.get("rssi"),
@@ -175,9 +175,15 @@ mod tests {
 
     fn readings(device: &Device) -> BTreeMap<String, f64> {
         match &device.data {
-            DeviceData::Sensor(SensorDevice::Readings { readings }) => readings
+            DeviceData::Sensors(sensors) => sensors
+                .values
                 .iter()
-                .map(|(metric, value)| (metric.clone(), value.as_f64().unwrap()))
+                .map(|(metric, value)| {
+                    (
+                        metric.clone(),
+                        value.scalar_value().unwrap().as_f64().unwrap(),
+                    )
+                })
                 .collect(),
             other => panic!("expected readings, got {other:?}"),
         }

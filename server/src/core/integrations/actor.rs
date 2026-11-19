@@ -404,7 +404,9 @@ mod tests {
     fn device_power(device: &Device) -> bool {
         match &device.data {
             DeviceData::Controllable(controllable) => controllable.state.power,
-            DeviceData::Sensor(_) => panic!("expected controllable test device"),
+            DeviceData::Sensor(_) | DeviceData::Sensors(_) => {
+                panic!("expected controllable test device")
+            }
         }
     }
 

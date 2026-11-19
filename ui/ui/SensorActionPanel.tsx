@@ -34,7 +34,8 @@ export const sendSensorPayload = async (
         id: device.id,
         name: device.name,
         integration_id: device.integration_id,
-        data: { Sensor: payload },
+        data:
+          'Sensors' in device.data ? { Sensors: payload } : { Sensor: payload },
         raw: null,
       }),
     },

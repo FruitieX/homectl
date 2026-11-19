@@ -33,8 +33,7 @@ use crate::types::{
     automation_definition::{HelperId, RoutineSemantics},
     automation_value::HelperDefinition,
     device::{
-        ControllableState, Device, DeviceData, DeviceKey, DeviceRef, DevicesState, ReadingValue,
-        SensorDevice,
+        ControllableState, Device, DeviceData, DeviceKey, DeviceRef, DevicesState, SensorDevice,
     },
     integration::IntegrationId,
     rule::{AnyRule, Rule, Rules},
@@ -2145,6 +2144,15 @@ async fn preview_routine(
                                 .or_else(|| item.path.strip_prefix("/value"))
                                 .unwrap_or(&item.path);
                             format!("/data/Sensor{suffix}")
+                        }
+                        crate::types::device::DeviceData::Sensors(_) => {
+                            let suffix = item
+                                .path
+                                .strip_prefix("/observed/value/")
+                                .or_else(|| item.path.strip_prefix("/value/"))
+                                .or_else(|| item.path.strip_prefix("/readings/"))
+                                .unwrap_or(item.path.trim_start_matches('/'));
+                            format!("/data/Sensors/values/{suffix}/value")
                         }
                         crate::types::device::DeviceData::Sensor(_) => {
                             let path = if item.path == "/observed/value" {
@@ -5072,25 +5080,6 @@ fn non_matching_sensor_state(expected: &SensorDevice) -> SensorDevice {
         },
         SensorDevice::Number { value } => SensorDevice::Number {
             value: if *value == 0.0 { 1.0 } else { 0.0 },
-        },
-        SensorDevice::Readings { readings } => SensorDevice::Readings {
-            readings: readings
-                .iter()
-                .map(|(metric, value)| {
-                    let other = match value {
-                        ReadingValue::Boolean(value) => ReadingValue::Boolean(!value),
-                        ReadingValue::Number(value) => {
-                            ReadingValue::Number(if *value == 0.0 { 1.0 } else { 0.0 })
-                        }
-                        ReadingValue::Text(value) => ReadingValue::Text(if value.is_empty() {
-                            "__unknown__".to_string()
-                        } else {
-                            String::new()
-                        }),
-                    };
-                    (metric.clone(), other)
-                })
-                .collect(),
         },
         SensorDevice::Color(state) => SensorDevice::Color(ControllableState {
             power: !state.power,

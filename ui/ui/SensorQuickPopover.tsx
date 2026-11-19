@@ -232,7 +232,11 @@ export function SensorQuickPopover({
         </form>
       ) : sensor.kind === 'readings' ? (
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-2xl bg-card/95 p-3 text-sm shadow-md">
-          {describeSensorReadings(sensor.value).map((reading) => (
+          {describeSensorReadings(
+            sensor.value,
+            sensor.metadata,
+            sensor.order,
+          ).map((reading) => (
             <Fragment key={reading.metric}>
               <dt className="text-muted-foreground">{reading.label}</dt>
               <dd className="text-right font-medium tabular-nums">

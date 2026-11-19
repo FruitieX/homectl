@@ -61,7 +61,9 @@ export default function GroupViewport() {
   );
   const devices = keys.flatMap((key) => (state?.[key] ? [state[key]!] : []));
   const controls = devices.filter((device) => 'Controllable' in device.data);
-  const sensors = devices.filter((device) => 'Sensor' in device.data);
+  const sensors = devices.filter(
+    (device) => 'Sensor' in device.data || 'Sensors' in device.data,
+  );
   const writable = controls.filter((device) => !isDeviceReadOnly(device));
   const enabled = controls.filter(
     (device) =>

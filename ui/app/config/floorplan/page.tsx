@@ -298,14 +298,14 @@ function FloorplanEditor({
         key: getDeviceKey(device),
         name: getDeviceDisplayLabel(device, displayNames),
         type:
-          'Sensor' in device.data
+          'Sensor' in device.data || 'Sensors' in device.data
             ? ('sensor' as const)
             : 'Controllable' in device.data
               ? ('controllable' as const)
               : ('other' as const),
         groupIds: memberGroups[getDeviceKey(device)] ?? [],
         sensorMarker:
-          'Sensor' in device.data
+          'Sensor' in device.data || 'Sensors' in device.data
             ? getSensorMarkerKind(
                 device,
                 sensorConfigs.data.find(

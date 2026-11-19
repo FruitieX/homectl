@@ -8,6 +8,7 @@ import { getDeviceKey } from '@/lib/device';
 import { getSensorMarkerKind, type SensorMarkerKind } from '@/lib/sensorMarker';
 import {
   formatSensorReadings,
+  getSensorDetails,
   type DeviceSensorConfig,
 } from '@/lib/sensorInteraction';
 import {
@@ -377,14 +378,16 @@ function buildVisibilityPolygon(
 }
 
 function getSensorStatusLabel(device: Device) {
-  if (!('Sensor' in device.data)) {
-    return undefined;
-  }
-
+  const details = getSensorDetails(device);
+  if (details.kind === 'readings')
+    return (
+      formatSensorReadings(details.value, {
+        metadata: details.metadata,
+        order: details.order,
+      }) || undefined
+    );
+  if (!('Sensor' in device.data)) return undefined;
   const sensor = device.data.Sensor;
-  if ('readings' in sensor) {
-    return formatSensorReadings(sensor.readings) || undefined;
-  }
   if (!('value' in sensor)) {
     return 'COLOR';
   }
@@ -563,7 +566,7 @@ export function buildFloorplanScene({
       continue;
     }
 
-    if ('Sensor' in device.data) {
+    if ('Sensor' in device.data || 'Sensors' in device.data) {
       sensors.push({
         markerKind: getSensorMarkerKind(device, sensorConfigs?.[deviceKey]),
         deviceKey,

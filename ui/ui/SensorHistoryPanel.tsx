@@ -7,12 +7,14 @@ import { Link } from 'react-router-dom';
 export function SensorHistoryPanel({
   deviceKey,
   showLink = true,
+  order,
 }: {
   deviceKey: string;
   showLink?: boolean;
+  order?: readonly string[];
 }) {
   const query = useSensorHistory(deviceKey);
-  const fields = sensorHistoryFields(query.data ?? []);
+  const fields = sensorHistoryFields(query.data ?? [], order);
   const latest = query.data?.[0];
   return (
     <section className="space-y-3">

@@ -166,7 +166,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
       (!groupFilterKeys || groupFilterKeys.has(getDeviceKey(device))) &&
       ('Controllable' in device.data
         ? visibleLayers.lights
-        : 'Sensor' in device.data
+        : 'Sensor' in device.data || 'Sensors' in device.data
           ? visibleLayers.sensors
           : true),
   );
@@ -409,7 +409,8 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
                         const key = value.slice(7);
                         if (
                           devicesState?.[key] &&
-                          'Sensor' in devicesState[key]!.data
+                          ('Sensor' in devicesState[key]!.data ||
+                            'Sensors' in devicesState[key]!.data)
                         )
                           setActiveSensorKey(key);
                         else openDevice([key]);
@@ -623,7 +624,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
                       (!groupFilterKeys || groupFilterKeys.has(key)) &&
                       ('Controllable' in device.data
                         ? visibleLayers.lights
-                        : 'Sensor' in device.data
+                        : 'Sensor' in device.data || 'Sensors' in device.data
                           ? visibleLayers.sensors
                           : true),
                   )

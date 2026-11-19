@@ -66,7 +66,7 @@ export function resolveDraftTarget(
       data &&
       ('Controllable' in data
         ? data.Controllable.state
-        : 'power' in data.Sensor
+        : 'Sensor' in data && 'power' in data.Sensor
           ? data.Sensor
           : undefined);
     if (!state) return { reason: 'The source has no light state to follow.' };
