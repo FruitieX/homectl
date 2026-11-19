@@ -1,3 +1,4 @@
+import { getSensorDetails } from '@/lib/sensorInteraction';
 import type { DevicesState } from '@/bindings/DevicesState';
 import { SearchablePicker, type PickerOption } from '@/ui/SearchablePicker';
 import { Input } from '@/ui/primitives/input';
@@ -110,12 +111,20 @@ export function ValuePathPicker({
       device && 'Controllable' in device.data
         ? controllableFields
         : sensorFields;
+    const details = getSensorDetails(device ?? null);
     const value =
-      device && 'Sensor' in device.data && !('value' in device.data.Sensor)
-        ? device.data.Sensor
-        : null;
+      details.kind === 'readings'
+        ? details.value
+        : device && 'Sensor' in device.data && !('value' in device.data.Sensor)
+          ? device.data.Sensor
+          : null;
     const dynamic = nestedFields(value, '/value');
-    if (device && 'Sensor' in device.data && value && typeof value === 'object')
+    if (
+      device &&
+      !('Controllable' in device.data) &&
+      value &&
+      typeof value === 'object'
+    )
       dynamic.push(...nestedFields(value, ''));
     const confirmed = serverFields.map((field) => ({
       value: field.path,
@@ -135,6 +144,15 @@ export function ValuePathPicker({
   }, [device, serverFields]);
   const live = (() => {
     if (!device) return undefined;
+    if ('Sensors' in device.data) {
+      const details = getSensorDetails(device);
+      if (details.kind !== 'readings') return undefined;
+      if (path === '/value' || path === '/observed/value') return details.value;
+      return atPath(
+        details.value,
+        path.replace(/^\/(?:observed\/value|value|readings)\//, '/'),
+      );
+    }
     if ('Sensor' in device.data) {
       const value =
         'value' in device.data.Sensor

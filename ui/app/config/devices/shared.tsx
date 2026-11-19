@@ -13,7 +13,7 @@ import { useMemo } from 'react';
 export function deviceType(device: Device) {
   return 'Controllable' in device.data
     ? 'controllable'
-    : 'Sensor' in device.data
+    : 'Sensor' in device.data || 'Sensors' in device.data
       ? 'sensor'
       : 'other';
 }
@@ -30,7 +30,11 @@ export function deviceSummary(device: Device) {
     : sensor.kind === 'number' || sensor.kind === 'text'
       ? String(sensor.value)
       : sensor.kind === 'readings'
-        ? formatSensorReadings(sensor.value, { full: true })
+        ? formatSensorReadings(sensor.value, {
+            labels: false,
+            metadata: sensor.metadata,
+            order: sensor.order,
+          })
         : sensor.kind === 'state'
           ? 'Structured sensor value'
           : 'No value received';

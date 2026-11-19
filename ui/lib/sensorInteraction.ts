@@ -1,5 +1,7 @@
 import type { Device } from '../bindings/Device';
 import type { ReadingValue } from '../bindings/ReadingValue';
+import type { SensorValueMetadata } from '../bindings/SensorValueMetadata';
+import type { SensorValues } from '../bindings/SensorValues';
 
 const UNKNOWN_SENSOR_PLACEHOLDER_VALUE = '__homectl_unknown_sensor__';
 
@@ -29,7 +31,9 @@ export type SensorDetails =
   | {
       kind: 'readings';
       value: Record<string, ReadingValue>;
-      payload: { readings: Record<string, ReadingValue> };
+      payload: { readings: Record<string, ReadingValue> } | SensorValues;
+      metadata?: Record<string, SensorValueMetadata>;
+      order?: readonly string[];
     }
   | {
       kind: 'state';
@@ -90,6 +94,26 @@ export const stringifySensorPayload = (payload: unknown) => {
 };
 
 export const getSensorDetails = (device: Device | null): SensorDetails => {
+  if (device && 'Sensors' in device.data) {
+    const { values, metadata, order } = device.data.Sensors;
+    const readings = Object.fromEntries(
+      Object.entries(values).flatMap(([key, sensor]) =>
+        sensor &&
+        'value' in sensor &&
+        (typeof sensor.value !== 'number' || Number.isFinite(sensor.value)) &&
+        sensor.value !== UNKNOWN_SENSOR_PLACEHOLDER_VALUE
+          ? [[key, sensor.value]]
+          : [],
+      ),
+    );
+    return {
+      kind: 'readings',
+      value: readings,
+      payload: device.data.Sensors,
+      metadata,
+      order,
+    };
+  }
   if (!device || !('Sensor' in device.data)) {
     return { kind: 'unknown', value: null, payload: null };
   }
@@ -331,93 +355,53 @@ export function getSensorEventButtons(
     }));
 }
 
-/** Known reading metrics, in display order. */
-const READING_FORMATS: Array<{
-  metric: string;
-  label: string;
-  format: (value: number) => string;
-  compact: boolean;
-}> = [
-  {
-    metric: 'temperature',
-    label: 'Temperature',
-    format: (value) => `${value.toFixed(1)} °C`,
-    compact: true,
-  },
-  {
-    metric: 'humidity',
-    label: 'Humidity',
-    format: (value) => `${Math.round(value)}%`,
-    compact: true,
-  },
-  {
-    metric: 'battery',
-    label: 'Battery',
-    format: (value) => `${Math.round(value)}%`,
-    compact: false,
-  },
-];
-
-/** A reading without a known format: text verbatim, booleans as On/Off. */
-const readingText = (value: ReadingValue) =>
-  typeof value === 'boolean' ? (value ? 'On' : 'Off') : String(value);
-
-/**
- * Labelled readings: known metrics first, then any others by name. Known
- * metrics are formatted only when numeric; text such as "85%" is shown as-is.
- */
+/** All reported readings in discovery order, followed by any unmapped values. */
 export const describeSensorReadings = (
   readings: Record<string, ReadingValue>,
-) => [
-  ...READING_FORMATS.filter(({ metric }) => metric in readings).map(
-    ({ metric, label, format, compact }) => {
-      const value = readings[metric];
-      return {
-        metric,
-        label,
-        value: typeof value === 'number' ? format(value) : readingText(value),
-        compact,
-      };
-    },
-  ),
-  ...Object.entries(readings)
-    .filter(([metric]) => !READING_FORMATS.some((f) => f.metric === metric))
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([metric, value]) => ({
+  metadata: Record<string, SensorValueMetadata> = {},
+  order: readonly string[] = [],
+) =>
+  [...new Set([...order, ...Object.keys(readings)])]
+    .filter((metric) => Object.hasOwn(readings, metric))
+    .map((metric) => ({
       metric,
-      label: metric,
-      value: readingText(value),
-      compact: false,
-    })),
-];
+      label: metadata[metric]?.label || metric,
+      value: `${readings[metric]}${metadata[metric]?.unit ?? ''}`,
+    }));
 
-/**
- * One-line summary, e.g. "21.4 °C · 45%". Battery and other extras are left
- * out unless `full`, which labels them ("21.4 °C · 45% · Battery 68%").
- */
+/** Every reported value and unit, with labels where the view requests them. */
 export const formatSensorReadings = (
   readings: Record<string, ReadingValue>,
-  { full = false }: { full?: boolean } = {},
-) => {
-  const described = describeSensorReadings(readings);
-  const compact = described.filter((reading) => reading.compact);
-  const shown = full || !compact.length ? described : compact;
-  return shown
+  {
+    metadata = {},
+    order = [],
+    labels = false,
+  }: {
+    metadata?: Record<string, SensorValueMetadata>;
+    order?: readonly string[];
+    labels?: boolean;
+  } = {},
+) =>
+  describeSensorReadings(readings, metadata, order)
     .map((reading) =>
-      reading.compact ? reading.value : `${reading.label} ${reading.value}`,
+      labels ? `${reading.label} ${reading.value}` : reading.value,
     )
     .join(' · ');
-};
 
 /**
- * A sensor's current reading for compact lists, or undefined when its value
+ * A sensor's current readings for lists, or undefined when its value
  * is not a meaningful reading (button events, structured state, no report).
  */
 export const sensorValueText = (device: Device): string | undefined => {
   const sensor = getSensorDetails(device);
   switch (sensor.kind) {
     case 'readings':
-      return formatSensorReadings(sensor.value) || undefined;
+      return (
+        formatSensorReadings(sensor.value, {
+          metadata: sensor.metadata,
+          order: sensor.order,
+        }) || undefined
+      );
     case 'number':
       return String(Math.round(sensor.value * 100) / 100);
     case 'boolean':

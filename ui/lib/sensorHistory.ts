@@ -1,5 +1,8 @@
 import type { ValueHistoryEntry } from '@/bindings/ValueHistoryEntry';
-export function sensorHistoryFields(entries: ValueHistoryEntry[]) {
+export function sensorHistoryFields(
+  entries: ValueHistoryEntry[],
+  order: readonly string[] = [],
+) {
   const fields = new Map<
     string,
     { time: number; value: number | string | boolean }[]
@@ -19,10 +22,12 @@ export function sensorHistoryFields(entries: ValueHistoryEntry[]) {
     }
   };
   for (const e of entries) visit(e.value, '', Number(e.changed_at_ms));
-  return [...fields].map(([name, samples]) => ({
-    name,
-    samples: samples.sort((a, b) => a.time - b.time),
-  }));
+  return [...new Set([...order, ...fields.keys()])].flatMap((name) => {
+    const samples = fields.get(name);
+    return samples
+      ? [{ name, samples: samples.sort((a, b) => a.time - b.time) }]
+      : [];
+  });
 }
 export const sensorValueLabel = (value: unknown) =>
   typeof value === 'boolean'

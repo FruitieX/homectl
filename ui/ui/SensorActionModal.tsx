@@ -5,6 +5,7 @@ import { useSettingsPreferences } from '@/hooks/useSettingsPreferences';
 import { configItemHref } from '@/lib/configItemHref';
 import {
   formatSensorReadings,
+  describeSensorReadings,
   getSensorDetails,
 } from '@/lib/sensorInteraction';
 import { useSensorInteraction } from '@/hooks/useSensorInteraction';
@@ -79,7 +80,11 @@ const SensorActionModalContent = ({
             ? 'On'
             : 'Off'
           : sensor.kind === 'readings'
-            ? formatSensorReadings(sensor.value, { full: true })
+            ? formatSensorReadings(sensor.value, {
+                labels: false,
+                metadata: sensor.metadata,
+                order: sensor.order,
+              })
             : String(sensor.value);
 
   return (
@@ -116,6 +121,25 @@ const SensorActionModalContent = ({
             <p className="break-words text-2xl font-medium">{value}</p>
           </div>
         </div>
+        {sensor.kind === 'readings' && (
+          <dl className="space-y-2">
+            {describeSensorReadings(
+              sensor.value,
+              sensor.metadata,
+              sensor.order,
+            ).map((reading) => (
+              <div
+                key={reading.metric}
+                className="flex justify-between gap-4 text-sm"
+              >
+                <dt className="text-muted-foreground">{reading.label}</dt>
+                <dd className="text-right font-medium tabular-nums">
+                  {reading.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
         {showControls && (
           <section aria-labelledby="sensor-send-event" className="space-y-2">
             <div>
@@ -130,7 +154,10 @@ const SensorActionModalContent = ({
           </section>
         )}
         <HealthEvidence deviceKey={deviceKey} />
-        <SensorHistoryPanel deviceKey={deviceKey} />
+        <SensorHistoryPanel
+          deviceKey={deviceKey}
+          order={sensor.kind === 'readings' ? sensor.order : undefined}
+        />
         <Link
           className="inline-block text-sm text-primary underline"
           to={configItemHref('device', deviceKey)}

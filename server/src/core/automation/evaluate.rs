@@ -781,7 +781,7 @@ fn device_active_truth_from(device: Option<&Device>) -> TruthValue {
             DeviceData::Sensor(crate::types::device::SensorDevice::Boolean { value }) => {
                 TruthValue::from_bool(*value)
             }
-            DeviceData::Sensor(_) => TruthValue::Unknown,
+            DeviceData::Sensor(_) | DeviceData::Sensors(_) => TruthValue::Unknown,
         },
     }
 }
@@ -1090,8 +1090,43 @@ pub(crate) fn resolve_device_path(
 
     match device.data {
         DeviceData::Sensor(ref sensor) => resolve_sensor_path(key, device, sensor, path),
+        DeviceData::Sensors(ref sensors) => resolve_sensor_values_path(key, device, sensors, path),
         DeviceData::Controllable(ref controllable) => {
             resolve_controllable_path(key, controllable, path)
+        }
+    }
+}
+
+fn resolve_sensor_values_path(
+    key: &DeviceKey,
+    device: &Device,
+    sensors: &crate::types::device::SensorValues,
+    path: &str,
+) -> ResolvedValue {
+    match path {
+        "/name" | "/integration_id" | "/device_id" | "/is_sensor" | "/is_controllable" => {
+            resolve_sensor_path(
+                key,
+                device,
+                &crate::types::device::SensorDevice::unknown_placeholder(),
+                path,
+            )
+        }
+        "/" | "/value" | "/observed" | "/observed/value" => ResolvedValue::known(sensors.to_json()),
+        _ => {
+            let pointer = path
+                .strip_prefix("/observed/value/")
+                .or_else(|| path.strip_prefix("/value/"))
+                .or_else(|| path.strip_prefix("/readings/"))
+                .map(|suffix| format!("/{suffix}"))
+                .unwrap_or_else(|| path.to_owned());
+            // Use JSON pointer decoding, including escaped property names.
+            match sensors.to_json().pointer(&pointer) {
+                Some(value) => ResolvedValue::known(value.clone()),
+                None => ResolvedValue::absent(UnknownReason::MissingField {
+                    field: path.to_owned(),
+                }),
+            }
         }
     }
 }
@@ -1128,14 +1163,6 @@ fn resolve_sensor_path(
             // this for fields like `/brightness` and `/color/ct` (P11).
             // Multi-reading sensors expose each metric by name, e.g.
             // `/temperature`, `/value/temperature` or `/readings/temperature`.
-            if let crate::types::device::SensorDevice::Readings { readings } = sensor {
-                let pointer = path.strip_prefix("/value").unwrap_or(path);
-                let pointer = pointer.strip_prefix("/readings").unwrap_or(pointer);
-                let metric = pointer.strip_prefix('/').unwrap_or(pointer);
-                if let Some(value) = readings.get(metric).and_then(|value| value.to_json()) {
-                    return ResolvedValue::known(value);
-                }
-            }
             if let crate::types::device::SensorDevice::Color(state) = sensor {
                 let pointer = path.strip_prefix("/value").unwrap_or(path);
                 let pointer = if pointer.is_empty() { "/" } else { pointer };
@@ -1316,12 +1343,6 @@ fn sensor_value(sensor: &crate::types::device::SensorDevice) -> Result<Value, St
                 Err("nonfinite sensor value".to_string())
             }
         }
-        crate::types::device::SensorDevice::Readings { readings } => Ok(Value::Object(
-            readings
-                .iter()
-                .filter_map(|(metric, value)| Some((metric.clone(), value.to_json()?)))
-                .collect(),
-        )),
         crate::types::device::SensorDevice::Color(state) => serde_json::to_value(state)
             .map_err(|error| format!("unserializable color state: {error}")),
     }
@@ -2703,20 +2724,23 @@ mod tests {
             IntegrationId::from("ble".to_string()),
             DeviceId::new("D7353530665A"),
             "Living room".to_string(),
-            DeviceData::Sensor(SensorDevice::Readings {
-                readings: std::collections::BTreeMap::from([
+            DeviceData::Sensors(crate::types::device::SensorValues::new(
+                std::collections::BTreeMap::from([
                     ("humidity".to_string(), 45.0.into()),
                     ("temperature".to_string(), 21.4.into()),
+                    ("rate/day~total".to_string(), 2.0.into()),
                     (
                         "battery".to_string(),
-                        crate::types::device::ReadingValue::Text("85%".to_string()),
+                        SensorDevice::Text {
+                            value: "85%".to_string(),
+                        },
                     ),
                     (
                         "charging".to_string(),
-                        crate::types::device::ReadingValue::Boolean(true),
+                        SensorDevice::Boolean { value: true },
                     ),
                 ]),
-            }),
+            )),
             None,
         );
         let key = sensor.get_device_key();
@@ -2733,17 +2757,19 @@ mod tests {
             "/temperature",
             "/value/temperature",
             "/readings/temperature",
+            "/observed/value/temperature",
         ] {
             assert_eq!(resolve(path).value, Some(json!(21.4)), "{path}");
         }
         assert_eq!(
             resolve("/value").value,
             Some(
-                json!({ "battery": "85%", "charging": true, "humidity": 45.0, "temperature": 21.4 })
+                json!({ "battery": "85%", "charging": true, "humidity": 45.0, "temperature": 21.4, "rate/day~total": 2.0 })
             )
         );
         assert_eq!(resolve("/battery").value, Some(json!("85%")));
         assert_eq!(resolve("/charging").value, Some(json!(true)));
+        assert_eq!(resolve("/value/rate~1day~0total").value, Some(json!(2.0)));
         assert!(matches!(
             resolve("/pressure").reason,
             Some(UnknownReason::MissingField { .. })

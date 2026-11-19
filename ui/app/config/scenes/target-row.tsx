@@ -155,7 +155,10 @@ export function SceneTargetRow({
       : deviceOptions;
   const sourceOptions = deviceOptions.filter((option) => {
     const data = context.devices[option.id]?.data;
-    return data && ('Controllable' in data || 'power' in data.Sensor);
+    return (
+      data &&
+      ('Controllable' in data || ('Sensor' in data && 'power' in data.Sensor))
+    );
   });
   return (
     <div className="scene-target-row" role="row" data-target-key={targetKey}>

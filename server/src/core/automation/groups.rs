@@ -17,7 +17,7 @@ use crate::types::automation_trace::{
     GroupEvaluation, GroupMemberEvaluation, GroupSceneSummary, GroupSceneSummaryKind, TruthValue,
     UnknownReason,
 };
-use crate::types::device::{Device, DeviceData, DeviceKey, DeviceRef, DevicesState};
+use crate::types::device::{Device, DeviceKey, DeviceRef, DevicesState};
 use crate::types::group::GroupId;
 
 /// Maximum member details retained in one evaluation result. Counts still
@@ -53,7 +53,7 @@ pub fn evaluate_group(
         };
         let device = devices.0.get(&device_key);
         let sensor = match device {
-            Some(device) => matches!(device.data, DeviceData::Sensor(_)),
+            Some(device) => device.is_sensor(),
             None => groups.is_known_sensor(&device_key),
         };
         if sensor {

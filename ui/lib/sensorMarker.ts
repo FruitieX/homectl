@@ -1,6 +1,7 @@
 import type { Device } from '../bindings/Device';
 import {
   resolveSensorInteraction,
+  getSensorDetails,
   type DeviceSensorConfig,
 } from './sensorInteraction.ts';
 
@@ -80,8 +81,22 @@ export function getSensorMarkerKind(
       return 'text';
     case 'state':
       return 'state';
-    case 'readings':
-      return 'climate';
+    case 'readings': {
+      const sensor = getSensorDetails(device);
+      if (sensor.kind !== 'readings') return 'unknown';
+      if ('temperature' in sensor.value || 'humidity' in sensor.value)
+        return 'climate';
+      const values = Object.values(sensor.value);
+      if (values.length !== 1) return 'unknown';
+      const value = values[0];
+      return typeof value === 'boolean'
+        ? value
+          ? 'boolean_on'
+          : 'boolean'
+        : typeof value === 'number'
+          ? 'number'
+          : 'text';
+    }
     default:
       return 'unknown';
   }

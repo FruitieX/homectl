@@ -347,25 +347,65 @@ impl ControllableDevice {
 #[ts(export)]
 #[serde(untagged)]
 pub enum SensorDevice {
-    Boolean {
-        value: bool,
-    },
-    Text {
-        value: String,
-    },
-    Number {
-        value: f64,
-    },
-    /// Several named readings from one sensor, e.g. a climate sensor's
-    /// `temperature`, `humidity` and `battery`.
-    Readings {
-        readings: BTreeMap<String, ReadingValue>,
-    },
+    Boolean { value: bool },
+    Text { value: String },
+    Number { value: f64 },
     Color(ControllableState),
 }
 
-/// One named reading of a multi-reading sensor. Text is kept verbatim
-/// (`"85%"`, `"charging"`) so automations and scripts can interpret it.
+/// Named values from one physical sensor. Property names, rather than vector
+/// positions, keep automation paths stable when discovery changes order.
+#[derive(TS, Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+#[ts(export)]
+pub struct SensorValues {
+    pub values: BTreeMap<String, SensorDevice>,
+    #[serde(default)]
+    pub metadata: BTreeMap<String, SensorValueMetadata>,
+    /// Property names in discovery order. Maps alone lose the exposes order.
+    #[serde(default)]
+    pub order: Vec<String>,
+}
+
+#[derive(TS, Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+#[ts(export)]
+pub struct SensorValueMetadata {
+    pub label: String,
+    pub unit: Option<String>,
+}
+
+impl SensorValues {
+    pub fn new(values: BTreeMap<String, SensorDevice>) -> Self {
+        Self {
+            values,
+            ..Self::default()
+        }
+    }
+
+    /// Scalar document used by automation paths, scenarios and value history.
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::Value::Object(
+            self.values
+                .iter()
+                .filter_map(|(key, sensor)| Some((key.clone(), sensor.scalar_value()?.to_json()?)))
+                .collect(),
+        )
+    }
+}
+
+impl Display for SensorValues {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = self
+            .values
+            .iter()
+            .map(|(key, sensor)| format!("{key}={sensor}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        f.write_str(&text)
+    }
+}
+
+/// Scalar wire value for scenarios and legacy device snapshots. Runtime
+/// collections use SensorDevice directly. Text is kept verbatim.
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
 #[serde(untagged)]
@@ -412,6 +452,15 @@ impl Display for ReadingValue {
 pub const UNKNOWN_SENSOR_PLACEHOLDER_VALUE: &str = "__homectl_unknown_sensor__";
 
 impl SensorDevice {
+    pub fn scalar_value(&self) -> Option<ReadingValue> {
+        match self {
+            Self::Boolean { value } => Some(ReadingValue::Boolean(*value)),
+            Self::Number { value } => Some(ReadingValue::Number(*value)),
+            Self::Text { value } => Some(ReadingValue::Text(value.clone())),
+            Self::Color(_) => None,
+        }
+    }
+
     pub fn unknown_placeholder() -> Self {
         SensorDevice::Text {
             value: UNKNOWN_SENSOR_PLACEHOLDER_VALUE.to_string(),
@@ -432,11 +481,6 @@ impl Display for SensorDevice {
             SensorDevice::Boolean { value } => value.to_string(),
             SensorDevice::Text { value } => value.to_string(),
             SensorDevice::Number { value } => value.to_string(),
-            SensorDevice::Readings { readings } => readings
-                .iter()
-                .map(|(metric, value)| format!("{metric}={value}"))
-                .collect::<Vec<_>>()
-                .join(" "),
             SensorDevice::Color(state) => state.to_string(),
         };
 
@@ -447,7 +491,7 @@ impl Display for SensorDevice {
 // Controllable devices are the common case; boxing them would touch most of the
 // codebase for a negligible copy cost.
 #[allow(clippy::large_enum_variant)]
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Serialize)]
 #[ts(export)]
 pub enum DeviceData {
     /// This device type can both be read and written to
@@ -455,6 +499,58 @@ pub enum DeviceData {
 
     /// This device type can only be read from
     Sensor(SensorDevice),
+
+    /// Several read-only values from one physical device.
+    Sensors(SensorValues),
+}
+
+impl From<f64> for SensorDevice {
+    fn from(value: f64) -> Self {
+        Self::Number { value }
+    }
+}
+
+impl From<ReadingValue> for SensorDevice {
+    fn from(value: ReadingValue) -> Self {
+        match value {
+            ReadingValue::Boolean(value) => Self::Boolean { value },
+            ReadingValue::Number(value) => Self::Number { value },
+            ReadingValue::Text(value) => Self::Text { value },
+        }
+    }
+}
+
+// Accept stored device snapshots written before named values moved out of
+// SensorDevice. New snapshots always serialize the Sensors variant.
+impl<'de> Deserialize<'de> for DeviceData {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum SensorWire {
+            Single(SensorDevice),
+            Legacy {
+                readings: BTreeMap<String, ReadingValue>,
+            },
+        }
+        #[allow(clippy::large_enum_variant)]
+        #[derive(Deserialize)]
+        enum Wire {
+            Controllable(ControllableDevice),
+            Sensor(SensorWire),
+            Sensors(SensorValues),
+        }
+        Ok(match Wire::deserialize(deserializer)? {
+            Wire::Controllable(value) => Self::Controllable(value),
+            Wire::Sensor(SensorWire::Single(value)) => Self::Sensor(value),
+            Wire::Sensor(SensorWire::Legacy { readings }) => Self::Sensors(SensorValues::new(
+                readings
+                    .into_iter()
+                    .map(|(key, value)| (key, value.into()))
+                    .collect(),
+            )),
+            Wire::Sensors(value) => Self::Sensors(value),
+        })
+    }
 }
 
 impl Display for DeviceData {
@@ -462,6 +558,7 @@ impl Display for DeviceData {
         let s = match self {
             DeviceData::Controllable(light) => light.state.to_string(),
             DeviceData::Sensor(sensor) => sensor.to_string(),
+            DeviceData::Sensors(sensors) => sensors.to_string(),
         };
 
         f.write_str(&s)
@@ -484,6 +581,7 @@ impl DeviceData {
                     && cmp_device_states(a, &b.state)
             }
             (DeviceData::Sensor(a), DeviceData::Sensor(b)) => cmp_sensor_states(a, b),
+            (DeviceData::Sensors(a), DeviceData::Sensors(b)) => a == b,
             _ => false,
         }
     }
@@ -735,7 +833,7 @@ impl Device {
     pub fn get_scene_id(&self) -> Option<SceneId> {
         match &self.data {
             DeviceData::Controllable(ControllableDevice { scene_id, .. }) => scene_id.clone(),
-            DeviceData::Sensor(_) => None,
+            DeviceData::Sensor(_) | DeviceData::Sensors(_) => None,
         }
     }
 
@@ -808,14 +906,14 @@ impl Device {
         match &self.data {
             DeviceData::Controllable(data) => Some(data.state.power),
             // Doesn't make sense for sensors
-            DeviceData::Sensor(_) => None,
+            DeviceData::Sensor(_) | DeviceData::Sensors(_) => None,
         }
     }
 
     pub fn get_controllable_state(&self) -> Option<&ControllableState> {
         match self.data {
             DeviceData::Controllable(ref data) => Some(&data.state),
-            DeviceData::Sensor(_) => None,
+            DeviceData::Sensor(_) | DeviceData::Sensors(_) => None,
         }
     }
 
@@ -848,7 +946,7 @@ impl Device {
     pub fn get_supported_color_modes(&self) -> Option<&Capabilities> {
         match self.data {
             DeviceData::Controllable(ref data) => Some(&data.capabilities),
-            DeviceData::Sensor(_) => None,
+            DeviceData::Sensor(_) | DeviceData::Sensors(_) => None,
         }
     }
 
@@ -867,7 +965,7 @@ impl Device {
     }
 
     pub fn is_sensor(&self) -> bool {
-        matches!(self.data, DeviceData::Sensor(_))
+        matches!(self.data, DeviceData::Sensor(_) | DeviceData::Sensors(_))
     }
 
     pub fn is_readonly(&self) -> bool {
@@ -882,7 +980,7 @@ impl Device {
 
     pub fn get_sensor_state(&self) -> Option<&SensorDevice> {
         match self.data {
-            DeviceData::Controllable(_) => None,
+            DeviceData::Controllable(_) | DeviceData::Sensors(_) => None,
             DeviceData::Sensor(ref data) => Some(data),
         }
     }
@@ -917,6 +1015,7 @@ impl Device {
         match self.data {
             DeviceData::Controllable(ref data) => serde_json::to_value(data).unwrap(),
             DeviceData::Sensor(ref data) => serde_json::to_value(data).unwrap(),
+            DeviceData::Sensors(ref data) => data.to_json(),
         }
     }
 
@@ -936,7 +1035,7 @@ impl Device {
                         }
                 )
             }
-            DeviceData::Sensor(_) => false,
+            DeviceData::Sensor(_) | DeviceData::Sensors(_) => false,
         }
     }
 
@@ -1422,34 +1521,28 @@ mod tests {
         let deserialized: SensorDevice = serde_json::from_str(json).unwrap();
         assert_eq!(deserialized, SensorDevice::Number { value: 42.5 });
 
-        // Test Readings variant
-        let json = r#"{"readings":{"humidity":45.0,"temperature":21.4}}"#;
-        let deserialized: SensorDevice = serde_json::from_str(json).unwrap();
+        // Legacy snapshots deserialize into the collection and re-export in
+        // the new format, using the existing scalar SensorDevice variants.
+        let legacy =
+            r#"{"Sensor":{"readings":{"battery":"85%","charging":true,"temperature":21.4}}}"#;
+        let data: DeviceData = serde_json::from_str(legacy).unwrap();
+        let DeviceData::Sensors(ref sensors) = data else {
+            panic!()
+        };
         assert_eq!(
-            deserialized,
-            SensorDevice::Readings {
-                readings: BTreeMap::from([
-                    ("humidity".to_string(), 45.0.into()),
-                    ("temperature".to_string(), 21.4.into()),
-                ])
-            }
+            sensors.values["charging"],
+            SensorDevice::Boolean { value: true }
         );
-        assert_eq!(serde_json::to_string(&deserialized).unwrap(), json);
-
-        // Readings keep booleans and text alongside numbers.
-        let json = r#"{"readings":{"battery":"85%","charging":true,"temperature":21.4}}"#;
-        let deserialized: SensorDevice = serde_json::from_str(json).unwrap();
         assert_eq!(
-            deserialized,
-            SensorDevice::Readings {
-                readings: BTreeMap::from([
-                    ("battery".to_string(), ReadingValue::Text("85%".to_string())),
-                    ("charging".to_string(), ReadingValue::Boolean(true)),
-                    ("temperature".to_string(), 21.4.into()),
-                ])
-            }
+            sensors.to_json(),
+            serde_json::json!({"battery":"85%","charging":true,"temperature":21.4})
         );
-        assert_eq!(serde_json::to_string(&deserialized).unwrap(), json);
+        let serialized = serde_json::to_string(&data).unwrap();
+        assert!(serialized.contains("Sensors"));
+        assert_eq!(
+            serde_json::from_str::<DeviceData>(&serialized).unwrap(),
+            data
+        );
 
         // Test Color variant
         let json =

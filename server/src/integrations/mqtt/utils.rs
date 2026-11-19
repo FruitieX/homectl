@@ -1,7 +1,7 @@
 use crate::integrations::mqtt::{MqttConfig, SensorValueMode};
 use crate::types::color::{Capabilities, DeviceColor};
 use crate::types::{
-    device::{ControllableDevice, Device, DeviceData, DeviceId, ReadingValue, SensorDevice},
+    device::{ControllableDevice, Device, DeviceData, DeviceId, SensorDevice, SensorValues},
     integration::IntegrationId,
 };
 use color_eyre::{eyre::eyre, Result};
@@ -324,7 +324,7 @@ pub fn mqtt_to_homectl(
         || effect.is_some();
 
     let device_state = if let Some(readings) = sensor_readings {
-        DeviceData::Sensor(SensorDevice::Readings { readings })
+        DeviceData::Sensors(SensorValues::new(readings))
     } else if let Some((field, value)) = resolved_sensor_value_field {
         DeviceData::Sensor(match value {
             serde_json::Value::Number(value) => SensorDevice::Number {
@@ -397,14 +397,14 @@ pub fn mqtt_to_homectl(
 /// Last readings per generic MQTT sensor, so a message carrying only some of
 /// the listed values (say humidity alone) keeps the others.
 #[derive(Default)]
-pub struct SensorReadings(HashMap<DeviceId, BTreeMap<String, ReadingValue>>);
+pub struct SensorReadings(HashMap<DeviceId, BTreeMap<String, SensorDevice>>);
 
 impl SensorReadings {
     pub fn merge(&mut self, mut device: Device) -> Device {
-        if let DeviceData::Sensor(SensorDevice::Readings { readings }) = &mut device.data {
+        if let DeviceData::Sensors(sensors) = &mut device.data {
             let known = self.0.entry(device.id.clone()).or_default();
-            known.extend(std::mem::take(readings));
-            readings.clone_from(known);
+            known.extend(std::mem::take(&mut sensors.values));
+            sensors.values.clone_from(known);
         }
         device
     }
@@ -439,15 +439,15 @@ fn reading_name(field: &Pointer, fields: &[&Pointer]) -> String {
 fn sensor_readings(
     fields: &[&Pointer],
     value: &serde_json::Value,
-) -> BTreeMap<String, ReadingValue> {
+) -> BTreeMap<String, SensorDevice> {
     fields
         .iter()
         .filter_map(|field| {
             let reading = match field.resolve(value).ok()? {
-                serde_json::Value::Number(number) => {
-                    ReadingValue::Number(number.as_f64().filter(|value| value.is_finite())?)
-                }
-                serde_json::Value::Bool(value) => ReadingValue::Boolean(*value),
+                serde_json::Value::Number(number) => SensorDevice::Number {
+                    value: number.as_f64().filter(|value| value.is_finite())?,
+                },
+                serde_json::Value::Bool(value) => SensorDevice::Boolean { value: *value },
                 serde_json::Value::String(value) => string_reading(value)?,
                 _ => return None,
             };
@@ -456,14 +456,14 @@ fn sensor_readings(
         .collect()
 }
 
-fn string_reading(value: &str) -> Option<ReadingValue> {
+fn string_reading(value: &str) -> Option<SensorDevice> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return None;
     }
     Some(match trimmed {
-        "true" => ReadingValue::Boolean(true),
-        "false" => ReadingValue::Boolean(false),
+        "true" => SensorDevice::Boolean { value: true },
+        "false" => SensorDevice::Boolean { value: false },
         // `f64::from_str` also accepts "inf" and "NaN"; keep those as text.
         _ => match trimmed.parse::<f64>() {
             Ok(number)
@@ -472,9 +472,11 @@ fn string_reading(value: &str) -> Option<ReadingValue> {
                         .bytes()
                         .all(|byte| byte.is_ascii_digit() || b"+-.eE".contains(&byte)) =>
             {
-                ReadingValue::Number(number)
+                SensorDevice::Number { value: number }
             }
-            _ => ReadingValue::Text(value.to_string()),
+            _ => SensorDevice::Text {
+                value: value.to_string(),
+            },
         },
     })
 }
@@ -576,7 +578,7 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
 mod tests {
     use crate::types::{
         color::{Capabilities, ColorMode, Hs},
-        device::ManageKind,
+        device::{ManageKind, ReadingValue},
     };
 
     use super::*;
@@ -857,12 +859,12 @@ mod tests {
     }
 
     fn mixed_readings(pairs: &[(&str, ReadingValue)]) -> DeviceData {
-        DeviceData::Sensor(SensorDevice::Readings {
-            readings: pairs
+        DeviceData::Sensors(SensorValues::new(
+            pairs
                 .iter()
-                .map(|(name, value)| (name.to_string(), value.clone()))
+                .map(|(name, value)| (name.to_string(), value.clone().into()))
                 .collect(),
-        })
+        ))
     }
 
     #[test]

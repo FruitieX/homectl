@@ -24,7 +24,7 @@ use crate::types::{
     color::{Capabilities, DeviceColor},
     device::{
         ControllableDevice, ControllableState, Device, DeviceData, DeviceKey, DeviceStateSource,
-        ManageKind, ReadingValue, SensorDevice,
+        ManageKind, ReadingValue, SensorDevice, SensorValues,
     },
     event::{mk_event_channel, Event, RxEventChannel},
     scene::SceneId,
@@ -402,20 +402,21 @@ async fn run_scenario(
                         label(device, &labels)
                     ));
                 };
-                let DeviceData::Sensor(sensor) = &current.data else {
+                if !current.is_sensor() {
                     return Err(eyre!(
                         "scenario '{}' injects a sensor event into light '{}'",
                         scenario.name,
                         label(device, &labels)
                     ));
                 };
-                let current_kind = SensorValueKind::from_sensor(sensor).ok_or_else(|| {
-                    eyre!(
-                        "scenario '{}' cannot inject values into color-type sensor '{}'",
-                        scenario.name,
-                        label(device, &labels)
-                    )
-                })?;
+                let current_kind =
+                    SensorValueKind::from_device(&current.data).ok_or_else(|| {
+                        eyre!(
+                            "scenario '{}' cannot inject values into color-type sensor '{}'",
+                            scenario.name,
+                            label(device, &labels)
+                        )
+                    })?;
                 if value.kind() != current_kind {
                     return Err(eyre!(
                         "scenario '{}' injects the wrong value type for sensor '{}'",
@@ -423,15 +424,18 @@ async fn run_scenario(
                         label(device, &labels)
                     ));
                 }
-                current.data = DeviceData::Sensor(match (sensor, value) {
-                    // Like an MQTT report carrying some of the readings.
-                    (SensorDevice::Readings { readings }, SensorValue::Readings(update)) => {
-                        let mut readings = readings.clone();
-                        readings.extend(update.clone());
-                        SensorDevice::Readings { readings }
+                current.data = match (&current.data, value) {
+                    (DeviceData::Sensors(known), SensorValue::Readings(update)) => {
+                        let mut sensors = known.clone();
+                        sensors.values.extend(
+                            update
+                                .iter()
+                                .map(|(key, value)| (key.clone(), value.clone().into())),
+                        );
+                        DeviceData::Sensors(sensors)
                     }
-                    _ => value.to_sensor()?,
-                });
+                    _ => value.to_device_data()?,
+                };
                 process_events(
                     &mut state,
                     &mut event_rx,
@@ -1029,7 +1033,10 @@ fn validate_expectations(
                     | ExpectedDeviceState::LightScene { .. }
                     | ExpectedDeviceState::LightScenePower { .. },
                 DeviceData::Controllable(_)
-            ) | (ExpectedDeviceState::Sensor { .. }, DeviceData::Sensor(_))
+            ) | (
+                ExpectedDeviceState::Sensor { .. },
+                DeviceData::Sensor(_) | DeviceData::Sensors(_)
+            )
         );
         if !kind_matches {
             return Err(eyre!(
@@ -1306,10 +1313,15 @@ fn compare_final_state(
                     value: SensorValue::Readings(expected),
                     ..
                 },
-                DeviceData::Sensor(SensorDevice::Readings { readings }),
-            ) => expected
-                .iter()
-                .all(|(metric, value)| readings.get(metric) == Some(value)),
+                DeviceData::Sensors(sensors),
+            ) => expected.iter().all(|(metric, value)| {
+                sensors
+                    .values
+                    .get(metric)
+                    .and_then(SensorDevice::scalar_value)
+                    .as_ref()
+                    == Some(value)
+            }),
             (ExpectedDeviceState::Sensor { value, .. }, DeviceData::Sensor(sensor)) => {
                 value == &SensorValue::from_sensor(sensor)
             }
@@ -1630,7 +1642,7 @@ impl ScenarioDevice {
                     device.integration_id.clone(),
                     device.device_id.clone(),
                     resolved_name,
-                    DeviceData::Sensor(value.to_sensor()?),
+                    value.to_device_data()?,
                     None,
                 ))
             }
@@ -1660,16 +1672,19 @@ impl SensorValue {
         }
     }
 
-    fn to_sensor(&self) -> Result<SensorDevice> {
+    fn to_device_data(&self) -> Result<DeviceData> {
         Ok(match self {
-            Self::Boolean(value) => SensorDevice::Boolean { value: *value },
-            Self::Number(value) => SensorDevice::Number { value: *value },
-            Self::Text(value) => SensorDevice::Text {
+            Self::Boolean(value) => DeviceData::Sensor(SensorDevice::Boolean { value: *value }),
+            Self::Number(value) => DeviceData::Sensor(SensorDevice::Number { value: *value }),
+            Self::Text(value) => DeviceData::Sensor(SensorDevice::Text {
                 value: value.clone(),
-            },
-            Self::Readings(readings) => SensorDevice::Readings {
-                readings: readings.clone(),
-            },
+            }),
+            Self::Readings(readings) => DeviceData::Sensors(SensorValues::new(
+                readings
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone().into()))
+                    .collect(),
+            )),
         })
     }
 
@@ -1678,20 +1693,22 @@ impl SensorValue {
             SensorDevice::Boolean { value } => Self::Boolean(*value),
             SensorDevice::Number { value } => Self::Number(*value),
             SensorDevice::Text { value } => Self::Text(value.clone()),
-            SensorDevice::Readings { readings } => Self::Readings(readings.clone()),
             SensorDevice::Color(state) => Self::Text(format!("color:{state:?}")),
         }
     }
 }
 
 impl SensorValueKind {
-    fn from_sensor(sensor: &SensorDevice) -> Option<Self> {
-        match sensor {
-            SensorDevice::Boolean { .. } => Some(Self::Boolean),
-            SensorDevice::Number { .. } => Some(Self::Number),
-            SensorDevice::Text { .. } => Some(Self::Text),
-            SensorDevice::Readings { .. } => Some(Self::Readings),
-            SensorDevice::Color(_) => None,
+    fn from_device(data: &DeviceData) -> Option<Self> {
+        match data {
+            DeviceData::Sensors(_) => Some(Self::Readings),
+            DeviceData::Controllable(_) => None,
+            DeviceData::Sensor(sensor) => match sensor {
+                SensorDevice::Boolean { .. } => Some(Self::Boolean),
+                SensorDevice::Number { .. } => Some(Self::Number),
+                SensorDevice::Text { .. } => Some(Self::Text),
+                SensorDevice::Color(_) => None,
+            },
         }
     }
 }
@@ -1727,10 +1744,12 @@ mod tests {
     #[test]
     fn sensor_values_convert_without_loss() {
         assert_eq!(
-            SensorValue::Text("off".to_string()).to_sensor().unwrap(),
-            SensorDevice::Text {
+            SensorValue::Text("off".to_string())
+                .to_device_data()
+                .unwrap(),
+            DeviceData::Sensor(SensorDevice::Text {
                 value: "off".to_string()
-            }
+            })
         );
     }
 

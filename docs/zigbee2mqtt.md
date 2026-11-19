@@ -28,6 +28,34 @@ metadata is in use) and `/health/ready` lists it under
 payloads and state buffered while no inventory exists have them stripped, so a
 press is never replayed late.
 
+Read-only sensors discover their values from the top-level generic `binary`,
+`text` and `numeric` entries in `definition.exposes`; no sensor field mappings
+are needed. Only entries with the published-state access bit (`access & 1`)
+are read. Values use the expose's `property` (including endpoint suffixes),
+label and optional unit. Binary values are compared with `value_on` and
+`value_off`, including string and numeric encodings. Text is kept verbatim;
+numeric strings are not coerced to numbers. Missing, null and incorrectly typed
+values are skipped. Partial reports retain the last valid values from the same
+IEEE address, whether sent under its address or friendly name.
+
+A physical sensor is one `DeviceData::Sensors` collection. Its `values` map
+contains the existing `SensorDevice::Boolean`, `Text` and `Number` variants,
+with labels and units in a separate `metadata` map. The UI lists all readings in
+sensor details, quick popovers and summaries in the order declared in `exposes`.
+Each value is followed immediately by its declared unit, without a space. No unit
+or metric-specific formatting is inferred, and summaries include every reported
+value. The collection carries this display order separately from the value map.
+Automation paths `/temperature`, `/value/temperature`,
+`/readings/temperature` and `/observed/value/temperature` read individual values;
+`/value` is the scalar object. Use the exact exposed property name for
+endpoint-specific readings. A value not yet reported is unavailable.
+
+Explicit `sensor_value_fields` remain an override using the existing first-field
+behavior, including button/remote enum actions. Clear those mappings to use
+automatic sensor discovery. Enum, composite and list exposes are not decoded by
+automatic sensor discovery. Existing light/switch control handling is unchanged;
+extra sensor exposes on controllable devices are not mapped to a second device.
+
 Inventory entries without a root light/switch expose (buttons, motion and
 climate sensors) are reported to the state as sensors (`Event::SensorInventory`),
 from the cache at start and again for each live list. Group power/scene

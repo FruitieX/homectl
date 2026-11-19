@@ -1,6 +1,6 @@
 //! Zigbee2MQTT protocol boundary. Discovery is separate from reported state.
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     hash::{DefaultHasher, Hash, Hasher},
     time::{Duration, Instant},
 };
@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use super::{utils::mqtt_to_homectl, MqttConfig};
 use crate::types::{
     color::{Capabilities, DeviceColor},
-    device::{Device, DeviceData},
+    device::{Device, DeviceData, DeviceId, SensorDevice, SensorValueMetadata, SensorValues},
     integration::IntegrationId,
 };
 
@@ -23,6 +23,67 @@ struct Metadata {
     get_fields: Vec<String>,
     /// No root light/switch expose: a button, motion or climate sensor.
     sensor: bool,
+    sensor_fields: Vec<SensorField>,
+}
+
+#[derive(Clone)]
+struct SensorField {
+    property: String,
+    metadata: SensorValueMetadata,
+    kind: SensorKind,
+}
+
+#[derive(Clone)]
+enum SensorKind {
+    Binary { on: Value, off: Value },
+    Numeric,
+    Text,
+}
+
+impl SensorField {
+    fn from_expose(expose: &Value) -> Option<Self> {
+        // Only values actually published in state, never set-only settings.
+        if expose["access"].as_u64()? & 1 == 0 {
+            return None;
+        }
+        let property = expose["property"].as_str()?.to_owned();
+        let kind = match expose["type"].as_str()? {
+            "binary" => SensorKind::Binary {
+                on: expose.get("value_on")?.clone(),
+                off: expose.get("value_off")?.clone(),
+            },
+            "numeric" => SensorKind::Numeric,
+            "text" => SensorKind::Text,
+            _ => return None,
+        };
+        Some(Self {
+            metadata: SensorValueMetadata {
+                label: expose["label"].as_str().unwrap_or(&property).to_owned(),
+                unit: expose["unit"].as_str().map(str::to_owned),
+            },
+            property,
+            kind,
+        })
+    }
+
+    fn decode(&self, payload: &Value) -> Option<SensorDevice> {
+        let value = payload.get(&self.property)?;
+        match &self.kind {
+            SensorKind::Binary { on, .. } if value == on => {
+                Some(SensorDevice::Boolean { value: true })
+            }
+            SensorKind::Binary { off, .. } if value == off => {
+                Some(SensorDevice::Boolean { value: false })
+            }
+            SensorKind::Numeric => Some(SensorDevice::Number {
+                value: value.as_f64().filter(|n| n.is_finite())?,
+            }),
+            SensorKind::Text => Some(SensorDevice::Text {
+                value: value.as_str()?.to_owned(),
+            }),
+            _ => None,
+        }
+    }
 }
 
 /// Where the current device inventory came from.
@@ -41,6 +102,8 @@ pub(super) struct Discovery {
     devices: HashMap<String, Metadata>,
     // Retained state may arrive before the retained device inventory.
     pending: HashMap<String, Value>,
+    /// Last valid values, shared by friendly-name and IEEE-address aliases.
+    sensor_values: HashMap<String, SensorValues>,
     source: InventorySource,
     // Set when a valid live inventory was applied; see `take_live_inventory`.
     live_inventory: bool,
@@ -72,6 +135,10 @@ fn metadata(value: &Value) -> Option<Metadata> {
     let id = value["ieee_address"].as_str()?.to_owned();
     let name = value["friendly_name"].as_str()?.to_owned();
     let exposes = value["definition"]["exposes"].as_array()?;
+    let sensor_fields = exposes
+        .iter()
+        .filter_map(SensorField::from_expose)
+        .collect();
     let mut capabilities = Capabilities {
         brightness: Some(false),
         ..Default::default()
@@ -94,6 +161,7 @@ fn metadata(value: &Value) -> Option<Metadata> {
             capabilities,
             get_fields: vec![],
             sensor,
+            sensor_fields,
         });
     };
     let features = light["features"].as_array()?;
@@ -143,6 +211,7 @@ fn metadata(value: &Value) -> Option<Metadata> {
         capabilities,
         get_fields,
         sensor: false,
+        sensor_fields,
     })
 }
 
@@ -153,6 +222,28 @@ impl Discovery {
             self.devices.insert(item.id.clone(), item.clone());
             self.devices.insert(item.name.clone(), item);
         }
+        // Removed devices/properties and changed types must not survive a
+        // discovery refresh as stale values. Metadata itself is not a report.
+        self.sensor_values.retain(|id, values| {
+            let Some(meta) = self.devices.get(id) else {
+                return false;
+            };
+            values.values.retain(|property, value| {
+                meta.sensor_fields.iter().any(|field| {
+                    field.property == *property
+                        && matches!(
+                            (&field.kind, &*value),
+                            (SensorKind::Binary { .. }, SensorDevice::Boolean { .. })
+                                | (SensorKind::Numeric, SensorDevice::Number { .. })
+                                | (SensorKind::Text, SensorDevice::Text { .. })
+                        )
+                })
+            });
+            values
+                .metadata
+                .retain(|property, _| values.values.contains_key(property));
+            !values.values.is_empty()
+        });
     }
 
     /// Seed the inventory from a stored `bridge/devices` payload so decoding
@@ -256,14 +347,15 @@ impl Discovery {
             self.live_inventory = true;
             // Only replay state held while waiting for initial discovery. A
             // metadata refresh alone is never treated as a new device report.
-            return std::mem::take(&mut self.pending)
-                .into_iter()
-                .filter_map(|(key, state)| {
-                    self.devices
-                        .get(&key)
-                        .and_then(|m| decode(state, m, integration, config))
-                })
-                .collect();
+            let mut devices = Vec::new();
+            for (key, state) in std::mem::take(&mut self.pending) {
+                if let Some(meta) = self.devices.get(&key).cloned() {
+                    if let Some(device) = self.decode(state, &meta, integration, config) {
+                        devices.push(device);
+                    }
+                }
+            }
+            return devices;
         }
         let Some(key) = topic.strip_prefix(&format!("{base}/")) else {
             return vec![];
@@ -274,17 +366,67 @@ impl Discovery {
         if retained {
             strip_actions(&mut value);
         }
-        if let Some(meta) = self.devices.get(key) {
-            return decode(value, meta, integration, config)
+        if let Some(meta) = self.devices.get(key).cloned() {
+            return self
+                .decode(value, &meta, integration, config)
                 .into_iter()
                 .collect();
         }
         // Do not buffer commands, availability, or unbounded arbitrary topics.
         if !key.ends_with("/set") && !key.ends_with("/get") && self.pending.len() < 1024 {
             strip_actions(&mut value);
-            self.pending.insert(key.to_owned(), value);
+            if let Some(previous) = self.pending.get_mut(key).and_then(Value::as_object_mut) {
+                previous.extend(value.as_object().unwrap().clone());
+            } else {
+                self.pending.insert(key.to_owned(), value);
+            }
         }
         vec![]
+    }
+
+    fn decode(
+        &mut self,
+        value: Value,
+        meta: &Metadata,
+        integration: &IntegrationId,
+        config: &MqttConfig,
+    ) -> Option<Device> {
+        if !meta.sensor
+            || config
+                .sensor_value_fields
+                .as_ref()
+                .is_some_and(|fields| !fields.is_empty())
+            || meta.sensor_fields.is_empty()
+        {
+            return decode(value, meta, integration, config);
+        }
+        let incoming: BTreeMap<_, _> = meta
+            .sensor_fields
+            .iter()
+            .filter_map(|field| Some((field.property.clone(), field.decode(&value)?)))
+            .collect();
+        if incoming.is_empty() {
+            return None;
+        }
+        let known = self.sensor_values.entry(meta.id.clone()).or_default();
+        known.values.extend(incoming);
+        known.metadata = meta
+            .sensor_fields
+            .iter()
+            .map(|field| (field.property.clone(), field.metadata.clone()))
+            .collect();
+        known.order = meta
+            .sensor_fields
+            .iter()
+            .map(|field| field.property.clone())
+            .collect();
+        Some(Device::new(
+            integration.clone(),
+            DeviceId::new(&meta.id),
+            meta.name.clone(),
+            DeviceData::Sensors(known.clone()),
+            Some(value),
+        ))
     }
 }
 
@@ -528,6 +670,192 @@ pub(super) fn encode(device: &Device) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sensor_inventory() -> Value {
+        json!([{"ieee_address":"0xsensor", "friendly_name":"Climate", "definition":{"exposes":[
+            {"type":"numeric", "name":"temperature", "property":"temperature_left", "label":"Room temperature", "unit":"°F", "access":1},
+            {"type":"numeric", "name":"humidity", "property":"humidity", "label":"Humidity", "unit":"%", "access":5},
+            {"type":"binary", "name":"contact", "property":"contact", "label":"Contact", "value_on":"CLOSED", "value_off":"OPEN", "access":1},
+            {"type":"binary", "name":"alarm", "property":"alarm", "value_on":1, "value_off":0, "access":1},
+            {"type":"binary", "name":"occupancy", "property":"occupancy", "value_on":true, "value_off":false, "access":1},
+            {"type":"text", "name":"status", "property":"status", "label":"Status", "access":1},
+            {"type":"numeric", "property":"calibration", "access":2},
+            {"type":"enum", "property":"mode", "access":1},
+            {"type":"composite", "property":"position", "features":[]},
+            {"type":"list", "property":"samples", "access":1}
+        ]}}])
+    }
+
+    fn auto_receive(
+        discovery: &mut Discovery,
+        topic: &str,
+        value: Value,
+        retained: bool,
+    ) -> Vec<Device> {
+        discovery.receive(
+            "z",
+            topic,
+            &serde_json::to_vec(&value).unwrap(),
+            retained,
+            &"zigbee".parse().unwrap(),
+            &MqttConfig::default(),
+        )
+    }
+
+    fn sensor_values(device: &Device) -> &SensorValues {
+        let DeviceData::Sensors(values) = &device.data else {
+            panic!("expected Sensors, got {:?}", device.data)
+        };
+        values
+    }
+
+    #[test]
+    fn exposes_decode_all_supported_published_values_without_mappings() {
+        let mut discovery = Discovery::default();
+        auto_receive(&mut discovery, "z/bridge/devices", sensor_inventory(), true);
+        let raw = json!({"temperature_left":72.5,"humidity":40,"contact":"OPEN","alarm":1,"occupancy":false,"status":"false","calibration":2,"mode":"auto","samples":[1,2],"undeclared":12});
+        let devices = auto_receive(&mut discovery, "z/Climate", raw.clone(), false);
+        assert_eq!(devices.len(), 1);
+        let device = &devices[0];
+        assert_eq!(device.id.to_string(), "0xsensor");
+        assert!(device.is_sensor());
+        assert_eq!(device.raw, Some(raw));
+        let values = sensor_values(device);
+        assert_eq!(
+            values.to_json(),
+            json!({"temperature_left":72.5,"humidity":40.0,"contact":false,"alarm":true,"occupancy":false,"status":"false"})
+        );
+        assert_eq!(
+            values.metadata["temperature_left"].label,
+            "Room temperature"
+        );
+        assert_eq!(
+            values.metadata["temperature_left"].unit.as_deref(),
+            Some("°F")
+        );
+        assert_eq!(
+            values.order,
+            [
+                "temperature_left",
+                "humidity",
+                "contact",
+                "alarm",
+                "occupancy",
+                "status"
+            ]
+        );
+        let restored: Device =
+            serde_json::from_value(serde_json::to_value(device).unwrap()).unwrap();
+        assert_eq!(sensor_values(&restored).order, values.order);
+        assert!(discovery.poll_requests("z", &[]).is_empty());
+    }
+
+    #[test]
+    fn explicit_mapping_overrides_discovery_and_clearing_it_enables_all_values() {
+        let mut discovery = Discovery::default();
+        assert!(discovery.load_cached(&serde_json::to_vec(&sensor_inventory()).unwrap()));
+        let mut config = MqttConfig {
+            sensor_value_fields: Some(vec![jsonptr::PointerBuf::from_tokens(["temperature_left"])]),
+            ..Default::default()
+        };
+        let payload = serde_json::to_vec(&json!({"temperature_left":72.5,"humidity":40})).unwrap();
+        let integration = "zigbee".parse().unwrap();
+        let devices = discovery.receive("z", "z/Climate", &payload, false, &integration, &config);
+        assert_eq!(
+            devices[0].data,
+            DeviceData::Sensor(SensorDevice::Number { value: 72.5 })
+        );
+        config.sensor_value_fields = Some(vec![]);
+        let devices = discovery.receive("z", "z/Climate", &payload, false, &integration, &config);
+        assert_eq!(sensor_values(&devices[0]).values.len(), 2);
+    }
+
+    #[test]
+    fn partial_sensor_reports_merge_by_ieee_id_and_reject_wrong_types() {
+        let mut discovery = Discovery::default();
+        assert!(discovery.load_cached(&serde_json::to_vec(&sensor_inventory()).unwrap()));
+        auto_receive(
+            &mut discovery,
+            "z/Climate",
+            json!({"temperature_left":72.5,"contact":"CLOSED"}),
+            true,
+        );
+        let devices = auto_receive(
+            &mut discovery,
+            "z/0xsensor",
+            json!({"humidity":0,"temperature_left":null,"contact":"TOGGLE","status":""}),
+            false,
+        );
+        assert_eq!(
+            sensor_values(&devices[0]).to_json(),
+            json!({"temperature_left":72.5,"contact":true,"humidity":0.0,"status":""})
+        );
+        assert!(auto_receive(
+            &mut discovery,
+            "z/Climate",
+            json!({"temperature_left":"22","contact":false,"status":5}),
+            false
+        )
+        .is_empty());
+        assert!(auto_receive(
+            &mut discovery,
+            "z/Climate",
+            json!({"calibration":1,"mode":"auto"}),
+            false
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn sensor_reports_before_discovery_merge_and_replay_without_actions() {
+        let mut discovery = Discovery::default();
+        auto_receive(
+            &mut discovery,
+            "z/Climate",
+            json!({"temperature_left":72.5,"action":"on"}),
+            false,
+        );
+        auto_receive(&mut discovery, "z/Climate", json!({"humidity":40}), false);
+        let replayed = auto_receive(&mut discovery, "z/bridge/devices", sensor_inventory(), true);
+        assert_eq!(replayed.len(), 1);
+        assert_eq!(sensor_values(&replayed[0]).values.len(), 2);
+        assert!(replayed[0].raw.as_ref().unwrap().get("action").is_none());
+        assert!(
+            auto_receive(&mut discovery, "z/bridge/devices", sensor_inventory(), true).is_empty()
+        );
+    }
+
+    #[test]
+    fn discovery_refresh_drops_removed_or_retyped_readings() {
+        let mut discovery = Discovery::default();
+        auto_receive(&mut discovery, "z/bridge/devices", sensor_inventory(), true);
+        auto_receive(
+            &mut discovery,
+            "z/Climate",
+            json!({"temperature_left":72.5,"contact":"OPEN"}),
+            false,
+        );
+        let mut inventory = sensor_inventory();
+        inventory[0]["definition"]["exposes"]
+            .as_array_mut()
+            .unwrap()
+            .remove(0);
+        inventory[0]["definition"]["exposes"][1]["type"] = json!("text");
+        inventory[0]["definition"]["exposes"]
+            .as_array_mut()
+            .unwrap()
+            .reverse();
+        auto_receive(&mut discovery, "z/bridge/devices", inventory, false);
+        let devices = auto_receive(&mut discovery, "z/Climate", json!({"humidity":40}), false);
+        assert_eq!(
+            sensor_values(&devices[0]).to_json(),
+            json!({"humidity":40.0})
+        );
+        assert_eq!(
+            sensor_values(&devices[0]).order,
+            ["status", "occupancy", "alarm", "contact", "humidity"]
+        );
+    }
 
     fn inventory() -> Value {
         json!([{"ieee_address":"0x123", "friendly_name":"Office", "definition":{"exposes":[{"type":"light","features":[

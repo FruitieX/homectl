@@ -734,7 +734,7 @@ impl Devices {
             }
 
             // Previously seen sensor, state is always updated
-            (DeviceData::Sensor(_), _) => {
+            (DeviceData::Sensor(_) | DeviceData::Sensors(_), _) => {
                 self.set_state_with_origin(incoming, false, false, EventOrigin::Report);
             }
 

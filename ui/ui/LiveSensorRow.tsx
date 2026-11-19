@@ -64,7 +64,10 @@ export function LiveSensorRow({
             ? 'On'
             : 'Off'
           : sensor.kind === 'readings'
-            ? formatSensorReadings(sensor.value)
+            ? formatSensorReadings(sensor.value, {
+                metadata: sensor.metadata,
+                order: sensor.order,
+              })
             : String(sensor.value);
   return (
     <>

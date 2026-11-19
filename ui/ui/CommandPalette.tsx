@@ -339,7 +339,7 @@ export function CommandPalette() {
         description: state
           ? `${state.power ? 'On' : 'Off'}${state.power && state.brightness !== null ? ` · ${Math.round(state.brightness * 100)}%` : ''} · Device settings`
           : sensor.kind === 'readings'
-            ? `${formatSensorReadings(sensor.value)} · Sensor settings`
+            ? `${formatSensorReadings(sensor.value, { metadata: sensor.metadata, order: sensor.order })} · Sensor settings`
             : sensor.kind !== 'unknown' && sensor.kind !== 'state'
               ? `${String(sensor.value)} · Sensor settings`
               : 'Device settings',
