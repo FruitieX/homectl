@@ -11,4 +11,9 @@ export type UserTimerRuntime = {
   pending: string | null;
   last_message: string | null;
   last_run_ms: number | null;
+  /**
+   * How a temperature-based warm-up was planned, e.g. the reading,
+   * target and estimate behind `next_start_ms`.
+   */
+  plan?: string;
 };

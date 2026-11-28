@@ -29,6 +29,7 @@ pub mod state;
 pub mod ui;
 pub mod user_timers;
 pub mod value_history;
+pub mod warmup;
 pub mod websockets;
 
 pub mod device_commands;

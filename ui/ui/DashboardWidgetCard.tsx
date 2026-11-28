@@ -4,6 +4,7 @@ import {
   widgetSettingsHref,
 } from '../app/dashboard/WidgetRecovery';
 import { TimersCard } from '../app/dashboard/TimersCard';
+import { DeviceTimersCard } from '../app/dashboard/DeviceTimersCard';
 import type { DashboardWidget } from '@/hooks/useDashboard';
 import { Link } from 'react-router-dom';
 import { getDashboardWidgetOptionString } from '@/hooks/useDashboard';
@@ -59,6 +60,8 @@ export function DashboardWidgetCard({
   switch (widget.widget_type) {
     case 'timers':
       return <TimersCard widget={widget} />;
+    case 'device_timers':
+      return <DeviceTimersCard widget={widget} />;
     case 'rooms':
       return <RoomsCard widget={widget} />;
     case 'scenes':

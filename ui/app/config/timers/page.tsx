@@ -1,5 +1,5 @@
 import { ConfigPageHeader } from '../page-header';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import type { UserTimerDefinition } from '@/bindings/UserTimerDefinition';
@@ -20,15 +20,8 @@ import { SettingsSelect } from '@/ui/settings/SettingsSelect';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { TimerSummary } from '../../dashboard/TimersCard';
+import { Field, ScheduleFields, timed } from '@/ui/timers/TimerScheduleFields';
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="grid min-w-0 gap-1.5 text-sm">
-      <span className="font-medium">{label}</span>
-      {children}
-    </label>
-  );
-}
 function newTimer(deviceKey = ''): UserTimerDefinition {
   return {
     id: crypto.randomUUID(),
@@ -39,17 +32,6 @@ function newTimer(deviceKey = ''): UserTimerDefinition {
     action: { kind: 'device', device_key: deviceKey, power: false },
     finish_action: null,
   };
-}
-function timed(kind: 'scheduled' | 'ready_by'): UserTimerSchedule {
-  const fields = {
-    time: '08:00',
-    timezone: 'Europe/Helsinki',
-    date: null,
-    weekdays: [1, 2, 3, 4, 5],
-  };
-  return kind === 'scheduled'
-    ? { kind, ...fields, duration_minutes: null }
-    : { kind, ...fields, warmup_minutes: 40 };
 }
 function validate(timers: UserTimerDefinition[]) {
   return timers.flatMap((t) => {
@@ -77,6 +59,20 @@ function validate(timers: UserTimerDefinition[]) {
       } catch {
         add('Choose a valid IANA time zone.');
       }
+    }
+    if (s.kind === 'ready_by' && s.temperature) {
+      if (!s.temperature.sensor_key) add('Choose a temperature sensor.');
+      if (!Number.isFinite(s.temperature.target))
+        add('Enter a target temperature.');
+      if (
+        !Number.isInteger(s.temperature.max_warmup_minutes) ||
+        s.temperature.max_warmup_minutes < 1
+      )
+        add('Enter the longest warm-up in minutes.');
+      if (t.action.kind !== 'device' || !t.action.power)
+        add(
+          'A target temperature needs a start action that turns a device on.',
+        );
     }
     const minutes =
       s.kind === 'countdown'
@@ -326,6 +322,12 @@ export default function TimersPage() {
                 <ScheduleFields
                   schedule={selected.schedule}
                   change={(s) => change({ ...selected, schedule: s })}
+                  heaterKey={
+                    selected.action.kind === 'device'
+                      ? selected.action.device_key
+                      : undefined
+                  }
+                  models={api.data?.heating_models}
                 />
                 <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
                   <h2 className="mb-3 text-sm font-semibold">
@@ -416,7 +418,10 @@ export default function TimersPage() {
                 <p className="text-xs text-muted-foreground">
                   {selected.schedule.kind === 'countdown'
                     ? 'An overdue countdown runs when the server returns.'
-                    : 'Missed starts are skipped after one minute. A started timer’s end action resumes after a restart. Repeated hours run once; times skipped by daylight saving are skipped.'}{' '}
+                    : selected.schedule.kind === 'ready_by' &&
+                        selected.schedule.temperature
+                      ? 'A warm-up missed while the server was down still starts late, until the ready-by time. Repeated hours run once; times skipped by daylight saving are skipped.'
+                      : 'Missed starts are skipped after one minute. A started timer’s end action resumes after a restart. Repeated hours run once; times skipped by daylight saving are skipped.'}{' '}
                   Action results confirm runtime application, not physical
                   delivery.
                 </p>
@@ -442,113 +447,6 @@ export default function TimersPage() {
   );
 }
 
-function ScheduleFields({
-  schedule: s,
-  change,
-}: {
-  schedule: UserTimerSchedule;
-  change: (s: UserTimerSchedule) => void;
-}) {
-  if (s.kind === 'countdown')
-    return (
-      <Field label="Wait for (minutes)">
-        <Input
-          type="number"
-          min={1}
-          max={10080}
-          value={s.minutes || ''}
-          onChange={(e) => change({ ...s, minutes: Number(e.target.value) })}
-        />
-      </Field>
-    );
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={s.kind === 'ready_by' ? 'Ready by' : 'Start time'}>
-          <Input
-            type="time"
-            value={s.time}
-            onChange={(e) => change({ ...s, time: e.target.value })}
-          />
-        </Field>
-        <Field label="Time zone">
-          <Input
-            value={s.timezone}
-            placeholder="Europe/Helsinki"
-            onChange={(e) => change({ ...s, timezone: e.target.value })}
-          />
-        </Field>
-      </div>
-      {s.kind === 'ready_by' && (
-        <Field label="Warm up for (minutes)">
-          <Input
-            type="number"
-            min={1}
-            max={10080}
-            value={s.warmup_minutes || ''}
-            onChange={(e) =>
-              change({ ...s, warmup_minutes: Number(e.target.value) })
-            }
-          />
-        </Field>
-      )}
-      <Field label="Repeat">
-        <SettingsSelect
-          aria-label="Repeat"
-          value={s.date !== null ? 'once' : 'days'}
-          onValueChange={(value) =>
-            change({
-              ...s,
-              date:
-                value === 'once'
-                  ? new Date(Date.now() + 86400000).toLocaleDateString('en-CA')
-                  : null,
-              weekdays: value === 'once' ? [] : [1, 2, 3, 4, 5],
-            })
-          }
-          options={[
-            { value: 'days', label: 'On selected days' },
-            { value: 'once', label: 'Once, on a date' },
-          ]}
-        />
-      </Field>
-      {s.date !== null ? (
-        <Field label="Date">
-          <Input
-            type="date"
-            value={s.date}
-            onChange={(e) => change({ ...s, date: e.target.value })}
-          />
-        </Field>
-      ) : (
-        <div
-          className="flex flex-wrap gap-1"
-          role="group"
-          aria-label="Repeat days"
-        >
-          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => (
-            <Button
-              key={day}
-              size="sm"
-              variant={s.weekdays.includes(i + 1) ? 'default' : 'outline'}
-              aria-pressed={s.weekdays.includes(i + 1)}
-              onClick={() =>
-                change({
-                  ...s,
-                  weekdays: s.weekdays.includes(i + 1)
-                    ? s.weekdays.filter((d) => d !== i + 1)
-                    : [...s.weekdays, i + 1].sort(),
-                })
-              }
-            >
-              {day}
-            </Button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 function ActionFields({
   action: a,
   change,

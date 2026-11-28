@@ -55,6 +55,7 @@ export function getDashboardWidgetMinimumWidth(widgetType: string) {
     case 'indoor_climate':
     case 'timers':
       return 3;
+    case 'device_timers':
     case 'clock':
     case 'weather':
     case 'controls':

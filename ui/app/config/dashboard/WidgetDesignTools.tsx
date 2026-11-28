@@ -14,6 +14,7 @@ import {
   StickyNote,
   Thermometer,
   Timer,
+  Car,
   TrainFront,
   TrendingUp,
   Waves,
@@ -31,6 +32,7 @@ import { cn } from '@/lib/cn';
 
 const icons = {
   timers: Timer,
+  device_timers: Car,
   rooms: Home,
   scenes: Palette,
   indoor_climate: Thermometer,
@@ -55,6 +57,7 @@ const categories: Record<string, WidgetType[]> = {
     'indoor_climate',
     'controls',
     'timers',
+    'device_timers',
     'helper_mode',
     'home_overview',
   ],

@@ -35,8 +35,12 @@ export function TimerSummary({ entry }: { entry: UserTimerEntry }) {
         {zone ? ` · ${zone}` : ''}
       </p>
       {!r.active && d.enabled && r.finish_ms && (
-        <p>Ends {format(r.finish_ms)}</p>
+        <p>
+          {d.schedule.kind === 'ready_by' ? 'Ready' : 'Ends'}{' '}
+          {format(r.finish_ms)}
+        </p>
       )}
+      {!r.active && d.enabled && r.plan && <p>{r.plan}</p>}
       {r.last_message && (
         <p
           className={

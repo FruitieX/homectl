@@ -3,7 +3,7 @@
 //! Commands use the existing actor command path. A persisted pending intent is
 //! replayed after a crash; state assignments can repeat, never arbitrary actions.
 use crate::{
-    core::{snapshot::RuntimeSnapshot, state::StateHandle},
+    core::{snapshot::RuntimeSnapshot, state::StateHandle, warmup},
     db::config_queries::{self, WidgetSettingRow},
     types::{
         device::DeviceKey, device_command::DeviceCommand, group::GroupId, scene::SceneId,
@@ -117,11 +117,28 @@ pub fn validate_definitions(definitions: &[UserTimerDefinition]) -> Result<()> {
                 date,
                 weekdays,
                 warmup_minutes,
+                temperature,
             } => {
                 calendar(time, timezone, date, weekdays)?;
                 duration(*warmup_minutes)?;
                 if d.finish_action.is_none() {
                     return Err(eyre!("Ready-by timers need an end action"));
+                }
+                if let Some(t) = temperature {
+                    let _: DeviceKey = serde_json::from_value(serde_json::json!(t.sensor_key))
+                        .map_err(|_| eyre!("Choose a temperature sensor"))?;
+                    if t.reading.trim().is_empty() || t.reading.len() > 80 {
+                        return Err(eyre!("Choose the sensor's temperature reading"));
+                    }
+                    if !t.target.is_finite() || !(-40.0..=60.0).contains(&t.target) {
+                        return Err(eyre!("Target temperature must be between -40 and 60 °C"));
+                    }
+                    duration(t.max_warmup_minutes)?;
+                    if warmup::heater_key(&d.action).is_none() {
+                        return Err(eyre!(
+                            "A target temperature needs a start action that turns one device on"
+                        ));
+                    }
                 }
             }
         }
@@ -196,6 +213,7 @@ pub fn arm(d: &UserTimerDefinition, now: DateTime<Utc>) -> Result<UserTimerRunti
             date,
             weekdays,
             warmup_minutes,
+            ..
         } => (
             time,
             timezone,
@@ -455,6 +473,84 @@ fn complete(entry: &mut UserTimerEntry, now: DateTime<Utc>) {
     entry.runtime.last_run_ms = last_run;
 }
 
+/// Moves a temperature-based warm-up's start to match the live reading.
+/// The ready-by time stays fixed. Returns whether the runtime changed enough
+/// to persist (start moved by two minutes or more, or a first plan).
+fn replan(
+    entry: &mut UserTimerEntry,
+    snapshot: &RuntimeSnapshot,
+    models: &UserTimers,
+    ms: i64,
+) -> bool {
+    let UserTimerSchedule::ReadyBy {
+        temperature: Some(t),
+        warmup_minutes,
+        ..
+    } = &entry.definition.schedule
+    else {
+        return false;
+    };
+    let r = &entry.runtime;
+    let (Some(start), Some(finish)) = (r.next_start_ms, r.finish_ms) else {
+        return false;
+    };
+    if !entry.definition.enabled || r.active || r.pending.is_some() || start <= ms || finish <= ms {
+        return false;
+    }
+    let plan = warmup::plan(
+        snapshot,
+        models,
+        &entry.definition.action,
+        t,
+        *warmup_minutes,
+    );
+    let planned = (finish - i64::from(plan.minutes) * 60_000).max(ms);
+    let first = entry.runtime.plan.is_none();
+    if !first && (planned - start).abs() < 120_000 {
+        return false;
+    }
+    entry.runtime.next_start_ms = Some(planned);
+    entry.runtime.plan = Some(plan.note);
+    true
+}
+
+/// Learn from finished heater runs and store improved models.
+pub async fn learn(
+    handle: &StateHandle,
+    tracker: &mut warmup::RunTracker,
+    now: DateTime<Utc>,
+) -> Result<()> {
+    let snapshot = handle.snapshot.load();
+    if snapshot.warming_up {
+        return Ok(());
+    }
+    let catalog = read(&snapshot.runtime_config.widget_settings)?;
+    let updated = tracker.observe(&snapshot, &catalog, now.timestamp_millis());
+    drop(snapshot);
+    if updated.is_empty() {
+        return Ok(());
+    }
+    let _guard = lock(handle).await?;
+    let mut catalog = read(&handle.snapshot.load().runtime_config.widget_settings)?;
+    for model in updated {
+        info!(
+            "Learned warm-up for {} → {}: {:.3} °C/min after {:.0} min ({} runs)",
+            model.device_key,
+            model.sensor_key,
+            model.rate_per_minute,
+            model.lag_minutes,
+            model.runs
+        );
+        catalog.heating_models.retain(|m| {
+            !(m.device_key == model.device_key
+                && m.sensor_key == model.sensor_key
+                && m.reading == model.reading)
+        });
+        catalog.heating_models.push(model);
+    }
+    persist(handle, &catalog).await
+}
+
 pub async fn tick(handle: &StateHandle, now: DateTime<Utc>) -> Result<()> {
     let _guard = lock(handle).await?;
     if handle.snapshot.load().warming_up {
@@ -462,6 +558,10 @@ pub async fn tick(handle: &StateHandle, now: DateTime<Utc>) -> Result<()> {
     }
     migrate_legacy(handle, now).await?;
     let mut catalog = read(&handle.snapshot.load().runtime_config.widget_settings)?;
+    let models = UserTimers {
+        heating_models: catalog.heating_models.clone(),
+        ..Default::default()
+    };
     let ms = now.timestamp_millis();
     for index in 0..catalog.timers.len() {
         let entry = &mut catalog.timers[index];
@@ -483,6 +583,10 @@ pub async fn tick(handle: &StateHandle, now: DateTime<Utc>) -> Result<()> {
             persist(handle, &catalog).await?;
             continue;
         }
+        if replan(entry, &handle.snapshot.load(), &models, ms) {
+            persist(handle, &catalog).await?;
+            continue;
+        }
         if entry.runtime.pending.is_some()
             && entry
                 .runtime
@@ -499,17 +603,34 @@ pub async fn tick(handle: &StateHandle, now: DateTime<Utc>) -> Result<()> {
         {
             // Skip stale starts after downtime. Never replay an old on
             // command for a completed warm-up window. End actions recover.
-            if (!matches!(
+            // A temperature-based warm-up still starts late: a shorter
+            // warm-up beats none.
+            let late_start_ok = matches!(
                 entry.definition.schedule,
                 UserTimerSchedule::Countdown { .. }
-            ) && entry
-                .runtime
-                .next_start_ms
-                .is_some_and(|at| ms - at > 60_000))
+                    | UserTimerSchedule::ReadyBy {
+                        temperature: Some(_),
+                        ..
+                    }
+            );
+            if (!late_start_ok
+                && entry
+                    .runtime
+                    .next_start_ms
+                    .is_some_and(|at| ms - at > 60_000))
                 || entry.runtime.finish_ms.is_some_and(|at| at <= ms)
             {
-                entry.runtime.last_message =
-                    Some("Missed while the server was unavailable; start skipped".into());
+                let warm = entry.runtime.next_start_ms.is_some()
+                    && entry.runtime.next_start_ms == entry.runtime.finish_ms;
+                entry.runtime.last_message = Some(if warm {
+                    entry
+                        .runtime
+                        .plan
+                        .clone()
+                        .unwrap_or_else(|| "Already at the target; warm-up skipped".into())
+                } else {
+                    "Missed while the server was unavailable; start skipped".into()
+                });
                 complete(entry, now);
                 persist(handle, &catalog).await?;
                 continue;
@@ -636,6 +757,7 @@ async fn migrate_legacy(handle: &StateHandle, now: DateTime<Utc>) -> Result<()> 
                 }),
                 weekdays,
                 warmup_minutes: 40,
+                temperature: None,
             },
             action: UserTimerAction::Device {
                 device_key: "tuya_devices/bfe553b84e883ace37nvxw".into(),
@@ -659,6 +781,7 @@ async fn migrate_legacy(handle: &StateHandle, now: DateTime<Utc>) -> Result<()> 
         &UserTimers {
             timers,
             legacy_migrated: true,
+            heating_models: vec![],
         },
     )
     .await?;
@@ -746,8 +869,12 @@ pub fn spawn(handle: StateHandle) {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut failed = false;
+        let mut tracker = warmup::RunTracker::default();
         loop {
             interval.tick().await;
+            if let Err(error) = learn(&handle, &mut tracker, Utc::now()).await {
+                warn!("Timer warm-up learning failed: {error}");
+            }
             match tick(&handle, Utc::now()).await {
                 Ok(_) => failed = false,
                 Err(error) => {
@@ -779,6 +906,7 @@ mod tests {
                 date: date.map(Into::into),
                 weekdays,
                 warmup_minutes: 40,
+                temperature: None,
             },
             action: UserTimerAction::Device {
                 device_key: "dummy/plug".into(),
@@ -856,6 +984,106 @@ mod tests {
             Some(at("2026-10-05T05:00:00Z").timestamp_millis())
         );
     }
+    fn with_car_temperature(value: f64) -> RuntimeSnapshot {
+        use crate::types::{
+            device::{Device, DeviceData, DeviceId, ReadingValue, SensorDevice},
+            integration::IntegrationId,
+        };
+        let (state, _rx) = crate::core::event::tests::test_state();
+        let mut snapshot = (*state.snapshot.load_full()).clone();
+        let device = Device::new(
+            IntegrationId::from("dummy".to_string()),
+            DeviceId::new("car"),
+            "Car".into(),
+            DeviceData::Sensor(SensorDevice::Readings {
+                readings: [("temperature".to_string(), ReadingValue::Number(value))].into(),
+            }),
+            None,
+        );
+        std::sync::Arc::make_mut(&mut snapshot.devices)
+            .0
+            .insert(device.get_device_key(), device);
+        snapshot
+    }
+    fn temperature_ready() -> UserTimerDefinition {
+        let mut d = ready("08:00", None, vec![1, 2, 3, 4, 5, 6, 7]);
+        if let UserTimerSchedule::ReadyBy { temperature, .. } = &mut d.schedule {
+            *temperature = Some(ReadyByTemperature {
+                sensor_key: "dummy/car".into(),
+                reading: "temperature".into(),
+                target: 5.0,
+                max_warmup_minutes: 120,
+            });
+        }
+        d
+    }
+    #[test]
+    fn temperature_warmup_follows_the_reading_and_keeps_the_ready_time() {
+        let d = temperature_ready();
+        validate_definitions(std::slice::from_ref(&d)).unwrap();
+        let now = at("2026-11-30T00:00:00Z");
+        let mut e = UserTimerEntry {
+            runtime: arm(&d, now).unwrap(),
+            definition: d,
+        };
+        let ready_at = at("2026-11-30T06:00:00Z").timestamp_millis();
+        assert_eq!(e.runtime.finish_ms, Some(ready_at));
+        let models = UserTimers {
+            heating_models: vec![HeatingModel {
+                device_key: "dummy/plug".into(),
+                sensor_key: "dummy/car".into(),
+                reading: "temperature".into(),
+                rate_per_minute: 0.25,
+                lag_minutes: 7.0,
+                runs: 3,
+                updated_ms: None,
+            }],
+            ..Default::default()
+        };
+        let ms = now.timestamp_millis();
+        // −5 °C → 5 °C: 7 + 10 / 0.25 = 47 minutes.
+        assert!(replan(&mut e, &with_car_temperature(-5.0), &models, ms));
+        assert_eq!(e.runtime.next_start_ms, Some(ready_at - 47 * 60_000));
+        assert!(e.runtime.plan.as_deref().unwrap().contains("47 min"));
+        // Small changes do not rewrite the schedule.
+        assert!(!replan(&mut e, &with_car_temperature(-5.1), &models, ms));
+        // A colder night starts earlier, capped at the longest warm-up.
+        assert!(replan(&mut e, &with_car_temperature(-40.0), &models, ms));
+        assert_eq!(e.runtime.next_start_ms, Some(ready_at - 120 * 60_000));
+        // Already warm: no warm-up, the start waits at the ready time.
+        assert!(replan(&mut e, &with_car_temperature(8.0), &models, ms));
+        assert_eq!(e.runtime.next_start_ms, Some(ready_at));
+        // No reading: the fixed warm-up applies.
+        let (state, _rx) = crate::core::event::tests::test_state();
+        assert!(replan(&mut e, &state.snapshot.load_full(), &models, ms));
+        assert_eq!(e.runtime.next_start_ms, Some(ready_at - 40 * 60_000));
+        // A temperature target needs a single device to switch on.
+        let mut bad = temperature_ready();
+        bad.action = UserTimerAction::Scene {
+            scene_id: "x".into(),
+        };
+        assert!(validate_definitions(&[bad]).is_err());
+        // Backups keep the target and the learned model; older backups
+        // without them still load.
+        let backup = UserTimers {
+            timers: vec![e],
+            ..models
+        };
+        let encoded = serde_json::to_value(&backup).unwrap();
+        validate_setting(SETTING_KEY, &encoded).unwrap();
+        assert_eq!(
+            serde_json::from_value::<UserTimers>(encoded).unwrap(),
+            backup
+        );
+        let old = serde_json::json!({"timers": [], "legacy_migrated": true});
+        assert!(read(&[WidgetSettingRow {
+            key: SETTING_KEY.into(),
+            config: old
+        }])
+        .unwrap()
+        .heating_models
+        .is_empty());
+    }
     #[test]
     fn validates_duration_target_and_backup_representation() {
         let mut d = ready("08:00", None, vec![1]);
@@ -872,6 +1100,7 @@ mod tests {
                 runtime: arm(&d, at("2026-09-29T02:00:00Z")).unwrap(),
             }],
             legacy_migrated: true,
+            heating_models: vec![],
         };
         let encoded = serde_json::to_value(&original).unwrap();
         validate_setting(SETTING_KEY, &encoded).unwrap();

@@ -1,4 +1,5 @@
 import { useUserTimers } from '@/hooks/useUserTimers';
+import { numericReadings } from '@/ui/timers/TemperatureFields';
 import { Link } from 'react-router-dom';
 import { useSensorData } from '@/hooks/influxdb';
 import { useSensorCatalog } from '@/hooks/sensorCatalog';
@@ -538,6 +539,8 @@ export function WidgetOptionFields({
 
   if (widgetType === 'timers')
     return <TimerWidgetOptions options={options} onChange={onChange} />;
+  if (widgetType === 'device_timers')
+    return <DeviceTimersOptions options={options} onChange={onChange} />;
   if (widgetType === 'indoor_climate')
     return <IndoorClimateOptions options={options} onChange={onChange} />;
   if (widgetType === 'rooms' || widgetType === 'scenes') {
@@ -1007,6 +1010,70 @@ export function WidgetOptionFields({
     <ConfigHelpPanel>
       This widget type only exposes advanced JSON options for now.
     </ConfigHelpPanel>
+  );
+}
+
+function DeviceTimersOptions({
+  options,
+  onChange,
+}: {
+  options: Record<string, unknown>;
+  onChange: (key: string, value: unknown) => void;
+}) {
+  const api = useDevicesApi();
+  const deviceKey =
+    typeof options.deviceKey === 'string' ? options.deviceKey : '';
+  const sensorKey =
+    typeof options.sensorKey === 'string' ? options.sensorKey : '';
+  const reading =
+    typeof options.sensorReading === 'string' ? options.sensorReading : '';
+  const sensors = api.devices.flatMap((device) =>
+    Object.keys(numericReadings(device)).map((name) => ({
+      value: `${device.integration_id}/${device.id}|${name}`,
+      label: `${device.name} · ${name}`,
+    })),
+  );
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <ConfigField label="Device">
+        <SearchablePicker
+          ariaLabel="Device"
+          value={deviceKey}
+          options={api.devices
+            .filter((device) => 'Controllable' in device.data)
+            .map((device) => ({
+              value: `${device.integration_id}/${device.id}`,
+              label: device.name,
+            }))}
+          onChange={(value) => onChange('deviceKey', value)}
+          placeholder="Choose the device to switch"
+        />
+      </ConfigField>
+      <ConfigField label="Temperature shown">
+        <SearchablePicker
+          ariaLabel="Temperature shown"
+          value={sensorKey ? `${sensorKey}|${reading || 'temperature'}` : ''}
+          options={sensors}
+          onChange={(value) => {
+            const at = value.lastIndexOf('|');
+            onChange('sensorKey', at < 0 ? '' : value.slice(0, at));
+            onChange('sensorReading', at < 0 ? '' : value.slice(at + 1));
+          }}
+          placeholder="The timers' temperature sensor"
+        />
+      </ConfigField>
+      <ConfigHelpPanel>
+        Tap the widget to switch the device on or off. Hold it (or right-click)
+        to edit the device&apos;s ready-by times, including a target
+        temperature.{' '}
+        <Link to="/config/timers" className="underline">
+          All timers
+        </Link>
+      </ConfigHelpPanel>
+      {api.error && (
+        <p role="alert">Device catalog unavailable; selections are kept.</p>
+      )}
+    </div>
   );
 }
 

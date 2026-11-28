@@ -102,6 +102,16 @@ entries are persisted to the `routine_history` table (full entry JSON) and
 restored into the ring at startup, so the history view survives a server
 restart; the table is pruned on startup and every 100 written entries.
 
+### User timers
+Household timers (countdown, scheduled, ready-by) are stored in the reserved
+`user_timers` widget setting and run by the server scheduler
+(`server/src/core/user_timers.rs`). A ready-by timer can warm up to a target
+temperature (`server/src/core/warmup.rs`): its start is replanned from the live
+sensor reading and a per heater/sensor model (`rate · max(0, t − lag)`) learned
+from every complete run of the heater, timer-started or manual, and stored as
+`heating_models`. The `device_timers` dashboard widget toggles one device on tap
+and opens that device's timers on long press.
+
 ### State actor & runtime snapshot
 The server uses an actor-model architecture for `AppState`:
 

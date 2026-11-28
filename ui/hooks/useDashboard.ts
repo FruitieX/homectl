@@ -5,6 +5,7 @@ import { useAppConfig } from './appConfig';
 export type WidgetType =
   | 'home_overview'
   | 'timers'
+  | 'device_timers'
   | 'rooms'
   | 'scenes'
   | 'indoor_climate'
@@ -154,6 +155,12 @@ export const widgetRegistry: Record<
     name: 'Timers',
     description: 'Server countdowns, schedules and ready-by times',
     defaultOptions: { timerSelection: 'all', timerIds: [] },
+  },
+  device_timers: {
+    name: 'Device with timers',
+    description:
+      'Tap to switch one device, hold for its ready-by times (e.g. a car heater)',
+    defaultOptions: { deviceKey: '', sensorKey: '', sensorReading: '' },
   },
   rooms: {
     name: 'Rooms',
