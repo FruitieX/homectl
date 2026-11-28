@@ -795,10 +795,32 @@ fn default_worker_binary() -> Result<PathBuf, WorkerError> {
     let current = std::env::current_exe().map_err(|error| WorkerError::Spawn {
         message: format!("cannot locate the current executable: {error}"),
     })?;
-    let directory = current.parent().ok_or_else(|| WorkerError::Spawn {
-        message: "current executable has no parent directory".to_string(),
-    })?;
-    Ok(directory.join(format!("script-worker{}", std::env::consts::EXE_SUFFIX)))
+    if current.parent().is_none() {
+        return Err(WorkerError::Spawn {
+            message: "current executable has no parent directory".to_string(),
+        });
+    }
+    Ok(worker_binary_near(&current))
+}
+
+/// The `script-worker` next to `executable`, or in the closest directory
+/// above it. Releases ship it alongside the server; Cargo puts test
+/// executables below the profile directory that holds the binaries, how far
+/// below depending on its build-directory layout.
+pub fn worker_binary_near(executable: &std::path::Path) -> PathBuf {
+    let name = format!("script-worker{}", std::env::consts::EXE_SUFFIX);
+    let directory = executable.parent().unwrap_or(executable);
+    directory
+        .ancestors()
+        .map(|dir| dir.join(&name))
+        .find(|candidate| candidate.is_file())
+        .unwrap_or_else(|| directory.join(&name))
+}
+
+/// The worker binary for tests run from Cargo's build directory.
+#[cfg(test)]
+pub fn test_worker_binary() -> PathBuf {
+    worker_binary_near(&std::env::current_exe().expect("test executable path"))
 }
 
 /// Continuously drain stderr into a capped ring buffer.

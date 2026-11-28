@@ -227,11 +227,8 @@ mod tests {
             ("return true;", Some(TruthValue::True), true),
         ] {
             let (mut state, mut events) = test_state();
-            let mut binary = std::env::current_exe().unwrap();
-            binary.pop();
-            binary.pop();
-            binary.push("script-worker");
-            state.scripts.worker_binary = Some(binary);
+            state.scripts.worker_binary =
+                Some(crate::core::js_worker::supervisor::test_worker_binary());
             let lamp = crate::core::event::tests::lamp("dummy", "lamp", false, 0.1);
             state.devices.set_state(&lamp, true, true);
             state.devices.begin_command(EventCausation::default());

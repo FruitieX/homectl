@@ -281,11 +281,8 @@ mod tests {
 
     fn fixture(source: &str) -> (AppState, crate::types::event::RxEventChannel) {
         let (mut state, events) = test_state();
-        let mut binary = std::env::current_exe().unwrap();
-        binary.pop();
-        binary.pop();
-        binary.push("script-worker");
-        state.scripts.worker_binary = Some(binary);
+        state.scripts.worker_binary =
+            Some(crate::core::js_worker::supervisor::test_worker_binary());
         let input = HelperDefinition::new(
             "input",
             "Input",

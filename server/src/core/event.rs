@@ -3960,10 +3960,7 @@ pub(crate) mod tests {
 
     /// Worker binary built next to the test executable's profile directory.
     fn script_worker_binary() -> std::path::PathBuf {
-        let mut directory = std::env::current_exe().expect("test executable path");
-        directory.pop();
-        directory.pop();
-        directory.join("script-worker")
+        crate::core::js_worker::supervisor::test_worker_binary()
     }
 
     fn scripted_routine_row(source_body: &str, revision: i64) -> RoutineRow {

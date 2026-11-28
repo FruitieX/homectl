@@ -440,13 +440,7 @@ mod tests {
     #[ignore = "requires cargo build --bin script-worker; run explicitly with --ignored"]
     async fn script_preview_executes_isolated_worker_and_preserves_runtime() {
         use crate::core::js_worker::{JsWorkerPool, SupervisorConfig};
-        let binary = std::env::current_exe()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join(format!("script-worker{}", std::env::consts::EXE_SUFFIX));
+        let binary = crate::core::js_worker::supervisor::test_worker_binary();
         assert!(
             binary.exists(),
             "Build the script-worker binary before this integration test"

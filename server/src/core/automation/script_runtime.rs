@@ -1032,11 +1032,10 @@ mod tests {
         use super::super::plan::{PlannedStep, PlannedStepBody, RoutinePlan};
         use crate::types::automation_definition::NodeId;
 
-        let mut scripts = ScriptExecution::default();
-        let mut worker = std::env::current_exe().unwrap();
-        worker.pop();
-        worker.pop();
-        scripts.worker_binary = Some(worker.join("script-worker"));
+        let mut scripts = ScriptExecution {
+            worker_binary: Some(crate::core::js_worker::supervisor::test_worker_binary()),
+            ..Default::default()
+        };
         let owner = ScriptOwnerId::routine("mixed");
         scripts.coordinator_mut().load_owner(&owner, 1, Value::Null);
         let devices = states(vec![lamp("first", false), lamp("second", true)]);

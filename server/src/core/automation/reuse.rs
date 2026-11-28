@@ -127,15 +127,7 @@ pub async fn preview_execute(body: &str, context: Value) -> Result<Value, String
     use crate::core::js_worker::{JsWorkerPool, SupervisorConfig};
     static POOL: tokio::sync::OnceCell<JsWorkerPool> = tokio::sync::OnceCell::const_new();
     #[cfg(test)]
-    let worker_binary = Some(
-        std::env::current_exe()
-            .map_err(|error| error.to_string())?
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("script-worker"),
-    );
+    let worker_binary = Some(crate::core::js_worker::supervisor::test_worker_binary());
     #[cfg(not(test))]
     let worker_binary = None;
     let pool = POOL
